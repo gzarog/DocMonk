@@ -25,6 +25,7 @@ jobs:
     outputs:
       installer: ${{ steps.classify.outputs.installer }}
       docker: ${{ steps.classify.outputs.docker }}
+      cross_platform: ${{ steps.classify.outputs.cross_platform }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,6 +37,7 @@ jobs:
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             echo "installer=true" >> "$GITHUB_OUTPUT"
             echo "docker=true" >> "$GITHUB_OUTPUT"
+            echo "cross_platform=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # The PR checkout is the merge commit; its first parent is the base.
@@ -84,16 +86,44 @@ jobs:
         if: github.event_name == 'push'
         run: cargo build --workspace --release
 
-  # Windows/macOS: the same full checks plus the release build, on pushes
-  # to main and the release branch only (PRs validate on Linux).
-  rust-cross-platform:
-    name: Rust fmt/clippy/test (${{ matrix.os }})
-    if: github.event_name == 'push'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  # Windows/macOS: the same full checks plus the release build. Pushes
+  # always run them; PRs only when `Detect changes` selects cross_platform
+  # (shared build inputs, installer/updater, platform-specific sources).
+  # Two plain jobs rather than a matrix, so a skipped run still shows the
+  # OS in its name. Keep their steps identical.
+  rust-windows:
+    name: Rust fmt/clippy/test (windows-latest)
+    needs: changes
+    if: needs.changes.outputs.cross_platform == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      # rust-toolchain.toml pins the toolchain; rustup installs it on first use.
+      - name: Show toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo fmt
+        run: cargo fmt --all --check
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - uses: ./.github/actions/fetch-models
+        with:
+          dir: ${{ runner.temp }}
+      - name: cargo test
+        run: cargo test --workspace --no-fail-fast
+        env:
+          DOCMONK_OCR_MODELS_DIR: ${{ runner.temp }}/ocr-models
+          DOCMONK_REQUIRE_OCR: "1"
+          DOCMONK_MODELS_DIR: ${{ runner.temp }}/models
+          DOCMONK_REQUIRE_MODELS: "1"
+      - name: cargo build --release
+        run: cargo build --workspace --release
+
+  rust-macos:
+    name: Rust fmt/clippy/test (macos-latest)
+    needs: changes
+    if: needs.changes.outputs.cross_platform == 'true'
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       # rust-toolchain.toml pins the toolchain; rustup installs it on first use.
@@ -328,7 +358,8 @@ jobs:
       - changes
       - repository-audits
       - rust-linux
-      - rust-cross-platform
+      - rust-windows
+      - rust-macos
       - server-integration
       - install-script-tests
       - install-script-tests-windows
@@ -355,15 +386,18 @@ jobs:
           }
           for j in changes repository-audits rust-linux server-integration; do check "$j" no; done
           if [ "$EVENT" = pull_request ]; then
-            check rust-cross-platform yes
             inst=$(output changes installer); dock=$(output changes docker)
+            cross=$(output changes cross_platform)
             skip_inst=yes; [ "$inst" = true ] && skip_inst=no
             skip_dock=yes; [ "$dock" = true ] && skip_dock=no
+            skip_cross=yes; [ "$cross" = true ] && skip_cross=no
+            check rust-windows "$skip_cross"
+            check rust-macos "$skip_cross"
             check install-script-tests "$skip_inst"
             check install-script-tests-windows "$skip_inst"
             check container-image "$skip_dock"
           else
-            for j in rust-cross-platform install-script-tests install-script-tests-windows container-image; do
+            for j in rust-windows rust-macos install-script-tests install-script-tests-windows container-image; do
               check "$j" no
             done
           fi
