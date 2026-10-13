@@ -151,14 +151,16 @@ mod tests {
     #[test]
     fn burst_collapses_and_keys_are_independent() {
         let (fired, cb) = collector();
-        let d = Debouncer::new(80, cb);
+        // The quiet period is far longer than the gap between notifies, so
+        // a slow CI scheduler oversleeping a 10 ms tick cannot end the burst.
+        let d = Debouncer::new(500, cb);
         for _ in 0..10 {
             d.notify("a");
             std::thread::sleep(Duration::from_millis(10));
         }
         d.notify("b");
         assert_eq!(d.pending_count(), 2);
-        std::thread::sleep(Duration::from_millis(300));
+        std::thread::sleep(Duration::from_millis(1500));
         let mut got = fired.lock().unwrap().clone();
         got.sort();
         assert_eq!(got, ["a", "b"]);
