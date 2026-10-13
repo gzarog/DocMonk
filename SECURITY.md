@@ -2,15 +2,15 @@
 
 ## Local-first by design
 
-RagMonk is a local-first tool. By default it does not transmit indexed
+DocMonk is a local-first tool. By default it does not transmit indexed
 source material, file contents, or derived metadata to any external
 service, and network/API/MCP surfaces (`api.enabled`, `mcp.enabled`,
 `privacy.external_ai_allowed`) are either disabled or bound to localhost by
 default. Nothing leaves your machine unless you explicitly configure an
 integration that does so.
 
-RagMonk only reads files under source roots you explicitly register with
-`ragmonk source add`. `PathGuard` resolves and validates every path the
+DocMonk only reads files under source roots you explicitly register with
+`docmonk source add`. `PathGuard` resolves and validates every path the
 scanner touches, rejecting path traversal and symlinks that escape a
 registered root, and known secret-like filenames (`.env`, `*.pem`, `*.key`,
 `id_rsa`, `id_ed25519`, `credentials*`, `secrets*`) are excluded from
@@ -18,7 +18,7 @@ indexing by default.
 
 ## Reporting a vulnerability
 
-If you discover a security vulnerability in RagMonk, please report it
+If you discover a security vulnerability in DocMonk, please report it
 privately rather than opening a public issue:
 
 - Open a GitHub security advisory ("Report a vulnerability" under the

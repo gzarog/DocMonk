@@ -4,8 +4,8 @@ Status: accepted
 
 ## Scope
 
-The `ragmonk-retrieval` crate, plus storage projections in
-`ragmonk_storage::search`. Symbol and graph queries are ADR 0017;
+The `docmonk-retrieval` crate, plus storage projections in
+`docmonk_storage::search`. Symbol and graph queries are ADR 0017;
 explore, impact and attachment provenance are ADR 0018.
 
 ### Lexical search (`lexical`)

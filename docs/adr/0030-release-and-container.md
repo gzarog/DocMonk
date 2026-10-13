@@ -6,7 +6,7 @@ Status: accepted
 
 - **Workflow:** `.github/workflows/rust-release.yml` publishes releases.
 - **Container:** published to GHCR as a multi-arch image
-  (`ghcr.io/gzarog/ragmonk`, linux/amd64 and linux/arm64).
+  (`ghcr.io/gzarog/docmonk`, linux/amd64 and linux/arm64).
 - **Signing:** a hook. When the `MINISIGN_SECRET_KEY` secret exists the
   workflow signs `SHA256SUMS`; otherwise it publishes checksums only.
 - **Installer CI:** the installer jobs from ADR 0029 run in `rust.yml` on
@@ -27,7 +27,7 @@ The workflow starts in three ways:
   true).
 
 The GitHub release itself is always tagged `v<version>`, because that is
-the tag `ragmonk update` expects.
+the tag `docmonk update` expects.
 
 1. **validate:** checks the version format and refuses a tag `v<version>`
    that already exists.
@@ -43,8 +43,8 @@ the tag `ragmonk update` expects.
    Each build does the following:
    - fetches the pinned models with `scripts/fetch_models.sh`, using
      the same digests as the crates' manifests;
-   - runs `cargo build --release --locked` with `RAGMONK_BUILD_VERSION`,
-     `RAGMONK_BUILD_COMMIT` and `RAGMONK_MINISIGN_PUBKEY` (from
+   - runs `cargo build --release --locked` with `DOCMONK_BUILD_VERSION`,
+     `DOCMONK_BUILD_COMMIT` and `DOCMONK_MINISIGN_PUBKEY` (from
      `vars.MINISIGN_PUBLIC_KEY`);
    - smoke-tests `version --json`;
    - packages the archive with `cargo xtask package --models`.
@@ -60,28 +60,28 @@ the tag `ragmonk update` expects.
    `<version>`, plus `latest` for a full release.
 
 Manual and tag-triggered releases are pre-releases by default. GitHub's
-"latest release" endpoint, which `ragmonk update` follows, skips
+"latest release" endpoint, which `docmonk update` follows, skips
 pre-releases, so such a release reaches existing users only once it is
 published as a full release.
 
 ## Container (`Dockerfile`)
 
 - **Build stage:** `rust:1.90.0-slim-bookworm`, matching
-  `rust-toolchain.toml`. It builds `ragmonk-cli` with `--locked` and fetches
+  `rust-toolchain.toml`. It builds `docmonk-cli` with `--locked` and fetches
   the models.
 - **Runtime stage:** `debian:bookworm-slim` with `ca-certificates` and
   `tini`, and nothing else.
-- **User and data:** runs as the non-root user `ragmonk` (uid 10001).
-  `RAGMONK_HOME=/data` is a volume.
-- **Models:** baked in at `/opt/ragmonk/models`, set through
-  `RAGMONK_MODELS_DIR` and `RAGMONK_OCR_MODELS_DIR`.
-- **Updates:** `RAGMONK_NO_UPDATE_CHECK=1`, because an image is updated by
+- **User and data:** runs as the non-root user `docmonk` (uid 10001).
+  `DOCMONK_HOME=/data` is a volume.
+- **Models:** baked in at `/opt/docmonk/models`, set through
+  `DOCMONK_MODELS_DIR` and `DOCMONK_OCR_MODELS_DIR`.
+- **Updates:** `DOCMONK_NO_UPDATE_CHECK=1`, because an image is updated by
   pulling a new tag.
-- **Entrypoint:** `ragmonk`, with default arguments `--help`.
+- **Entrypoint:** `docmonk`, with default arguments `--help`.
 
 Example invocations:
-- MCP over stdio: `docker run -i -v ragmonk:/data ghcr.io/gzarog/ragmonk serve --mcp`
-- Admin UI: `docker run -p 8765:8765 -v ragmonk:/data ghcr.io/gzarog/ragmonk ui --host 0.0.0.0 --no-browser`
+- MCP over stdio: `docker run -i -v docmonk:/data ghcr.io/gzarog/docmonk serve --mcp`
+- Admin UI: `docker run -p 8765:8765 -v docmonk:/data ghcr.io/gzarog/docmonk ui --host 0.0.0.0 --no-browser`
 
 There is no cross-compilation. Multi-arch comes from native runners, so the
 Dockerfile stays a plain two-stage build.
@@ -89,13 +89,13 @@ Dockerfile stays a plain two-stage build.
 ## Setting up signing
 
 ```sh
-minisign -G -p ragmonk.pub -s ragmonk.key
+minisign -G -p docmonk.pub -s docmonk.key
 ```
 
 Then configure the repository:
 - **Repository variable `MINISIGN_PUBLIC_KEY`:** the second line of
-  `ragmonk.pub`, which is the base64 key.
-- **Secret `MINISIGN_SECRET_KEY`:** the whole of `ragmonk.key`.
+  `docmonk.pub`, which is the base64 key.
+- **Secret `MINISIGN_SECRET_KEY`:** the whole of `docmonk.key`.
 - **Secret `MINISIGN_PASSWORD`:** the key's password.
 
 From then on, every binary refuses an update whose `SHA256SUMS` signature

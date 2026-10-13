@@ -4,7 +4,7 @@ Status: accepted
 
 ## Scope
 
-`ragmonk_retrieval::explore` holds:
+`docmonk_retrieval::explore` holds:
 
 | Function | Behavior |
 |---|---|

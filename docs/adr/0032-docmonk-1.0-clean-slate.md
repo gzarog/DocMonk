@@ -1,5 +1,5 @@
 <!-- clean-slate-audit: allow-start -->
-# ADR 0032 — RagMonk 1.0: fresh install, fresh index, no migrations
+# ADR 0032 — DocMonk 1.0: fresh install, fresh index, no migrations
 
 Status: accepted (RM10-00)
 
@@ -8,16 +8,16 @@ The Rust implementation on `main` is complete. It still carries the
 machinery of the rewrite that produced it: a V1 source import, a migration
 preflight, `migrate-to-rust-v2`, numbered SQLite migration arrays,
 `schema_migrations` / `migration_log`, `V2Layout` paths under `<home>/v2/`,
-`ragmonk-v2-*` server indexes with legacy-index discovery and deletion, a
+`docmonk-v2-*` server indexes with legacy-index discovery and deletion, a
 Python differential harness under `rust/compat/`, and Python packaging and
-branding scripts. RagMonk 1.0 is the first product generation of this Rust
+branding scripts. DocMonk 1.0 is the first product generation of this Rust
 implementation, not an upgrade of anything that came before it.
 ## Decision
-* **Fresh install, fresh index only.** A RagMonk 1.0 user runs
-  `ragmonk init`, `ragmonk source add <path>`, `ragmonk index`. The only
+* **Fresh install, fresh index only.** A DocMonk 1.0 user runs
+  `docmonk init`, `docmonk source add <path>`, `docmonk index`. The only
   input that survives from before is the user's original source files;
-  RagMonk rebuilds all knowledge from them.
-* **Unsupported inputs.** Earlier RagMonk homes, config files, source
+  DocMonk rebuilds all knowledge from them.
+* **Unsupported inputs.** Earlier DocMonk homes, config files, source
   registries, SQLite databases, embeddings, chunks, IDs, generation state
   and OpenSearch/Elasticsearch indexes are not inputs. No code detects,
   opens, imports, transforms, cleans up or deletes them, and no installer
@@ -32,15 +32,15 @@ implementation, not an upgrade of anything that came before it.
   embedding model (id, checksum, dimension), embedding-text and tokenizer
   identities stay. They decide cache invalidation and when a source needs a
   full rebuild; they never sequence schema changes.
-* **Canonical local layout** under `RAGMONK_HOME` (default `~/.ragmonk`):
+* **Canonical local layout** under `DOCMONK_HOME` (default `~/.docmonk`):
   `config.yaml`, `state/control.db`, `projects/<id>/…`, `models/`,
   `cache/`, `logs/`, `locks/`. No versioned or legacy directory exists.
 * **Canonical server indexes** under the configured prefix (default
-  `ragmonk`): `{prefix}-source-state`, `{prefix}-files`, `{prefix}-code`,
+  `docmonk`): `{prefix}-source-state`, `{prefix}-files`, `{prefix}-code`,
   `{prefix}-documents`, `{prefix}-chunks`, `{prefix}-relationships`.
   Creation is idempotent for the current mappings only. Incompatible
   mappings under the configured prefix fail with an instruction to use a
-  fresh prefix/cluster or reset the current RagMonk indexes. No other
+  fresh prefix/cluster or reset the current DocMonk indexes. No other
   prefix is ever probed.
 * **Kept from the rewrite architecture:** atomic build publication with
   invisible incomplete builds and failed-build cleanup, deterministic IDs,
@@ -56,7 +56,7 @@ implementation, not an upgrade of anything that came before it.
   grammar, its query/framework wiring, and `.py` input fixtures. Runtime,
   build, tests, CI, packaging and release never execute Python.
 * **Releases** use one strict semver tag convention (`v1.0.0`) shared by
-  GitHub releases, `install.sh`, `install.ps1`, `ragmonk update` and the
+  GitHub releases, `install.sh`, `install.ps1`, `docmonk update` and the
   release workflow.
 
 ## Enforcement

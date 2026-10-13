@@ -4,14 +4,14 @@ Status: accepted
 
 ## Scope
 
-- `ragmonk-documents` holds the normalized-document model, the chunker, the
+- `docmonk-documents` holds the normalized-document model, the chunker, the
   table renderer, document metadata and the pinned tokenizer.
 - The chunker consumes only the **canonical intermediate JSON**: a normalized
   document is a flat, index-addressed unit list (`title`, `page_count`,
   `is_scanned`, `units[]` with `kind`, `text`, `heading_level`,
   `heading_path`, `parent_index`, `page_start`/`page_end`, `table_rows`,
   `caption`, `header_row_count`).
-  - Conversion that produces this format lives in `ragmonk-convert`
+  - Conversion that produces this format lives in `docmonk-convert`
     (ADR 0011).
 
 ## Tokenizer

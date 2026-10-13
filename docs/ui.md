@@ -1,20 +1,20 @@
-# RagMonk Admin UI
+# DocMonk Admin UI
 
-RagMonk ships with a built-in, local-first administration web interface. It
-lets you manage RagMonk from a browser instead of the CLI, while reusing the
+DocMonk ships with a built-in, local-first administration web interface. It
+lets you manage DocMonk from a browser instead of the CLI, while reusing the
 same underlying application services — the CLI, the MCP server and the UI all
-call the same code (`ragmonk.service.*`), so there is one source of truth and
+call the same code (`docmonk.service.*`), so there is one source of truth and
 no business logic duplicated in the web layer.
 
 ## Starting the UI
 
 ```bash
-ragmonk init      # once, if you haven't already
-ragmonk ui
+docmonk init      # once, if you haven't already
+docmonk ui
 ```
 
 ```text
-RagMonk Admin UI
+DocMonk Admin UI
 URL: http://127.0.0.1:8765
 Opening browser...
 Press Ctrl+C to stop.
@@ -32,18 +32,18 @@ server; it shuts down cleanly and closes all database connections.
 | `--no-browser` | off | Do not open a browser automatically (useful on headless hosts). |
 
 ```bash
-ragmonk ui --port 9000
-ragmonk ui --no-browser
+docmonk ui --port 9000
+docmonk ui --no-browser
 ```
 
 ## Admin screens
 
-- **Dashboard** — RagMonk version, source/enabled counts, indexed/queued/failed
+- **Dashboard** — DocMonk version, source/enabled counts, indexed/queued/failed
   files, document/symbol/relationship counts, database + index size, daemon
   state, tokenizer identity, and the latest indexing errors.
 - **Sources** — list, add (with include/exclude patterns), enable, disable and
   remove sources, plus a per-source detail screen. Removing a source deletes
-  RagMonk's indexed data for it but never your original files.
+  DocMonk's indexed data for it but never your original files.
 - **Indexing** — start an indexing pass, rebuild a source or everything, inspect
   failed files, and watch live progress over Server-Sent Events.
 - **Documents** — browse indexed documents with source/format/filename filters
@@ -59,15 +59,15 @@ ragmonk ui --no-browser
 - **AI** — see the selected provider, model, authentication status and the full
   provider catalog, and test a provider's connectivity. Credentials are never
   shown — only "configured / not configured".
-- **Configuration** — a typed form generated from `RagMonkConfig`, validated
+- **Configuration** — a typed form generated from `DocMonkConfig`, validated
   with the same validation as the CLI before writing. Environment-overridden
   values are shown read-only with their variable name; sensitive fields show
   only whether they are configured.
 - **Daemon** — start, stop and restart the background daemon and see watched
   sources.
-- **Health** — the same checks as `ragmonk doctor` / `ragmonk health`.
+- **Health** — the same checks as `docmonk doctor` / `docmonk health`.
 - **Backups** — create, download and restore backups, and see update status.
-- **Logs** — read `ragmonk.log` newest-first with level, component, text and
+- **Logs** — read `docmonk.log` newest-first with level, component, text and
   errors-only filters.
 - **System** — installed vs. latest version, update channel, home directory and
   tokenizer identity.
@@ -114,7 +114,7 @@ never fatal.
 
 ## Running under WSL
 
-Start `ragmonk ui` inside WSL and open `http://127.0.0.1:8765` from your Windows
+Start `docmonk ui` inside WSL and open `http://127.0.0.1:8765` from your Windows
 browser — recent WSL forwards localhost automatically. If it does not resolve,
 use the WSL VM's IP (`ip addr` inside WSL) or an SSH tunnel.
 
@@ -124,7 +124,7 @@ Bind to all interfaces inside the container and publish the port, keeping access
 restricted at the host/network layer (the in-container UI still has no auth):
 
 ```bash
-docker run -p 127.0.0.1:8765:8765 your-ragmonk-image ragmonk ui --host 0.0.0.0 --no-browser
+docker run -p 127.0.0.1:8765:8765 your-docmonk-image docmonk ui --host 0.0.0.0 --no-browser
 ```
 
 Publishing to `127.0.0.1:8765` on the host (as above) keeps it reachable only
@@ -138,7 +138,7 @@ from the host machine.
 - **`Host not allowed` (421)** — you reached the server via a hostname it does
   not recognize. Use `http://127.0.0.1:<port>` (or `localhost`).
 - **Blank/unstyled page** — confirm the wheel shipped the UI assets; the
-  templates and vendored HTMX/CSS live under `ragmonk/ui/` and are declared in
+  templates and vendored HTMX/CSS live under `docmonk/ui/` and are declared in
   the build configuration.
 - **Indexing looks stuck** — check the Logs screen and the Indexing page's
   failed-files list; heavy first-time indexing loads the document/embedding

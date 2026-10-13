@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🧘 RagMonk
+# 🧘 DocMonk
 
 ### Ask your company documents, and your code, anything.
 ### Answers with exact sources. Entirely on your machine.
@@ -10,7 +10,7 @@
 [![MCP Compatible](https://img.shields.io/badge/MCP-compatible-green)](https://modelcontextprotocol.io)
 [![Zero Telemetry](https://img.shields.io/badge/telemetry-none-brightgreen)](https://github.com/gzarog/RagMonk)
 
-**[Overview slides](docs/ragmonk-overview.html)** · **[Install](#-install)** · **[Quick start](#-quick-start-5-minutes)** · **[Features](#-what-you-get)** · **[How indexing works](#-how-indexing-works)** · **[Commands](#-command-cheat-sheet)** · **[Status](#-is-it-working-ragmonk-status)** · **[Configuration](#%EF%B8%8F-configuration)** · **[FAQ](#-faq--troubleshooting)**
+**[Overview slides](docs/docmonk-overview.html)** · **[Install](#-install)** · **[Quick start](#-quick-start-5-minutes)** · **[Features](#-what-you-get)** · **[How indexing works](#-how-indexing-works)** · **[Commands](#-command-cheat-sheet)** · **[Status](#-is-it-working-docmonk-status)** · **[Configuration](#%EF%B8%8F-configuration)** · **[FAQ](#-faq--troubleshooting)**
 
 </div>
 
@@ -37,7 +37,7 @@ Python, JavaScript, TypeScript, Go, Java, Rust, C#. Symbols, callers, call graph
 <td width="33%" valign="top">
 
 ### 🔒 Private
-No telemetry, no cloud, no external AI unless you opt in. Your data stays in `~/.ragmonk`.
+No telemetry, no cloud, no external AI unless you opt in. Your data stays in `~/.docmonk`.
 
 </td>
 </tr>
@@ -45,14 +45,14 @@ No telemetry, no cloud, no external AI unless you opt in. Your data stays in `~/
 
 ---
 
-## 🤔 Why RagMonk?
+## 🤔 Why DocMonk?
 
 > *"What does the onboarding policy say about remote equipment?"*
 > *"Which spec describes settlement retries, and what code implements them?"*
 
 Knowledge is scattered across **PDFs, Word files, slides, spreadsheets, wikis** and **repositories**. Most RAG tools send that data to the cloud and answer **without sources**.
 
-RagMonk is a **local-first knowledge engine**. Point it at folders and you get an evidence-backed knowledge base:
+DocMonk is a **local-first knowledge engine**. Point it at folders and you get an evidence-backed knowledge base:
 
 | | |
 |---|---|
@@ -69,23 +69,35 @@ RagMonk is a **local-first knowledge engine**. Point it at folders and you get a
 |---|---|
 | **macOS / Linux** | `curl -fsSL https://raw.githubusercontent.com/gzarog/RagMonk/main/install.sh \| sh` |
 | **Windows (PowerShell)** | `irm https://raw.githubusercontent.com/gzarog/RagMonk/main/install.ps1 \| iex` |
-| **Docker** | `docker pull ghcr.io/gzarog/ragmonk` (see [Container](docs/adr/0030-release-and-container.md)) |
+| **Docker** | `docker pull ghcr.io/gzarog/docmonk` (see [Container](docs/adr/0030-release-and-container.md)) |
 
-**Requirements:** none. A single native binary for Linux x86_64, macOS (Apple silicon and Intel) and Windows x86_64, with the embedding, reranker and OCR models bundled, so everything runs offline from the first start. Update in place with `ragmonk update install`.
+**Requirements:** none. A single native binary for Linux x86_64, macOS (Apple silicon and Intel) and Windows x86_64, with the embedding, reranker and OCR models bundled, so everything runs offline from the first start. Update in place with `docmonk update install`.
 
-Check the install with `ragmonk version` and `ragmonk doctor`.
+Check the install with `docmonk version` and `docmonk doctor`.
+
+> 🏷️ **Formerly RagMonk.** The product, binary and every runtime name are now **DocMonk**; the GitHub repository is still [`gzarog/RagMonk`](https://github.com/gzarog/RagMonk). Nothing is carried over automatically, so an existing RagMonk setup moves by hand:
+>
+> | RagMonk | DocMonk |
+> |---|---|
+> | `ragmonk` binary (`ragmonk update` does not install DocMonk) | reinstall with the commands above |
+> | `RAGMONK_*` environment variables | `DOCMONK_*` (same names after the prefix) |
+> | `~/.ragmonk`, `%LOCALAPPDATA%\RagMonk` | `~/.docmonk`, `%LOCALAPPDATA%\DocMonk`: move the folder, or set `DOCMONK_HOME` to it |
+> | `.ragmonk.yaml`, `.ragmonkignore` | `.docmonk.yaml`, `.docmonkignore` |
+> | MCP server `ragmonk serve --mcp`, tools `ragmonk_*` | `docmonk serve --mcp`, tools `docmonk_*`: re-register it in your agent |
+> | Server indexes `ragmonk-*` | `docmonk-*`: run `docmonk server init` and `docmonk rebuild` |
+> | `ghcr.io/gzarog/ragmonk` | `ghcr.io/gzarog/docmonk` |
 
 ---
 
 ## 🚀 Quick start (5 minutes)
 
 ```bash
-ragmonk init                              # 1. create the runtime folder (~/.ragmonk)
-ragmonk source add ~/company-docs         # 2. register folders to index
-ragmonk source add ~/code/payments
-ragmonk index                             # 3. build the knowledge base
-ragmonk status                            # 4. check progress and errors
-ragmonk explore "what does the onboarding policy say about equipment?"   # 5. ask
+docmonk init                              # 1. create the runtime folder (~/.docmonk)
+docmonk source add ~/company-docs         # 2. register folders to index
+docmonk source add ~/code/payments
+docmonk index                             # 3. build the knowledge base
+docmonk status                            # 4. check progress and errors
+docmonk explore "what does the onboarding policy say about equipment?"   # 5. ask
 ```
 
 Example of what you get back:
@@ -96,15 +108,15 @@ contracts/msa-2024.docx     →  page 12 · Termination › Notice Period
 src/payments/settlement.py  →  line 88 · SettlementService.retry()
 ```
 
-> 💡 **Keep it fresh automatically:** run `ragmonk daemon start`, and changed files are re-indexed in the background.
+> 💡 **Keep it fresh automatically:** run `docmonk daemon start`, and changed files are re-indexed in the background.
 
-> 🎞️ **New here?** Open [`docs/ragmonk-overview.html`](docs/ragmonk-overview.html) in a browser: a short slide overview for users and engineers.
+> 🎞️ **New here?** Open [`docs/docmonk-overview.html`](docs/docmonk-overview.html) in a browser: a short slide overview for users and engineers.
 
 ---
 
 ## 🔄 How indexing works
 
-Every `ragmonk index` (and every background daemon pass) runs in **two stages**:
+Every `docmonk index` (and every background daemon pass) runs in **two stages**:
 
 ```
  Stage 1 · INDEX (all selected sources)          Stage 2 · RELATIONSHIPS (after ALL of stage 1)
@@ -118,7 +130,7 @@ Every `ragmonk index` (and every background daemon pass) runs in **two stages**:
 | 🧱 **A barrier** | Stage 2 starts only after every selected source finished stage 1. |
 | 🎯 **Exact snapshots** | Each relationship graph belongs to one published index. A graph built from an older index is never shown as current. A file edited mid-run marks the graph `stale` instead of mixing versions. |
 | ♻️ **Incremental** | Only changed files are re-parsed, and only files that reference a changed symbol are re-resolved. In server mode unchanged edges and links are copied forward on the cluster, not rewritten. |
-| 🩹 **Retry cheaply** | `ragmonk relationships build [--source ID]` rebuilds graphs without re-reading or re-converting any content. |
+| 🩹 **Retry cheaply** | `docmonk relationships build [--source ID]` rebuilds graphs without re-reading or re-converting any content. |
 | 🔌 **Optional** | `indexing.relationships_enabled: false` skips stage 2 and hides graphs (callers, callees, impact, doc↔code links); search still works, nothing is deleted, and toggling it never forces a reindex. |
 
 A run where every index published but a graph failed is reported as a **partial success**: the index is usable, and `status` shows the graph separately.
@@ -156,9 +168,9 @@ Full extraction for **Python, JavaScript, TypeScript/TSX, Go, Java, Rust and C#*
 <!-- clean-slate-audit: allow-end -->
 
 ```bash
-ragmonk symbol SettlementService      # where is it defined?
-ragmonk callers SettlementService     # who calls it?
-ragmonk impact SettlementService      # callers, tests, and the specs that mention it
+docmonk symbol SettlementService      # where is it defined?
+docmonk callers SettlementService     # who calls it?
+docmonk impact SettlementService      # callers, tests, and the specs that mention it
 ```
 
 </details>
@@ -167,7 +179,7 @@ ragmonk impact SettlementService      # callers, tests, and the specs that menti
 <summary><b>🔎 One question, one command</b></summary>
 
 ```bash
-ragmonk explore "what breaks if SettlementService changes?"
+docmonk explore "what breaks if SettlementService changes?"
 ```
 
 A deterministic planner combines symbol lookup, the call graph, full-text search, document links and (optionally) semantic search into **one cited evidence package**.
@@ -178,7 +190,7 @@ A deterministic planner combines symbol lookup, the call graph, full-text search
 <summary><b>🖥️ Admin UI</b></summary>
 
 ```bash
-ragmonk ui          # → http://127.0.0.1:8765
+docmonk ui          # → http://127.0.0.1:8765
 ```
 
 Manage sources, run indexing with live progress, browse document chunks, test search, explore the code graph, edit settings, and control the daemon, backups and logs. It listens only on `127.0.0.1`, with CSRF protection. See [docs/ui.md](docs/ui.md).
@@ -189,10 +201,10 @@ Manage sources, run indexing with live progress, browse document chunks, test se
 <summary><b>🤖 AI agents (MCP)</b></summary>
 
 ```bash
-ragmonk serve --mcp   # register this command as a stdio MCP server in your client
+docmonk serve --mcp   # register this command as a stdio MCP server in your client
 ```
 
-Tools exposed: `ragmonk_explore`, `ragmonk_search`, `ragmonk_documents`, `ragmonk_symbol`, `ragmonk_callers`, `ragmonk_callees`, `ragmonk_impact`, `ragmonk_status`, `ragmonk_ask`.
+Tools exposed: `docmonk_explore`, `docmonk_search`, `docmonk_documents`, `docmonk_symbol`, `docmonk_callers`, `docmonk_callees`, `docmonk_impact`, `docmonk_status`, `docmonk_ask`.
 
 </details>
 
@@ -200,17 +212,17 @@ Tools exposed: `ragmonk_explore`, `ragmonk_search`, `ragmonk_documents`, `ragmon
 <summary><b>🧠 Optional AI answers and semantic search</b></summary>
 
 ```bash
-ragmonk config set search.semantic true      # local semantic search (no cloud)
-ragmonk config set ai.provider ollama
-ragmonk config set ai.model llama3.2
-ragmonk ask "how are settlement retries handled?"
+docmonk config set search.semantic true      # local semantic search (no cloud)
+docmonk config set ai.provider ollama
+docmonk config set ai.model llama3.2
+docmonk ask "how are settlement retries handled?"
 ```
 
 | Provider | Notes |
 |---|---|
 | **Ollama**, OpenAI-compatible | Local / self-hosted |
 | **OpenAI**, **Anthropic** | Require `privacy.external_ai_allowed: true` |
-| **Codex**, **GitHub Copilot** (beta) | `ragmonk ai login <provider>`, see [docs/providers](docs/providers/) |
+| **Codex**, **GitHub Copilot** (beta) | `docmonk ai login <provider>`, see [docs/providers](docs/providers/) |
 
 </details>
 
@@ -218,12 +230,12 @@ ragmonk ask "how are settlement retries handled?"
 <summary><b>🏢 Large or shared corpora: OpenSearch / Elasticsearch</b></summary>
 
 ```bash
-ragmonk init --storage-mode server --storage-engine opensearch \
+docmonk init --storage-mode server --storage-engine opensearch \
     --storage-url https://search.internal:9200
 ```
 
 - `init` checks the real cluster first: reachable, right engine, OpenSearch 2+ / Elasticsearch 8+, permissions.
-- Credentials come **only** from environment variables (`RAGMONK_OPENSEARCH_USERNAME`, `…_PASSWORD`, `…_API_KEY`, and the same names with `ELASTICSEARCH`). They are never stored in `config.yaml`.
+- Credentials come **only** from environment variables (`DOCMONK_OPENSEARCH_USERNAME`, `…_PASSWORD`, `…_API_KEY`, and the same names with `ELASTICSEARCH`). They are never stored in `config.yaml`.
 - Rebuilds publish atomically. A failed rebuild keeps serving the previous index.
 - Local dev cluster: `docker compose -f docker/docker-compose.opensearch.yml up -d`
 
@@ -235,36 +247,36 @@ ragmonk init --storage-mode server --storage-engine opensearch \
 
 | Task | Command |
 |---|---|
-| Set up | `ragmonk init` |
-| Add / list / remove a folder | `ragmonk source add PATH [--include GLOB] [--exclude GLOB]` · `source list` · `source remove ID` |
-| Pause / resume a folder | `ragmonk source disable ID` · `source enable ID` |
-| Index now | `ragmonk index [--source ID]` |
-| Retry relationship graphs only | `ragmonk relationships build [--source ID]` |
-| Index automatically | `ragmonk daemon start` · `daemon status` · `daemon stop` |
-| Is it working? | `ragmonk status [--watch] [--errors] [--verbose] [--json]` |
-| Search | `ragmonk search "text" [--hybrid] [--table] [--json]` |
-| Ask across everything | `ragmonk explore "question"` · `ragmonk ask "question"` (AI) |
-| Code navigation | `ragmonk symbol` · `callers` · `callees` · `references` · `impact` `NAME` |
-| List documents | `ragmonk docs [--source ID]` |
-| Pin a doc↔code link | `ragmonk link add ENTITY DOCUMENT` · `link list` · `link remove ID` |
-| Web UI | `ragmonk ui` |
-| Health check | `ragmonk doctor` · `ragmonk health` |
-| Settings | `ragmonk config show` · `config get KEY` · `config set KEY VALUE` |
-| Backup / restore | `ragmonk backup [PATH]` · `ragmonk restore ARCHIVE` |
-| Rebuild from scratch | `ragmonk rebuild [--source ID] [--fresh]` |
-| Update RagMonk | `ragmonk update check` · `update install` |
-| Uninstall | `ragmonk uninstall [--keep-data]` |
+| Set up | `docmonk init` |
+| Add / list / remove a folder | `docmonk source add PATH [--include GLOB] [--exclude GLOB]` · `source list` · `source remove ID` |
+| Pause / resume a folder | `docmonk source disable ID` · `source enable ID` |
+| Index now | `docmonk index [--source ID]` |
+| Retry relationship graphs only | `docmonk relationships build [--source ID]` |
+| Index automatically | `docmonk daemon start` · `daemon status` · `daemon stop` |
+| Is it working? | `docmonk status [--watch] [--errors] [--verbose] [--json]` |
+| Search | `docmonk search "text" [--hybrid] [--table] [--json]` |
+| Ask across everything | `docmonk explore "question"` · `docmonk ask "question"` (AI) |
+| Code navigation | `docmonk symbol` · `callers` · `callees` · `references` · `impact` `NAME` |
+| List documents | `docmonk docs [--source ID]` |
+| Pin a doc↔code link | `docmonk link add ENTITY DOCUMENT` · `link list` · `link remove ID` |
+| Web UI | `docmonk ui` |
+| Health check | `docmonk doctor` · `docmonk health` |
+| Settings | `docmonk config show` · `config get KEY` · `config set KEY VALUE` |
+| Backup / restore | `docmonk backup [PATH]` · `docmonk restore ARCHIVE` |
+| Rebuild from scratch | `docmonk rebuild [--source ID] [--fresh]` |
+| Update DocMonk | `docmonk update check` · `update install` |
+| Uninstall | `docmonk uninstall [--keep-data]` |
 
 Every command supports `--help`.
 
 ---
 
-## 📊 Is it working? `ragmonk status`
+## 📊 Is it working? `docmonk status`
 
-`ragmonk status` tells you whether indexing is **running, progressing, stalled or failing**, on which sources and hosts, and what failed. Example while two sources index on two hosts (server mode):
+`docmonk status` tells you whether indexing is **running, progressing, stalled or failing**, on which sources and hosts, and what failed. Example while two sources index on two hosts (server mode):
 
 ```
-RagMonk status  [server mode, opensearch http://search.example:9200 prefix=ragmonk, authoritative]
+DocMonk status  [server mode, opensearch http://search.example:9200 prefix=docmonk, authoritative]
 Snapshot 2026-10-08T15:00:00.000000Z (0s ago)
 Health: DEGRADED  (2 problem(s))  Cluster: yellow (unassigned shards 7)
 Sources: 3 registered, 3 enabled, 2 active, 0 failed, 0 offline
@@ -302,7 +314,7 @@ src_beta   host-b  live  scanning    0/N/A           0        0       0      3s 
 
 ## ⚙️ Configuration
 
-Settings live in `~/.ragmonk/config.yaml` (Windows: `%LOCALAPPDATA%\RagMonk`); unknown keys are rejected. Change them with `ragmonk config set KEY VALUE`, or override any of them with an environment variable, e.g. `RAGMONK_DOCUMENTS__OCR=off`. Set `RAGMONK_HOME` to move the whole runtime folder.
+Settings live in `~/.docmonk/config.yaml` (Windows: `%LOCALAPPDATA%\DocMonk`); unknown keys are rejected. Change them with `docmonk config set KEY VALUE`, or override any of them with an environment variable, e.g. `DOCMONK_DOCUMENTS__OCR=off`. Set `DOCMONK_HOME` to move the whole runtime folder.
 
 | Setting | Default | What it does |
 |---|---|---|
@@ -318,7 +330,7 @@ Settings live in `~/.ragmonk/config.yaml` (Windows: `%LOCALAPPDATA%\RagMonk`); u
 | `indexing.relationship_dependencies` | `[]` | Explicit cross-source dependencies, `"<consumer> -> <producer>"` (C# project references are discovered) |
 | `indexing.lock_timeout_seconds` | `30` | Max wait when another process is indexing |
 | `indexing.status_stall_threshold_seconds` | `120` | When `status` reports "stalled" |
-| `ai.provider` / `ai.model` | *(none)* | Optional AI answers for `ragmonk ask` |
+| `ai.provider` / `ai.model` | *(none)* | Optional AI answers for `docmonk ask` |
 | `privacy.external_ai_allowed` | `false` | Required for cloud AI providers |
 
 <details>
@@ -326,10 +338,10 @@ Settings live in `~/.ragmonk/config.yaml` (Windows: `%LOCALAPPDATA%\RagMonk`); u
 
 | Situation | Try |
 |---|---|
-| Many digital (non-scanned) PDFs, speed matters more than layout | `ragmonk config set documents.pdf_mode fast`: 81s → 1.6s on a 24-PDF test set |
+| Many digital (non-scanned) PDFs, speed matters more than layout | `docmonk config set documents.pdf_mode fast`: 81s → 1.6s on a 24-PDF test set |
 | Big first index | Let it finish once. After that only changed files are reprocessed |
 
-Changing `pdf_mode` reprocesses PDFs on the next `ragmonk index`.
+Changing `pdf_mode` reprocesses PDFs on the next `docmonk index`.
 
 </details>
 
@@ -346,37 +358,37 @@ No. There is no telemetry. Indexes are stored locally (or in *your* OpenSearch/E
 <details>
 <summary><b>A folder shows <code>offline</code></b></summary>
 
-The folder (for example a network share) could not be reached. Its existing knowledge is **kept, never deleted**. Reconnect it and run `ragmonk index`.
+The folder (for example a network share) could not be reached. Its existing knowledge is **kept, never deleted**. Reconnect it and run `docmonk index`.
 </details>
 
 <details>
 <summary><b>A source shows <code>errors</code> or <code>retrying</code></b></summary>
 
-Run `ragmonk status --errors` to see the failing files and why. Files that fail temporarily are retried automatically with backoff. Files that keep failing (corrupt or password-protected) are recorded as failed, and the rest of the run continues.
+Run `docmonk status --errors` to see the failing files and why. Files that fail temporarily are retried automatically with backoff. Files that keep failing (corrupt or password-protected) are recorded as failed, and the rest of the run continues.
 </details>
 
 <details>
 <summary><b>Relationships show <code>stale</code> or <code>failed</code></b></summary>
 
-The index itself is published and searchable; only the relationship graph (callers, impact, doc↔code links) is not current. `stale` usually means a file changed while the run was going: the next `ragmonk index` picks it up. To retry just the graphs, run `ragmonk relationships build`. `ragmonk status --verbose` shows the reason.
+The index itself is published and searchable; only the relationship graph (callers, impact, doc↔code links) is not current. `stale` usually means a file changed while the run was going: the next `docmonk index` picks it up. To retry just the graphs, run `docmonk relationships build`. `docmonk status --verbose` shows the reason.
 </details>
 
 <details>
-<summary><b>"Another RagMonk process holds index.lock"</b></summary>
+<summary><b>"Another DocMonk process holds index.lock"</b></summary>
 
-Another index run, the daemon or the Admin UI is indexing right now. The error names the PID and the operation. Wait for it, or stop it with `ragmonk daemon stop`. **Do not delete the lock file.** It is released automatically when its owner exits or crashes.
+Another index run, the daemon or the Admin UI is indexing right now. The error names the PID and the operation. Wait for it, or stop it with `docmonk daemon stop`. **Do not delete the lock file.** It is released automatically when its owner exits or crashes.
 </details>
 
 <details>
 <summary><b>The first index is slow</b></summary>
 
-The first run downloads the document models once, and every file is new. Later runs only process changes. See the *Faster indexing tips* above, and watch progress with `ragmonk status --watch`.
+The first run downloads the document models once, and every file is new. Later runs only process changes. See the *Faster indexing tips* above, and watch progress with `docmonk status --watch`.
 </details>
 
 <details>
 <summary><b>Something looks broken</b></summary>
 
-Run `ragmonk doctor`. It checks the runtime folder, sources, databases, the index lock, the storage backend and AI providers. If the index itself is damaged: `ragmonk rebuild --fresh`. Your previous index is restored if the rebuild fails.
+Run `docmonk doctor`. It checks the runtime folder, sources, databases, the index lock, the storage backend and AI providers. If the index itself is damaged: `docmonk rebuild --fresh`. Your previous index is restored if the rebuild fails.
 </details>
 
 ---
@@ -385,7 +397,7 @@ Run `ragmonk doctor`. It checks the runtime folder, sources, databases, the inde
 
 **📄 Documents** · **💻 Code** · **🔗 Linked** · **🔒 Local**
 
-🎞️ [Overview slides](docs/ragmonk-overview.html) · 📘 [Full reference](docs/reference.md) · 🖥️ [Admin UI guide](docs/ui.md) · 📝 [Releases](https://github.com/gzarog/RagMonk/releases) · 🤝 [Contributing](CONTRIBUTING.md) · 🔐 [Security](SECURITY.md)
+🎞️ [Overview slides](docs/docmonk-overview.html) · 📘 [Full reference](docs/reference.md) · 🖥️ [Admin UI guide](docs/ui.md) · 📝 [Releases](https://github.com/gzarog/RagMonk/releases) · 🤝 [Contributing](CONTRIBUTING.md) · 🔐 [Security](SECURITY.md)
 
 MIT licensed
 

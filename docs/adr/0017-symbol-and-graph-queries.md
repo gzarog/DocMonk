@@ -4,8 +4,8 @@ Status: accepted
 
 ## Scope
 
-The `ragmonk_retrieval::graph` module answers symbol and graph queries.
-Storage support lives in `ragmonk_storage::search`: `symbol_entities`,
+The `docmonk_retrieval::graph` module answers symbol and graph queries.
+Storage support lives in `docmonk_storage::search`: `symbol_entities`,
 `entity_edges`, `unresolved_edges` and `file_rel_path`, all scoped to one
 build.
 
@@ -53,5 +53,5 @@ edges are compared as a multiset; the depth sequence must match. The
 stored graph is resolved against the whole build (ADR 0009), so it does
 not depend on scan order.
 
-These queries are exposed as `ragmonk symbol`, `callers`, `callees` and
+These queries are exposed as `docmonk symbol`, `callers`, `callees` and
 `references`, and through the MCP tools.
