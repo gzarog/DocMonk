@@ -14,7 +14,7 @@
 
 $ErrorActionPreference = "Stop"
 
-$Repo = "gzarog/RagMonk"
+$Repo = "gzarog/DocMonk"
 # The release-signing public key (minisign). Empty: checksums only.
 $MinisignPubkey = ""
 $Target = "x86_64-pc-windows-msvc"

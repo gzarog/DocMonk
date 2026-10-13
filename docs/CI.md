@@ -4,7 +4,7 @@ Three workflows, all in `.github/workflows/`:
 
 | Workflow | File | Triggers |
 | --- | --- | --- |
-| `CI` | `rust.yml` | every pull request; pushes to `main` and `release/ragmonk-1.0-clean-slate` |
+| `CI` | `rust.yml` | every pull request; pushes to `main` |
 | `Nightly` | `rust-nightly.yml` | daily 03:00 UTC; manual dispatch |
 | `Rust release` | `rust-release.yml` | unchanged: green push CI on `main` (`workflow_run`), tags, manual |
 
@@ -92,9 +92,9 @@ Rollout order:
 
 ## Baseline (2026-10-08, before this change)
 
-- PR run: 1038 s wall, https://github.com/gzarog/RagMonk/actions/runs/37847236804
+- PR run: 1038 s wall, https://github.com/gzarog/DocMonk/actions/runs/37847236804
   (Windows 1034 s, macOS 896 s, Docker 492 s, Linux 477 s, server 230 s).
-- Main run: 1946 s wall, https://github.com/gzarog/RagMonk/actions/runs/37797728388;
+- Main run: 1946 s wall, https://github.com/gzarog/DocMonk/actions/runs/37797728388;
   the automatic release that followed took 1374 s.
 
 Wall time is measured from the run's start to its last job's end. The

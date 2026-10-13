@@ -1,11 +1,11 @@
 {
-  "plan": "RagMonk P0 completion plan",
+  "plan": "DocMonk P0 completion plan",
   "baseline_commit": "a92f9a1deec08cb977e0390033ea93f106ed9312",
   "measured_on": "2026-10-08",
-  "reproduce": "cargo build --release -p ragmonk-cli (at the baseline commit); RAGMONK_P0_SERVER_URL=http://localhost:9201 scripts/p0-baseline.sh target/release/ragmonk out.json 20 4000 opensearch",
+  "reproduce": "cargo build --release -p docmonk-cli (at the baseline commit); DOCMONK_P0_SERVER_URL=http://localhost:9201 scripts/p0-baseline.sh target/release/docmonk out.json 20 4000 opensearch",
   "scenarios": {
     "harness": "scripts/p0-baseline.sh",
-    "binary": "ragmonk 0.0.0",
+    "binary": "docmonk 0.0.0",
     "corpus": {
       "generator": "cargo xtask p0-corpus --with-documents",
       "sources": 20,
@@ -61,7 +61,7 @@
   "findings": [
     "storage.mode=server indexed into 20 local SQLite knowledge.db files and wrote 0 records to any OpenSearch index",
     "server-mode search returned results read from local SQLite (silent local fallback)",
-    "server-mode status reported no server counts (placeholder error in ragmonk-service status.rs)",
+    "server-mode status reported no server counts (placeholder error in docmonk-service status.rs)",
     "sources were indexed serially under one global index.lock"
   ],
   "notes": "Small corpus (20 sources, 4000 generated files plus document fixtures in every tenth repository) on a shared 4-vCPU container; timings are a baseline for the same harness and host only, not a performance claim. The full 150-source/200000-file run uses the same script with 150 200000."

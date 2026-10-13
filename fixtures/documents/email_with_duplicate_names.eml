@@ -3,15 +3,15 @@ To: recipient@example.com
 Subject: Duplicate names
 Date: Mon, 01 Sep 2025 12:00:00 +0000
 MIME-Version: 1.0
-Content-Type: multipart/mixed; boundary="===ragmonk-fixture-boundary==="
+Content-Type: multipart/mixed; boundary="===docmonk-fixture-boundary==="
 
---===ragmonk-fixture-boundary===
+--===docmonk-fixture-boundary===
 Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: 7bit
 
 Two attachments share one filename.
 
---===ragmonk-fixture-boundary===
+--===docmonk-fixture-boundary===
 Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: 7bit
 Content-Disposition: attachment; filename="notes.txt"
@@ -19,7 +19,7 @@ MIME-Version: 1.0
 
 First copy mentions alpacafirst.
 
---===ragmonk-fixture-boundary===
+--===docmonk-fixture-boundary===
 Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: 7bit
 Content-Disposition: attachment; filename="notes.txt"
@@ -27,4 +27,4 @@ MIME-Version: 1.0
 
 Second copy mentions llamasecond.
 
---===ragmonk-fixture-boundary===--
+--===docmonk-fixture-boundary===--

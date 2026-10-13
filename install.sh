@@ -13,7 +13,7 @@
 #                          assets (testing and mirrors)
 set -eu
 
-REPO="gzarog/RagMonk"
+REPO="gzarog/DocMonk"
 # The release-signing public key (minisign). Empty: checksums only.
 MINISIGN_PUBKEY=""
 INSTALL_DIR="${DOCMONK_INSTALL_DIR:-$HOME/.docmonk}"

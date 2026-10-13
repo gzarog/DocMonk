@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: ["main", "release/ragmonk-1.0-clean-slate"]
+    branches: ["main"]
 
 # A newer push to the same PR supersedes its running CI. Pushes get a
 # unique group (the run id) and are never cancelled: a green main push

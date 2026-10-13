@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Native binary](https://img.shields.io/badge/native-Rust-orange)](docs/architecture.md)
 [![MCP Compatible](https://img.shields.io/badge/MCP-compatible-green)](https://modelcontextprotocol.io)
-[![Zero Telemetry](https://img.shields.io/badge/telemetry-none-brightgreen)](https://github.com/gzarog/RagMonk)
+[![Zero Telemetry](https://img.shields.io/badge/telemetry-none-brightgreen)](https://github.com/gzarog/DocMonk)
 
 **[Overview slides](docs/docmonk-overview.html)** · **[Install](#-install)** · **[Quick start](#-quick-start-5-minutes)** · **[Features](#-what-you-get)** · **[How indexing works](#-how-indexing-works)** · **[Commands](#-command-cheat-sheet)** · **[Status](#-is-it-working-docmonk-status)** · **[Configuration](#%EF%B8%8F-configuration)** · **[FAQ](#-faq--troubleshooting)**
 
@@ -67,25 +67,13 @@ DocMonk is a **local-first knowledge engine**. Point it at folders and you get a
 
 | Platform | Command |
 |---|---|
-| **macOS / Linux** | `curl -fsSL https://raw.githubusercontent.com/gzarog/RagMonk/main/install.sh \| sh` |
-| **Windows (PowerShell)** | `irm https://raw.githubusercontent.com/gzarog/RagMonk/main/install.ps1 \| iex` |
+| **macOS / Linux** | `curl -fsSL https://raw.githubusercontent.com/gzarog/DocMonk/main/install.sh \| sh` |
+| **Windows (PowerShell)** | `irm https://raw.githubusercontent.com/gzarog/DocMonk/main/install.ps1 \| iex` |
 | **Docker** | `docker pull ghcr.io/gzarog/docmonk` (see [Container](docs/adr/0030-release-and-container.md)) |
 
 **Requirements:** none. A single native binary for Linux x86_64, macOS (Apple silicon and Intel) and Windows x86_64, with the embedding, reranker and OCR models bundled, so everything runs offline from the first start. Update in place with `docmonk update install`.
 
 Check the install with `docmonk version` and `docmonk doctor`.
-
-> 🏷️ **Formerly RagMonk.** The product, binary and every runtime name are now **DocMonk**; the GitHub repository is still [`gzarog/RagMonk`](https://github.com/gzarog/RagMonk). Nothing is carried over automatically, so an existing RagMonk setup moves by hand:
->
-> | RagMonk | DocMonk |
-> |---|---|
-> | `ragmonk` binary (`ragmonk update` does not install DocMonk) | reinstall with the commands above |
-> | `RAGMONK_*` environment variables | `DOCMONK_*` (same names after the prefix) |
-> | `~/.ragmonk`, `%LOCALAPPDATA%\RagMonk` | `~/.docmonk`, `%LOCALAPPDATA%\DocMonk`: move the folder, or set `DOCMONK_HOME` to it |
-> | `.ragmonk.yaml`, `.ragmonkignore` | `.docmonk.yaml`, `.docmonkignore` |
-> | MCP server `ragmonk serve --mcp`, tools `ragmonk_*` | `docmonk serve --mcp`, tools `docmonk_*`: re-register it in your agent |
-> | Server indexes `ragmonk-*` | `docmonk-*`: run `docmonk server init` and `docmonk rebuild` |
-> | `ghcr.io/gzarog/ragmonk` | `ghcr.io/gzarog/docmonk` |
 
 ---
 
@@ -397,7 +385,7 @@ Run `docmonk doctor`. It checks the runtime folder, sources, databases, the inde
 
 **📄 Documents** · **💻 Code** · **🔗 Linked** · **🔒 Local**
 
-🎞️ [Overview slides](docs/docmonk-overview.html) · 📘 [Full reference](docs/reference.md) · 🖥️ [Admin UI guide](docs/ui.md) · 📝 [Releases](https://github.com/gzarog/RagMonk/releases) · 🤝 [Contributing](CONTRIBUTING.md) · 🔐 [Security](SECURITY.md)
+🎞️ [Overview slides](docs/docmonk-overview.html) · 📘 [Full reference](docs/reference.md) · 🖥️ [Admin UI guide](docs/ui.md) · 📝 [Releases](https://github.com/gzarog/DocMonk/releases) · 🤝 [Contributing](CONTRIBUTING.md) · 🔐 [Security](SECURITY.md)
 
 MIT licensed
 

@@ -3,15 +3,15 @@ To: recipient@example.com
 Subject: Quarterly planning
 Date: Mon, 01 Sep 2025 12:00:00 +0000
 MIME-Version: 1.0
-Content-Type: multipart/mixed; boundary="===ragmonk-fixture-boundary==="
+Content-Type: multipart/mixed; boundary="===docmonk-fixture-boundary==="
 
---===ragmonk-fixture-boundary===
+--===docmonk-fixture-boundary===
 Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: 7bit
 
 Please see the attached planning material.
 
---===ragmonk-fixture-boundary===
+--===docmonk-fixture-boundary===
 Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: quoted-printable
 Content-Disposition: attachment; filename="notes.txt"
@@ -19,7 +19,7 @@ MIME-Version: 1.0
 
 Field notes about zebrafish migration.
 
---===ragmonk-fixture-boundary===
+--===docmonk-fixture-boundary===
 Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
 Content-Transfer-Encoding: base64
 Content-Disposition: attachment; filename="report.docx"
@@ -669,7 +669,7 @@ YkJdkNCHiWsDAACJFQAAEgAAAAAAAAAAAAAAgAEKgQAAd29yZC9udW1iZXJpbmcueG1sUEsBAhQD
 FAAAAAgAz2JCXaLI1me9BQAAhCAAABcAAAAAAAAAAAAAAIABpYQAAGRvY1Byb3BzL3RodW1ibmFp
 bC5qcGVnUEsFBgAAAAARABEAYQQAAJeKAAAAAA==
 
---===ragmonk-fixture-boundary===
+--===docmonk-fixture-boundary===
 Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 Content-Transfer-Encoding: base64
 Content-Disposition: attachment; filename="budget.xlsx"
@@ -762,7 +762,7 @@ ABoAAAAAAAAAAAAAAIABfA4AAHhsL19yZWxzL3dvcmtib29rLnhtbC5yZWxzUEsBAhQDFAAAAAgA
 z2JCXWWQeZIZAQAAzwMAABMAAAAAAAAAAAAAAIABYQ8AAFtDb250ZW50X1R5cGVzXS54bWxQSwUG
 AAAAAAkACQA+AgAAqxAAAAAA
 
---===ragmonk-fixture-boundary===
+--===docmonk-fixture-boundary===
 Content-Type: application/zip
 Content-Transfer-Encoding: base64
 Content-Disposition: attachment; filename="archive.zip"
@@ -770,7 +770,7 @@ MIME-Version: 1.0
 
 UEsFBgAAAAAAAAAAAAAAAAAAAAAAAA==
 
---===ragmonk-fixture-boundary===
+--===docmonk-fixture-boundary===
 Content-Type: text/markdown; charset="utf-8"
 Content-Transfer-Encoding: 7bit
 Content-Disposition: attachment;
@@ -781,4 +781,4 @@ MIME-Version: 1.0
 
 The narwhalmemo decision was approved.
 
---===ragmonk-fixture-boundary===--
+--===docmonk-fixture-boundary===--

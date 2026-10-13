@@ -770,7 +770,7 @@
       },
       {
        "caption": null,
-       "contextual_text": "Document: Operations Handbook\nSection: Operations Handbook > Code-ish\n\nCall\n\nragmonk index --source /srv/data\n\nthen visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details.",
+       "contextual_text": "Document: Operations Handbook\nSection: Operations Handbook > Code-ish\n\nCall\n\ndocmonk index --source /srv/data\n\nthen visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details.",
        "heading_level": null,
        "heading_path": [
         "Operations Handbook",
@@ -780,9 +780,9 @@
        "page_end": null,
        "page_start": null,
        "parent_index": 19,
-       "search_text": "Operations Handbook\nOperations Handbook\nCode-ish\nCall\n\nragmonk index --source /srv/data\n\nthen visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details.",
+       "search_text": "Operations Handbook\nOperations Handbook\nCode-ish\nCall\n\ndocmonk index --source /srv/data\n\nthen visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details.",
        "table_rows": null,
-       "text": "Call\n\nragmonk index --source /srv/data\n\nthen visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details.",
+       "text": "Call\n\ndocmonk index --source /srv/data\n\nthen visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details.",
        "token_count": 51
       }
      ],
@@ -2803,7 +2803,7 @@
       },
       {
        "caption": null,
-       "contextual_text": "Document: Operations Handbook\nSection: Operations Handbook > Code-ish\n\nCall\n\nragmonk index --source /srv/data",
+       "contextual_text": "Document: Operations Handbook\nSection: Operations Handbook > Code-ish\n\nCall\n\ndocmonk index --source /srv/data",
        "heading_level": null,
        "heading_path": [
         "Operations Handbook",
@@ -2813,9 +2813,9 @@
        "page_end": null,
        "page_start": null,
        "parent_index": 82,
-       "search_text": "Operations Handbook\nOperations Handbook\nCode-ish\nCall\n\nragmonk index --source /srv/data",
+       "search_text": "Operations Handbook\nOperations Handbook\nCode-ish\nCall\n\ndocmonk index --source /srv/data",
        "table_rows": null,
-       "text": "Call\n\nragmonk index --source /srv/data",
+       "text": "Call\n\ndocmonk index --source /srv/data",
        "token_count": 13
       },
       {
@@ -7428,7 +7428,7 @@
       },
       {
        "caption": null,
-       "contextual_text": "Document: Operations Handbook\nSection: Operations Handbook > Code-ish\n\nCall\n\nragmonk index --source /srv/data\n\nthen visit",
+       "contextual_text": "Document: Operations Handbook\nSection: Operations Handbook > Code-ish\n\nCall\n\ndocmonk index --source /srv/data\n\nthen visit",
        "heading_level": null,
        "heading_path": [
         "Operations Handbook",
@@ -7438,9 +7438,9 @@
        "page_end": null,
        "page_start": null,
        "parent_index": 210,
-       "search_text": "Operations Handbook\nOperations Handbook\nCode-ish\nCall\n\nragmonk index --source /srv/data\n\nthen visit",
+       "search_text": "Operations Handbook\nOperations Handbook\nCode-ish\nCall\n\ndocmonk index --source /srv/data\n\nthen visit",
        "table_rows": null,
-       "text": "Call\n\nragmonk index --source /srv/data\n\nthen visit",
+       "text": "Call\n\ndocmonk index --source /srv/data\n\nthen visit",
        "token_count": 15
       },
       {
@@ -8144,7 +8144,7 @@
       "page_start": null,
       "parent_index": 14,
       "table_rows": null,
-      "text": "ragmonk index --source /srv/data"
+      "text": "docmonk index --source /srv/data"
      },
      {
       "caption": null,
