@@ -1,7 +1,7 @@
 # Storage backend abstraction plan, Phase 9 (packaging/docs).
 #
 # OPTIONAL, dev-only convenience for exercising RagMonk's Elasticsearch
-# server backend (crates/ragmonk-backends) and its live integration
+# server backend (crates/docmonk-backends) and its live integration
 # tests (RAGMONK_TEST_ELASTICSEARCH_URL, see CONTRIBUTING.md) against a REAL
 # cluster. This file is NEVER required to run RagMonk -- the default
 # `storage.mode="local"` (SQLite/FTS5 + HNSW vectors) needs no server at all, and

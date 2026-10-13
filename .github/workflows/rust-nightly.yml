@@ -63,7 +63,7 @@ jobs:
         run: |
           set -o pipefail
           start=$(date +%s)
-          cargo test --release -p ragmonk-status --test live_server -- --ignored --nocapture 2>&1 \
+          cargo test --release -p docmonk-status --test live_server -- --ignored --nocapture 2>&1 \
             | tee "$RUNNER_TEMP/benchmark.log"
           echo "duration_seconds=$(( $(date +%s) - start ))" | tee -a "$RUNNER_TEMP/benchmark.log"
       - uses: actions/upload-artifact@v4

@@ -1,5 +1,5 @@
 {
- "description": "Minimum retrieval quality on fixtures/search_quality (72 golden queries over mixed code and documents, kind:path keys). semantic/semantic_rerank are gated by ragmonk-ml's quality test; lexical and hybrid (per query category and 'all') by ragmonk-retrieval's. Floors sit 0.03 below the measured values; a change that drops any metric below its floor fails the test.",
+ "description": "Minimum retrieval quality on fixtures/search_quality (72 golden queries over mixed code and documents, kind:path keys). semantic/semantic_rerank are gated by docmonk-ml's quality test; lexical and hybrid (per query category and 'all') by docmonk-retrieval's. Floors sit 0.03 below the measured values; a change that drops any metric below its floor fails the test.",
  "hybrid": {
   "all": {
    "mrr": 0.88,

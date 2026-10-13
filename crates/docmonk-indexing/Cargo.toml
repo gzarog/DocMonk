@@ -1,0 +1,28 @@
+[package]
+name = "docmonk-indexing"
+description = "RagMonk scanning, incremental diff, jobs/retries, locks and the bounded indexing coordinator"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+chrono.workspace = true
+notify.workspace = true
+docmonk-config.workspace = true
+docmonk-core.workspace = true
+docmonk-storage.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sysinfo.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+rusqlite.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

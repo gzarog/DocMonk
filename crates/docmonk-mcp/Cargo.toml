@@ -1,0 +1,17 @@
+[package]
+name = "docmonk-mcp"
+description = "RagMonk MCP server: JSON-RPC over stdio exposing read-only knowledge tools"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+docmonk-core.workspace = true
+docmonk-retrieval.workspace = true
+docmonk-service.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

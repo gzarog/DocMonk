@@ -22,7 +22,7 @@ ENV RAGMONK_BUILD_VERSION=${RAGMONK_VERSION} \
     CARGO_INCREMENTAL=0
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
-    cargo build --release --locked -p ragmonk-cli \
+    cargo build --release --locked -p docmonk-cli \
     && cp target/release/ragmonk /usr/local/bin/ragmonk
 RUN sh scripts/fetch_models.sh /opt/ragmonk/models
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Fetches the pinned model assets a release bundles, verified
-# against the same SHA-256 digests as ragmonk-ml's and ragmonk-convert's
+# against the same SHA-256 digests as docmonk-ml's and docmonk-convert's
 # manifests, into the layout `<home>/models` uses:
 #
 #   <dir>/all-minilm-l6-v2/      embedding model

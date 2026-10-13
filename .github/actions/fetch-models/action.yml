@@ -11,7 +11,7 @@ runs:
   using: composite
   steps:
     # The pinned ocrs models (not bundled) so OCR tests always
-    # run in CI; digests match ragmonk-convert's OCR_MODEL_MANIFEST.
+    # run in CI; digests match docmonk-convert's OCR_MODEL_MANIFEST.
     - name: Cache OCR models
       uses: actions/cache@v4
       with:
@@ -34,7 +34,7 @@ runs:
         fetch text-detection.rten f15cfb56bd02c4bf478a20343986504a1f01e1665c2b3a0ad66340f054b1b5ca
         fetch text-recognition.rten e484866d4cce403175bd8d00b128feb08ab42e208de30e42cd9889d8f1735a6e
     # The pinned embedding and reranker models (revision + sha256
-    # match ragmonk-ml's manifest) so parity and finalizer tests run.
+    # match docmonk-ml's manifest) so parity and finalizer tests run.
     - name: Cache embedding models
       uses: actions/cache@v4
       with:

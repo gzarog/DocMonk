@@ -1,0 +1,1333 @@
+//! [`KnowledgeRead`] over the server indexes.
+//!
+//! A [`ServerReader`] is one source's view of one published build. Every
+//! query is filtered to `(source_id, build_id)` (never to "all builds"),
+//! so records of other sources, pending builds and garbage-collected
+//! builds can never appear. Ordering mirrors the local store's: equal
+//! scores fall back to path, qualified name, line and id, never to
+//! engine insertion order.
+//!
+//! Lexical scores are the engine's own BM25; they are reported as
+//! `bm25 = -score` (lower is better, like SQLite FTS5) and are not claimed
+//! to equal SQLite's values.
+
+use std::sync::Arc;
+
+use serde_json::{json, Value};
+
+use docmonk_storage::error::{Result, StorageError};
+use docmonk_storage::knowledge::{ChunkRow, EntityRow, RelationshipRow};
+use docmonk_storage::read::{parse_expression, FtsTerm, KnowledgeRead, VectorHit};
+use docmonk_storage::search::{
+    AttachmentProvenance, DocumentSearchRow, EntityLinkRow, EntitySearchRow, PathSearchRow,
+};
+use docmonk_storage::vectors::{SubjectMeta, SNIPPET_CHARS, SUBJECT_CHUNK, SUBJECT_ENTITY};
+
+use crate::backend::{ServerBackend, MANUAL_BUILD, MANUAL_LINK};
+use crate::engine::Engine;
+use crate::schema::IndexKind;
+use crate::transport::Method;
+
+/// Largest result window a single read asks for.
+pub const MAX_READ: usize = 10_000;
+
+/// One source's published build on the server.
+pub struct ServerReader {
+    backend: Arc<ServerBackend>,
+    source_id: String,
+    /// `base build -> visible graph generation`, resolved once per reader
+    /// (one request's snapshot).
+    graph: std::sync::Mutex<std::collections::HashMap<String, Option<String>>>,
+}
+
+impl ServerReader {
+    pub fn new(backend: Arc<ServerBackend>, source_id: &str) -> Self {
+        Self {
+            backend,
+            source_id: source_id.to_owned(),
+            graph: Default::default(),
+        }
+    }
+
+    /// The graph generation derived from base build `b`, when it is the
+    /// source's ready graph; `None` (graph queries come back empty) for a
+    /// missing, building, failed, disabled or stale graph.
+    pub fn graph_generation(&self, b: &str) -> Result<Option<String>> {
+        let mut cache = self.graph.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(g) = cache.get(b) {
+            return Ok(g.clone());
+        }
+        let g = self
+            .backend
+            .visible_graph(&self.source_id, b)
+            .map_err(Self::err)?;
+        cache.insert(b.to_owned(), g.clone());
+        Ok(g)
+    }
+
+    pub fn backend(&self) -> &ServerBackend {
+        &self.backend
+    }
+
+    fn err(e: crate::BackendError) -> StorageError {
+        StorageError::Backend(docmonk_telemetry::redact::redact_urls_in_text(
+            &e.to_string(),
+        ))
+    }
+
+    fn scope(&self, build_id: &str) -> Vec<Value> {
+        vec![
+            json!({ "term": { "source_id": self.source_id } }),
+            json!({ "term": { "build_id": build_id } }),
+        ]
+    }
+
+    /// Raw hits of a `_search` against one index.
+    fn hits(&self, kind: IndexKind, body: Value) -> Result<Vec<Value>> {
+        let path = format!("/{}/_search", self.backend.index(kind));
+        let v = self
+            .backend
+            .post_json(Method::Post, &path, &body)
+            .map_err(Self::err)?;
+        Ok(v.pointer("/hits/hits")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default())
+    }
+
+    /// `filter` + `must` over one build, sorted, at most `size`.
+    fn find(
+        &self,
+        kind: IndexKind,
+        build_id: &str,
+        mut filter: Vec<Value>,
+        must: Option<Value>,
+        sort: Value,
+        size: usize,
+    ) -> Result<Vec<Value>> {
+        let mut f = self.scope(build_id);
+        f.append(&mut filter);
+        let mut query = json!({ "bool": { "filter": f } });
+        if let Some(m) = must {
+            query["bool"]["must"] = json!([m]);
+        }
+        self.hits(
+            kind,
+            json!({ "size": size.min(MAX_READ), "query": query, "sort": sort }),
+        )
+    }
+
+    fn file_mtimes(&self, build_id: &str, ids: &[&str]) -> Result<Vec<(String, String, f64)>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let hits = self.find(
+            IndexKind::Files,
+            build_id,
+            vec![json!({ "terms": { "file_id": ids } })],
+            None,
+            json!([{ "file_id": "asc" }]),
+            ids.len(),
+        )?;
+        Ok(hits
+            .iter()
+            .map(|h| {
+                let s = &h["_source"];
+                (
+                    str_of(s, "file_id"),
+                    str_of(s, "rel_path"),
+                    s["mtime"].as_f64().unwrap_or(0.0),
+                )
+            })
+            .collect())
+    }
+
+    fn entity_search_rows(&self, hits: &[Value]) -> Vec<EntitySearchRow> {
+        hits.iter()
+            .map(|h| {
+                let s = &h["_source"];
+                EntitySearchRow {
+                    id: str_of(s, "entity_id"),
+                    name: str_of(s, "name"),
+                    qualified_name: str_of(s, "qualified_name"),
+                    kind: str_of(s, "kind"),
+                    signature: opt_str(s, "signature"),
+                    start_line: s["start_line"].as_i64().unwrap_or(0),
+                    end_line: s["end_line"].as_i64().unwrap_or(0),
+                    rel_path: str_of(s, "rel_path"),
+                    mtime: s["mtime"].as_f64().unwrap_or(0.0),
+                    fts_rank: 0,
+                    bm25: None,
+                }
+            })
+            .collect()
+    }
+
+    fn attachment_of(s: &Value) -> Option<AttachmentProvenance> {
+        let parent = opt_str(s, "parent_document_id")?;
+        Some(AttachmentProvenance {
+            name: opt_str(s, "attachment_name"),
+            content_type: opt_str(s, "attachment_content_type"),
+            index: s["attachment_index"].as_i64(),
+            format: opt_str(s, "document_format")
+                .or_else(|| opt_str(s, "format"))
+                .unwrap_or_default(),
+            parent_document_id: parent,
+            parent_title: opt_str(s, "parent_title"),
+        })
+    }
+
+    fn fts_query(expression: &str, fields: &[&str]) -> Option<Value> {
+        let parsed = parse_expression(expression)?;
+        let clauses: Vec<Value> = parsed
+            .terms
+            .iter()
+            .map(|t| match t {
+                FtsTerm::Phrase(p) => json!({ "multi_match": {
+                    "query": p, "type": "phrase", "fields": fields } }),
+                FtsTerm::Prefix(p) => json!({ "multi_match": {
+                    "query": p, "type": "phrase_prefix", "fields": fields } }),
+            })
+            .collect();
+        Some(if parsed.all {
+            json!({ "bool": { "must": clauses } })
+        } else {
+            json!({ "bool": { "should": clauses, "minimum_should_match": 1 } })
+        })
+    }
+
+    fn edges(
+        &self,
+        build_id: &str,
+        filter: Vec<Value>,
+        rtype: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<RelationshipRow>> {
+        let mut filter = filter;
+        filter.push(json!({ "term": { "record_kind": "edge" } }));
+        if let Some(t) = rtype {
+            filter.push(json!({ "term": { "relationship_type": t } }));
+        }
+        let sort = if rtype.is_some() {
+            json!([{ "relationship_id": "asc" }])
+        } else {
+            json!([{ "relationship_type": "asc" }, { "relationship_id": "asc" }])
+        };
+        let Some(graph) = self.graph_generation(build_id)? else {
+            return Ok(Vec::new());
+        };
+        let hits = self.find(
+            IndexKind::Relationships,
+            &graph,
+            filter,
+            None,
+            sort,
+            limit.max(0) as usize,
+        )?;
+        Ok(hits
+            .iter()
+            .map(|h| relationship_row(&h["_source"]))
+            .collect())
+    }
+
+    fn chunks_where(
+        &self,
+        build_id: &str,
+        filter: Vec<Value>,
+        sort: Value,
+        size: usize,
+    ) -> Result<Vec<ChunkRow>> {
+        Ok(self
+            .find(IndexKind::Chunks, build_id, filter, None, sort, size)?
+            .iter()
+            .map(|h| chunk_row(&h["_source"]))
+            .collect())
+    }
+
+    fn one_document(&self, build_id: &str, document_id: &str) -> Result<Option<Value>> {
+        Ok(self
+            .find(
+                IndexKind::Documents,
+                build_id,
+                vec![json!({ "term": { "document_id": document_id } })],
+                None,
+                json!([{ "document_id": "asc" }]),
+                1,
+            )?
+            .into_iter()
+            .next()
+            .map(|h| h["_source"].clone()))
+    }
+
+    fn knn_body(&self, field_filter: Vec<Value>, query: &[f32], k: usize) -> Value {
+        match self.backend.engine() {
+            Engine::OpenSearch => json!({
+                "size": k,
+                "_source": ["chunk_id", "entity_id"],
+                "query": { "knn": { "embedding": {
+                    "vector": query, "k": k,
+                    "filter": { "bool": { "filter": field_filter } },
+                } } },
+            }),
+            Engine::Elasticsearch => json!({
+                "size": k,
+                "_source": ["chunk_id", "entity_id"],
+                "knn": {
+                    "field": "embedding", "query_vector": query, "k": k,
+                    "num_candidates": (k * 4).max(50),
+                    "filter": { "bool": { "filter": field_filter } },
+                },
+            }),
+        }
+    }
+}
+
+/// A knowledge link as listed by `link list`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ServerLink {
+    pub id: String,
+    pub link_type: String,
+    pub entity_id: String,
+    pub document_id: String,
+    pub chunk_id: Option<String>,
+    pub resolver: String,
+    pub confidence: String,
+    pub evidence: Option<String>,
+    /// A user-defined (manual) link; `id` is what `link remove` takes.
+    pub manual: bool,
+}
+
+/// A manual link to store on the server.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ManualLinkRecord {
+    pub id: String,
+    pub link_type: String,
+    pub entity_id: String,
+    pub entity_qualified_name: String,
+    pub document_id: String,
+    pub file_id: String,
+    pub rel_path: String,
+    pub chunk_id: Option<String>,
+    pub chunk_ordinal: Option<i64>,
+    pub note: Option<String>,
+}
+
+impl ServerReader {
+    /// Automatic links of build `b` and the source's manual links.
+    pub fn links(&self, b: &str) -> Result<Vec<ServerLink>> {
+        // Without a visible graph only manual links are listed.
+        let g = self.graph_generation(b)?.unwrap_or_default();
+        let b = g.as_str();
+        let body = json!({
+            "size": MAX_READ,
+            "query": { "bool": { "filter": [
+                { "term": { "source_id": self.source_id } },
+                { "bool": { "should": [
+                    { "bool": { "filter": [ { "term": { "build_id": b } }, { "term": { "record_kind": "link" } } ] } },
+                    { "bool": { "filter": [ { "term": { "build_id": MANUAL_BUILD } }, { "term": { "record_kind": MANUAL_LINK } } ] } },
+                ], "minimum_should_match": 1 } },
+            ] } },
+            "sort": [{ "relationship_id": "asc" }],
+        });
+        Ok(self
+            .hits(IndexKind::Relationships, body)?
+            .iter()
+            .map(|h| {
+                let s = &h["_source"];
+                ServerLink {
+                    id: str_of(s, "relationship_id"),
+                    link_type: opt_str(s, "link_type")
+                        .unwrap_or_else(|| str_of(s, "relationship_type")),
+                    entity_id: str_of(s, "entity_id"),
+                    document_id: str_of(s, "document_id"),
+                    chunk_id: opt_str(s, "chunk_id"),
+                    resolver: str_of(s, "resolver"),
+                    confidence: str_of(s, "confidence"),
+                    evidence: opt_str(s, "evidence"),
+                    manual: s["record_kind"].as_str() == Some(MANUAL_LINK),
+                }
+            })
+            .collect())
+    }
+
+    /// Entities whose short name is exactly `name`.
+    pub fn entities_named(&self, b: &str, name: &str) -> Result<Vec<EntityRow>> {
+        Ok(self
+            .find(
+                IndexKind::Code,
+                b,
+                vec![json!({ "term": { "name.raw": name } })],
+                None,
+                json!([{ "qualified_name.raw": "asc" }, { "entity_id": "asc" }]),
+                MAX_READ,
+            )?
+            .iter()
+            .map(|h| entity_row(&h["_source"]))
+            .collect())
+    }
+
+    /// `(rel_path, file_id)` of a document of build `b`.
+    pub fn document_location(
+        &self,
+        b: &str,
+        document_id: &str,
+    ) -> Result<Option<(String, String)>> {
+        Ok(self
+            .one_document(b, document_id)?
+            .map(|d| (str_of(&d, "rel_path"), str_of(&d, "file_id"))))
+    }
+
+    /// Resolves a document reference (id, path, path suffix or file name of
+    /// a top-level document) to `(rel_path, file_id, document_id)`; `None`
+    /// when nothing or more than one document matches.
+    pub fn resolve_document(&self, b: &str, r: &str) -> Result<Option<(String, String, String)>> {
+        if let Some(d) = self.one_document(b, r)? {
+            return Ok(Some((
+                str_of(&d, "rel_path"),
+                str_of(&d, "file_id"),
+                str_of(&d, "document_id"),
+            )));
+        }
+        let name = r.rsplit('/').next().unwrap_or(r);
+        let hits = self.find(
+            IndexKind::Documents,
+            b,
+            vec![
+                json!({ "wildcard": { "rel_path": { "value": format!("*{}", wildcard_literal(name)) } } }),
+                json!({ "bool": { "must_not": [ { "exists": { "field": "parent_document_id" } } ] } }),
+            ],
+            None,
+            json!([{ "rel_path": "asc" }]),
+            MAX_READ,
+        )?;
+        let matches: Vec<&Value> = hits
+            .iter()
+            .map(|h| &h["_source"])
+            .filter(|d| {
+                let p = str_of(d, "rel_path");
+                p == r || p.ends_with(r) || p.rsplit('/').next() == Some(r)
+            })
+            .collect();
+        Ok(match matches.as_slice() {
+            [d] => Some((
+                str_of(d, "rel_path"),
+                str_of(d, "file_id"),
+                str_of(d, "document_id"),
+            )),
+            _ => None,
+        })
+    }
+
+    /// Every record of build `b` in `kind` matching `filter`, paged with
+    /// `search_after` on `id_field` (no truncation).
+    pub fn scan_all(
+        &self,
+        kind: IndexKind,
+        b: &str,
+        filter: Vec<Value>,
+        id_field: &str,
+    ) -> Result<Vec<Value>> {
+        let mut f = self.scope(b);
+        f.extend(filter);
+        let mut out = Vec::new();
+        let mut after: Option<Value> = None;
+        loop {
+            let mut body = json!({
+                "size": 1000,
+                "query": { "bool": { "filter": f } },
+                "sort": [ { id_field: "asc" } ],
+                "track_total_hits": false,
+            });
+            if let Some(a) = &after {
+                body["search_after"] = a.clone();
+            }
+            let hits = self.hits(kind, body)?;
+            let n = hits.len();
+            after = hits.last().map(|h| h["sort"].clone());
+            out.extend(hits.into_iter().map(|h| h["_source"].clone()));
+            if n < 1000 {
+                return Ok(out);
+            }
+        }
+    }
+
+    /// Every document of build `b`.
+    pub fn documents(&self, b: &str) -> Result<Vec<Value>> {
+        self.scan_all(IndexKind::Documents, b, vec![], "document_id")
+    }
+
+    /// Every file of build `b` (optionally of one kind).
+    pub fn files(&self, b: &str, kind: Option<&str>) -> Result<Vec<Value>> {
+        let filter = kind
+            .map(|k| json!({ "term": { "kind": k } }))
+            .into_iter()
+            .collect();
+        self.scan_all(IndexKind::Files, b, filter, "file_id")
+    }
+
+    /// Every file of build `b` as storage rows.
+    pub fn file_rows(&self, b: &str) -> Result<Vec<docmonk_storage::knowledge::FileRow>> {
+        Ok(self
+            .files(b, None)?
+            .iter()
+            .map(|f| docmonk_storage::knowledge::FileRow {
+                id: str_of(f, "file_id"),
+                rel_path: str_of(f, "rel_path"),
+                kind: str_of(f, "kind"),
+                size: f["size"].as_i64().unwrap_or(0),
+                mtime: f["mtime"].as_f64().unwrap_or(0.0),
+                content_hash: opt_str(f, "content_hash"),
+                status: opt_str(f, "status").unwrap_or_else(|| "indexed".into()),
+                parser_version: opt_str(f, "parser_version"),
+                chunker_version: opt_str(f, "chunker_version"),
+                converter_version: opt_str(f, "converter_version"),
+                embedding_model_id: opt_str(f, "embedding_model_id"),
+                embedding_text_version: opt_str(f, "embedding_text_version"),
+                last_error: opt_str(f, "last_error"),
+                attempt_count: f["attempt_count"].as_i64().unwrap_or(0),
+                next_attempt_at: opt_str(f, "next_attempt_at"),
+            })
+            .collect())
+    }
+
+    /// Every document of build `b` as storage rows.
+    pub fn document_rows(&self, b: &str) -> Result<Vec<docmonk_storage::knowledge::DocumentRow>> {
+        Ok(self
+            .documents(b)?
+            .iter()
+            .map(|d| docmonk_storage::knowledge::DocumentRow {
+                id: str_of(d, "document_id"),
+                file_id: str_of(d, "file_id"),
+                format: str_of(d, "format"),
+                title: opt_str(d, "title"),
+                author: opt_str(d, "author"),
+                page_count: d["page_count"].as_i64(),
+                is_scanned: d["is_scanned"].as_bool().unwrap_or(false),
+                content_hash: opt_str(d, "content_hash"),
+                attachment: opt_str(d, "parent_document_id").map(|parent| {
+                    docmonk_storage::knowledge::AttachmentProvenance {
+                        parent_document_id: parent,
+                        name: opt_str(d, "attachment_name"),
+                        content_type: opt_str(d, "attachment_content_type"),
+                        index: d["attachment_index"].as_i64().unwrap_or(0),
+                        content_id: opt_str(d, "attachment_content_id"),
+                    }
+                }),
+            })
+            .collect())
+    }
+
+    /// Chunks of one document of build `b`, in ordinal order.
+    pub fn document_chunks(&self, b: &str, document_id: &str) -> Result<Vec<ChunkRow>> {
+        let mut v: Vec<ChunkRow> = self
+            .scan_all(
+                IndexKind::Chunks,
+                b,
+                vec![json!({ "term": { "document_id": document_id } })],
+                "chunk_id",
+            )?
+            .iter()
+            .map(chunk_row)
+            .collect();
+        v.sort_by_key(|c| c.ordinal);
+        Ok(v)
+    }
+
+    /// Every code entity of build `b`.
+    pub fn all_entities(&self, b: &str) -> Result<Vec<EntityRow>> {
+        Ok(self
+            .scan_all(IndexKind::Code, b, vec![], "entity_id")?
+            .iter()
+            .map(entity_row)
+            .collect())
+    }
+
+    /// `document_id -> (headings, paragraphs, tables)` chunk counts.
+    pub fn chunk_kind_counts(
+        &self,
+        b: &str,
+    ) -> Result<std::collections::HashMap<String, (i64, i64, i64)>> {
+        let mut out: std::collections::HashMap<String, (i64, i64, i64)> = Default::default();
+        let mut after: Option<Value> = None;
+        loop {
+            let mut composite = json!({
+                "size": 1000,
+                "sources": [
+                    { "d": { "terms": { "field": "document_id" } } },
+                    { "k": { "terms": { "field": "kind" } } },
+                ],
+            });
+            if let Some(a) = &after {
+                composite["after"] = a.clone();
+            }
+            let v = self
+                .backend
+                .post_json(
+                    Method::Post,
+                    &format!("/{}/_search", self.backend.index(IndexKind::Chunks)),
+                    &json!({
+                        "size": 0,
+                        "query": { "bool": { "filter": self.scope(b) } },
+                        "aggs": { "c": { "composite": composite } },
+                    }),
+                )
+                .map_err(Self::err)?;
+            let buckets = v
+                .pointer("/aggregations/c/buckets")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            for bk in &buckets {
+                let d = str_of(&bk["key"], "d");
+                let n = bk["doc_count"].as_i64().unwrap_or(0);
+                let e = out.entry(d).or_default();
+                match bk["key"]["k"].as_str() {
+                    Some("heading") => e.0 += n,
+                    Some("paragraph") => e.1 += n,
+                    Some("table") => e.2 += n,
+                    _ => {}
+                }
+            }
+            match v.pointer("/aggregations/c/after_key") {
+                Some(k) if !buckets.is_empty() => after = Some(k.clone()),
+                _ => return Ok(out),
+            }
+        }
+    }
+
+    fn manual_doc_id(&self, id: &str) -> String {
+        format!("{MANUAL_BUILD}:{}:{id}", self.source_id)
+    }
+
+    /// Stores a manual link; `Ok(false)` when it already exists.
+    pub fn put_manual_link(&self, l: &ManualLinkRecord) -> Result<bool> {
+        let path = format!(
+            "/{}/_create/{}?refresh=true",
+            self.backend.index(IndexKind::Relationships),
+            crate::backend::encode_id(&self.manual_doc_id(&l.id))
+        );
+        let doc = json!({
+            "source_id": self.source_id,
+            "build_id": MANUAL_BUILD,
+            "record_kind": MANUAL_LINK,
+            "relationship_id": l.id,
+            "manual_link_id": l.id,
+            "relationship_type": l.link_type,
+            "link_type": l.link_type,
+            "entity_id": l.entity_id,
+            "target_symbol": l.entity_qualified_name,
+            "document_id": l.document_id,
+            "file_id": l.file_id,
+            "rel_path": l.rel_path,
+            "chunk_id": l.chunk_id,
+            "chunk_ordinal": l.chunk_ordinal,
+            "resolver": "user",
+            "confidence": "exact",
+            "evidence": l.note,
+            "created_at": std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+                .to_string(),
+        });
+        match self.backend.post_json(Method::Put, &path, &doc) {
+            Ok(_) => Ok(true),
+            Err(crate::BackendError::Http { status: 409, .. }) => Ok(false),
+            Err(e) => Err(Self::err(e)),
+        }
+    }
+
+    /// Deletes a manual link; `Ok(false)` when there is none with `id`.
+    pub fn remove_manual_link(&self, id: &str) -> Result<bool> {
+        let path = format!(
+            "/{}/_doc/{}?refresh=true",
+            self.backend.index(IndexKind::Relationships),
+            crate::backend::encode_id(&self.manual_doc_id(id))
+        );
+        self.backend.delete_path(&path).map_err(Self::err)
+    }
+}
+
+fn str_of(v: &Value, k: &str) -> String {
+    v.get(k)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned()
+}
+
+fn opt_str(v: &Value, k: &str) -> Option<String> {
+    v.get(k).and_then(Value::as_str).map(str::to_owned)
+}
+
+fn strings(v: &Value, k: &str) -> Vec<String> {
+    match v.get(k) {
+        Some(Value::Array(a)) => a
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect(),
+        Some(Value::String(s)) => vec![s.clone()],
+        _ => Vec::new(),
+    }
+}
+
+fn entity_row(s: &Value) -> EntityRow {
+    EntityRow {
+        id: str_of(s, "entity_id"),
+        file_id: str_of(s, "file_id"),
+        kind: str_of(s, "kind"),
+        name: str_of(s, "name"),
+        qualified_name: str_of(s, "qualified_name"),
+        language: str_of(s, "language"),
+        parent_id: opt_str(s, "parent_id"),
+        signature: opt_str(s, "signature"),
+        start_line: s["start_line"].as_i64().unwrap_or(0),
+        end_line: s["end_line"].as_i64().unwrap_or(0),
+        start_col: s["start_col"].as_i64().unwrap_or(0),
+        end_col: s["end_col"].as_i64().unwrap_or(0),
+    }
+}
+
+fn relationship_row(s: &Value) -> RelationshipRow {
+    RelationshipRow {
+        id: str_of(s, "relationship_id"),
+        file_id: str_of(s, "file_id"),
+        relationship_type: str_of(s, "relationship_type"),
+        source_entity_id: str_of(s, "source_entity_id"),
+        target_entity_id: opt_str(s, "target_entity_id"),
+        target_symbol: opt_str(s, "target_symbol"),
+        resolver: str_of(s, "resolver"),
+        confidence: str_of(s, "confidence"),
+        source_location: opt_str(s, "source_location"),
+        evidence: opt_str(s, "evidence"),
+        reference_text: opt_str(s, "reference_text"),
+    }
+}
+
+fn chunk_row(s: &Value) -> ChunkRow {
+    ChunkRow {
+        id: str_of(s, "chunk_id"),
+        document_id: str_of(s, "document_id"),
+        file_id: str_of(s, "file_id"),
+        kind: str_of(s, "kind"),
+        ordinal: s["ordinal"].as_i64().unwrap_or(0),
+        heading_path: strings(s, "heading_path"),
+        heading_level: s["heading_level"].as_i64(),
+        text: str_of(s, "text"),
+        search_text: str_of(s, "search_text"),
+        embedding_text: opt_str(s, "embedding_text"),
+        token_count: s["token_count"].as_i64(),
+        page_start: s["page_start"].as_i64(),
+        page_end: s["page_end"].as_i64(),
+        table_rows: serde_json::from_value(s["table_rows"].clone()).ok(),
+        caption: opt_str(s, "caption"),
+        parent_ordinal: s["parent_ordinal"].as_i64(),
+    }
+}
+
+/// Engine similarity score -> cosine similarity. Both engines report
+/// `(1 + cos) / 2` for cosine HNSW fields.
+fn cosine(score: f64) -> f32 {
+    (2.0 * score - 1.0) as f32
+}
+
+/// SQL `LIKE`-style wildcard text with `*`/`?` escaped.
+fn wildcard_literal(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if matches!(c, '*' | '?' | '\\') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
+impl KnowledgeRead for ServerReader {
+    fn source_id(&self) -> &str {
+        &self.source_id
+    }
+
+    fn backend_kind(&self) -> &'static str {
+        self.backend.engine().as_str()
+    }
+
+    fn search_entities_exact(&self, b: &str, q: &str) -> Result<Vec<EntitySearchRow>> {
+        let hits = self.find(
+            IndexKind::Code,
+            b,
+            vec![json!({ "bool": { "should": [
+                { "term": { "name.raw": q } },
+                { "term": { "qualified_name.raw": q } },
+            ], "minimum_should_match": 1 } })],
+            None,
+            json!([{ "qualified_name.raw": "asc" }, { "file_id": "asc" }, { "start_line": "asc" }, { "entity_id": "asc" }]),
+            MAX_READ,
+        )?;
+        Ok(self.entity_search_rows(&hits))
+    }
+
+    fn search_entities_alias(
+        &self,
+        b: &str,
+        alias: &str,
+        limit: i64,
+    ) -> Result<Vec<EntitySearchRow>> {
+        if alias.matches('.').count() != 1 {
+            return Ok(Vec::new());
+        }
+        let hits = self.find(
+            IndexKind::Code,
+            b,
+            vec![json!({ "wildcard": { "qualified_name.raw": {
+                "value": format!("*.{}", wildcard_literal(alias)) } } })],
+            None,
+            json!([{ "qualified_name.raw": "asc" }, { "file_id": "asc" }, { "start_line": "asc" }, { "entity_id": "asc" }]),
+            MAX_READ,
+        )?;
+        let mut rows = self.entity_search_rows(&hits);
+        rows.retain(|r| r.qualified_name.matches('.').count() >= 2);
+        rows.truncate(limit.max(0) as usize);
+        Ok(rows)
+    }
+
+    fn search_entities_fts(
+        &self,
+        b: &str,
+        expression: &str,
+        limit: i64,
+    ) -> Result<Vec<EntitySearchRow>> {
+        let Some(must) = Self::fts_query(expression, &["name", "qualified_name", "signature"])
+        else {
+            return Ok(Vec::new());
+        };
+        let hits = self.find(
+            IndexKind::Code,
+            b,
+            vec![],
+            Some(must),
+            json!([{ "_score": "desc" }, { "rel_path": "asc" }, { "qualified_name.raw": "asc" }, { "start_line": "asc" }, { "entity_id": "asc" }]),
+            limit.max(0) as usize,
+        )?;
+        let mut rows = self.entity_search_rows(&hits);
+        for (i, (row, h)) in rows.iter_mut().zip(&hits).enumerate() {
+            row.fts_rank = i as u32;
+            row.bm25 = h["_score"].as_f64().map(|s| -s);
+        }
+        Ok(rows)
+    }
+
+    fn search_document_titles(
+        &self,
+        b: &str,
+        title: &str,
+        limit: i64,
+    ) -> Result<Vec<DocumentSearchRow>> {
+        let hits = self.find(
+            IndexKind::Documents,
+            b,
+            vec![json!({ "term": { "title.raw": { "value": title, "case_insensitive": true } } })],
+            None,
+            json!([{ "rel_path": "asc" }, { "document_id": "asc" }]),
+            limit.max(0) as usize,
+        )?;
+        Ok(hits
+            .iter()
+            .map(|h| {
+                let s = &h["_source"];
+                let t = str_of(s, "title");
+                DocumentSearchRow {
+                    id: str_of(s, "document_id"),
+                    snippet: Some(t.clone()),
+                    title: t,
+                    rel_path: str_of(s, "rel_path"),
+                    mtime: s["mtime"].as_f64().unwrap_or(0.0),
+                    heading: None,
+                    heading_path: Vec::new(),
+                    page_start: None,
+                    page_end: None,
+                    attachment: Self::attachment_of(s),
+                    fts_rank: 0,
+                    bm25: None,
+                }
+            })
+            .collect())
+    }
+
+    fn search_chunks_fts(
+        &self,
+        b: &str,
+        expression: &str,
+        limit: i64,
+        snippet_tokens: i64,
+    ) -> Result<Vec<DocumentSearchRow>> {
+        let Some(must) = Self::fts_query(expression, &["fts_heading^5", "search_text", "title^8"])
+        else {
+            return Ok(Vec::new());
+        };
+        let mut f = self.scope(b);
+        f.shrink_to_fit();
+        let tokens = snippet_tokens.clamp(1, 64) as usize;
+        let body = json!({
+            "size": (limit.max(0) as usize).min(MAX_READ),
+            "query": { "bool": { "filter": f, "must": [must] } },
+            "sort": [{ "_score": "desc" }, { "rel_path": "asc" }, { "ordinal": "asc" }, { "chunk_id": "asc" }],
+            "track_scores": true,
+            "highlight": {
+                "fields": { "search_text": {
+                    "type": "unified", "number_of_fragments": 1,
+                    // About six characters per token.
+                    "fragment_size": tokens * 6,
+                    "pre_tags": [""], "post_tags": [""],
+                } },
+            },
+        });
+        let hits = self.hits(IndexKind::Chunks, body)?;
+        Ok(hits
+            .iter()
+            .enumerate()
+            .map(|(i, h)| {
+                let s = &h["_source"];
+                let rel_path = str_of(s, "rel_path");
+                let heading = opt_str(s, "fts_heading").filter(|x| !x.is_empty());
+                let body = str_of(s, "search_text");
+                let fallback: String = if body.is_empty() {
+                    heading.clone().unwrap_or_default()
+                } else {
+                    body
+                }
+                .chars()
+                .take(SNIPPET_CHARS)
+                .collect();
+                let snippet = h
+                    .pointer("/highlight/search_text/0")
+                    .and_then(Value::as_str)
+                    .map(|x| x.trim().to_owned())
+                    .filter(|x| !x.is_empty())
+                    .or((!fallback.is_empty()).then_some(fallback));
+                DocumentSearchRow {
+                    id: str_of(s, "chunk_id"),
+                    title: opt_str(s, "title")
+                        .filter(|t| !t.is_empty())
+                        .unwrap_or_else(|| rel_path.clone()),
+                    rel_path,
+                    mtime: s["mtime"].as_f64().unwrap_or(0.0),
+                    snippet,
+                    heading,
+                    heading_path: strings(s, "heading_path"),
+                    page_start: s["page_start"].as_i64(),
+                    page_end: s["page_end"].as_i64(),
+                    attachment: Self::attachment_of(s),
+                    fts_rank: i as u32,
+                    bm25: h["_score"].as_f64().map(|x| -x),
+                }
+            })
+            .collect())
+    }
+
+    fn search_paths_projection(&self, b: &str, q: &str, limit: i64) -> Result<Vec<PathSearchRow>> {
+        let map = |hits: Vec<Value>| -> Vec<PathSearchRow> {
+            hits.iter()
+                .map(|h| {
+                    let s = &h["_source"];
+                    PathSearchRow {
+                        id: str_of(s, "file_id"),
+                        rel_path: str_of(s, "rel_path"),
+                        mtime: s["mtime"].as_f64().unwrap_or(0.0),
+                    }
+                })
+                .collect()
+        };
+        let size = limit.max(0) as usize;
+        let tokens = docmonk_storage::search::word_tokens(q);
+        if !tokens.is_empty() {
+            let rows = map(self.find(
+                IndexKind::Files,
+                b,
+                vec![],
+                Some(json!({ "match": { "path_text": { "query": tokens.join(" "), "operator": "and" } } })),
+                json!([{ "_score": "desc" }, { "rel_path": "asc" }]),
+                size,
+            )?);
+            if !rows.is_empty() {
+                return Ok(rows);
+            }
+        }
+        Ok(map(self.find(
+            IndexKind::Files,
+            b,
+            vec![json!({ "wildcard": { "rel_path": {
+                "value": format!("*{}*", wildcard_literal(q)), "case_insensitive": true } } })],
+            None,
+            json!([{ "rel_path": "asc" }]),
+            size,
+        )?))
+    }
+
+    fn symbol_entities(&self, b: &str, q: &str) -> Result<Vec<EntityRow>> {
+        Ok(self
+            .find(
+                IndexKind::Code,
+                b,
+                vec![json!({ "bool": { "should": [
+                    { "term": { "name.raw": q } },
+                    { "term": { "qualified_name.raw": q } },
+                ], "minimum_should_match": 1 } })],
+                None,
+                json!([{ "qualified_name.raw": "asc" }, { "file_id": "asc" }, { "start_line": "asc" }, { "entity_id": "asc" }]),
+                MAX_READ,
+            )?
+            .iter()
+            .map(|h| entity_row(&h["_source"]))
+            .collect())
+    }
+
+    fn entity(&self, b: &str, id: &str) -> Result<Option<EntityRow>> {
+        Ok(self
+            .find(
+                IndexKind::Code,
+                b,
+                vec![json!({ "term": { "entity_id": id } })],
+                None,
+                json!([{ "entity_id": "asc" }]),
+                1,
+            )?
+            .first()
+            .map(|h| entity_row(&h["_source"])))
+    }
+
+    fn entity_edges(
+        &self,
+        b: &str,
+        entity_id: &str,
+        rtype: Option<&str>,
+        outgoing: bool,
+        limit: i64,
+    ) -> Result<Vec<RelationshipRow>> {
+        let field = if outgoing {
+            "source_entity_id"
+        } else {
+            "target_entity_id"
+        };
+        self.edges(
+            b,
+            vec![json!({ "term": { field: entity_id } })],
+            rtype,
+            limit,
+        )
+    }
+
+    fn unresolved_edges(
+        &self,
+        b: &str,
+        symbol: &str,
+        rtype: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<RelationshipRow>> {
+        self.edges(
+            b,
+            vec![
+                json!({ "term": { "target_symbol": symbol } }),
+                json!({ "bool": { "must_not": [ { "exists": { "field": "target_entity_id" } } ] } }),
+            ],
+            rtype,
+            limit,
+        )
+    }
+
+    fn file_rel_path(&self, b: &str, file_id: &str) -> Result<Option<String>> {
+        Ok(self.file_mtimes(b, &[file_id])?.pop().map(|(_, p, _)| p))
+    }
+
+    fn entity_links(&self, b: &str, entity_id: &str) -> Result<Vec<EntityLinkRow>> {
+        // Automatic links of the build's visible graph generation plus the
+        // source's manual links; nothing without a visible graph.
+        let Some(graph) = self.graph_generation(b)? else {
+            return Ok(Vec::new());
+        };
+        let path = format!("/{}/_search", self.backend.index(IndexKind::Relationships));
+        let body = json!({
+            "size": MAX_READ,
+            "query": { "bool": { "filter": [
+                { "term": { "source_id": self.source_id } },
+                { "term": { "entity_id": entity_id } },
+                { "bool": { "should": [
+                    { "bool": { "filter": [ { "term": { "build_id": graph } }, { "term": { "record_kind": "link" } } ] } },
+                    { "bool": { "filter": [ { "term": { "build_id": MANUAL_BUILD } }, { "term": { "record_kind": MANUAL_LINK } } ] } },
+                ], "minimum_should_match": 1 } },
+            ] } },
+            "sort": [{ "relationship_id": "asc" }],
+        });
+        let v = self
+            .backend
+            .post_json(Method::Post, &path, &body)
+            .map_err(Self::err)?;
+        let mut out = Vec::new();
+        for h in v
+            .pointer("/hits/hits")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let s = &h["_source"];
+            let document_id = str_of(s, "document_id");
+            // A link to a document that is not in this build is skipped,
+            // as in the local store's join.
+            let Some(doc) = self.one_document(b, &document_id)? else {
+                continue;
+            };
+            let chunk_id = opt_str(s, "chunk_id");
+            let chunk = match &chunk_id {
+                Some(c) => self.chunk(b, c)?,
+                None => None,
+            };
+            out.push((
+                str_of(s, "relationship_id"),
+                EntityLinkRow {
+                    link_type: opt_str(s, "link_type")
+                        .unwrap_or_else(|| str_of(s, "relationship_type")),
+                    document_id,
+                    chunk_id,
+                    resolver: str_of(s, "resolver"),
+                    confidence: str_of(s, "confidence"),
+                    document_path: opt_str(&doc, "rel_path").unwrap_or_default(),
+                    chunk_page_start: chunk.as_ref().and_then(|c| c.page_start),
+                    chunk_heading_path: chunk.map(|c| c.heading_path).unwrap_or_default(),
+                },
+            ));
+        }
+        let conf = |c: &str| match c {
+            "exact" => 0,
+            "high" => 1,
+            "medium" => 2,
+            _ => 3,
+        };
+        let res = |r: &str| match r {
+            "linker:exact_identifier" => 0,
+            "linker:qualified_identifier" => 1,
+            "linker:alias" => 2,
+            "linker:filename" => 3,
+            "linker:route_heuristic" => 4,
+            _ => 5,
+        };
+        out.sort_by(|(ia, a), (ib, b)| {
+            conf(&a.confidence)
+                .cmp(&conf(&b.confidence))
+                .then(res(&a.resolver).cmp(&res(&b.resolver)))
+                .then(a.link_type.cmp(&b.link_type))
+                .then(ia.cmp(ib))
+        });
+        Ok(out.into_iter().map(|(_, r)| r).collect())
+    }
+
+    fn document_attachment(
+        &self,
+        b: &str,
+        document_id: &str,
+    ) -> Result<Option<AttachmentProvenance>> {
+        Ok(self
+            .one_document(b, document_id)?
+            .and_then(|d| Self::attachment_of(&d)))
+    }
+
+    fn chunk(&self, b: &str, id: &str) -> Result<Option<ChunkRow>> {
+        Ok(self
+            .chunks_where(
+                b,
+                vec![json!({ "term": { "chunk_id": id } })],
+                json!([{ "chunk_id": "asc" }]),
+                1,
+            )?
+            .pop())
+    }
+
+    fn chunk_at(&self, b: &str, document_id: &str, ordinal: i64) -> Result<Option<ChunkRow>> {
+        Ok(self
+            .chunks_where(
+                b,
+                vec![
+                    json!({ "term": { "document_id": document_id } }),
+                    json!({ "term": { "ordinal": ordinal } }),
+                ],
+                json!([{ "chunk_id": "asc" }]),
+                1,
+            )?
+            .pop())
+    }
+
+    fn chunk_siblings(
+        &self,
+        b: &str,
+        c: &ChunkRow,
+        previous: i64,
+        next: i64,
+    ) -> Result<(Vec<ChunkRow>, Vec<ChunkRow>)> {
+        let parent = match c.parent_ordinal {
+            Some(p) => json!({ "term": { "parent_ordinal": p } }),
+            None => {
+                json!({ "bool": { "must_not": [ { "exists": { "field": "parent_ordinal" } } ] } })
+            }
+        };
+        let doc = json!({ "term": { "document_id": c.document_id } });
+        let mut before = if previous > 0 {
+            self.chunks_where(
+                b,
+                vec![
+                    doc.clone(),
+                    parent.clone(),
+                    json!({ "range": { "ordinal": { "lt": c.ordinal } } }),
+                ],
+                json!([{ "ordinal": "desc" }]),
+                previous as usize,
+            )?
+        } else {
+            Vec::new()
+        };
+        before.reverse();
+        let after = if next > 0 {
+            self.chunks_where(
+                b,
+                vec![
+                    doc,
+                    parent,
+                    json!({ "range": { "ordinal": { "gt": c.ordinal } } }),
+                ],
+                json!([{ "ordinal": "asc" }]),
+                next as usize,
+            )?
+        } else {
+            Vec::new()
+        };
+        Ok((before, after))
+    }
+
+    fn vector_search(
+        &self,
+        b: &str,
+        fingerprint: &str,
+        query: &[f32],
+        k: usize,
+    ) -> Result<Option<Vec<VectorHit>>> {
+        let Some(spec) = self.backend.vector_spec() else {
+            return Ok(None);
+        };
+        if query.len() != spec.dims as usize {
+            return Err(StorageError::Backend(format!(
+                "query vector has {} dimensions but the server indexes were created for {} ({}); \
+                 recreate the indexes for this model",
+                query.len(),
+                spec.dims,
+                spec.model_id
+            )));
+        }
+        if k == 0 {
+            return Ok(Some(Vec::new()));
+        }
+        let mut filter = self.scope(b);
+        filter.push(json!({ "term": { "embedding_fingerprint": fingerprint } }));
+        let mut out = Vec::new();
+        for (kind, subject, id_field) in [
+            (IndexKind::Chunks, SUBJECT_CHUNK, "chunk_id"),
+            (IndexKind::Code, SUBJECT_ENTITY, "entity_id"),
+        ] {
+            for h in self.hits(kind, self.knn_body(filter.clone(), query, k))? {
+                out.push((
+                    subject.to_owned(),
+                    str_of(&h["_source"], id_field),
+                    cosine(h["_score"].as_f64().unwrap_or(0.0)),
+                ));
+            }
+        }
+        out.sort_by(|a, b| b.2.total_cmp(&a.2).then_with(|| a.1.cmp(&b.1)));
+        out.truncate(k);
+        Ok(Some(out))
+    }
+
+    fn subject_meta(&self, b: &str, keys: &[(String, String)]) -> Result<Vec<SubjectMeta>> {
+        let mut out = Vec::with_capacity(keys.len());
+        for (t, id) in keys {
+            if t == SUBJECT_ENTITY {
+                if let Some(e) = self.entity(b, id)? {
+                    let path = self.file_rel_path(b, &e.file_id)?.unwrap_or_default();
+                    out.push(SubjectMeta {
+                        subject_type: t.clone(),
+                        subject_id: id.clone(),
+                        kind: "entity".into(),
+                        rel_path: path,
+                        title: e.qualified_name.clone(),
+                        snippet: e.signature.clone().unwrap_or(e.qualified_name),
+                        section: None,
+                        position: e.start_line,
+                        end_line: Some(e.end_line),
+                        attachment_index: None,
+                        document_id: None,
+                    });
+                }
+                continue;
+            }
+            let hits = self.find(
+                IndexKind::Chunks,
+                b,
+                vec![json!({ "term": { "chunk_id": id } })],
+                None,
+                json!([{ "chunk_id": "asc" }]),
+                1,
+            )?;
+            let Some(h) = hits.first() else { continue };
+            let s = &h["_source"];
+            let c = chunk_row(s);
+            let path = str_of(s, "rel_path");
+            let title = opt_str(s, "title")
+                .filter(|x| !x.is_empty())
+                .unwrap_or_else(|| path.clone());
+            let text = match (c.kind.as_str(), &c.table_rows) {
+                ("table", Some(rows)) => rows
+                    .iter()
+                    .flatten()
+                    .filter(|x| !x.is_empty())
+                    .map(String::as_str)
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                _ => c.text.clone(),
+            };
+            out.push(SubjectMeta {
+                subject_type: t.clone(),
+                subject_id: id.clone(),
+                kind: "document".into(),
+                title,
+                rel_path: path,
+                snippet: text.chars().take(SNIPPET_CHARS).collect(),
+                section: (!c.heading_path.is_empty()).then(|| c.heading_path.join(" > ")),
+                position: c.ordinal,
+                end_line: None,
+                attachment_index: s["attachment_index"].as_i64(),
+                document_id: Some(c.document_id),
+            });
+        }
+        Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fts_translation_covers_the_generated_grammar() {
+        let q = ServerReader::fts_query("\"settle bet\"", &["a"]).unwrap();
+        assert_eq!(q["bool"]["must"][0]["multi_match"]["type"], "phrase");
+        let q = ServerReader::fts_query("settle* AND \"in\"", &["a"]).unwrap();
+        assert_eq!(q["bool"]["must"][0]["multi_match"]["type"], "phrase_prefix");
+        assert_eq!(q["bool"]["must"].as_array().unwrap().len(), 2);
+        let q = ServerReader::fts_query("\"a\" OR \"b\"", &["a"]).unwrap();
+        assert_eq!(q["bool"]["minimum_should_match"], 1);
+        assert!(ServerReader::fts_query("a AND b", &["a"]).is_none());
+    }
+
+    #[test]
+    fn scores_and_wildcards() {
+        assert!((cosine(1.0) - 1.0).abs() < 1e-6);
+        assert!((cosine(0.5)).abs() < 1e-6);
+        assert_eq!(wildcard_literal("a*b?c\\"), "a\\*b\\?c\\\\");
+    }
+}
