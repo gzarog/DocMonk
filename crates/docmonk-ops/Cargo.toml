@@ -1,0 +1,29 @@
+[package]
+name = "docmonk-ops"
+description = "DocMonk operations: health checks, backup/restore, rebuild, vector maintenance and data removal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+chrono.workspace = true
+docmonk-ai.workspace = true
+flate2.workspace = true
+docmonk-backends.workspace = true
+docmonk-config.workspace = true
+docmonk-convert.workspace = true
+docmonk-core.workspace = true
+docmonk-documents.workspace = true
+docmonk-indexing.workspace = true
+docmonk-ml.workspace = true
+docmonk-service.workspace = true
+docmonk-storage.workspace = true
+docmonk-telemetry.workspace = true
+serde_json.workspace = true
+sysinfo.workspace = true
+tar.workspace = true
+
+[lints]
+workspace = true

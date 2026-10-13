@@ -14,13 +14,13 @@ Status: accepted
 
 ## Model assets
 
-- **Pinning.** `ragmonk_ml::manifest` pins each model by Hugging Face id,
+- **Pinning.** `docmonk_ml::manifest` pins each model by Hugging Face id,
   exact revision and the sha256 of every file the runtime reads:
   `config.json`, `model.safetensors` and `tokenizer.json`.
 - **Verification.** Files are read and verified before loading. A tampered
   or missing asset is a typed error.
 - **Location.** Assets are not compiled into the binary. They are loaded
-  from `RAGMONK_MODELS_DIR` (default `<home>/models`) under `<slug>/`;
+  from `DOCMONK_MODELS_DIR` (default `<home>/models`) under `<slug>/`;
   release archives and the container image ship them (ADR 0030).
 - **No `unsafe`.** Weights load through
   `VarBuilder::from_buffered_safetensors`, not mmap, so the project keeps
@@ -38,7 +38,7 @@ Status: accepted
 
 - `candle-transformers`' generic BERT ran at 5.2 texts/s here; its batched
   3-D linear layers reached only about a third of plain GEMM throughput.
-- `ragmonk_ml::bert` is a lean encoder that keeps the standard BERT math:
+- `docmonk_ml::bert` is a lean encoder that keeps the standard BERT math:
   post-norm layers, exact-erf GELU and an `f32::MIN` padding bias.
 - Restructured for the CPU:
   - activations stay 2-D, so each projection is one contiguous GEMM against
@@ -96,7 +96,7 @@ logged.
   - crash recovery;
   - the model-unavailable path.
 - CI fetches the pinned model, verifies its sha256 and caches it, and sets
-  `RAGMONK_REQUIRE_MODELS=1` so these tests cannot be skipped.
+  `DOCMONK_REQUIRE_MODELS=1` so these tests cannot be skipped.
 
 ## Benchmark
 

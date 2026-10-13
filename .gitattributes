@@ -1,3 +1,3 @@
-crates/ragmonk-documents/assets/** -text
-crates/ragmonk-update/tests/minisign.* -text
+crates/docmonk-documents/assets/** -text
+crates/docmonk-update/tests/minisign.* -text
 fixtures/documents/** -text

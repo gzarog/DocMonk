@@ -5,7 +5,7 @@ Status: accepted
 * Shared versions live in `[workspace.dependencies]`; crates use `.workspace = true`.
 * Preferred stack: tokio, clap, serde, thiserror/anyhow, tracing,
   reqwest+rustls, rusqlite, notify, tree-sitter, tokenizers, axum, and
-  docling.rs behind RagMonk's own trait.
+  docling.rs behind DocMonk's own trait.
 * A new dependency needs: maintained upstream, permissive license compatible
   with MIT, builds on Windows/Linux/macOS without system packages where
   possible (e.g. `rusqlite` `bundled`), and a reason it beats a few lines of

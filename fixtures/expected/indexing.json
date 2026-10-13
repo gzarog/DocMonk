@@ -1,7 +1,7 @@
 {
  "tree": {
   ".gitignore": "# comment\n*.log\nbuild-out/\n/docs/private/*\n",
-  ".ragmonkignore": "*.tmp\n",
+  ".docmonkignore": "*.tmp\n",
   "src/app.py": "def main():\n    return 1\n",
   "src/util/helpers.ts": "export const x = 1;\n",
   "src/util/README.md": "# Helpers\n",
@@ -31,11 +31,11 @@
  ],
  "scan": [
   {
-   "rel_path": ".gitignore",
+   "rel_path": ".docmonkignore",
    "kind": "unknown"
   },
   {
-   "rel_path": ".ragmonkignore",
+   "rel_path": ".gitignore",
    "kind": "unknown"
   },
   {

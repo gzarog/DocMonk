@@ -1,6 +1,6 @@
 name: Rust release
 
-# Publishes a RagMonk release (ADR 0030): archives for the
+# Publishes a DocMonk release (ADR 0030): archives for the
 # four release targets with their bundled models, SHA256SUMS (signed with
 # minisign when the MINISIGN_SECRET_KEY secret exists), the installers,
 # and a multi-arch image on GHCR.
@@ -9,7 +9,7 @@ name: Rust release
 #   * automatically, after the CI workflow (rust.yml) passes on a push
 #     to main: the next vX.Y.Z is computed (patch bump, or minor when the
 #     merged commit message contains "[release minor]"), tagged, and
-#     published as a full release, which `ragmonk update` picks up;
+#     published as a full release, which `docmonk update` picks up;
 #   * a pushed `v<MAJOR.MINOR.PATCH>` tag: a pre-release with the
 #     image, for dry runs;
 #   * manual dispatch (default branch only).
@@ -33,7 +33,7 @@ on:
         required: true
         type: string
       prerelease:
-        description: "Publish as a pre-release (not picked up by `ragmonk update`)"
+        description: "Publish as a pre-release (not picked up by `docmonk update`)"
         type: boolean
         default: true
       image:
@@ -49,7 +49,7 @@ permissions:
   contents: read
 
 env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/ragmonk
+  IMAGE: ghcr.io/${{ github.repository_owner }}/docmonk
 
 jobs:
   validate:
@@ -163,13 +163,13 @@ jobs:
         run: sh scripts/fetch_models.sh "$RUNNER_TEMP/models"
       - name: Build
         env:
-          RAGMONK_BUILD_VERSION: ${{ needs.validate.outputs.version }}
-          RAGMONK_BUILD_COMMIT: ${{ needs.validate.outputs.sha }}
-          RAGMONK_MINISIGN_PUBKEY: ${{ vars.MINISIGN_PUBLIC_KEY }}
-        run: cargo build --release --locked -p ragmonk-cli --target ${{ matrix.target }}
+          DOCMONK_BUILD_VERSION: ${{ needs.validate.outputs.version }}
+          DOCMONK_BUILD_COMMIT: ${{ needs.validate.outputs.sha }}
+          DOCMONK_MINISIGN_PUBKEY: ${{ vars.MINISIGN_PUBLIC_KEY }}
+        run: cargo build --release --locked -p docmonk-cli --target ${{ matrix.target }}
       - name: Smoke test
         run: |
-          EXE=target/${{ matrix.target }}/release/ragmonk
+          EXE=target/${{ matrix.target }}/release/docmonk
           [ -f "$EXE.exe" ] && EXE="$EXE.exe"
           # No `tee /dev/stderr`: Git Bash on Windows has no /dev/stderr.
           out="$("$EXE" version --json)"
@@ -228,7 +228,7 @@ jobs:
           umask 077
           printf '%s\n' "$MINISIGN_SECRET_KEY" > "$RUNNER_TEMP/minisign.key"
           printf '%s\n' "$MINISIGN_PASSWORD" | minisign -S -s "$RUNNER_TEMP/minisign.key" \
-            -m dist/SHA256SUMS -t "RagMonk $TAG SHA256SUMS"
+            -m dist/SHA256SUMS -t "DocMonk $TAG SHA256SUMS"
           rm -f "$RUNNER_TEMP/minisign.key"
           if [ -n "$PUBKEY" ]; then
             minisign -Vm dist/SHA256SUMS -P "$PUBKEY"
@@ -241,18 +241,18 @@ jobs:
           flags=""
           [ "$PRERELEASE" = "true" ] && flags="--prerelease"
           cat > notes.md <<NOTES
-          RagMonk $VERSION.
+          DocMonk $VERSION.
 
           Install: \`curl -fsSL https://github.com/${{ github.repository }}/releases/download/$TAG/install.sh | sh\`
           (Windows: \`irm https://github.com/${{ github.repository }}/releases/download/$TAG/install.ps1 | iex\`).
-          Existing native installs: \`ragmonk update install\`.
+          Existing native installs: \`docmonk update install\`.
 
           Container: \`docker pull $IMAGE:$VERSION\`
 
           Every archive is listed in SHA256SUMS; SHA256SUMS.minisig, when present, is its minisign signature.
           NOTES
           gh release create "$TAG" dist/* --target "${{ needs.validate.outputs.sha }}" \
-            --title "RagMonk $VERSION" --notes-file notes.md $flags
+            --title "DocMonk $VERSION" --notes-file notes.md $flags
 
   image:
     name: Image (${{ matrix.platform }})
@@ -291,9 +291,9 @@ jobs:
           file: Dockerfile
           platforms: ${{ matrix.platform }}
           build-args: |
-            RAGMONK_VERSION=${{ needs.validate.outputs.version }}
-            RAGMONK_COMMIT=${{ needs.validate.outputs.sha }}
-            RAGMONK_MINISIGN_PUBKEY=${{ vars.MINISIGN_PUBLIC_KEY }}
+            DOCMONK_VERSION=${{ needs.validate.outputs.version }}
+            DOCMONK_COMMIT=${{ needs.validate.outputs.sha }}
+            DOCMONK_MINISIGN_PUBKEY=${{ vars.MINISIGN_PUBLIC_KEY }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.validate.outputs.version }}

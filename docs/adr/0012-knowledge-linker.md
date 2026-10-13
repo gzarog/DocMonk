@@ -11,9 +11,9 @@ persisted.
 
 ### Linker
 
-- **Crate.** `ragmonk-knowledge` provides the `KnowledgeLinker`, which
+- **Crate.** `docmonk-knowledge` provides the `KnowledgeLinker`, which
   implements `BuildFinalizer`. It is registered after the code finalizers in
-  `ragmonk_convert::registry`.
+  `docmonk_convert::registry`.
 - **Finalizer interface.** `BuildFinalizer::finalize` receives the ids of
   the files written in the build. This allows incremental (touched-only)
   linking.
@@ -65,5 +65,5 @@ file touched takes about 2.7 s; a cold index end to end about 6.6 s.
 
 ## Interfaces
 
-- The CLI exposes manual links as `ragmonk link add/remove/list`, on top
-  of the library API `ragmonk_knowledge::manual::{add, remove}`.
+- The CLI exposes manual links as `docmonk link add/remove/list`, on top
+  of the library API `docmonk_knowledge::manual::{add, remove}`.

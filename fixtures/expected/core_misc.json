@@ -81,61 +81,61 @@
   {
    "owner": null,
    "timeout": 30.0,
-   "message": "Another RagMonk process holds index.lock (owner unknown); timed out after 30s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (owner unknown); timed out after 30s waiting for it.",
    "exit_code": 1
   },
   {
    "owner": null,
    "timeout": 0.5,
-   "message": "Another RagMonk process holds index.lock (owner unknown); timed out after 0.5s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (owner unknown); timed out after 0.5s waiting for it.",
    "exit_code": 1
   },
   {
    "owner": null,
    "timeout": 1e-07,
-   "message": "Another RagMonk process holds index.lock (owner unknown); timed out after 1e-07s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (owner unknown); timed out after 1e-07s waiting for it.",
    "exit_code": 1
   },
   {
    "owner": null,
    "timeout": 3600.0,
-   "message": "Another RagMonk process holds index.lock (owner unknown); timed out after 3600s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (owner unknown); timed out after 3600s waiting for it.",
    "exit_code": 1
   },
   {
    "owner": null,
    "timeout": 2.25,
-   "message": "Another RagMonk process holds index.lock (owner unknown); timed out after 2.25s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (owner unknown); timed out after 2.25s waiting for it.",
    "exit_code": 1
   },
   {
    "owner": {},
    "timeout": 30.0,
-   "message": "Another RagMonk process holds index.lock (owner unknown); timed out after 30s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (owner unknown); timed out after 30s waiting for it.",
    "exit_code": 1
   },
   {
    "owner": {},
    "timeout": 0.5,
-   "message": "Another RagMonk process holds index.lock (owner unknown); timed out after 0.5s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (owner unknown); timed out after 0.5s waiting for it.",
    "exit_code": 1
   },
   {
    "owner": {},
    "timeout": 1e-07,
-   "message": "Another RagMonk process holds index.lock (owner unknown); timed out after 1e-07s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (owner unknown); timed out after 1e-07s waiting for it.",
    "exit_code": 1
   },
   {
    "owner": {},
    "timeout": 3600.0,
-   "message": "Another RagMonk process holds index.lock (owner unknown); timed out after 3600s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (owner unknown); timed out after 3600s waiting for it.",
    "exit_code": 1
   },
   {
    "owner": {},
    "timeout": 2.25,
-   "message": "Another RagMonk process holds index.lock (owner unknown); timed out after 2.25s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (owner unknown); timed out after 2.25s waiting for it.",
    "exit_code": 1
   },
   {
@@ -146,7 +146,7 @@
     "hostname": "box"
    },
    "timeout": 30.0,
-   "message": "Another RagMonk process holds index.lock (PID 42, operation=index, source=src_1, host=box); timed out after 30s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (PID 42, operation=index, source=src_1, host=box); timed out after 30s waiting for it.",
    "exit_code": 1
   },
   {
@@ -157,7 +157,7 @@
     "hostname": "box"
    },
    "timeout": 0.5,
-   "message": "Another RagMonk process holds index.lock (PID 42, operation=index, source=src_1, host=box); timed out after 0.5s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (PID 42, operation=index, source=src_1, host=box); timed out after 0.5s waiting for it.",
    "exit_code": 1
   },
   {
@@ -168,7 +168,7 @@
     "hostname": "box"
    },
    "timeout": 1e-07,
-   "message": "Another RagMonk process holds index.lock (PID 42, operation=index, source=src_1, host=box); timed out after 1e-07s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (PID 42, operation=index, source=src_1, host=box); timed out after 1e-07s waiting for it.",
    "exit_code": 1
   },
   {
@@ -179,7 +179,7 @@
     "hostname": "box"
    },
    "timeout": 3600.0,
-   "message": "Another RagMonk process holds index.lock (PID 42, operation=index, source=src_1, host=box); timed out after 3600s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (PID 42, operation=index, source=src_1, host=box); timed out after 3600s waiting for it.",
    "exit_code": 1
   },
   {
@@ -190,7 +190,7 @@
     "hostname": "box"
    },
    "timeout": 2.25,
-   "message": "Another RagMonk process holds index.lock (PID 42, operation=index, source=src_1, host=box); timed out after 2.25s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (PID 42, operation=index, source=src_1, host=box); timed out after 2.25s waiting for it.",
    "exit_code": 1
   },
   {
@@ -199,7 +199,7 @@
     "operation": "rebuild"
    },
    "timeout": 30.0,
-   "message": "Another RagMonk process holds index.lock (operation=rebuild); timed out after 30s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (operation=rebuild); timed out after 30s waiting for it.",
    "exit_code": 1
   },
   {
@@ -208,7 +208,7 @@
     "operation": "rebuild"
    },
    "timeout": 0.5,
-   "message": "Another RagMonk process holds index.lock (operation=rebuild); timed out after 0.5s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (operation=rebuild); timed out after 0.5s waiting for it.",
    "exit_code": 1
   },
   {
@@ -217,7 +217,7 @@
     "operation": "rebuild"
    },
    "timeout": 1e-07,
-   "message": "Another RagMonk process holds index.lock (operation=rebuild); timed out after 1e-07s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (operation=rebuild); timed out after 1e-07s waiting for it.",
    "exit_code": 1
   },
   {
@@ -226,7 +226,7 @@
     "operation": "rebuild"
    },
    "timeout": 3600.0,
-   "message": "Another RagMonk process holds index.lock (operation=rebuild); timed out after 3600s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (operation=rebuild); timed out after 3600s waiting for it.",
    "exit_code": 1
   },
   {
@@ -235,7 +235,7 @@
     "operation": "rebuild"
    },
    "timeout": 2.25,
-   "message": "Another RagMonk process holds index.lock (operation=rebuild); timed out after 2.25s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (operation=rebuild); timed out after 2.25s waiting for it.",
    "exit_code": 1
   },
   {
@@ -243,7 +243,7 @@
     "pid": 7
    },
    "timeout": 30.0,
-   "message": "Another RagMonk process holds index.lock (PID 7); timed out after 30s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (PID 7); timed out after 30s waiting for it.",
    "exit_code": 1
   },
   {
@@ -251,7 +251,7 @@
     "pid": 7
    },
    "timeout": 0.5,
-   "message": "Another RagMonk process holds index.lock (PID 7); timed out after 0.5s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (PID 7); timed out after 0.5s waiting for it.",
    "exit_code": 1
   },
   {
@@ -259,7 +259,7 @@
     "pid": 7
    },
    "timeout": 1e-07,
-   "message": "Another RagMonk process holds index.lock (PID 7); timed out after 1e-07s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (PID 7); timed out after 1e-07s waiting for it.",
    "exit_code": 1
   },
   {
@@ -267,7 +267,7 @@
     "pid": 7
    },
    "timeout": 3600.0,
-   "message": "Another RagMonk process holds index.lock (PID 7); timed out after 3600s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (PID 7); timed out after 3600s waiting for it.",
    "exit_code": 1
   },
   {
@@ -275,7 +275,7 @@
     "pid": 7
    },
    "timeout": 2.25,
-   "message": "Another RagMonk process holds index.lock (PID 7); timed out after 2.25s waiting for it.",
+   "message": "Another DocMonk process holds index.lock (PID 7); timed out after 2.25s waiting for it.",
    "exit_code": 1
   }
  ],

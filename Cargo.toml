@@ -1,26 +1,26 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/ragmonk-ai",
-    "crates/ragmonk-backends",
-    "crates/ragmonk-cli",
-    "crates/ragmonk-code",
-    "crates/ragmonk-config",
-    "crates/ragmonk-convert",
-    "crates/ragmonk-core",
-    "crates/ragmonk-documents",
-    "crates/ragmonk-indexing",
-    "crates/ragmonk-knowledge",
-    "crates/ragmonk-ml",
-    "crates/ragmonk-mcp",
-    "crates/ragmonk-ops",
-    "crates/ragmonk-retrieval",
-    "crates/ragmonk-service",
-    "crates/ragmonk-status",
-    "crates/ragmonk-storage",
-    "crates/ragmonk-telemetry",
-    "crates/ragmonk-ui",
-    "crates/ragmonk-update",
+    "crates/docmonk-ai",
+    "crates/docmonk-backends",
+    "crates/docmonk-cli",
+    "crates/docmonk-code",
+    "crates/docmonk-config",
+    "crates/docmonk-convert",
+    "crates/docmonk-core",
+    "crates/docmonk-documents",
+    "crates/docmonk-indexing",
+    "crates/docmonk-knowledge",
+    "crates/docmonk-ml",
+    "crates/docmonk-mcp",
+    "crates/docmonk-ops",
+    "crates/docmonk-retrieval",
+    "crates/docmonk-service",
+    "crates/docmonk-status",
+    "crates/docmonk-storage",
+    "crates/docmonk-telemetry",
+    "crates/docmonk-ui",
+    "crates/docmonk-update",
     "xtask",
 ]
 
@@ -47,27 +47,27 @@ minijinja = { version = "2", features = ["loader", "json"] }
 minijinja-contrib = { version = "2", features = ["pycompat"] }
 signal-hook = "0.3"
 tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "time", "sync", "signal"] }
-ragmonk-ai = { path = "crates/ragmonk-ai" }
-ragmonk-backends = { path = "crates/ragmonk-backends" }
+docmonk-ai = { path = "crates/docmonk-ai" }
+docmonk-backends = { path = "crates/docmonk-backends" }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 dunce = "1"
-ragmonk-code = { path = "crates/ragmonk-code" }
-ragmonk-convert = { path = "crates/ragmonk-convert" }
-ragmonk-config = { path = "crates/ragmonk-config" }
-ragmonk-documents = { path = "crates/ragmonk-documents" }
-ragmonk-core = { path = "crates/ragmonk-core" }
-ragmonk-ml = { path = "crates/ragmonk-ml" }
-ragmonk-knowledge = { path = "crates/ragmonk-knowledge" }
-ragmonk-retrieval = { path = "crates/ragmonk-retrieval" }
-ragmonk-service = { path = "crates/ragmonk-service" }
-ragmonk-status = { path = "crates/ragmonk-status" }
-ragmonk-ops = { path = "crates/ragmonk-ops" }
-ragmonk-mcp = { path = "crates/ragmonk-mcp" }
-ragmonk-ui = { path = "crates/ragmonk-ui" }
-ragmonk-indexing = { path = "crates/ragmonk-indexing" }
-ragmonk-storage = { path = "crates/ragmonk-storage" }
-ragmonk-telemetry = { path = "crates/ragmonk-telemetry" }
-ragmonk-update = { path = "crates/ragmonk-update" }
+docmonk-code = { path = "crates/docmonk-code" }
+docmonk-convert = { path = "crates/docmonk-convert" }
+docmonk-config = { path = "crates/docmonk-config" }
+docmonk-documents = { path = "crates/docmonk-documents" }
+docmonk-core = { path = "crates/docmonk-core" }
+docmonk-ml = { path = "crates/docmonk-ml" }
+docmonk-knowledge = { path = "crates/docmonk-knowledge" }
+docmonk-retrieval = { path = "crates/docmonk-retrieval" }
+docmonk-service = { path = "crates/docmonk-service" }
+docmonk-status = { path = "crates/docmonk-status" }
+docmonk-ops = { path = "crates/docmonk-ops" }
+docmonk-mcp = { path = "crates/docmonk-mcp" }
+docmonk-ui = { path = "crates/docmonk-ui" }
+docmonk-indexing = { path = "crates/docmonk-indexing" }
+docmonk-storage = { path = "crates/docmonk-storage" }
+docmonk-telemetry = { path = "crates/docmonk-telemetry" }
+docmonk-update = { path = "crates/docmonk-update" }
 clap = { version = "4.5", features = ["derive"] }
 flate2 = "1"
 notify = "8.2"

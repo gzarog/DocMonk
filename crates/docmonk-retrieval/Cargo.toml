@@ -1,0 +1,30 @@
+[package]
+name = "docmonk-retrieval"
+description = "DocMonk retrieval: lexical search, hybrid RRF fusion and neural reranking (RUST-10)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+docmonk-config.workspace = true
+docmonk-documents.workspace = true
+docmonk-ml.workspace = true
+regex.workspace = true
+docmonk-storage.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+docmonk-config.workspace = true
+docmonk-convert.workspace = true
+docmonk-core.workspace = true
+docmonk-indexing.workspace = true
+docmonk-knowledge.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

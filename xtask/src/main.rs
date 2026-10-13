@@ -1,4 +1,4 @@
-//! Repository tooling for RagMonk, run as `cargo xtask <command>`.
+//! Repository tooling for DocMonk, run as `cargo xtask <command>`.
 
 mod audit;
 mod branding;

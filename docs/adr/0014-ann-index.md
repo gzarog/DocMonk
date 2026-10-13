@@ -7,9 +7,9 @@ Status: accepted
 1. **Engine.** A pure-Rust HNSW index with exact search as the fallback,
    with no C++ dependency.
 2. **Fusion.** Reciprocal Rank Fusion is a tested primitive in
-   `ragmonk-ml`; hybrid search (ADR 0016) uses it.
+   `docmonk-ml`; hybrid search (ADR 0016) uses it.
 
-## Index (`ragmonk_ml::hnsw`)
+## Index (`docmonk_ml::hnsw`)
 
 - Standard HNSW over L2-normalized vectors, scored by inner product.
 - Parameters: `m` = 16 (32 on layer 0), `ef_construction` = 128,
@@ -24,7 +24,7 @@ Status: accepted
 - No `unsafe`: the dot product uses 8 accumulators so the compiler can
   vectorize it.
 
-## Persistence (`ragmonk_ml::ann`)
+## Persistence (`docmonk_ml::ann`)
 
 - **Location.** `<project>/ann/index.hnsw` holds one index per project.
 - **File format (version 1).** A magic number, then a header:
@@ -47,7 +47,7 @@ Status: accepted
   - it is a no-op, with no write, when the digest already matches;
   - a sync failure only logs, and search stays exact.
 
-## Semantic search (`ragmonk_ml::semantic`)
+## Semantic search (`docmonk_ml::semantic`)
 
 - Embeds the query, takes the candidates (`candidate_k` ≥ `limit`) and
   attaches display metadata:

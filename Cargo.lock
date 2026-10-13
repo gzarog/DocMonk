@@ -989,6 +989,378 @@ dependencies = [
 ]
 
 [[package]]
+name = "docmonk-ai"
+version = "0.0.0"
+dependencies = [
+ "docmonk-config",
+ "docmonk-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "docmonk-backends"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "docmonk-config",
+ "docmonk-core",
+ "docmonk-storage",
+ "docmonk-telemetry",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "docmonk-cli"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "docmonk-ai",
+ "docmonk-backends",
+ "docmonk-config",
+ "docmonk-core",
+ "docmonk-indexing",
+ "docmonk-mcp",
+ "docmonk-ops",
+ "docmonk-retrieval",
+ "docmonk-service",
+ "docmonk-status",
+ "docmonk-telemetry",
+ "docmonk-ui",
+ "docmonk-update",
+ "flate2",
+ "regex",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "signal-hook",
+ "sysinfo",
+ "tar",
+ "tempfile",
+]
+
+[[package]]
+name = "docmonk-code"
+version = "0.0.0"
+dependencies = [
+ "docmonk-config",
+ "docmonk-core",
+ "docmonk-indexing",
+ "docmonk-storage",
+ "regex",
+ "serde",
+ "serde_json",
+ "streaming-iterator",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+ "tree-sitter",
+ "tree-sitter-c-sharp",
+ "tree-sitter-go",
+ "tree-sitter-java",
+ "tree-sitter-javascript",
+ "tree-sitter-python",
+ "tree-sitter-rust",
+ "tree-sitter-typescript",
+]
+
+[[package]]
+name = "docmonk-config"
+version = "0.0.0"
+dependencies = [
+ "docmonk-core",
+ "docmonk-telemetry",
+ "regex",
+ "serde_json",
+ "tempfile",
+ "yaml-rust2",
+]
+
+[[package]]
+name = "docmonk-convert"
+version = "0.0.0"
+dependencies = [
+ "docling",
+ "docmonk-code",
+ "docmonk-config",
+ "docmonk-core",
+ "docmonk-documents",
+ "docmonk-indexing",
+ "docmonk-knowledge",
+ "docmonk-ml",
+ "docmonk-storage",
+ "image",
+ "lopdf",
+ "mail-parser",
+ "ocrs",
+ "rten",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
+name = "docmonk-core"
+version = "0.0.0"
+dependencies = [
+ "dunce",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "docmonk-documents"
+version = "0.0.0"
+dependencies = [
+ "docmonk-config",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.21",
+ "tokenizers",
+ "tracing",
+]
+
+[[package]]
+name = "docmonk-indexing"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "docmonk-config",
+ "docmonk-core",
+ "docmonk-storage",
+ "notify",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sysinfo",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
+name = "docmonk-knowledge"
+version = "0.0.0"
+dependencies = [
+ "docmonk-code",
+ "docmonk-config",
+ "docmonk-convert",
+ "docmonk-core",
+ "docmonk-documents",
+ "docmonk-indexing",
+ "docmonk-storage",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+ "unicode-general-category",
+]
+
+[[package]]
+name = "docmonk-mcp"
+version = "0.0.0"
+dependencies = [
+ "docmonk-core",
+ "docmonk-retrieval",
+ "docmonk-service",
+ "serde_json",
+]
+
+[[package]]
+name = "docmonk-ml"
+version = "0.0.0"
+dependencies = [
+ "candle-core",
+ "candle-nn",
+ "docmonk-config",
+ "docmonk-convert",
+ "docmonk-core",
+ "docmonk-documents",
+ "docmonk-indexing",
+ "docmonk-storage",
+ "rayon",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokenizers",
+ "tracing",
+]
+
+[[package]]
+name = "docmonk-ops"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "docmonk-ai",
+ "docmonk-backends",
+ "docmonk-config",
+ "docmonk-convert",
+ "docmonk-core",
+ "docmonk-documents",
+ "docmonk-indexing",
+ "docmonk-ml",
+ "docmonk-service",
+ "docmonk-storage",
+ "docmonk-telemetry",
+ "flate2",
+ "serde_json",
+ "sysinfo",
+ "tar",
+]
+
+[[package]]
+name = "docmonk-retrieval"
+version = "0.0.0"
+dependencies = [
+ "docmonk-config",
+ "docmonk-convert",
+ "docmonk-core",
+ "docmonk-documents",
+ "docmonk-indexing",
+ "docmonk-knowledge",
+ "docmonk-ml",
+ "docmonk-storage",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
+name = "docmonk-service"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "docmonk-ai",
+ "docmonk-backends",
+ "docmonk-code",
+ "docmonk-config",
+ "docmonk-convert",
+ "docmonk-core",
+ "docmonk-documents",
+ "docmonk-indexing",
+ "docmonk-knowledge",
+ "docmonk-ml",
+ "docmonk-retrieval",
+ "docmonk-status",
+ "docmonk-storage",
+ "docmonk-telemetry",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "signal-hook",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "docmonk-status"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "docmonk-backends",
+ "docmonk-config",
+ "docmonk-core",
+ "docmonk-indexing",
+ "docmonk-storage",
+ "docmonk-telemetry",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "docmonk-storage"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "docmonk-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "docmonk-telemetry"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "regex",
+ "serde_json",
+ "tempfile",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "docmonk-ui"
+version = "0.0.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "docmonk-ai",
+ "docmonk-config",
+ "docmonk-core",
+ "docmonk-indexing",
+ "docmonk-ops",
+ "docmonk-retrieval",
+ "docmonk-service",
+ "docmonk-status",
+ "docmonk-storage",
+ "docmonk-telemetry",
+ "docmonk-update",
+ "futures-util",
+ "getrandom 0.3.4",
+ "minijinja",
+ "minijinja-contrib",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "docmonk-update"
+version = "0.0.0"
+dependencies = [
+ "docmonk-core",
+ "flate2",
+ "minisign-verify",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tar",
+ "tempfile",
+ "zip 8.6.0",
+]
+
+[[package]]
 name = "dtoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2937,378 +3309,6 @@ name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
-
-[[package]]
-name = "ragmonk-ai"
-version = "0.0.0"
-dependencies = [
- "ragmonk-config",
- "ragmonk-core",
- "reqwest",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "ragmonk-backends"
-version = "0.0.0"
-dependencies = [
- "chrono",
- "ragmonk-config",
- "ragmonk-core",
- "ragmonk-storage",
- "ragmonk-telemetry",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "ragmonk-cli"
-version = "0.0.0"
-dependencies = [
- "chrono",
- "clap",
- "flate2",
- "ragmonk-ai",
- "ragmonk-backends",
- "ragmonk-config",
- "ragmonk-core",
- "ragmonk-indexing",
- "ragmonk-mcp",
- "ragmonk-ops",
- "ragmonk-retrieval",
- "ragmonk-service",
- "ragmonk-status",
- "ragmonk-telemetry",
- "ragmonk-ui",
- "ragmonk-update",
- "regex",
- "reqwest",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "signal-hook",
- "sysinfo",
- "tar",
- "tempfile",
-]
-
-[[package]]
-name = "ragmonk-code"
-version = "0.0.0"
-dependencies = [
- "ragmonk-config",
- "ragmonk-core",
- "ragmonk-indexing",
- "ragmonk-storage",
- "regex",
- "serde",
- "serde_json",
- "streaming-iterator",
- "tempfile",
- "thiserror 2.0.21",
- "tracing",
- "tree-sitter",
- "tree-sitter-c-sharp",
- "tree-sitter-go",
- "tree-sitter-java",
- "tree-sitter-javascript",
- "tree-sitter-python",
- "tree-sitter-rust",
- "tree-sitter-typescript",
-]
-
-[[package]]
-name = "ragmonk-config"
-version = "0.0.0"
-dependencies = [
- "ragmonk-core",
- "ragmonk-telemetry",
- "regex",
- "serde_json",
- "tempfile",
- "yaml-rust2",
-]
-
-[[package]]
-name = "ragmonk-convert"
-version = "0.0.0"
-dependencies = [
- "docling",
- "image",
- "lopdf",
- "mail-parser",
- "ocrs",
- "ragmonk-code",
- "ragmonk-config",
- "ragmonk-core",
- "ragmonk-documents",
- "ragmonk-indexing",
- "ragmonk-knowledge",
- "ragmonk-ml",
- "ragmonk-storage",
- "rten",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.21",
- "tracing",
-]
-
-[[package]]
-name = "ragmonk-core"
-version = "0.0.0"
-dependencies = [
- "dunce",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "ragmonk-documents"
-version = "0.0.0"
-dependencies = [
- "ragmonk-config",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror 2.0.21",
- "tokenizers",
- "tracing",
-]
-
-[[package]]
-name = "ragmonk-indexing"
-version = "0.0.0"
-dependencies = [
- "chrono",
- "notify",
- "ragmonk-config",
- "ragmonk-core",
- "ragmonk-storage",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sysinfo",
- "tempfile",
- "thiserror 2.0.21",
- "tracing",
-]
-
-[[package]]
-name = "ragmonk-knowledge"
-version = "0.0.0"
-dependencies = [
- "ragmonk-code",
- "ragmonk-config",
- "ragmonk-convert",
- "ragmonk-core",
- "ragmonk-documents",
- "ragmonk-indexing",
- "ragmonk-storage",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.21",
- "tracing",
- "unicode-general-category",
-]
-
-[[package]]
-name = "ragmonk-mcp"
-version = "0.0.0"
-dependencies = [
- "ragmonk-core",
- "ragmonk-retrieval",
- "ragmonk-service",
- "serde_json",
-]
-
-[[package]]
-name = "ragmonk-ml"
-version = "0.0.0"
-dependencies = [
- "candle-core",
- "candle-nn",
- "ragmonk-config",
- "ragmonk-convert",
- "ragmonk-core",
- "ragmonk-documents",
- "ragmonk-indexing",
- "ragmonk-storage",
- "rayon",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.21",
- "tokenizers",
- "tracing",
-]
-
-[[package]]
-name = "ragmonk-ops"
-version = "0.0.0"
-dependencies = [
- "chrono",
- "flate2",
- "ragmonk-ai",
- "ragmonk-backends",
- "ragmonk-config",
- "ragmonk-convert",
- "ragmonk-core",
- "ragmonk-documents",
- "ragmonk-indexing",
- "ragmonk-ml",
- "ragmonk-service",
- "ragmonk-storage",
- "ragmonk-telemetry",
- "serde_json",
- "sysinfo",
- "tar",
-]
-
-[[package]]
-name = "ragmonk-retrieval"
-version = "0.0.0"
-dependencies = [
- "ragmonk-config",
- "ragmonk-convert",
- "ragmonk-core",
- "ragmonk-documents",
- "ragmonk-indexing",
- "ragmonk-knowledge",
- "ragmonk-ml",
- "ragmonk-storage",
- "regex",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.21",
- "tracing",
-]
-
-[[package]]
-name = "ragmonk-service"
-version = "0.0.0"
-dependencies = [
- "chrono",
- "ragmonk-ai",
- "ragmonk-backends",
- "ragmonk-code",
- "ragmonk-config",
- "ragmonk-convert",
- "ragmonk-core",
- "ragmonk-documents",
- "ragmonk-indexing",
- "ragmonk-knowledge",
- "ragmonk-ml",
- "ragmonk-retrieval",
- "ragmonk-status",
- "ragmonk-storage",
- "ragmonk-telemetry",
- "reqwest",
- "serde",
- "serde_json",
- "signal-hook",
- "tempfile",
- "tracing",
-]
-
-[[package]]
-name = "ragmonk-status"
-version = "0.0.0"
-dependencies = [
- "chrono",
- "ragmonk-backends",
- "ragmonk-config",
- "ragmonk-core",
- "ragmonk-indexing",
- "ragmonk-storage",
- "ragmonk-telemetry",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "ragmonk-storage"
-version = "0.0.0"
-dependencies = [
- "chrono",
- "ragmonk-core",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "ragmonk-telemetry"
-version = "0.0.0"
-dependencies = [
- "chrono",
- "regex",
- "serde_json",
- "tempfile",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "ragmonk-ui"
-version = "0.0.0"
-dependencies = [
- "axum",
- "chrono",
- "futures-util",
- "getrandom 0.3.4",
- "minijinja",
- "minijinja-contrib",
- "ragmonk-ai",
- "ragmonk-config",
- "ragmonk-core",
- "ragmonk-indexing",
- "ragmonk-ops",
- "ragmonk-retrieval",
- "ragmonk-service",
- "ragmonk-status",
- "ragmonk-storage",
- "ragmonk-telemetry",
- "ragmonk-update",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "ragmonk-update"
-version = "0.0.0"
-dependencies = [
- "flate2",
- "minisign-verify",
- "ragmonk-core",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tar",
- "tempfile",
- "zip 8.6.0",
-]
 
 [[package]]
 name = "rand"

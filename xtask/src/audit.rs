@@ -1,7 +1,7 @@
 //! `cargo xtask clean-slate-audit`: keeps migration, legacy-format,
 //! V1/V2 product naming and Python tooling out of the repository.
 //!
-//! RagMonk 1.0 is fresh-install / fresh-index only (see the clean-slate
+//! DocMonk 1.0 is fresh-install / fresh-index only (see the clean-slate
 //! ADR). Every tracked text file is scanned line by line against [`RULES`].
 //! A finding is accepted only when it is
 //!
@@ -89,7 +89,7 @@ const NEUTRAL_TOKENS: &[&str] = &[
     r#"\blanguage: "python""#,
     // Semantic-version tags (`v1.0.0`).
     r"\bv[0-9]+\.[0-9]+",
-    // The Python grammar RagMonk uses to index Python source.
+    // The Python grammar DocMonk uses to index Python source.
     r"tree[-_]sitter[-_]python",
 ];
 
@@ -98,8 +98,8 @@ const ALLOWED_PATHS: &[(&str, &str)] = &[
     // Python as an indexed source language: the code-intelligence crate
     // (grammar wiring, queries, extraction and their tests) and the
     // default ignore list (`.venv`/`venv` in indexed repositories).
-    ("python", "crates/ragmonk-code/"),
-    ("python", "crates/ragmonk-indexing/src/ignore.rs"),
+    ("python", "crates/docmonk-code/"),
+    ("python", "crates/docmonk-indexing/src/ignore.rs"),
     ("python", "docs/adr/0009-code-intelligence.md"),
     ("python-file", "fixtures/"),
     // Test inputs and their goldens are indexed *data*: Python sample
@@ -110,8 +110,8 @@ const ALLOWED_PATHS: &[(&str, &str)] = &[
     ("migration", "fixtures/"),
     ("version-naming", "fixtures/"),
     // The vendored WordPiece vocabulary of the pinned embedding model:
-    // English word pieces, not RagMonk text.
-    ("*", "crates/ragmonk-documents/assets/all-MiniLM-L6-v2/"),
+    // English word pieces, not DocMonk text.
+    ("*", "crates/docmonk-documents/assets/all-MiniLM-L6-v2/"),
 ];
 
 /// Rules that apply only to production sources (`crates/*/src/`).
@@ -345,7 +345,7 @@ mod tests {
     #[test]
     fn version_naming_ignores_models_and_semver() {
         assert!(matches("version-naming", "pub struct V2Layout;"));
-        assert!(matches("version-naming", "let prefix = \"ragmonk-v2\";"));
+        assert!(matches("version-naming", "let prefix = \"docmonk-v2\";"));
         assert!(matches("version-naming", "mod v1;"));
         assert!(matches("version-naming", "tags: rust-v*"));
         assert!(matches("version-naming", "let dir = home.join(\"v1\");"));
@@ -390,11 +390,11 @@ mod tests {
         ));
         assert!(applies(
             "unbounded-channel",
-            "crates/ragmonk-ai/src/transport.rs"
+            "crates/docmonk-ai/src/transport.rs"
         ));
         assert!(!applies(
             "unbounded-channel",
-            "crates/ragmonk-ai/tests/golden.rs"
+            "crates/docmonk-ai/tests/golden.rs"
         ));
     }
 
@@ -409,12 +409,12 @@ mod tests {
     fn python_fixtures_are_allowed_only_under_fixtures() {
         assert!(allowed("python-file", "fixtures/code/python/animals.py"));
         assert!(!allowed("python-file", "scripts/check_branding.py"));
-        assert!(!allowed("python", "crates/ragmonk-config/src/value.rs"));
+        assert!(!allowed("python", "crates/docmonk-config/src/value.rs"));
     }
 
     #[test]
     fn data_inputs_are_exempt_only_from_their_rules() {
-        assert!(allowed("python", "crates/ragmonk-code/tests/indexing.rs"));
+        assert!(allowed("python", "crates/docmonk-code/tests/indexing.rs"));
         assert!(allowed("python", "fixtures/expected/graph.json"));
         assert!(allowed("version-naming", "fixtures/search/queries.json"));
         assert!(allowed("migration", "fixtures/documents/mail.eml"));
@@ -422,13 +422,13 @@ mod tests {
         assert!(!allowed("rewrite", "fixtures/expected/code.json"));
         assert!(!allowed(
             "version-naming",
-            "crates/ragmonk-code/src/lang.rs"
+            "crates/docmonk-code/src/lang.rs"
         ));
         assert!(allowed(
             "legacy",
-            "crates/ragmonk-documents/assets/all-MiniLM-L6-v2/vocab.txt"
+            "crates/docmonk-documents/assets/all-MiniLM-L6-v2/vocab.txt"
         ));
-        assert!(!allowed("legacy", "crates/ragmonk-documents/src/lib.rs"));
+        assert!(!allowed("legacy", "crates/docmonk-documents/src/lib.rs"));
         assert!(!matches("python", "language: \"python\".into(),"));
         assert!(matches("python", "language: \"python3\" runtime"));
     }

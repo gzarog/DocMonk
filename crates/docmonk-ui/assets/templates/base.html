@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}DocMonk Admin{% endblock %} — DocMonk</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/static/js/htmx.min.js" defer></script>
+</head>
+<!-- Every HTMX request carries the CSRF token as X-CSRF-Token;
+     the server validates it against the double-submit cookie. -->
+<body hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
+  <div class="layout">
+    <nav class="sidebar">
+      <div class="brand">
+        <span>DocMonk</span>
+        <span class="ver">v{{ docmonk_version }}</span>
+      </div>
+      <ul class="nav">
+        {% for slug, label, url in nav_items %}
+        <li><a href="{{ url }}" class="{{ 'active' if active == slug else '' }}">{{ label }}</a></li>
+        {% endfor %}
+      </ul>
+    </nav>
+    <main class="main">
+      {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

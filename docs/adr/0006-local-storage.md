@@ -27,7 +27,7 @@ Status: accepted
   in `needs_full_rebuild`, an aborted later build keeps the previous build
   visible. Unchanged files are carried forward into incremental builds;
   superseded and aborted builds are garbage-collected.
-* **Record IDs** (`ragmonk_core::ids::record`): 32-hex sha256 over a domain
+* **Record IDs** (`docmonk_core::ids::record`): 32-hex sha256 over a domain
   tag and natural-key parts, deterministic and idempotent.
 * **Manual links** are stored as user data (`manual_links`, keyed by
   qualified name/relative path) so they survive rebuilds.
@@ -35,4 +35,4 @@ Status: accepted
 ## Consequences
 A schema change ships with a new fingerprint; existing homes are rebuilt
 from source rather than converted. Storage behavior is verified by the
-`ragmonk-storage` tests.
+`docmonk-storage` tests.

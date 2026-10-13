@@ -9,7 +9,7 @@ Status: accepted
 2. **Embedding model.** Keep `sentence-transformers/all-MiniLM-L6-v2` and
    record its measured search quality as the baseline.
 
-## Reranker (`ragmonk_ml::reranker`)
+## Reranker (`docmonk_ml::reranker`)
 
 - **Pinned assets.** The model is pinned in the manifest by revision
   `233902d2` plus sha256 of `config.json`, `model.safetensors` and

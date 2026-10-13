@@ -1,0 +1,25 @@
+[package]
+name = "docmonk-update"
+description = "DocMonk native self-update: release check, verified download, versioned install layout with atomic switch and rollback"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+flate2.workspace = true
+minisign-verify = "0.2"
+docmonk-core.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tar.workspace = true
+zip.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

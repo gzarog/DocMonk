@@ -48,7 +48,7 @@ Status: accepted
 - **Snapshots.** Databases are copied with SQLite's `VACUUM INTO` over a
   read-only connection. The copy is consistent while a writer is active,
   and the source database is never modified.
-- **Manifest.** `format_version`, `ragmonk_version`, `created_at`,
+- **Manifest.** `format_version`, `docmonk_version`, `created_at`,
   `control_schema` (the control-plane schema fingerprint), `projects`
   (each with its knowledge schema fingerprint) and `sources`.
 - **Not archived.** ANN index files are caches. Search falls back to
@@ -83,7 +83,7 @@ Status: accepted
 
 ### `uninstall [--keep-data] [-y] [--json]`
 
-- **Data.** Stops a running daemon, then deletes `RAGMONK_HOME`, unless
+- **Data.** Stops a running daemon, then deletes `DOCMONK_HOME`, unless
   `--keep-data` is given.
 - **The binary.** A running executable cannot delete itself on Windows,
   so `install_method` is `standalone_binary`, `app_removed` is false, and
@@ -100,7 +100,7 @@ Status: accepted
 
 ## Storage additions
 
-- **`ragmonk_storage::maintenance`:**
+- **`docmonk_storage::maintenance`:**
   - read-only schema state (`control_schema_state`,
     `knowledge_schema_state`);
   - `integrity_check`;
@@ -110,7 +110,7 @@ Status: accepted
 
 ## Tests
 
-- **`ragmonk-cli/tests/ops.rs`:**
+- **`docmonk-cli/tests/ops.rs`:**
   - doctor and health sections, verdict and text;
   - a backup → change → restore round trip, after which status and
     queries work;

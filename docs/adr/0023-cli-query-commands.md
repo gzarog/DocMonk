@@ -68,7 +68,7 @@ Status: accepted
 
 ## Tests
 
-- `ragmonk-cli/tests/queries.rs` covers, end to end:
+- `docmonk-cli/tests/queries.rs` covers, end to end:
   - text and JSON modes;
   - absolute paths;
   - range checks;
@@ -77,6 +77,6 @@ Status: accepted
     across a rebuild;
   - `references`, `impact`, `explore` and a `search` that exercises context
     expansion on a document.
-- `ragmonk-retrieval/tests/context.rs` covers heading and sibling
+- `docmonk-retrieval/tests/context.rs` covers heading and sibling
   structure, table rendering and the token budget, on a real indexed
   Markdown document.

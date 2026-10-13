@@ -3,9 +3,9 @@
 Status: accepted (P0-00, on the P0 completion release branch)
 
 ## Context
-At `main@a92f9a1` RagMonk ran end to end only in local mode. In server mode:
+At `main@a92f9a1` DocMonk ran end to end only in local mode. In server mode:
 
-* `ragmonk-service` indexing still opened the local `StorageLayout`,
+* `docmonk-service` indexing still opened the local `StorageLayout`,
   `ControlPlane` and `run_source`, and every query path
   (`query::open_sources`) opened a SQLite `ProjectStore`. A configured
   OpenSearch/Elasticsearch cluster therefore never received the knowledge
@@ -44,7 +44,7 @@ rebuilds it from the original files.
 ### Ports
 Services depend on typed ports, not on `ProjectStore`:
 
-* `KnowledgeRead` (`ragmonk-storage::read`): the object-safe read port the
+* `KnowledgeRead` (`docmonk-storage::read`): the object-safe read port the
   whole retrieval stack (lexical tiers, graph traversal, context expansion,
   semantic candidates, links) uses. Implemented by `ProjectStore` and by
   the server `ServerReader`; every call is scoped to one
@@ -57,7 +57,7 @@ Services depend on typed ports, not on `ProjectStore`:
   writes only changed files.
 * Status: `status::collect` reads the selected backend.
 
-`ragmonk_service::backend::open` is the only place that turns
+`docmonk_service::backend::open` is the only place that turns
 `storage.mode` into a backend; CLI, Admin UI, MCP and daemon all go through
 it.
 
@@ -73,7 +73,7 @@ it.
   is garbage-collected by a later publish.
 * Each query reads one snapshot: the active build map is read once per
   request.
-* Stable IDs (`ragmonk_core::ids::record`), deterministic ordering and
+* Stable IDs (`docmonk_core::ids::record`), deterministic ordering and
   bounded paging (`search_after`) everywhere.
 
 ### Execution
