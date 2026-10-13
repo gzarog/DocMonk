@@ -65,11 +65,10 @@ mod tests {
     }
 
     // A key pair and signature generated with the minisign format (plain
-    // and prehashed Ed25519), a fixed test-only seed (never a release key).
+    // and prehashed Ed25519), a fixed test-only seed (never a release key):
+    // SHA-256 of "docmonk minisign test seed", key id 01..08.
     const PUBKEY: &str = include_str!("../tests/minisign.pub");
     const SIG: &str = include_str!("../tests/minisign.sig");
-    // The signed bytes predate the rename; the test seed is not kept, so
-    // they cannot be re-signed with a new archive name.
     const SIG_DATA: &[u8] = b"abc123  docmonk-1.0.0-x86_64-unknown-linux-gnu.tar.gz\n";
 
     #[test]
