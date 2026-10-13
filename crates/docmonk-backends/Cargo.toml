@@ -1,0 +1,26 @@
+[package]
+name = "docmonk-backends"
+description = "RagMonk OpenSearch/Elasticsearch index schema, bounded bulk publication and stale-index cleanup"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+chrono.workspace = true
+docmonk-config.workspace = true
+docmonk-core.workspace = true
+docmonk-storage.workspace = true
+docmonk-telemetry.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

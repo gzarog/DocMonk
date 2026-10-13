@@ -11,7 +11,7 @@
   "findings": [
     "storage.mode=server indexed into 20 local SQLite knowledge.db files and wrote 0 records to any OpenSearch index",
     "server-mode search returned results read from local SQLite (silent local fallback)",
-    "server-mode status reported no server counts (placeholder error in ragmonk-service status.rs)",
+    "server-mode status reported no server counts (placeholder error in docmonk-service status.rs)",
     "sources were indexed serially under one global index.lock"
   ]
 }

@@ -1,0 +1,21 @@
+[package]
+name = "docmonk-config"
+description = "RagMonk config.yaml parsing, defaults, validation and environment layering"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+docmonk-core.workspace = true
+docmonk-telemetry.workspace = true
+regex.workspace = true
+yaml-rust2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,20 @@
+[package]
+name = "docmonk-documents"
+description = "RagMonk document core: normalized document model, exact tokenizer, chunker and table rendering"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+docmonk-config.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokenizers = { version = "=0.23.2", default-features = false, features = ["fancy-regex"] }
+tracing.workspace = true
+
+[lints]
+workspace = true

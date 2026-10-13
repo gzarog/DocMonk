@@ -1,0 +1,716 @@
+//! The typed configuration schema.
+//!
+//! Field order drives validation-error order and the `config show` /
+//! `config.yaml` output order.
+
+use crate::coerce::{self, Coerced};
+use crate::value::Value;
+
+/// The pinned embedding model's maximum sequence length.
+pub const MAX_SEQUENCE_TOKENS: i64 = 256;
+
+/// Collected `(location, message)` validation errors, in field order.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Errors(pub Vec<(String, String)>);
+
+impl Errors {
+    pub fn push(&mut self, loc: &str, msg: impl Into<String>) {
+        self.0.push((loc.to_owned(), msg.into()));
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    /// `loc: msg; loc: msg`.
+    pub fn render(&self) -> String {
+        self.0
+            .iter()
+            .map(|(loc, msg)| {
+                if loc.is_empty() {
+                    msg.clone()
+                } else {
+                    format!("{loc}: {msg}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("; ")
+    }
+}
+
+pub fn join_loc(parent: &str, child: &str) -> String {
+    if parent.is_empty() {
+        child.to_owned()
+    } else {
+        format!("{parent}.{child}")
+    }
+}
+
+/// A field type: conversion from a loaded [`Value`] and back.
+pub trait ConfigField: Sized + Clone {
+    fn coerce(errors: &mut Errors, value: &Value, loc: &str) -> Option<Self>;
+    fn dump(&self) -> Value;
+}
+
+fn scalar<T>(errors: &mut Errors, loc: &str, r: Coerced<T>) -> Option<T> {
+    r.map_err(|msg| errors.push(loc, msg)).ok()
+}
+
+impl ConfigField for i64 {
+    fn coerce(e: &mut Errors, v: &Value, loc: &str) -> Option<Self> {
+        scalar(e, loc, coerce::to_int(v))
+    }
+    fn dump(&self) -> Value {
+        Value::Int(*self)
+    }
+}
+
+impl ConfigField for f64 {
+    fn coerce(e: &mut Errors, v: &Value, loc: &str) -> Option<Self> {
+        scalar(e, loc, coerce::to_float(v))
+    }
+    fn dump(&self) -> Value {
+        Value::Float(*self)
+    }
+}
+
+impl ConfigField for bool {
+    fn coerce(e: &mut Errors, v: &Value, loc: &str) -> Option<Self> {
+        scalar(e, loc, coerce::to_bool(v))
+    }
+    fn dump(&self) -> Value {
+        Value::Bool(*self)
+    }
+}
+
+impl ConfigField for String {
+    fn coerce(e: &mut Errors, v: &Value, loc: &str) -> Option<Self> {
+        scalar(e, loc, coerce::to_str(v))
+    }
+    fn dump(&self) -> Value {
+        Value::Str(self.clone())
+    }
+}
+
+impl ConfigField for Option<String> {
+    fn coerce(e: &mut Errors, v: &Value, loc: &str) -> Option<Self> {
+        scalar(e, loc, coerce::to_opt_str(v))
+    }
+    fn dump(&self) -> Value {
+        self.as_ref().map_or(Value::Null, |s| Value::Str(s.clone()))
+    }
+}
+
+impl ConfigField for Vec<String> {
+    fn coerce(e: &mut Errors, v: &Value, loc: &str) -> Option<Self> {
+        scalar(e, loc, coerce::to_str_list(v))
+    }
+    fn dump(&self) -> Value {
+        Value::List(self.iter().map(|s| Value::Str(s.clone())).collect())
+    }
+}
+
+/// `documents.chunking.max_tokens`: an integer or `auto`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MaxTokens {
+    Auto,
+    Value(i64),
+}
+
+impl ConfigField for MaxTokens {
+    fn coerce(e: &mut Errors, v: &Value, loc: &str) -> Option<Self> {
+        if matches!(v, Value::Str(s) if s.trim() == "auto") {
+            return Some(MaxTokens::Auto);
+        }
+        match coerce::to_int(v) {
+            Ok(i) => Some(MaxTokens::Value(i)),
+            Err(_) => {
+                e.push(loc, "expected an integer or 'auto'");
+                None
+            }
+        }
+    }
+    fn dump(&self) -> Value {
+        match self {
+            MaxTokens::Auto => Value::str("auto"),
+            MaxTokens::Value(i) => Value::Int(*i),
+        }
+    }
+}
+
+/// `storage.server.engine`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StorageEngine {
+    OpenSearch,
+    Elasticsearch,
+}
+
+impl StorageEngine {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            StorageEngine::OpenSearch => "opensearch",
+            StorageEngine::Elasticsearch => "elasticsearch",
+        }
+    }
+}
+
+impl ConfigField for StorageEngine {
+    fn coerce(e: &mut Errors, v: &Value, loc: &str) -> Option<Self> {
+        match v {
+            Value::Str(s) if s == "opensearch" => Some(StorageEngine::OpenSearch),
+            Value::Str(s) if s == "elasticsearch" => Some(StorageEngine::Elasticsearch),
+            _ => {
+                e.push(loc, "expected 'opensearch' or 'elasticsearch'");
+                None
+            }
+        }
+    }
+    fn dump(&self) -> Value {
+        Value::str(self.as_str())
+    }
+}
+
+type Check<T> = fn(&T) -> Result<(), String>;
+
+fn coerce_field<T: ConfigField>(
+    e: &mut Errors,
+    obj: &Value,
+    loc: &str,
+    key: &str,
+    default: &T,
+    check: Option<Check<T>>,
+) -> Option<T> {
+    let floc = join_loc(loc, key);
+    let value = match obj.get(key) {
+        None => return Some(default.clone()),
+        Some(v) => T::coerce(e, v, &floc)?,
+    };
+    if let Some(check) = check {
+        if let Err(msg) = check(&value) {
+            e.push(&floc, msg);
+            return None;
+        }
+    }
+    Some(value)
+}
+
+macro_rules! section {
+    (
+        $(#[$meta:meta])*
+        $name:ident {
+            $( $field:ident : $ty:ty = $default:expr $(, check = $check:expr)? ; )*
+        }
+        $(model_check = $mcheck:expr ;)?
+    ) => {
+        $(#[$meta])*
+        #[derive(Debug, Clone, PartialEq)]
+        pub struct $name {
+            $( pub $field: $ty, )*
+        }
+
+        impl Default for $name {
+            fn default() -> Self {
+                Self { $( $field: $default, )* }
+            }
+        }
+
+        impl ConfigField for $name {
+            fn coerce(e: &mut Errors, value: &Value, loc: &str) -> Option<Self> {
+                let Some(entries) = value.as_map() else {
+                    e.push(loc, coerce::MSG_MAP);
+                    return None;
+                };
+                let defaults = Self::default();
+                let start = e.len();
+                const FIELDS: &[&str] = &[$( stringify!($field), )*];
+                for (key, _) in entries {
+                    if !FIELDS.contains(&key.as_str()) {
+                        e.push(&join_loc(loc, key), "unknown setting");
+                    }
+                }
+                $(
+                    #[allow(unused_mut, unused_assignments)]
+                    let mut check: Option<Check<$ty>> = None;
+                    $( check = Some($check); )?
+                    let $field = coerce_field::<$ty>(
+                        e, value, loc, stringify!($field), &defaults.$field, check,
+                    );
+                )*
+                if e.len() != start {
+                    return None;
+                }
+                let out = Self { $( $field: $field?, )* };
+                $(
+                    let mcheck: Check<Self> = $mcheck;
+                    if let Err(msg) = mcheck(&out) {
+                        e.push(loc, msg);
+                        return None;
+                    }
+                )?
+                Some(out)
+            }
+
+            fn dump(&self) -> Value {
+                Value::Map(vec![
+                    $( (stringify!($field).to_owned(), self.$field.dump()), )*
+                ])
+            }
+        }
+    };
+}
+
+/// `"<consumer> -> <producer>"` of `indexing.relationship_dependencies`.
+pub fn parse_dependency(d: &str) -> Option<(&str, &str)> {
+    let (c, p) = d.split_once("->")?;
+    let (c, p) = (c.trim(), p.trim());
+    (!c.is_empty() && !p.is_empty() && c != p).then_some((c, p))
+}
+
+fn one_of(value: &str, allowed: &[&str]) -> Result<(), String> {
+    if allowed.contains(&value) {
+        return Ok(());
+    }
+    Err(format!(
+        "unknown value {value:?}; expected one of: {}",
+        allowed.join(", ")
+    ))
+}
+
+section! {
+    RuntimeConfig {
+        log_level: String = "info".into();
+        sqlite_cache_size_mb: i64 = 64;
+    }
+}
+
+section! {
+    IndexingConfig {
+        watch: bool = true;
+        debounce_ms: i64 = 2000;
+        max_file_size_mb: i64 = 100;
+        follow_symlinks: bool = false;
+        network_poll_seconds: i64 = 30;
+        reconciliation_interval_seconds: i64 = 900;
+        code_extraction_workers: i64 = 1;
+        document_extraction_workers: i64 = 1;
+        embedding_batch_size: i64 = 16;
+        // Call graphs and code<->document links. Off skips their extraction,
+        // cross-file resolution and knowledge linking (faster indexing).
+        relationships_enabled: bool = true;
+        // Explicit cross-source dependencies, "<consumer> -> <producer>"
+        // (source ids or paths). Unresolved references of the consumer are
+        // looked up by exact qualified name in its producers only; C#
+        // project references between registered sources are discovered.
+        relationship_dependencies: Vec<String> = Vec::new(), check = |v| {
+            match v.iter().find(|d| parse_dependency(d).is_none()) {
+                None => Ok(()),
+                Some(d) => Err(format!("{d:?} is not \"<consumer> -> <producer>\"")),
+            }
+        };
+        lock_timeout_seconds: f64 = 30.0, check = |v| {
+            if *v > 0.0 && *v <= 3600.0 { Ok(()) } else {
+                Err("must be > 0 and <= 3600".into())
+            }
+        };
+        status_stall_threshold_seconds: f64 = 120.0, check = |v| {
+            if *v <= 0.0 { Err("must be > 0".into()) } else { Ok(()) }
+        };
+        // P0 parallel indexing (ADR 0033). 0 = auto, evaluated at runtime.
+        max_parallel_sources: i64 = 0, check = |v| if (0..=32).contains(v) { Ok(()) } else {
+            Err("must be between 0 (auto) and 32".into())
+        };
+        cpu_workers: i64 = 0, check = |v| if (0..=256).contains(v) { Ok(()) } else {
+            Err("must be between 0 (auto) and 256".into())
+        };
+        ocr_workers: i64 = 1, check = |v| if (1..=64).contains(v) { Ok(()) } else {
+            Err("must be between 1 and 64".into())
+        };
+        embedding_workers: i64 = 1, check = |v| if (1..=64).contains(v) { Ok(()) } else {
+            Err("must be between 1 and 64".into())
+        };
+        io_concurrency: i64 = 8, check = |v| if (1..=1024).contains(v) { Ok(()) } else {
+            Err("must be between 1 and 1024".into())
+        };
+        max_in_flight_mb: i64 = 512, check = |v| if (16..=1_048_576).contains(v) { Ok(()) } else {
+            Err("must be between 16 and 1048576".into())
+        };
+        fairness_max_wait_seconds: i64 = 120, check = |v| if (1..=86_400).contains(v) { Ok(()) } else {
+            Err("must be between 1 and 86400".into())
+        };
+        max_targeted_paths: i64 = 512, check = |v| if (1..=1_000_000).contains(v) { Ok(()) } else {
+            Err("must be between 1 and 1000000".into())
+        };
+    }
+}
+
+impl IndexingConfig {
+    /// `max_parallel_sources`, resolving `0` to `min(4, max(1, cpus / 2))`.
+    pub fn resolved_max_parallel_sources(&self) -> usize {
+        if self.max_parallel_sources > 0 {
+            return self.max_parallel_sources as usize;
+        }
+        let cpus = std::thread::available_parallelism().map_or(1, |n| n.get());
+        (cpus / 2).clamp(1, 4)
+    }
+
+    /// `cpu_workers`, resolving `0` to the number of available CPUs.
+    pub fn resolved_cpu_workers(&self) -> usize {
+        if self.cpu_workers > 0 {
+            return self.cpu_workers as usize;
+        }
+        std::thread::available_parallelism().map_or(1, |n| n.get())
+    }
+}
+
+impl ChunkingConfig {
+    /// `"auto"` resolves to the pinned model's `MAX_SEQUENCE_TOKENS`.
+    pub fn resolved_max_tokens(&self) -> i64 {
+        match self.max_tokens {
+            MaxTokens::Auto => MAX_SEQUENCE_TOKENS,
+            MaxTokens::Value(v) => v,
+        }
+    }
+}
+
+section! {
+    ChunkingConfig {
+        max_tokens: MaxTokens = MaxTokens::Auto, check = |v| match v {
+            MaxTokens::Auto => Ok(()),
+            MaxTokens::Value(n) if *n < 16 => Err("must be at least 16".into()),
+            MaxTokens::Value(n) if *n > MAX_SEQUENCE_TOKENS => Err(format!(
+                "{n} exceeds the embedding model's \
+                 maximum sequence length ({MAX_SEQUENCE_TOKENS}); a larger value would \
+                 let chunks be silently truncated at embedding time. Use 'auto' or a \
+                 value <= {MAX_SEQUENCE_TOKENS}."
+            )),
+            MaxTokens::Value(_) => Ok(()),
+        };
+        min_tokens: i64 = 60, check = |v| if *v < 1 { Err("must be at least 1".into()) } else { Ok(()) };
+        overlap_tokens: i64 = 40, check = |v| if *v < 0 { Err("must not be negative".into()) } else { Ok(()) };
+        safety_tokens: i64 = 4, check = |v| if *v < 0 { Err("must not be negative".into()) } else { Ok(()) };
+        merge_peers: bool = true;
+    }
+    model_check = |c| {
+        let resolved = c.resolved_max_tokens();
+        if c.min_tokens > resolved {
+            return Err("documents.chunking.min_tokens must not exceed documents.chunking.max_tokens".into());
+        }
+        if c.overlap_tokens >= resolved {
+            return Err("documents.chunking.overlap_tokens must be less than documents.chunking.max_tokens".into());
+        }
+        if c.safety_tokens >= resolved {
+            return Err("documents.chunking.safety_tokens must be less than documents.chunking.max_tokens".into());
+        }
+        Ok(())
+    };
+}
+
+fn positive_attachment(field: &'static str) -> Check<i64> {
+    match field {
+        "email_attachment_max_bytes" => |v| {
+            if *v <= 0 {
+                Err("must be > 0".into())
+            } else {
+                Ok(())
+            }
+        },
+        "email_attachment_max_count" => |v| {
+            if *v <= 0 {
+                Err("must be > 0".into())
+            } else {
+                Ok(())
+            }
+        },
+        _ => |v| {
+            if *v <= 0 {
+                Err("must be > 0".into())
+            } else {
+                Ok(())
+            }
+        },
+    }
+}
+
+section! {
+    DocumentsConfig {
+        ocr: String = "auto".into(), check = |v| one_of(v, &["off", "auto", "always"]);
+        max_pages: i64 = 1000;
+        chunking: ChunkingConfig = ChunkingConfig::default();
+        image_ocr: bool = false;
+        pdf_mode: String = "accurate".into(), check = |v| one_of(v, &["accurate", "fast"]);
+        email_attachments: bool = true;
+        email_attachment_max_bytes: i64 = 25 * 1024 * 1024, check = positive_attachment("email_attachment_max_bytes");
+        email_attachment_max_count: i64 = 50, check = positive_attachment("email_attachment_max_count");
+        email_attachment_total_max_bytes: i64 = 100 * 1024 * 1024, check = positive_attachment("email_attachment_total_max_bytes");
+    }
+}
+
+section! {
+    SearchOutputConfig {
+        fallback: Vec<String> = vec!["snippets".into(), "json".into(), "files".into()], check = |v| {
+            if v.is_empty() {
+                return Err("must not be empty".into());
+            }
+            for mode in v {
+                if !["snippets", "json", "files", "table"].contains(&mode.as_str()) {
+                    return Err(format!(
+                        "unknown search.output.fallback mode {mode:?}; expected one of: snippets, json, files, table"
+                    ));
+                }
+            }
+            Ok(())
+        };
+        snippet_max_tokens: i64 = 32, check = |v| if (1..=64).contains(v) { Ok(()) } else {
+            Err("must be between 1 and 64 (SQLite FTS5's own snippet() limit)".into())
+        };
+    }
+}
+
+fn non_negative_chunks(v: &i64) -> Result<(), String> {
+    if *v < 0 {
+        Err("must be >= 0".into())
+    } else {
+        Ok(())
+    }
+}
+
+section! {
+    SearchContextConfig {
+        parent_heading: bool = true;
+        previous_chunks: i64 = 1, check = non_negative_chunks;
+        next_chunks: i64 = 1, check = non_negative_chunks;
+        max_tokens: i64 = 1200, check = |v| if *v <= 0 { Err("must be > 0".into()) } else { Ok(()) };
+    }
+}
+
+section! {
+    SearchRerankerConfig {
+        enabled: bool = false;
+        top_n: i64 = 20, check = |v| if *v < 1 { Err("must be >= 1".into()) } else { Ok(()) };
+    }
+}
+
+section! {
+    SearchRoutingConfig {
+        enabled: bool = true;
+    }
+}
+
+section! {
+    SearchDecompositionConfig {
+        enabled: bool = true;
+        max_subqueries: i64 = 4, check = |v| if (1..=8).contains(v) { Ok(()) } else {
+            Err("must be between 1 and 8".into())
+        };
+        llm_enabled: bool = false;
+    }
+}
+
+section! {
+    SearchDiversityConfig {
+        enabled: bool = false;
+        lambda: f64 = 0.7, check = |v| if (0.0..=1.0).contains(v) { Ok(()) } else {
+            Err("must be between 0 and 1".into())
+        };
+        per_document_cap: i64 = 3, check = |v| if *v < 1 { Err("must be >= 1".into()) } else { Ok(()) };
+        per_source_cap: i64 = 0, check = |v| if *v < 0 { Err("must be >= 0 (0 = no cap)".into()) } else { Ok(()) };
+    }
+}
+
+section! {
+    SearchGroundingConfig {
+        enabled: bool = true;
+        min_coverage: f64 = 0.5, check = |v| if (0.0..=1.0).contains(v) { Ok(()) } else {
+            Err("must be between 0 and 1".into())
+        };
+    }
+}
+
+section! {
+    SearchConfig {
+        lexical: bool = true;
+        graph: bool = true;
+        semantic: bool = false;
+        lazy_semantic: bool = false;
+        semantic_top_k: i64 = 30;
+        output: SearchOutputConfig = SearchOutputConfig::default();
+        context: SearchContextConfig = SearchContextConfig::default();
+        reranker: SearchRerankerConfig = SearchRerankerConfig::default();
+        routing: SearchRoutingConfig = SearchRoutingConfig::default();
+        decomposition: SearchDecompositionConfig = SearchDecompositionConfig::default();
+        diversity: SearchDiversityConfig = SearchDiversityConfig::default();
+        grounding: SearchGroundingConfig = SearchGroundingConfig::default();
+        max_query_budget_ms: i64 = 5000, check = |v| if (100..=600_000).contains(v) { Ok(()) } else {
+            Err("must be between 100 and 600000".into())
+        };
+    }
+}
+
+section! {
+    ContextConfig {
+        max_chars: i64 = 30000;
+        max_files: i64 = 20;
+        max_graph_nodes: i64 = 100;
+    }
+}
+
+section! {
+    McpConfig {
+        enabled: bool = true;
+        request_timeout_seconds: f64 = 30.0;
+    }
+}
+
+section! {
+    PrivacyConfig {
+        external_ai_allowed: bool = false;
+    }
+}
+
+section! {
+    /// API keys are never stored here; providers read them from env vars.
+    AiConfig {
+        provider: String = "none".into();
+        model: String = String::new();
+        base_url: Option<String> = None;
+        timeout_seconds: f64 = 60.0;
+    }
+}
+
+section! {
+    UpdatesConfig {
+        enabled: bool = true;
+        check_interval_hours: i64 = 24;
+        notify: bool = true;
+        channel: String = "stable".into();
+    }
+}
+
+fn bulk_positive(v: &i64) -> Result<(), String> {
+    if *v < 1 {
+        Err("must be >= 1".into())
+    } else {
+        Ok(())
+    }
+}
+
+section! {
+    BulkConfig {
+        max_actions: i64 = 500, check = bulk_positive;
+        max_bytes: i64 = 5_000_000, check = bulk_positive;
+        max_retries: i64 = 3, check = |v| if *v < 0 { Err("must be >= 0".into()) } else { Ok(()) };
+    }
+}
+
+section! {
+    /// Never holds credentials: they come from
+    /// `RAGMONK_{OPENSEARCH,ELASTICSEARCH}_{USERNAME,PASSWORD,API_KEY}`.
+    ServerStorageConfig {
+        engine: StorageEngine = StorageEngine::OpenSearch;
+        url: String = String::new(), check = |v| {
+            if docmonk_telemetry::redact::url_has_userinfo(v) {
+                Err("must not contain credentials (user-info such as \
+                     'user:password@'); set RAGMONK_OPENSEARCH_USERNAME/_PASSWORD/_API_KEY \
+                     or RAGMONK_ELASTICSEARCH_USERNAME/_PASSWORD/_API_KEY instead".into())
+            } else {
+                Ok(())
+            }
+        };
+        index_prefix: String = "ragmonk".into();
+        verify_tls: bool = true;
+        request_timeout_seconds: f64 = 30.0, check = |v| {
+            if *v <= 0.0 { Err("must be > 0".into()) } else { Ok(()) }
+        };
+        bulk: BulkConfig = BulkConfig::default();
+        gc_grace_seconds: f64 = 60.0, check = |v| {
+            if (0.0..=86_400.0).contains(v) { Ok(()) } else { Err("must be between 0 and 86400".into()) }
+        };
+        lease_seconds: f64 = 300.0, check = |v| {
+            if (5.0..=86_400.0).contains(v) { Ok(()) } else { Err("must be between 5 and 86400".into()) }
+        };
+    }
+}
+
+section! {
+    /// `mode="local"` stays the default even when the section is absent.
+    StorageConfig {
+        mode: String = "local".into(), check = |v| one_of(v, &["local", "server"]);
+        server: ServerStorageConfig = ServerStorageConfig::default();
+    }
+}
+
+section! {
+    RagMonkConfig {
+        runtime: RuntimeConfig = RuntimeConfig::default();
+        indexing: IndexingConfig = IndexingConfig::default();
+        documents: DocumentsConfig = DocumentsConfig::default();
+        search: SearchConfig = SearchConfig::default();
+        context: ContextConfig = ContextConfig::default();
+        mcp: McpConfig = McpConfig::default();
+        privacy: PrivacyConfig = PrivacyConfig::default();
+        ai: AiConfig = AiConfig::default();
+        updates: UpdatesConfig = UpdatesConfig::default();
+        storage: StorageConfig = StorageConfig::default();
+    }
+}
+
+/// Top-level sections recognized by the `RAGMONK_<SECTION>__...` env layer.
+pub const KNOWN_SECTIONS: &[&str] = &[
+    "runtime",
+    "indexing",
+    "documents",
+    "search",
+    "context",
+    "mcp",
+    "privacy",
+    "ai",
+    "updates",
+    "storage",
+];
+
+impl RagMonkConfig {
+    /// Validates a merged value tree into the typed configuration.
+    pub fn validate(value: &Value) -> Result<Self, Errors> {
+        let mut errors = Errors::default();
+        match <Self as ConfigField>::coerce(&mut errors, value, "") {
+            Some(cfg) if errors.is_empty() => Ok(cfg),
+            _ => Err(errors),
+        }
+    }
+
+    /// The configuration as a value tree (field order preserved).
+    pub fn to_value(&self) -> Value {
+        self.dump()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_keys_and_bad_values_are_reported_in_order() {
+        let v = crate::yaml::parse(
+            "runtime:\n  log_level: debug\n  max_workers: 4\nsearch:\n  semantic: maybe\nstorage:\n  mode: cloud\n",
+        )
+        .unwrap();
+        let merged = crate::value::deep_merge(&RagMonkConfig::default().to_value(), &v);
+        let err = RagMonkConfig::validate(&merged).unwrap_err().render();
+        assert_eq!(
+            err,
+            "runtime.max_workers: unknown setting; search.semantic: expected true or false; \
+             storage.mode: unknown value \"cloud\"; expected one of: local, server"
+        );
+    }
+
+    #[test]
+    fn defaults_round_trip() {
+        let cfg = RagMonkConfig::default();
+        assert_eq!(RagMonkConfig::validate(&cfg.to_value()).unwrap(), cfg);
+        assert_eq!(
+            cfg.documents.chunking.resolved_max_tokens(),
+            MAX_SEQUENCE_TOKENS
+        );
+    }
+}

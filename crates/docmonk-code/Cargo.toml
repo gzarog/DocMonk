@@ -1,0 +1,34 @@
+[package]
+name = "docmonk-code"
+description = "RagMonk Tree-sitter code intelligence: extraction, resolution, framework rules and the code graph"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+docmonk-config.workspace = true
+docmonk-core.workspace = true
+docmonk-indexing.workspace = true
+docmonk-storage.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+streaming-iterator = "0.1"
+thiserror.workspace = true
+tracing.workspace = true
+tree-sitter = "0.25"
+tree-sitter-c-sharp = "0.23"
+tree-sitter-go = "0.25"
+tree-sitter-java = "0.23"
+tree-sitter-javascript = "0.25"
+tree-sitter-python = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-typescript = "0.23"
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

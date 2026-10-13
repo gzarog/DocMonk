@@ -1,0 +1,26 @@
+[package]
+name = "docmonk-status"
+description = "RagMonk's single status model, local/server snapshot collectors and health evaluator"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+chrono.workspace = true
+docmonk-backends.workspace = true
+docmonk-core.workspace = true
+docmonk-indexing.workspace = true
+docmonk-storage.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+docmonk-telemetry.workspace = true
+
+[dev-dependencies]
+docmonk-config.workspace = true
+rusqlite.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

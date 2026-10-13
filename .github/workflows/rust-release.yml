@@ -166,7 +166,7 @@ jobs:
           RAGMONK_BUILD_VERSION: ${{ needs.validate.outputs.version }}
           RAGMONK_BUILD_COMMIT: ${{ needs.validate.outputs.sha }}
           RAGMONK_MINISIGN_PUBKEY: ${{ vars.MINISIGN_PUBLIC_KEY }}
-        run: cargo build --release --locked -p ragmonk-cli --target ${{ matrix.target }}
+        run: cargo build --release --locked -p docmonk-cli --target ${{ matrix.target }}
       - name: Smoke test
         run: |
           EXE=target/${{ matrix.target }}/release/ragmonk

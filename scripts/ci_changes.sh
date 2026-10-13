@@ -16,7 +16,7 @@ classify() {
         installer=true docker=true ;;
     esac
     case "$path" in
-      install.sh | install.ps1 | crates/ragmonk-update/* | xtask/*) installer=true ;;
+      install.sh | install.ps1 | crates/docmonk-update/* | xtask/*) installer=true ;;
     esac
     case "$path" in
       Dockerfile | .dockerignore | docker/* | scripts/fetch_models.sh) docker=true ;;
@@ -39,17 +39,17 @@ expect() { # paths(\n-separated) expected-output
     exit 1
   fi
 }
-expect "crates/ragmonk-code/src/lib.rs" "installer=false docker=false"
+expect "crates/docmonk-code/src/lib.rs" "installer=false docker=false"
 expect "README.md\ndocs/CI.md" "installer=false docker=false"
 expect "" "installer=false docker=false"
 expect "install.ps1" "installer=true docker=false"
 expect "install.sh" "installer=true docker=false"
-expect "crates/ragmonk-update/src/lib.rs" "installer=true docker=false"
+expect "crates/docmonk-update/src/lib.rs" "installer=true docker=false"
 expect "xtask/src/main.rs" "installer=true docker=false"
 expect "Dockerfile" "installer=false docker=true"
 expect "scripts/fetch_models.sh" "installer=false docker=true"
 expect "Cargo.lock" "installer=true docker=true"
-expect "crates/ragmonk-cli/Cargo.toml" "installer=true docker=true"
+expect "crates/docmonk-cli/Cargo.toml" "installer=true docker=true"
 expect ".github/workflows/rust.yml" "installer=true docker=true"
 expect "src/a.rs\nDockerfile\ninstall.sh" "installer=true docker=true"
 echo "ci_changes self-test passed"
