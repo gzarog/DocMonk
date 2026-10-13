@@ -21,7 +21,7 @@ pub mod versioning;
 
 /// This project's own repository; updates never come from anywhere else.
 pub const GITHUB_OWNER: &str = "gzarog";
-pub const GITHUB_REPO: &str = "RagMonk";
+pub const GITHUB_REPO: &str = "DocMonk";
 
 /// The Rust target triple this binary was built for.
 pub const TARGET: &str = env!("DOCMONK_TARGET");

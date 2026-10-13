@@ -1,5 +1,5 @@
 {
-  "benchmark": "ragmonk status, 150 registered sources (ADR 0034)",
+  "benchmark": "docmonk status, 150 registered sources (ADR 0034)",
   "date": "2026-10-08",
   "environment": {
     "cpu": "Intel Xeon @ 2.80GHz, 4 vCPU",
@@ -9,9 +9,9 @@
   },
   "measured": {
     "server_request_counts": {
-      "mock_transport": {"full_snapshot": 7, "watch_refresh_unchanged_builds": 3, "test": "crates/ragmonk-status/tests/server_budget.rs"},
-      "opensearch_live": {"full_snapshot": 7, "watch_refresh_unchanged_builds": 3, "test": "crates/ragmonk-status/tests/live_server.rs"},
-      "elasticsearch_live": {"full_snapshot": 7, "watch_refresh_unchanged_builds": 3, "test": "crates/ragmonk-status/tests/live_server.rs"},
+      "mock_transport": {"full_snapshot": 7, "watch_refresh_unchanged_builds": 3, "test": "crates/docmonk-status/tests/server_budget.rs"},
+      "opensearch_live": {"full_snapshot": 7, "watch_refresh_unchanged_builds": 3, "test": "crates/docmonk-status/tests/live_server.rs"},
+      "elasticsearch_live": {"full_snapshot": 7, "watch_refresh_unchanged_builds": 3, "test": "crates/docmonk-status/tests/live_server.rs"},
       "budget": {"full_snapshot_max": 30, "watch_refresh_max": 9}
     },
     "local_sqlite": {
@@ -19,7 +19,7 @@
       "files": 165,
       "sql_statements": 302,
       "single_snapshot_ms": {"release": 254, "debug": 556},
-      "test": "crates/ragmonk-status/tests/local.rs::hundred_fifty_sources_are_read_with_bounded_statements"
+      "test": "crates/docmonk-status/tests/local.rs::hundred_fifty_sources_are_read_with_bounded_statements"
     }
   },
   "not_measured": [

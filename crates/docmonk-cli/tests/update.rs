@@ -148,7 +148,7 @@ fn native_home(dir: &Path) -> (PathBuf, PathBuf) {
         home.join("install_info.json"),
         serde_json::json!({
             "install_method": "native",
-            "repository": "gzarog/RagMonk",
+            "repository": "gzarog/DocMonk",
             "install_dir": install,
             "bin_dir": dir.join("bin"),
         })

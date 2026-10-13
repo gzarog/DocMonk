@@ -70,7 +70,7 @@ mod tests {
     const SIG: &str = include_str!("../tests/minisign.sig");
     // The signed bytes predate the rename; the test seed is not kept, so
     // they cannot be re-signed with a new archive name.
-    const SIG_DATA: &[u8] = b"abc123  ragmonk-1.0.0-x86_64-unknown-linux-gnu.tar.gz\n";
+    const SIG_DATA: &[u8] = b"abc123  docmonk-1.0.0-x86_64-unknown-linux-gnu.tar.gz\n";
 
     #[test]
     fn signatures() {

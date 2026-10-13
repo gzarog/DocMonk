@@ -92,4 +92,4 @@ Short tail paragraph.
 
 ## Code-ish
 
-Call `ragmonk index --source /srv/data` then visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details.
+Call `docmonk index --source /srv/data` then visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details.

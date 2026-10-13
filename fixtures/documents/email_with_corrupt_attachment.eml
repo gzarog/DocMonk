@@ -3,15 +3,15 @@ To: recipient@example.com
 Subject: Corrupt attachment
 Date: Mon, 01 Sep 2025 12:00:00 +0000
 MIME-Version: 1.0
-Content-Type: multipart/mixed; boundary="===ragmonk-fixture-boundary==="
+Content-Type: multipart/mixed; boundary="===docmonk-fixture-boundary==="
 
---===ragmonk-fixture-boundary===
+--===docmonk-fixture-boundary===
 Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: 7bit
 
 One attachment is broken.
 
---===ragmonk-fixture-boundary===
+--===docmonk-fixture-boundary===
 Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
 Content-Transfer-Encoding: base64
 Content-Disposition: attachment; filename="broken.docx"
@@ -20,7 +20,7 @@ MIME-Version: 1.0
 bm90IGEgcmVhbCBkb2N4IGZpbGUsIGp1c3QgZ2FyYmFnZSBieXRlcyB0byB0cmlnZ2VyIGEgRG9j
 bGluZyBDb252ZXJzaW9uRXJyb3IK
 
---===ragmonk-fixture-boundary===
+--===docmonk-fixture-boundary===
 Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: 7bit
 Content-Disposition: attachment; filename="ok.txt"
@@ -28,4 +28,4 @@ MIME-Version: 1.0
 
 The valid attachment mentions ibexvalid.
 
---===ragmonk-fixture-boundary===--
+--===docmonk-fixture-boundary===--

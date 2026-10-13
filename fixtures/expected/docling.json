@@ -7465,14 +7465,14 @@
      "content_layer": "body",
      "footnotes": [],
      "label": "code",
-     "orig": "ragmonk index --source /srv/data",
+     "orig": "docmonk index --source /srv/data",
      "parent": {
       "$ref": "#/groups/0"
      },
      "prov": [],
      "references": [],
      "self_ref": "#/texts/14",
-     "text": "ragmonk index --source /srv/data"
+     "text": "docmonk index --source /srv/data"
     },
     {
      "children": [],
@@ -8125,7 +8125,7 @@
      "page_start": null,
      "parent_index": 14,
      "table_rows": null,
-     "text": "ragmonk index --source /srv/data"
+     "text": "docmonk index --source /srv/data"
     },
     {
      "caption": null,
