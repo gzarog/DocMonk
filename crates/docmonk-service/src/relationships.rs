@@ -1,19 +1,19 @@
 //! The relationship graph stage of a run (phase 2).
 //!
-//! `ragmonk index` (and every automatic daemon pass) is two-staged per
+//! `docmonk index` (and every automatic daemon pass) is two-staged per
 //! batch of selected sources: phase 1 indexes and publishes every source
 //! ([`crate::indexing`]); only once **all** of them finished does phase 2
 //! derive and publish relationship graphs, for the sources whose base index
 //! is published and whose graph is missing, stale or failed. Phase 2 never
 //! runs when `indexing.relationships_enabled` is off, never holds back or
 //! rolls back a base publication, and one source's graph failure never
-//! stops another's. `ragmonk relationships build` runs phase 2 alone, to
+//! stops another's. `docmonk relationships build` runs phase 2 alone, to
 //! retry or initialize graphs without reindexing any content.
 
 use std::path::Path;
 
 use docmonk_code::graph_stage::{GraphError, GraphOutcome, GraphReport};
-use docmonk_core::errors::{ErrorKind, RagMonkError};
+use docmonk_core::errors::{DocMonkError, ErrorKind};
 use docmonk_core::paths::{project_id_for_canonical, Home};
 use docmonk_indexing::coordinator::Options;
 use docmonk_indexing::lock::RunLock;
@@ -40,9 +40,9 @@ pub enum RelationshipOutcome {
     /// next index pass.
     Stale(String),
     /// The graph build failed; the base index stays published.
-    Failed(RagMonkError),
+    Failed(DocMonkError),
     /// The source's lock or lease is held elsewhere.
-    Blocked(RagMonkError),
+    Blocked(DocMonkError),
     /// Nothing to build from (no published base yet).
     Skipped(String),
 }
@@ -117,14 +117,14 @@ fn from_graph(r: Result<GraphRun, GraphError>) -> RelationshipOutcome {
         Err(GraphError::NotPublished) => {
             RelationshipOutcome::Skipped("no published index yet".into())
         }
-        Err(e) => RelationshipOutcome::Failed(RagMonkError::new(ErrorKind::Generic, e.to_string())),
+        Err(e) => RelationshipOutcome::Failed(DocMonkError::new(ErrorKind::Generic, e.to_string())),
     }
 }
 
 /// Phase 2 for one source. The caller holds the source's lock.
 pub fn graph_one(
     home: &Home,
-    cfg: &docmonk_config::RagMonkConfig,
+    cfg: &docmonk_config::DocMonkConfig,
     backend: &Backend,
     source: &SourceRecord,
     opts: &Options,
@@ -194,10 +194,10 @@ pub fn graph_one(
 /// knowledge is touched). No graph job runs.
 pub fn mark_disabled(
     home: &Home,
-    cfg: &docmonk_config::RagMonkConfig,
+    cfg: &docmonk_config::DocMonkConfig,
     backend: &Backend,
     source: &SourceRecord,
-) -> Result<(), RagMonkError> {
+) -> Result<(), DocMonkError> {
     match backend {
         Backend::Local => {
             let layout = StorageLayout::new(home);
@@ -225,7 +225,7 @@ pub fn mark_disabled(
 #[allow(clippy::too_many_arguments)]
 pub fn run_stage(
     home: &Home,
-    cfg: &docmonk_config::RagMonkConfig,
+    cfg: &docmonk_config::DocMonkConfig,
     backend: &Backend,
     sources: &[SourceRecord],
     operation: &str,
@@ -268,7 +268,7 @@ pub fn run_stage(
             emit.emit(outcome);
         },
         |_| {
-            RelationshipOutcome::Failed(RagMonkError::new(
+            RelationshipOutcome::Failed(DocMonkError::new(
                 ErrorKind::Generic,
                 "relationship build panicked; nothing was published",
             ))
@@ -364,16 +364,16 @@ impl StageSummary {
     }
 }
 
-/// `ragmonk relationships build [--source ID]`: phase 2 alone, under
+/// `docmonk relationships build [--source ID]`: phase 2 alone, under
 /// progress tracking, without reindexing anything.
 pub fn build(
     home: &Home,
     sources: &[SourceRecord],
     mut on_outcome: impl FnMut(&SourceRecord, &RelationshipOutcome),
-) -> Result<StageSummary, RagMonkError> {
+) -> Result<StageSummary, DocMonkError> {
     let cfg = load(home)?;
     if !cfg.indexing.relationships_enabled {
-        return Err(RagMonkError::usage(
+        return Err(DocMonkError::usage(
             "relationships are disabled (indexing.relationships_enabled: false); enable them to build relationship graphs",
         ));
     }
@@ -417,7 +417,7 @@ pub fn build(
                 }
             }
             tracker.set_phase("done");
-            Ok::<(), RagMonkError>(())
+            Ok::<(), DocMonkError>(())
         },
     )?;
     Ok(summary)

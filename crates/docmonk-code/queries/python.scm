@@ -25,7 +25,7 @@
 ; class's own (block) means it cannot match assignments inside a nested
 ; method body, since that lives in a different (block) node.
 ;
-; RagMonk Rust: the crates.io Python grammar keeps the (expression_statement)
+; DocMonk Rust: the crates.io Python grammar keeps the (expression_statement)
 ; wrapper that the reference's bundled grammar inlines, so the assignment is
 ; matched one level down; the captured nodes are identical.
 (class_definition

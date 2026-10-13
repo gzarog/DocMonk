@@ -65,7 +65,7 @@ pub fn collect_error(e: BackendError) -> CollectError {
         BackendError::SchemaMismatch(_) => CollectError::SchemaMismatch(msg),
         BackendError::Invalid(_) => CollectError::Config(msg),
         BackendError::Http { status: 404, .. } => CollectError::SchemaMismatch(format!(
-            "{msg}; run `ragmonk server init` (or use a fresh index_prefix)"
+            "{msg}; run `docmonk server init` (or use a fresh index_prefix)"
         )),
         _ => CollectError::Unavailable(msg),
     }

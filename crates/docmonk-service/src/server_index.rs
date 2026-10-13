@@ -32,8 +32,8 @@ use docmonk_backends::backend::Lease;
 use docmonk_backends::publish::PublishInput;
 use docmonk_backends::status::RuntimeDoc;
 use docmonk_backends::ServerBackend;
-use docmonk_config::RagMonkConfig;
-use docmonk_core::errors::RagMonkError;
+use docmonk_config::DocMonkConfig;
+use docmonk_core::errors::DocMonkError;
 use docmonk_core::ids::record;
 use docmonk_core::paths::{project_id_for_canonical, Home};
 use docmonk_indexing::coordinator::{
@@ -49,7 +49,7 @@ use crate::indexing::{lease_owner, RunOptions};
 use crate::{db, generic};
 
 /// `<home>/cache/server-staging/<index_prefix>`.
-pub fn staging_root(home: &Home, cfg: &RagMonkConfig) -> PathBuf {
+pub fn staging_root(home: &Home, cfg: &DocMonkConfig) -> PathBuf {
     let prefix: String = cfg
         .storage
         .server
@@ -71,7 +71,7 @@ fn marker(root: &std::path::Path, source_id: &str) -> PathBuf {
 }
 
 /// Deletes a source's staging data (never its original files).
-pub fn drop_staging(home: &Home, cfg: &RagMonkConfig, source_id: &str) {
+pub fn drop_staging(home: &Home, cfg: &DocMonkConfig, source_id: &str) {
     let root = staging_root(home, cfg);
     let layout = StorageLayout::at(&root);
     if let Ok(mut cp) = open_staging(&layout, cfg) {
@@ -86,7 +86,7 @@ pub fn drop_staging(home: &Home, cfg: &RagMonkConfig, source_id: &str) {
 /// Opens the staging control plane. Parallel workers (and a concurrent
 /// process) may race to create it: creation is serialized in-process and a
 /// lost cross-process race is retried once the winner finished.
-fn open_staging(layout: &StorageLayout, cfg: &RagMonkConfig) -> Result<ControlPlane, RagMonkError> {
+fn open_staging(layout: &StorageLayout, cfg: &DocMonkConfig) -> Result<ControlPlane, DocMonkError> {
     static CREATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let _g = CREATE.lock().unwrap_or_else(|p| p.into_inner());
     let mut last = None;
@@ -120,14 +120,14 @@ impl Drop for Renewal<'_> {
 #[allow(clippy::too_many_arguments)]
 pub fn run_source(
     home: &Home,
-    cfg: &RagMonkConfig,
+    cfg: &DocMonkConfig,
     server: &ServerBackend,
     source: &SourceRecord,
     registry: &Registry,
     opts: &Options,
     run: &RunOptions,
     progress: &mut dyn Progress,
-) -> Result<SourceResult, RagMonkError> {
+) -> Result<SourceResult, DocMonkError> {
     let ttl = Duration::from_secs_f64(cfg.storage.server.lease_seconds);
     let lease = server
         .acquire_lease(&source.id, &lease_owner(), ttl)
@@ -183,7 +183,7 @@ pub fn run_source(
     if lost.load(Ordering::SeqCst) {
         tracing::warn!(component = "indexing", event = "lease_lost", source_id = %source.id);
     }
-    beat.finish(result.as_ref().err().map(RagMonkError::message));
+    beat.finish(result.as_ref().err().map(DocMonkError::message));
     let _ = server.release_lease(&lease);
     result
 }
@@ -328,7 +328,7 @@ impl Progress for Reporting<'_, '_> {
 #[allow(clippy::too_many_arguments)]
 fn staged_pass(
     home: &Home,
-    cfg: &RagMonkConfig,
+    cfg: &DocMonkConfig,
     server: &ServerBackend,
     source: &SourceRecord,
     registry: &Registry,
@@ -336,7 +336,7 @@ fn staged_pass(
     run: &RunOptions,
     lease: &Lease,
     progress: &mut dyn Progress,
-) -> Result<SourceResult, RagMonkError> {
+) -> Result<SourceResult, DocMonkError> {
     let root = staging_root(home, cfg);
     std::fs::create_dir_all(root.join("synced")).map_err(generic)?;
     let layout = StorageLayout::at(&root);
@@ -357,7 +357,7 @@ fn staged_pass(
         }
     };
     if staged.id != source.id {
-        return Err(RagMonkError::config(format!(
+        return Err(DocMonkError::config(format!(
             "staging id {} does not match server source {}; delete {} and retry",
             staged.id,
             source.id,
@@ -405,7 +405,7 @@ fn staged_pass(
     }
     let state = cp.state(&source.id).map_err(db)?;
     let Some(local_build) = state.active_build_id.clone() else {
-        return Err(RagMonkError::new(
+        return Err(DocMonkError::new(
             docmonk_core::errors::ErrorKind::Generic,
             "staging pass produced no build to publish",
         ));
@@ -466,10 +466,10 @@ fn staged_pass(
 /// published, or the cache was deleted).
 pub fn synced_staging_store(
     home: &Home,
-    cfg: &RagMonkConfig,
+    cfg: &DocMonkConfig,
     server: &ServerBackend,
     source: &SourceRecord,
-) -> Result<Option<(ProjectStore, String)>, RagMonkError> {
+) -> Result<Option<(ProjectStore, String)>, DocMonkError> {
     let active = server
         .source_state(&source.id)
         .map_err(server_err)?
@@ -507,9 +507,9 @@ pub struct ServerGraphRun {
 #[derive(Debug)]
 pub enum ServerGraphError {
     /// Another process holds the source's writer lease.
-    Blocked(RagMonkError),
+    Blocked(DocMonkError),
     Graph(docmonk_code::graph_stage::GraphError),
-    Other(RagMonkError),
+    Other(DocMonkError),
 }
 
 /// The relationship graph stage of one server-mode source, after its base
@@ -519,7 +519,7 @@ pub enum ServerGraphError {
 /// caller holds the source's local lock.
 pub fn build_relationships(
     home: &Home,
-    cfg: &RagMonkConfig,
+    cfg: &DocMonkConfig,
     server: &ServerBackend,
     source: &SourceRecord,
     opts: &Options,
@@ -581,7 +581,7 @@ pub fn build_relationships(
 /// falls through to the leased pass, which re-plans under the lease.
 fn current_without_lease(
     home: &Home,
-    cfg: &RagMonkConfig,
+    cfg: &DocMonkConfig,
     server: &ServerBackend,
     source: &SourceRecord,
 ) -> Result<Option<ServerGraphRun>, ServerGraphError> {
@@ -647,7 +647,7 @@ fn current_without_lease(
 #[allow(clippy::too_many_arguments)]
 fn graph_pass(
     home: &Home,
-    cfg: &RagMonkConfig,
+    cfg: &DocMonkConfig,
     server: &ServerBackend,
     source: &SourceRecord,
     opts: &Options,
@@ -671,7 +671,7 @@ fn graph_pass(
         .map(|s| s.trim().to_owned());
     if synced.as_deref() != Some(server_active.as_str()) {
         return Err(ServerGraphError::Graph(GraphError::Stale(
-            "the local staging copy does not describe the server's active build; run 'ragmonk index' first"
+            "the local staging copy does not describe the server's active build; run 'docmonk index' first"
                 .into(),
         )));
     }
@@ -809,10 +809,10 @@ fn graph_pass(
 /// Marks a server source's graph disabled (hidden, never deleted). A
 /// source whose lease is held elsewhere is left for its holder's next run.
 pub fn mark_relationships_disabled(
-    cfg: &RagMonkConfig,
+    cfg: &DocMonkConfig,
     server: &ServerBackend,
     source: &SourceRecord,
-) -> Result<(), RagMonkError> {
+) -> Result<(), DocMonkError> {
     let Some((graph, _)) = server.graph(&source.id).map_err(server_err)? else {
         return Ok(());
     };

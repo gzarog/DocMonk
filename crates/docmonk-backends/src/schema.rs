@@ -14,7 +14,7 @@ use crate::engine::{Engine, VectorSpec};
 /// another identity are refused: the operator uses a fresh prefix/cluster or
 /// resets the current indexes; nothing is ever mutated in place.
 pub const SCHEMA_VERSION: u64 = 3;
-pub const SCHEMA_TAG: &str = "ragmonk";
+pub const SCHEMA_TAG: &str = "docmonk";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -63,7 +63,7 @@ impl IndexKind {
     }
 }
 
-/// `{prefix}-{kind}`, e.g. `ragmonk-chunks` for the default config.
+/// `{prefix}-{kind}`, e.g. `docmonk-chunks` for the default config.
 pub fn index_name(prefix: &str, kind: IndexKind) -> String {
     format!("{prefix}-{}", kind.suffix())
 }
@@ -318,7 +318,7 @@ impl Default for IndexSettings {
     }
 }
 
-/// The `_meta` identity stored on every RagMonk index.
+/// The `_meta` identity stored on every DocMonk index.
 pub fn meta(kind: IndexKind, vector: Option<&VectorSpec>) -> Value {
     json!({
         "schema": SCHEMA_TAG,
@@ -368,12 +368,12 @@ pub fn check_meta(
     match actual {
         Some(m) if m == &expected => Ok(()),
         Some(m) => Err(format!(
-            "index {index} has schema metadata {m} but this RagMonk expects {expected}; \
-             use a fresh index_prefix (or cluster) or reset the current RagMonk indexes and \
+            "index {index} has schema metadata {m} but this DocMonk expects {expected}; \
+             use a fresh index_prefix (or cluster) or reset the current DocMonk indexes and \
              reindex (indexes are never converted in place)"
         )),
         None => Err(format!(
-            "index {index} exists but is not a RagMonk index; refusing to use or modify it. \
+            "index {index} exists but is not a DocMonk index; refusing to use or modify it. \
              Choose another index_prefix"
         )),
     }
@@ -410,8 +410,8 @@ mod tests {
     #[test]
     fn names_and_strictness() {
         assert_eq!(
-            index_name("ragmonk", IndexKind::SourceState),
-            "ragmonk-source-state"
+            index_name("docmonk", IndexKind::SourceState),
+            "docmonk-source-state"
         );
         for kind in IndexKind::ALL {
             let body = create_body(

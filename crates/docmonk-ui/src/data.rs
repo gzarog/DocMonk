@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use docmonk_core::errors::{ErrorKind, RagMonkError};
+use docmonk_core::errors::{DocMonkError, ErrorKind};
 use docmonk_core::paths::{project_id_for_canonical, Home};
 use docmonk_retrieval::graph::{self, Direction};
 use docmonk_storage::control::SourceRecord;
@@ -21,8 +21,8 @@ use docmonk_status::StatusReport;
 use docmonk_storage::knowledge::{DocumentRow, FileRow};
 use docmonk_storage::read::KnowledgeRead;
 
-fn db(e: impl std::fmt::Display) -> RagMonkError {
-    RagMonkError::new(ErrorKind::Database, e.to_string())
+fn db(e: impl std::fmt::Display) -> DocMonkError {
+    DocMonkError::new(ErrorKind::Database, e.to_string())
 }
 
 fn abs(root: &str, rel: &str) -> String {
@@ -31,13 +31,13 @@ fn abs(root: &str, rel: &str) -> String {
 
 // ------------------------------------------------------------ status ---
 
-/// The canonical status report (the same data as `ragmonk status --json`).
-pub fn report(home: &Home) -> Result<StatusReport, RagMonkError> {
+/// The canonical status report (the same data as `docmonk status --json`).
+pub fn report(home: &Home) -> Result<StatusReport, DocMonkError> {
     docmonk_service::status::report(home)
 }
 
-fn to_value(v: &impl serde::Serialize) -> Result<Value, RagMonkError> {
-    serde_json::to_value(v).map_err(|e| RagMonkError::new(ErrorKind::Generic, e.to_string()))
+fn to_value(v: &impl serde::Serialize) -> Result<Value, DocMonkError> {
+    serde_json::to_value(v).map_err(|e| DocMonkError::new(ErrorKind::Generic, e.to_string()))
 }
 
 /// The daemon's heartbeat snapshot.
@@ -50,7 +50,7 @@ pub fn daemon_snapshot(home: &Home) -> Value {
 }
 
 /// Dashboard data: the report plus the daemon snapshot.
-pub fn dashboard(home: &Home) -> Result<Value, RagMonkError> {
+pub fn dashboard(home: &Home) -> Result<Value, DocMonkError> {
     let mut r = report(home)?;
     r.recent_errors.truncate(10);
     Ok(json!({"status": to_value(&r)?, "daemon": daemon_snapshot(home)}))
@@ -82,7 +82,7 @@ fn summarize(s: &SourceRecord, row: Option<&SourceStatus>) -> Value {
 }
 
 /// Every registered source with its status row.
-pub fn list_sources(home: &Home) -> Result<Vec<Value>, RagMonkError> {
+pub fn list_sources(home: &Home) -> Result<Vec<Value>, DocMonkError> {
     let r = report(home)?;
     let cp = catalog(home)?;
     Ok(cp
@@ -93,7 +93,7 @@ pub fn list_sources(home: &Home) -> Result<Vec<Value>, RagMonkError> {
 }
 
 /// One source: its status row, published counters and its newest errors.
-pub fn source_detail(home: &Home, source_id: &str) -> Result<Value, RagMonkError> {
+pub fn source_detail(home: &Home, source_id: &str) -> Result<Value, DocMonkError> {
     let s = catalog(home)?.get(source_id)?;
     let r = docmonk_service::status::report_with(home, |o| {
         o.error_source = Some(source_id.to_owned());
@@ -115,7 +115,7 @@ pub fn source_detail(home: &Home, source_id: &str) -> Result<Value, RagMonkError
 // ---------------------------------------------------------- indexing ---
 
 /// Indexing page data (without the UI runner state, which the router adds).
-pub fn indexing_overview(home: &Home) -> Result<Value, RagMonkError> {
+pub fn indexing_overview(home: &Home) -> Result<Value, DocMonkError> {
     let r = report(home)?;
     Ok(json!({
         "summary": r.summary,
@@ -126,7 +126,7 @@ pub fn indexing_overview(home: &Home) -> Result<Value, RagMonkError> {
 }
 
 /// `index_service.failed_files`.
-pub fn failed_files(home: &Home) -> Result<Vec<Value>, RagMonkError> {
+pub fn failed_files(home: &Home) -> Result<Vec<Value>, DocMonkError> {
     let mut out = Vec::new();
     for o in open_sources(home, None)? {
         let (times, files) = file_listing(&o)?;
@@ -161,12 +161,12 @@ fn attachment_info(d: &docmonk_storage::knowledge::DocumentRow) -> Value {
 
 type Times = std::collections::BTreeMap<String, docmonk_storage::status::FileTimes>;
 
-fn sdb(e: docmonk_storage::StorageError) -> RagMonkError {
+fn sdb(e: docmonk_storage::StorageError) -> DocMonkError {
     e.into()
 }
 
 /// `(file times, files)` of a source's build, from either backend.
-fn file_listing(o: &Opened) -> Result<(Times, Vec<FileRow>), RagMonkError> {
+fn file_listing(o: &Opened) -> Result<(Times, Vec<FileRow>), DocMonkError> {
     match o.store.server() {
         Some(server) => Ok((Times::new(), server.file_rows(&o.build).map_err(sdb)?)),
         None => {
@@ -181,7 +181,7 @@ fn file_listing(o: &Opened) -> Result<(Times, Vec<FileRow>), RagMonkError> {
 
 type KindCounts = std::collections::HashMap<String, (i64, i64, i64)>;
 
-fn documents_and_counts(o: &Opened) -> Result<(Vec<DocumentRow>, KindCounts), RagMonkError> {
+fn documents_and_counts(o: &Opened) -> Result<(Vec<DocumentRow>, KindCounts), DocMonkError> {
     match o.store.server() {
         Some(server) => Ok((
             server.document_rows(&o.build).map_err(sdb)?,
@@ -197,7 +197,7 @@ fn documents_and_counts(o: &Opened) -> Result<(Vec<DocumentRow>, KindCounts), Ra
     }
 }
 
-fn document_rows(o: &Opened) -> Result<Vec<Value>, RagMonkError> {
+fn document_rows(o: &Opened) -> Result<Vec<Value>, DocMonkError> {
     let (docs, counts) = documents_and_counts(o)?;
     let (times, file_list) = file_listing(o)?;
     let files: std::collections::HashMap<String, _> =
@@ -246,7 +246,7 @@ pub fn list_documents(
     query: Option<&str>,
     fmt: Option<&str>,
     page: i64,
-) -> Result<Value, RagMonkError> {
+) -> Result<Value, DocMonkError> {
     const PAGE_SIZE: i64 = 25;
     let mut rows = Vec::new();
     for o in open_sources(home, None)? {
@@ -302,7 +302,7 @@ pub fn document_detail(
     home: &Home,
     source_id: &str,
     document_id: &str,
-) -> Result<Option<Value>, RagMonkError> {
+) -> Result<Option<Value>, DocMonkError> {
     catalog(home)?.get(source_id)?;
     let Some(o) = open_sources(home, Some(source_id))?.into_iter().next() else {
         return Ok(None);
@@ -360,7 +360,7 @@ pub fn run_search(
     query: &str,
     mode: &str,
     limit: usize,
-) -> Result<Value, RagMonkError> {
+) -> Result<Value, DocMonkError> {
     let query = query.trim();
     if query.is_empty() {
         return Ok(
@@ -431,7 +431,7 @@ pub fn list_symbols(
     home: &Home,
     query: Option<&str>,
     limit: usize,
-) -> Result<Vec<Value>, RagMonkError> {
+) -> Result<Vec<Value>, DocMonkError> {
     let mut rows = Vec::new();
     for o in open_sources(home, None)? {
         let entities = match (query, o.store.server()) {
@@ -487,7 +487,7 @@ pub fn list_symbols(
 }
 
 /// The symbol page's data for `relation` (`knowledge_service`).
-pub fn symbol_relation(home: &Home, name: &str, relation: &str) -> Result<Value, RagMonkError> {
+pub fn symbol_relation(home: &Home, name: &str, relation: &str) -> Result<Value, DocMonkError> {
     let opened = open_sources(home, None)?;
     let (depth, limit) = (graph::DEFAULT_MAX_DEPTH, graph::DEFAULT_LIMIT);
     match relation {
@@ -525,7 +525,7 @@ fn auth_status(provider: &str) -> &'static str {
 }
 
 /// `ai_service.provider_overview`.
-pub fn ai_overview(home: &Home) -> Result<Value, RagMonkError> {
+pub fn ai_overview(home: &Home) -> Result<Value, DocMonkError> {
     let cfg = load(home)?;
     let selected = &cfg.ai.provider;
     Ok(json!({
@@ -548,7 +548,7 @@ pub fn ai_overview(home: &Home) -> Result<Value, RagMonkError> {
 }
 
 /// `ai_service.test_provider`: never reveals a secret.
-pub fn ai_test(home: &Home, provider: &str) -> Result<Value, RagMonkError> {
+pub fn ai_test(home: &Home, provider: &str) -> Result<Value, DocMonkError> {
     let cfg = load(home)?;
     let Some(cap) = docmonk_ai::registry::get(provider) else {
         return Ok(json!({"provider": provider, "ok": false, "detail": "unknown provider"}));
@@ -583,7 +583,7 @@ pub fn ai_test(home: &Home, provider: &str) -> Result<Value, RagMonkError> {
 // ------------------------------------------------------------ health ---
 
 /// `health_service.health_report`.
-pub fn health_report(home: &Home) -> Result<Value, RagMonkError> {
+pub fn health_report(home: &Home) -> Result<Value, DocMonkError> {
     let sections = doctor_cmd::run_checks(home)?;
     Ok(json!({
         "overall": doctor_cmd::overall(&sections),
@@ -646,7 +646,7 @@ fn dunce_canonical(p: &Path) -> Option<std::path::PathBuf> {
 }
 
 /// `backup_service.update_status`: the local update cache only.
-pub fn update_status(home: &Home) -> Result<Value, RagMonkError> {
+pub fn update_status(home: &Home) -> Result<Value, DocMonkError> {
     let cfg = load(home)?;
     let installed = docmonk_core::version::version();
     let cache: Option<Value> = std::fs::read_to_string(home.root().join("update.json"))
@@ -695,7 +695,7 @@ pub fn read_logs(
     errors_only: bool,
 ) -> Value {
     const LIMIT: usize = 300;
-    let log_path = home.logs_dir().join("ragmonk.log");
+    let log_path = home.logs_dir().join("docmonk.log");
     let mut entries = Vec::new();
     let mut components = std::collections::BTreeSet::new();
     if let Ok(text) = std::fs::read_to_string(&log_path) {

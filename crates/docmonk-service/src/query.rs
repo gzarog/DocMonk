@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::time::Instant;
 
-use docmonk_core::errors::{ErrorKind, RagMonkError};
+use docmonk_core::errors::{DocMonkError, ErrorKind};
 use docmonk_core::paths::{project_id_for_canonical, Home};
 use docmonk_retrieval::graph::{self, Direction, SourceMatch, TraversalEdge};
 use docmonk_retrieval::lexical::{self, SearchResult};
@@ -40,14 +40,14 @@ impl Reader {
     }
 
     /// The local store; in server mode a typed "local only" error.
-    pub fn local(&self) -> Result<&ProjectStore, RagMonkError> {
+    pub fn local(&self) -> Result<&ProjectStore, DocMonkError> {
         match self {
             Reader::Local(s) => Ok(s),
             Reader::Server(_) => Err(crate::backend::local_only("this operation")),
         }
     }
 
-    pub fn local_mut(&mut self) -> Result<&mut ProjectStore, RagMonkError> {
+    pub fn local_mut(&mut self) -> Result<&mut ProjectStore, DocMonkError> {
         match self {
             Reader::Local(s) => Ok(s),
             Reader::Server(_) => Err(crate::backend::local_only("this operation")),
@@ -75,21 +75,21 @@ pub struct Opened {
 /// builds come from the server, read once: that map is the request's
 /// snapshot, so every later read of this request sees one consistent set
 /// of builds. Nothing local is opened.
-pub fn open_sources(home: &Home, only: Option<&str>) -> Result<Vec<Opened>, RagMonkError> {
+pub fn open_sources(home: &Home, only: Option<&str>) -> Result<Vec<Opened>, DocMonkError> {
     match crate::backend::open(home)? {
         Backend::Local => open_local(home, only),
         Backend::Server(server) => open_server(server, only),
     }
 }
 
-fn open_local(home: &Home, only: Option<&str>) -> Result<Vec<Opened>, RagMonkError> {
+fn open_local(home: &Home, only: Option<&str>) -> Result<Vec<Opened>, DocMonkError> {
     let cfg = load(home)?;
     let cp = control_plane(home)?;
     let sources = match only {
         Some(id) => vec![cp
             .get_source(id)
             .map_err(db)?
-            .ok_or_else(|| RagMonkError::usage(format!("no such source: {id}")))?],
+            .ok_or_else(|| DocMonkError::usage(format!("no such source: {id}")))?],
         None => cp.list_sources(false).map_err(db)?,
     };
     let layout = StorageLayout::new(home);
@@ -117,7 +117,7 @@ fn open_local(home: &Home, only: Option<&str>) -> Result<Vec<Opened>, RagMonkErr
 fn open_server(
     server: std::sync::Arc<docmonk_backends::ServerBackend>,
     only: Option<&str>,
-) -> Result<Vec<Opened>, RagMonkError> {
+) -> Result<Vec<Opened>, DocMonkError> {
     let catalog = crate::sources::Catalog::Server(server.clone());
     let sources = match only {
         Some(id) => vec![catalog.get(id)?],
@@ -147,8 +147,8 @@ pub fn corpora(opened: &[Opened]) -> Vec<Corpus<'_>> {
         .collect()
 }
 
-pub fn search_err(e: docmonk_retrieval::SearchError) -> RagMonkError {
-    RagMonkError::new(ErrorKind::Database, e.to_string())
+pub fn search_err(e: docmonk_retrieval::SearchError) -> DocMonkError {
+    DocMonkError::new(ErrorKind::Database, e.to_string())
 }
 
 fn root_of<'a>(opened: &'a [Opened], source_id: &str) -> Option<&'a str> {
@@ -289,7 +289,7 @@ pub fn edge_json(e: &TraversalEdge, opened: &[Opened]) -> Value {
 }
 
 /// `symbol --json` data.
-pub fn symbol_value(opened: &[Opened], name: &str) -> Result<Value, RagMonkError> {
+pub fn symbol_value(opened: &[Opened], name: &str) -> Result<Value, DocMonkError> {
     let matches = graph::find_symbol_matches(&corpora(opened), name).map_err(search_err)?;
     let m: Vec<Value> = matches.iter().map(|m| match_json(m, opened)).collect();
     Ok(json!({"query": name, "matches": m}))
@@ -302,7 +302,7 @@ pub fn calls_value(
     direction: Direction,
     max_depth: usize,
     limit: usize,
-) -> Result<Value, RagMonkError> {
+) -> Result<Value, DocMonkError> {
     traverse_value(
         opened,
         name,
@@ -321,7 +321,7 @@ pub fn traverse_value(
     types: &[&str],
     max_depth: usize,
     limit: usize,
-) -> Result<Value, RagMonkError> {
+) -> Result<Value, DocMonkError> {
     let (matches, edges) =
         graph::traverse_symbol(&corpora(opened), name, direction, types, max_depth, limit)
             .map_err(search_err)?;
@@ -338,14 +338,14 @@ pub fn impact_value(
     name: &str,
     max_depth: usize,
     limit: usize,
-) -> Result<Value, RagMonkError> {
+) -> Result<Value, DocMonkError> {
     let mut payload =
         explore::impact(&corpora(opened), name, max_depth, limit).map_err(search_err)?;
     absolutize_json(&mut payload, opened, None);
     Ok(payload)
 }
 
-pub fn lazy_embedder(home: &Home, cfg: &docmonk_config::RagMonkConfig) -> docmonk_ml::LazyEmbedder {
+pub fn lazy_embedder(home: &Home, cfg: &docmonk_config::DocMonkConfig) -> docmonk_ml::LazyEmbedder {
     docmonk_ml::LazyEmbedder::new(
         docmonk_ml::embedder::models_root(Some(&home.root().join("models"))),
         docmonk_ml::manifest::DEFAULT_EMBEDDING_MODEL,
@@ -362,7 +362,7 @@ pub fn semantic_json(s: &hybrid::SemanticOutcome) -> Value {
 }
 
 /// The configured `context.*` budget.
-pub fn config_budget(cfg: &docmonk_config::RagMonkConfig) -> explore::Budget {
+pub fn config_budget(cfg: &docmonk_config::DocMonkConfig) -> explore::Budget {
     explore::Budget {
         max_chars: cfg.context.max_chars.max(0) as usize,
         max_files: cfg.context.max_files.max(0) as usize,
@@ -373,11 +373,11 @@ pub fn config_budget(cfg: &docmonk_config::RagMonkConfig) -> explore::Budget {
 /// `explore --json` data under `budget`.
 pub fn explore_value(
     home: &Home,
-    cfg: &docmonk_config::RagMonkConfig,
+    cfg: &docmonk_config::DocMonkConfig,
     opened: &[Opened],
     query: &str,
     budget: explore::Budget,
-) -> Result<Value, RagMonkError> {
+) -> Result<Value, DocMonkError> {
     let corp = corpora(opened);
     let plan = explore::plan(query, cfg.search.semantic);
     let semantic = if plan.strategies.contains(&explore::Strategy::Semantic) {
@@ -408,11 +408,11 @@ pub fn explore_value(
 /// `{available, reason, results}` of a semantic search, absolute paths.
 pub fn semantic_value(
     home: &Home,
-    cfg: &docmonk_config::RagMonkConfig,
+    cfg: &docmonk_config::DocMonkConfig,
     opened: &[Opened],
     query: &str,
     limit: usize,
-) -> Result<Value, RagMonkError> {
+) -> Result<Value, DocMonkError> {
     let lazy = lazy_embedder(home, cfg);
     let embedder = lazy.get().ok().map(|a| a.as_ref());
     let mut s = hybrid::semantic_search(
@@ -430,11 +430,11 @@ pub fn semantic_value(
 /// The plain lexical ranking `search --json` reports as `results`, at
 /// most `limit` hits, with absolute paths.
 pub fn lexical_value(
-    cfg: &docmonk_config::RagMonkConfig,
+    cfg: &docmonk_config::DocMonkConfig,
     opened: &[Opened],
     query: &str,
     limit: usize,
-) -> Result<Value, RagMonkError> {
+) -> Result<Value, DocMonkError> {
     let mut results = lexical::search(
         &corpora(opened),
         query,
@@ -455,7 +455,7 @@ pub fn link_rows(
     o: &Opened,
     entity: Option<&str>,
     document: Option<&str>,
-) -> Result<Vec<Value>, RagMonkError> {
+) -> Result<Vec<Value>, DocMonkError> {
     if let Some(server) = o.store.server() {
         return server_link_rows(o, server, entity, document);
     }
@@ -525,7 +525,7 @@ pub fn link_rows(
     Ok(out)
 }
 
-fn sdb(e: docmonk_storage::StorageError) -> RagMonkError {
+fn sdb(e: docmonk_storage::StorageError) -> DocMonkError {
     e.into()
 }
 
@@ -534,7 +534,7 @@ fn server_entity_ids(
     server: &ServerReader,
     build: &str,
     r: &str,
-) -> Result<std::collections::HashSet<String>, RagMonkError> {
+) -> Result<std::collections::HashSet<String>, DocMonkError> {
     Ok(match server.entity(build, r).map_err(sdb)? {
         Some(e) => [e.id].into(),
         None => server
@@ -551,7 +551,7 @@ fn server_link_rows(
     server: &ServerReader,
     entity: Option<&str>,
     document: Option<&str>,
-) -> Result<Vec<Value>, RagMonkError> {
+) -> Result<Vec<Value>, DocMonkError> {
     let mut links = server.links(&o.build).map_err(sdb)?;
     if let Some(r) = entity {
         let ids = server_entity_ids(server, &o.build, r)?;
@@ -597,7 +597,7 @@ pub fn references_value(
     name: &str,
     max_depth: usize,
     limit: usize,
-) -> Result<Value, RagMonkError> {
+) -> Result<Value, DocMonkError> {
     let (matches, edges) =
         graph::references(&corpora(opened), name, max_depth, limit).map_err(search_err)?;
     Ok(json!({
@@ -663,10 +663,10 @@ pub fn tokenizer_json() -> Value {
 /// configuration and request call for.
 pub fn run_search(
     home: &Home,
-    cfg: &docmonk_config::RagMonkConfig,
+    cfg: &docmonk_config::DocMonkConfig,
     opened: &[Opened],
     req: &SearchRequest<'_>,
-) -> Result<SearchRun, RagMonkError> {
+) -> Result<SearchRun, DocMonkError> {
     let sc = &cfg.search;
     let f = &req.filters;
     // Hard source filter: other sources are never read.
@@ -693,7 +693,7 @@ pub fn run_search(
                     Some(c) => c
                         .store
                         .chunk(c.build_id, &r.id)
-                        .map_err(RagMonkError::from)?
+                        .map_err(DocMonkError::from)?
                         .map(|ch| ch.document_id)
                         .or_else(|| Some(r.id.clone())),
                     None => None,
@@ -823,7 +823,7 @@ pub fn link_add(
     document: &str,
     section: Option<&str>,
     source: Option<&str>,
-) -> Result<LinkAdded, RagMonkError> {
+) -> Result<LinkAdded, DocMonkError> {
     let mut opened = open_sources(home, source)?;
     if opened.iter().any(|o| o.store.server().is_some()) {
         return server_link_add(&opened, entity, document, section);
@@ -845,7 +845,7 @@ pub fn link_add(
         Some(sid) => match o.store.local()?.chunk(&o.build, sid).map_err(db)? {
             Some(c) if c.document_id == document_id => Some(c.ordinal),
             _ => {
-                return Err(RagMonkError::usage(format!(
+                return Err(DocMonkError::usage(format!(
                     "no such section '{sid}' in document {document_id}"
                 )))
             }
@@ -862,7 +862,7 @@ pub fn link_add(
         None,
         &now,
     )
-    .map_err(|err| RagMonkError::usage(err.to_string()))?;
+    .map_err(|err| DocMonkError::usage(err.to_string()))?;
     Ok(match added {
         None => LinkAdded::Exists,
         Some(l) => LinkAdded::Added {
@@ -878,9 +878,9 @@ fn pick_unique<E, D>(
     opened: &[Opened],
     entity: &str,
     document: &str,
-) -> Result<(usize, E, D), RagMonkError> {
+) -> Result<(usize, E, D), DocMonkError> {
     match hits.len() {
-        0 => Err(RagMonkError::usage(format!(
+        0 => Err(DocMonkError::usage(format!(
             "no unambiguous match for entity '{entity}' and document '{document}'"
         ))),
         1 => Ok(hits.remove(0)),
@@ -889,7 +889,7 @@ fn pick_unique<E, D>(
                 .iter()
                 .map(|(i, _, _)| opened[*i].source.id.as_str())
                 .collect();
-            Err(RagMonkError::usage(format!(
+            Err(DocMonkError::usage(format!(
                 "ambiguous match across sources ({}); pass --source to disambiguate",
                 ids.join(", ")
             )))
@@ -902,7 +902,7 @@ fn server_link_add(
     entity: &str,
     document: &str,
     section: Option<&str>,
-) -> Result<LinkAdded, RagMonkError> {
+) -> Result<LinkAdded, DocMonkError> {
     let mut hits = Vec::new();
     for (i, o) in opened.iter().enumerate() {
         let Some(server) = o.store.server() else {
@@ -928,7 +928,7 @@ fn server_link_add(
         Some(sid) => match server.chunk(&o.build, sid).map_err(sdb)? {
             Some(c) if c.document_id == document_id => (Some(c.id), Some(c.ordinal)),
             _ => {
-                return Err(RagMonkError::usage(format!(
+                return Err(DocMonkError::usage(format!(
                     "no such section '{sid}' in document {document_id}"
                 )))
             }
@@ -968,7 +968,7 @@ fn server_link_add(
 }
 
 /// Removes a manual link from whichever source holds it.
-pub fn link_remove(home: &Home, link_id: &str, source: Option<&str>) -> Result<(), RagMonkError> {
+pub fn link_remove(home: &Home, link_id: &str, source: Option<&str>) -> Result<(), DocMonkError> {
     for mut o in open_sources(home, source)? {
         if let Some(server) = o.store.server() {
             if server.remove_manual_link(link_id).map_err(sdb)? {
@@ -978,12 +978,12 @@ pub fn link_remove(home: &Home, link_id: &str, source: Option<&str>) -> Result<(
         }
         let build = o.build.clone();
         if docmonk_knowledge::manual::remove(o.store.local_mut()?, &build, link_id)
-            .map_err(|err| RagMonkError::usage(err.to_string()))?
+            .map_err(|err| DocMonkError::usage(err.to_string()))?
         {
             return Ok(());
         }
     }
-    Err(RagMonkError::usage(format!("no such link: {link_id}")))
+    Err(DocMonkError::usage(format!("no such link: {link_id}")))
 }
 
 /// `link list` rows across the selected sources.
@@ -992,7 +992,7 @@ pub fn link_list(
     entity: Option<&str>,
     document: Option<&str>,
     source: Option<&str>,
-) -> Result<Vec<Value>, RagMonkError> {
+) -> Result<Vec<Value>, DocMonkError> {
     let mut rows = Vec::new();
     for o in open_sources(home, source)? {
         rows.extend(link_rows(&o, entity, document)?);

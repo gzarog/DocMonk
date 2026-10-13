@@ -1,6 +1,6 @@
 //! The canonical status contract (`schema_version` 1).
 //!
-//! Every surface (CLI text and JSON, MCP `ragmonk_status`, Admin UI)
+//! Every surface (CLI text and JSON, MCP `docmonk_status`, Admin UI)
 //! renders exactly this model. Semantics:
 //!
 //! * **Authority.** Local mode reads only the home's SQLite catalog and
@@ -139,7 +139,7 @@ impl SourceIndexState {
         )
     }
 
-    /// Needs attention (`ragmonk status --errors`).
+    /// Needs attention (`docmonk status --errors`).
     pub fn is_problem(self) -> bool {
         matches!(
             self,
@@ -265,7 +265,7 @@ pub struct ClusterInfo {
     pub health: Option<ClusterHealth>,
     pub unassigned_shards: Option<u64>,
     pub number_of_nodes: Option<u64>,
-    /// Scope of the health reading (the RagMonk indexes of the prefix).
+    /// Scope of the health reading (the DocMonk indexes of the prefix).
     pub indexes: Vec<String>,
 }
 

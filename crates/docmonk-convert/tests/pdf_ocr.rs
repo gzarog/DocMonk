@@ -1,6 +1,6 @@
 //! PDF text layer, scanned detection, OCR policy, image OCR, page limit and
 //! the conversion cache. OCR assertions need the pinned `ocrs` models in
-//! `RAGMONK_OCR_MODELS_DIR`; CI sets `RAGMONK_REQUIRE_OCR=1` so they can
+//! `DOCMONK_OCR_MODELS_DIR`; CI sets `DOCMONK_REQUIRE_OCR=1` so they can
 //! never silently skip there.
 
 use std::path::{Path, PathBuf};
@@ -23,14 +23,14 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 fn models() -> Option<PathBuf> {
-    match std::env::var_os("RAGMONK_OCR_MODELS_DIR") {
+    match std::env::var_os("DOCMONK_OCR_MODELS_DIR") {
         Some(d) => Some(PathBuf::from(d)),
         None => {
             assert!(
-                std::env::var("RAGMONK_REQUIRE_OCR").as_deref() != Ok("1"),
-                "RAGMONK_OCR_MODELS_DIR is required when RAGMONK_REQUIRE_OCR=1"
+                std::env::var("DOCMONK_REQUIRE_OCR").as_deref() != Ok("1"),
+                "DOCMONK_OCR_MODELS_DIR is required when DOCMONK_REQUIRE_OCR=1"
             );
-            eprintln!("skipping OCR assertions: RAGMONK_OCR_MODELS_DIR not set");
+            eprintln!("skipping OCR assertions: DOCMONK_OCR_MODELS_DIR not set");
             None
         }
     }
@@ -91,7 +91,7 @@ fn image_only_pdf_reads_as_scanned_without_ocr() {
 
 #[test]
 fn missing_models_keep_the_plain_result() {
-    let bogus = std::env::temp_dir().join("ragmonk-no-ocr-models");
+    let bogus = std::env::temp_dir().join("docmonk-no-ocr-models");
     let d = convert(
         &converter("always", false, Some(&bogus), None),
         "scanned_image.pdf",

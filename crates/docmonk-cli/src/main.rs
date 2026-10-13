@@ -1,4 +1,4 @@
-//! The `ragmonk` command line: argument parsing, rendering and wiring of
+//! The `docmonk` command line: argument parsing, rendering and wiring of
 //! the service, operations, MCP and Admin UI crates.
 //!
 //! `--json` output is the envelope `{"schema_version": "1", "data": {...}}`.
@@ -19,7 +19,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 use docmonk_config::loader::{dump_yaml, get_path, set_path};
 use docmonk_config::write_user_config;
-use docmonk_core::errors::{RagMonkError, EXIT_GENERIC_FAILURE};
+use docmonk_core::errors::{DocMonkError, EXIT_GENERIC_FAILURE};
 use docmonk_core::version;
 use docmonk_telemetry::redact::redact_urls_in_text;
 
@@ -28,8 +28,8 @@ const SCHEMA_VERSION: &str = "1";
 
 #[derive(Parser)]
 #[command(
-    name = "ragmonk",
-    about = "RagMonk: local code and document knowledge for people and agents"
+    name = "docmonk",
+    about = "DocMonk: local code and document knowledge for people and agents"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -38,7 +38,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Show the RagMonk version.
+    /// Show the DocMonk version.
     Version {
         #[arg(long = "json")]
         json: bool,
@@ -52,7 +52,7 @@ enum Command {
     /// Manage the background indexing daemon.
     #[command(subcommand)]
     Daemon(daemon_cmd::DaemonCommand),
-    /// Bootstrap the RagMonk runtime directory.
+    /// Bootstrap the DocMonk runtime directory.
     Init(workflow::InitArgs),
     /// Manage registered sources.
     #[command(subcommand)]
@@ -147,16 +147,16 @@ enum Command {
         #[arg(long = "json")]
         json: bool,
     },
-    /// Create a restorable backup archive of RagMonk's databases.
+    /// Create a restorable backup archive of DocMonk's databases.
     Backup {
-        /// Output archive path (default: <home>/backups/ragmonk-backup-<timestamp>.tar.gz).
+        /// Output archive path (default: <home>/backups/docmonk-backup-<timestamp>.tar.gz).
         dest: Option<String>,
         #[arg(long = "json")]
         json: bool,
     },
-    /// Restore RagMonk's databases from a backup archive.
+    /// Restore DocMonk's databases from a backup archive.
     Restore {
-        /// Path to a backup archive created by 'ragmonk backup'.
+        /// Path to a backup archive created by 'docmonk backup'.
         archive: String,
         #[arg(long = "json")]
         json: bool,
@@ -175,14 +175,14 @@ enum Command {
         #[arg(long = "json")]
         json: bool,
     },
-    /// Check for and install RagMonk updates.
+    /// Check for and install DocMonk updates.
     Update {
         #[command(subcommand)]
         command: Option<update_cmd::UpdateCommand>,
     },
-    /// Remove RagMonk's data (and explain how to remove the binary).
+    /// Remove DocMonk's data (and explain how to remove the binary).
     Uninstall {
-        /// Remove only the application; keep RAGMONK_HOME.
+        /// Remove only the application; keep DOCMONK_HOME.
         #[arg(long = "keep-data")]
         keep_data: bool,
         /// Skip the confirmation prompt.
@@ -242,26 +242,26 @@ fn version_payload() -> serde_json::Value {
 
 pub(crate) use docmonk_service::{load, prepared_home};
 
-fn print_json(data: &impl serde::Serialize) -> Result<(), RagMonkError> {
+fn print_json(data: &impl serde::Serialize) -> Result<(), DocMonkError> {
     let envelope = serde_json::json!({ "schema_version": SCHEMA_VERSION, "data": data });
     let text = serde_json::to_string_pretty(&envelope)
-        .map_err(|e| RagMonkError::new(docmonk_core::ErrorKind::Generic, e.to_string()))?;
+        .map_err(|e| DocMonkError::new(docmonk_core::ErrorKind::Generic, e.to_string()))?;
     println!("{text}");
     Ok(())
 }
 
-fn server_config() -> Result<docmonk_config::model::ServerStorageConfig, RagMonkError> {
+fn server_config() -> Result<docmonk_config::model::ServerStorageConfig, DocMonkError> {
     let home = prepared_home()?;
     let cfg = load(&home)?;
     if cfg.storage.mode != "server" {
-        return Err(RagMonkError::config(
+        return Err(DocMonkError::config(
             "storage.mode is not 'server'; configure storage.server first",
         ));
     }
     Ok(cfg.storage.server)
 }
 
-fn run_server(cmd: ServerCommand) -> Result<(), RagMonkError> {
+fn run_server(cmd: ServerCommand) -> Result<(), DocMonkError> {
     use docmonk_backends::engine::{default_vector_spec, Engine};
     use docmonk_backends::{schema, ServerBackend};
     match cmd {
@@ -301,16 +301,16 @@ fn run_server(cmd: ServerCommand) -> Result<(), RagMonkError> {
     Ok(())
 }
 
-fn run(cli: Cli) -> Result<(), RagMonkError> {
+fn run(cli: Cli) -> Result<(), DocMonkError> {
     match cli.command {
         Command::Version { json } => {
             if json {
                 let text = serde_json::to_string_pretty(&version_payload()).map_err(|e| {
-                    RagMonkError::new(docmonk_core::ErrorKind::Generic, e.to_string())
+                    DocMonkError::new(docmonk_core::ErrorKind::Generic, e.to_string())
                 })?;
                 println!("{text}");
             } else {
-                println!("ragmonk {}", version::version());
+                println!("docmonk {}", version::version());
             }
         }
         Command::Config(ConfigCommand::Show) => {
@@ -325,7 +325,7 @@ fn run(cli: Cli) -> Result<(), RagMonkError> {
             let home = prepared_home()?;
             let (updated, stored) = set_path(&load(&home)?, &key, &value)?;
             let path = write_user_config(&updated, &home)
-                .map_err(|e| RagMonkError::new(docmonk_core::ErrorKind::Generic, e.to_string()))?;
+                .map_err(|e| DocMonkError::new(docmonk_core::ErrorKind::Generic, e.to_string()))?;
             println!("Set {key} = {stored} in {}", path.display());
         }
         Command::Server(cmd) => run_server(cmd)?,
@@ -383,7 +383,7 @@ fn main() -> ExitCode {
     // Commands that must stay quiet and network-free: the update commands
     // themselves, the MCP/daemon processes, and the ones `update install`
     // runs on a freshly installed binary.
-    if std::env::var_os("RAGMONK_NO_UPDATE_CHECK").is_none()
+    if std::env::var_os("DOCMONK_NO_UPDATE_CHECK").is_none()
         && !matches!(
             cli.command,
             Command::Update { .. }

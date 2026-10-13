@@ -1,7 +1,7 @@
 //! Chunking benchmark over the golden normalized documents.
 //!
 //! ```text
-//! ragmonk-chunk-bench GOLDEN_JSON [--iterations N]
+//! docmonk-chunk-bench GOLDEN_JSON [--iterations N]
 //! ```
 //!
 //! Loads every normalized document and configuration from
@@ -39,7 +39,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let path = args
         .get(1)
-        .expect("usage: ragmonk-chunk-bench GOLDEN_JSON [--iterations N]");
+        .expect("usage: docmonk-chunk-bench GOLDEN_JSON [--iterations N]");
     let iterations: usize = args
         .iter()
         .position(|a| a == "--iterations")

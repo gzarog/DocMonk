@@ -47,7 +47,7 @@ fn main() {
     let dir = models_root(None).join(DEFAULT_EMBEDDING_MODEL.slug);
     let t = Instant::now();
     let embedder = Embedder::load(&dir, DEFAULT_EMBEDDING_MODEL)
-        .expect("model (set RAGMONK_MODELS_DIR)")
+        .expect("model (set DOCMONK_MODELS_DIR)")
         .with_batch_size(batch);
     let load = t.elapsed().as_secs_f64();
     let refs: Vec<&str> = corpus.iter().map(String::as_str).collect();

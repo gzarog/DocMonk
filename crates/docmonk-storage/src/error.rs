@@ -1,4 +1,4 @@
-use docmonk_core::errors::{ErrorKind, RagMonkError};
+use docmonk_core::errors::{DocMonkError, ErrorKind};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
@@ -12,9 +12,9 @@ pub enum StorageError {
     Io(String),
     /// The database does not have this build's schema; it is never altered.
     #[error(
-        "{path} does not match this RagMonk's storage format ({found}; expected {expected}). \
-         RagMonk does not convert databases: remove it (or reset the RagMonk home) and run \
-         `ragmonk index` to rebuild from your sources"
+        "{path} does not match this DocMonk's storage format ({found}; expected {expected}). \
+         DocMonk does not convert databases: remove it (or reset the DocMonk home) and run \
+         `docmonk index` to rebuild from your sources"
     )]
     IncompatibleSchema {
         path: String,
@@ -37,13 +37,13 @@ impl StorageError {
     }
 }
 
-impl From<StorageError> for RagMonkError {
+impl From<StorageError> for DocMonkError {
     fn from(e: StorageError) -> Self {
         let kind = match e {
             StorageError::NotFound(_) | StorageError::Invalid(_) => ErrorKind::Usage,
             _ => ErrorKind::Database,
         };
-        RagMonkError::new(kind, e.to_string())
+        DocMonkError::new(kind, e.to_string())
     }
 }
 

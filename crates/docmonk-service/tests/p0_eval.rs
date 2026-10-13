@@ -12,9 +12,9 @@
 //!
 //! Queries are split into `dev` and `heldout` by a fixed hash of their id.
 //! Floors (`fixtures/p0/eval-gates.json`) apply to the held-out split per
-//! category and per arm. `RAGMONK_EVAL_OUT=path` writes the full report
+//! category and per arm. `DOCMONK_EVAL_OUT=path` writes the full report
 //! (metrics, per-query failures with route and stage diagnostics,
-//! latency); `RAGMONK_BLESS=1` rewrites the floors from this run minus a
+//! latency); `DOCMONK_BLESS=1` rewrites the floors from this run minus a
 //! fixed margin.
 
 #![allow(clippy::needless_range_loop)]
@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use docmonk_config::RagMonkConfig;
+use docmonk_config::DocMonkConfig;
 use docmonk_core::paths::Home;
 use docmonk_retrieval::route::SearchFilters;
 use docmonk_service::evidence::{evidence_value, EvidenceRequest};
@@ -83,7 +83,7 @@ fn generate() -> Corpus {
     let dir = tempfile::tempdir().unwrap();
     let home = Home::new(dir.path().join("home"));
     home.ensure_layout().unwrap();
-    let mut cfg = RagMonkConfig::default();
+    let mut cfg = DocMonkConfig::default();
     cfg.updates.enabled = false;
     cfg.indexing.max_parallel_sources = 3;
     docmonk_config::write_user_config(&cfg, &home).unwrap();
@@ -397,7 +397,7 @@ impl Acc {
 
 struct Arm {
     name: &'static str,
-    tweak: fn(&mut RagMonkConfig),
+    tweak: fn(&mut DocMonkConfig),
 }
 
 const ARMS: &[Arm] = &[
@@ -581,13 +581,13 @@ fn p0_retrieval_eval() {
             json!({"metrics": m, "latency_ms": {"p50": pct(0.5), "p95": pct(0.95)}});
     }
     report["failures_routed_decomposed"] = json!(failures);
-    if let Ok(out) = std::env::var("RAGMONK_EVAL_OUT") {
+    if let Ok(out) = std::env::var("DOCMONK_EVAL_OUT") {
         std::fs::write(&out, serde_json::to_string_pretty(&report).unwrap()).unwrap();
     }
     // --- gates ---------------------------------------------------------------
     let gates_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/p0/eval-gates.json");
-    if std::env::var_os("RAGMONK_BLESS").is_some() {
+    if std::env::var_os("DOCMONK_BLESS").is_some() {
         // Floors: held-out metrics of every arm minus a 0.05 margin.
         let mut floors = serde_json::Map::new();
         for arm in ARMS {
@@ -617,7 +617,7 @@ fn p0_retrieval_eval() {
         .unwrap();
     }
     let gates: Value = serde_json::from_str(
-        &std::fs::read_to_string(&gates_path).expect("eval gates; run with RAGMONK_BLESS=1 once"),
+        &std::fs::read_to_string(&gates_path).expect("eval gates; run with DOCMONK_BLESS=1 once"),
     )
     .unwrap();
     let mut regressions = Vec::new();

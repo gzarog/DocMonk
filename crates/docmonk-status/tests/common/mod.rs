@@ -72,6 +72,6 @@ pub fn registry() -> Registry {
 }
 
 pub fn index(home: &Home, cp: &mut ControlPlane) {
-    let opts = Options::from_config(&docmonk_config::RagMonkConfig::default());
+    let opts = Options::from_config(&docmonk_config::DocMonkConfig::default());
     index_all(home, cp, &registry(), &opts, &mut NoProgress).unwrap();
 }

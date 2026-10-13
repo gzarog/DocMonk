@@ -1,4 +1,4 @@
-//! `ragmonk serve --mcp` end to end.
+//! `docmonk serve --mcp` end to end.
 //!
 //! Replays the stdio session in `fixtures/expected/mcp.json` against the
 //! fixture corpus, normalizing paths, ids and timestamps in responses.
@@ -64,16 +64,16 @@ fn copy(from: &Path, to: &Path) {
     }
 }
 
-fn ragmonk(home: &Path) -> Command {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_ragmonk"));
-    c.env("RAGMONK_HOME", home)
-        .env("RAGMONK_SEARCH__SEMANTIC", "false")
-        .env("RAGMONK_UPDATES__ENABLED", "false");
+fn docmonk(home: &Path) -> Command {
+    let mut c = Command::new(env!("CARGO_BIN_EXE_docmonk"));
+    c.env("DOCMONK_HOME", home)
+        .env("DOCMONK_SEARCH__SEMANTIC", "false")
+        .env("DOCMONK_UPDATES__ENABLED", "false");
     c
 }
 
 fn run(home: &Path, args: &[&str]) -> String {
-    let o = ragmonk(home)
+    let o = docmonk(home)
         .args(args)
         .stdin(Stdio::null())
         .output()
@@ -238,8 +238,8 @@ fn mcp_session_is_as_expected() {
     let golden_path = repo().join("fixtures/expected/mcp.json");
     let mut golden: Vec<Value> =
         serde_json::from_str(&std::fs::read_to_string(&golden_path).unwrap()).unwrap();
-    // `RAGMONK_BLESS=1` rewrites the expected responses from this build.
-    let bless = std::env::var_os("RAGMONK_BLESS").is_some();
+    // `DOCMONK_BLESS=1` rewrites the expected responses from this build.
+    let bless = std::env::var_os("DOCMONK_BLESS").is_some();
     let dir = tempfile::tempdir().unwrap();
     let home = dir.path().join("home");
     let corpus = dir.path().join("source");
@@ -277,7 +277,7 @@ fn mcp_session_is_as_expected() {
         .collect();
     subs.sort_by_key(|(n, _)| std::cmp::Reverse(n.len()));
 
-    let mut child = ragmonk(&home)
+    let mut child = docmonk(&home)
         .args(["serve", "--mcp"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -312,8 +312,8 @@ fn mcp_session_is_as_expected() {
                     assert!(result["serverInfo"]["name"]
                         .as_str()
                         .unwrap()
-                        .starts_with("ragmonk v"));
-                    result["serverInfo"]["name"] = "ragmonk v<VERSION>".into();
+                        .starts_with("docmonk v"));
+                    result["serverInfo"]["name"] = "docmonk v<VERSION>".into();
                     result["serverInfo"]["version"] = "<VERSION>".into();
                 }
                 if let Some(structured) = result.get("structuredContent") {
@@ -362,28 +362,28 @@ fn mcp_session_is_as_expected() {
 fn serve_requires_mcp_and_respects_enabled() {
     let dir = tempfile::tempdir().unwrap();
     let home = dir.path().join("home");
-    let o = ragmonk(&home)
+    let o = docmonk(&home)
         .arg("serve")
         .stdin(Stdio::null())
         .output()
         .unwrap();
     assert_eq!(o.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&o.stderr).contains("requires --mcp"));
-    let o = ragmonk(&home)
+    let o = docmonk(&home)
         .args(["serve", "--mcp"])
-        .env("RAGMONK_MCP__ENABLED", "false")
+        .env("DOCMONK_MCP__ENABLED", "false")
         .stdin(Stdio::null())
         .output()
         .unwrap();
     assert!(!o.status.success());
     assert!(String::from_utf8_lossy(&o.stderr).contains("mcp.enabled=false"));
     // EOF on stdin ends the server cleanly; nothing is written to stdout.
-    let o = ragmonk(&home)
+    let o = docmonk(&home)
         .args(["serve", "--mcp"])
         .stdin(Stdio::null())
         .output()
         .unwrap();
     assert!(o.status.success(), "{o:?}");
     assert!(o.stdout.is_empty());
-    assert!(String::from_utf8_lossy(&o.stderr).contains("RagMonk MCP server starting on stdio..."));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("DocMonk MCP server starting on stdio..."));
 }

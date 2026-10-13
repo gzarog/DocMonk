@@ -1,4 +1,4 @@
-//! Native self-update: `ragmonk update check|status|install|
+//! Native self-update: `docmonk update check|status|install|
 //! rollback`, the throttled background check and the startup notice.
 //!
 //! * [`versioning`]: strict `MAJOR.MINOR.PATCH` for untrusted release tags.
@@ -24,27 +24,27 @@ pub const GITHUB_OWNER: &str = "gzarog";
 pub const GITHUB_REPO: &str = "RagMonk";
 
 /// The Rust target triple this binary was built for.
-pub const TARGET: &str = env!("RAGMONK_TARGET");
+pub const TARGET: &str = env!("DOCMONK_TARGET");
 
 /// The release archive for `version` on this target:
-/// `ragmonk-<ver>-<target>.tar.gz` (`.zip` on Windows).
+/// `docmonk-<ver>-<target>.tar.gz` (`.zip` on Windows).
 pub fn asset_name(version: &str, target: &str) -> String {
     let ext = if target.contains("windows") {
         "zip"
     } else {
         "tar.gz"
     };
-    format!("ragmonk-{version}-{target}.{ext}")
+    format!("docmonk-{version}-{target}.{ext}")
 }
 
 pub const SUMS_ASSET: &str = "SHA256SUMS";
 pub const SIG_ASSET: &str = "SHA256SUMS.minisig";
 
 /// The minisign public key releases are verified with, when one was
-/// configured at build time (`RAGMONK_MINISIGN_PUBKEY`). Without one only
+/// configured at build time (`DOCMONK_MINISIGN_PUBKEY`). Without one only
 /// the checksums are verified.
 pub fn minisign_public_key() -> Option<&'static str> {
-    option_env!("RAGMONK_MINISIGN_PUBKEY").filter(|k| !k.trim().is_empty())
+    option_env!("DOCMONK_MINISIGN_PUBKEY").filter(|k| !k.trim().is_empty())
 }
 
 #[cfg(test)]
@@ -55,11 +55,11 @@ mod tests {
     fn asset_names() {
         assert_eq!(
             asset_name("1.2.0", "x86_64-unknown-linux-gnu"),
-            "ragmonk-1.2.0-x86_64-unknown-linux-gnu.tar.gz"
+            "docmonk-1.2.0-x86_64-unknown-linux-gnu.tar.gz"
         );
         assert_eq!(
             asset_name("1.2.0", "x86_64-pc-windows-msvc"),
-            "ragmonk-1.2.0-x86_64-pc-windows-msvc.zip"
+            "docmonk-1.2.0-x86_64-pc-windows-msvc.zip"
         );
         assert!(TARGET.contains(std::env::consts::ARCH));
     }

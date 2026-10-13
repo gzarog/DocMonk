@@ -40,7 +40,7 @@ fn targeted_passes_are_as_expected() {
     let mut cp = common::control(&home);
     let src = common::add_source(&mut cp, &root, &[], &[]);
     let reg = Registry::raw();
-    let mut opts = Options::from_config(&docmonk_config::RagMonkConfig::default());
+    let mut opts = Options::from_config(&docmonk_config::DocMonkConfig::default());
     opts.workers = 2;
     run_source(&layout, &mut cp, &src, &reg, &opts, &mut NoProgress).unwrap();
 

@@ -167,7 +167,7 @@ pub fn problems(i: &ProblemInput<'_>) -> Vec<Problem> {
                 Sc::Cluster,
                 None,
                 None,
-                format!("cluster health is red{unassigned}: some RagMonk data is not searchable"),
+                format!("cluster health is red{unassigned}: some DocMonk data is not searchable"),
                 Some("check GET /_cluster/allocation/explain on the cluster"),
             ),
             Some(ClusterHealth::Yellow) => b.add(
@@ -178,7 +178,7 @@ pub fn problems(i: &ProblemInput<'_>) -> Vec<Problem> {
                 None,
                 format!("cluster health is yellow{unassigned}: replicas are not allocated"),
                 Some(if cluster.number_of_nodes == Some(1) {
-                    "single-node cluster: replica shards can never be allocated; set the RagMonk indexes' number_of_replicas to 0"
+                    "single-node cluster: replica shards can never be allocated; set the DocMonk indexes' number_of_replicas to 0"
                 } else {
                     "check GET /_cluster/allocation/explain on the cluster"
                 }),
@@ -217,7 +217,7 @@ pub fn problems(i: &ProblemInput<'_>) -> Vec<Problem> {
                 "publications kept changing while reading {} source(s); their counters may be incomplete",
                 i.inconsistent_sources.len()
             ),
-            Some("refresh ragmonk status"),
+            Some("refresh docmonk status"),
         );
     }
 
@@ -265,7 +265,7 @@ pub fn problems(i: &ProblemInput<'_>) -> Vec<Problem> {
                 None,
                 None,
                 format!("the last {op} run exited without finishing"),
-                Some("run 'ragmonk index' again; the previous published builds still serve"),
+                Some("run 'docmonk index' again; the previous published builds still serve"),
             ),
             "failed" => b.add(
                 C::RunFailed,
@@ -274,7 +274,7 @@ pub fn problems(i: &ProblemInput<'_>) -> Vec<Problem> {
                 None,
                 None,
                 format!("the last {op} run failed: {error}"),
-                Some("ragmonk doctor"),
+                Some("docmonk doctor"),
             ),
             "interrupted" => b.add(
                 C::RunInterrupted,
@@ -345,7 +345,7 @@ pub fn problems(i: &ProblemInput<'_>) -> Vec<Problem> {
                 id,
                 None,
                 format!("{msg}{detail}"),
-                Some("ragmonk index --source <id>"),
+                Some("docmonk index --source <id>"),
             );
         } else if let Some(e) = f.last_error.as_deref().filter(|e| !e.is_empty()) {
             b.add(
@@ -377,7 +377,7 @@ pub fn problems(i: &ProblemInput<'_>) -> Vec<Problem> {
                     "relationship graph is {}{why}; the index is published and searchable",
                     r.state
                 ),
-                Some("ragmonk relationships build"),
+                Some("docmonk relationships build"),
             );
         }
         if let Some(p) = &f.published {
@@ -389,7 +389,7 @@ pub fn problems(i: &ProblemInput<'_>) -> Vec<Problem> {
                     id,
                     None,
                     format!("{} file(s) failed in the published build", p.failed),
-                    Some("ragmonk status --errors"),
+                    Some("docmonk status --errors"),
                 );
             }
             if p.retrying > 0 {
@@ -426,7 +426,7 @@ pub fn problems(i: &ProblemInput<'_>) -> Vec<Problem> {
                             "{} retry file(s) are due with no indexer running",
                             p.retrying
                         ),
-                        Some("run 'ragmonk index' or start the daemon"),
+                        Some("run 'docmonk index' or start the daemon"),
                     );
                 }
             }

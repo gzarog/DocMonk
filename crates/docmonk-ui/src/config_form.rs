@@ -2,14 +2,14 @@
 //! overrides read-only and sensitive values never shown, and form updates
 //! validated exactly like `config set`.
 
-use docmonk_config::model::RagMonkConfig;
+use docmonk_config::model::DocMonkConfig;
 use docmonk_config::value::{deep_merge, Value as Cfg};
 use docmonk_core::paths::Home;
 use serde_json::{json, Value};
 
 use docmonk_service::load;
 
-const ENV_PREFIX: &str = "RAGMONK_";
+const ENV_PREFIX: &str = "DOCMONK_";
 const SENSITIVE: &[&str] = &["key", "token", "secret", "password", "credential"];
 
 fn is_sensitive(path: &str) -> bool {
@@ -100,7 +100,7 @@ fn env_present(name: &str) -> bool {
 }
 
 /// Every config section with its fields, for the Configuration page.
-pub fn describe_config(home: &Home) -> Result<Vec<Value>, docmonk_core::errors::RagMonkError> {
+pub fn describe_config(home: &Home) -> Result<Vec<Value>, docmonk_core::errors::DocMonkError> {
     let cfg = load(home)?;
     let dumped = cfg.to_value();
     let mut sections = Vec::new();
@@ -174,8 +174,8 @@ pub fn apply_updates(home: &Home, form: &[(String, String)]) -> Result<(), Strin
         }
         set_path(&mut user, &path, form_value(kind, raw));
     }
-    let merged = deep_merge(&RagMonkConfig::default().to_value(), &user);
-    let validated = RagMonkConfig::validate(&merged).map_err(|e| e.render())?;
+    let merged = deep_merge(&DocMonkConfig::default().to_value(), &user);
+    let validated = DocMonkConfig::validate(&merged).map_err(|e| e.render())?;
     docmonk_config::loader::write_user_config(&validated, home).map_err(|e| e.to_string())?;
     Ok(())
 }

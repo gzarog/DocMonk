@@ -13,8 +13,8 @@ use std::time::Duration;
 use docmonk_backends::backend::CatalogEntry;
 use docmonk_backends::engine::default_vector_spec;
 use docmonk_backends::ServerBackend;
-use docmonk_config::RagMonkConfig;
-use docmonk_core::errors::{ErrorKind, RagMonkError};
+use docmonk_config::DocMonkConfig;
+use docmonk_core::errors::{DocMonkError, ErrorKind};
 use docmonk_core::models::SourceType;
 use docmonk_core::paths::Home;
 use docmonk_storage::control::{ControlPlane, SourceRecord};
@@ -49,17 +49,17 @@ impl Backend {
     }
 }
 
-/// A server error as a [`RagMonkError`] (redacted, classed).
-pub fn server_err(e: docmonk_backends::BackendError) -> RagMonkError {
+/// A server error as a [`DocMonkError`] (redacted, classed).
+pub fn server_err(e: docmonk_backends::BackendError) -> DocMonkError {
     e.into()
 }
 
 /// Connects to the configured cluster (engine detection and a reachability
 /// check) without touching any index.
-pub fn connect(cfg: &RagMonkConfig) -> Result<ServerBackend, RagMonkError> {
+pub fn connect(cfg: &DocMonkConfig) -> Result<ServerBackend, DocMonkError> {
     let s = &cfg.storage.server;
     if s.url.is_empty() {
-        return Err(RagMonkError::config(
+        return Err(DocMonkError::config(
             "storage.mode is 'server' but storage.server.url is empty",
         )
         .with_class("BackendConfigError"));
@@ -70,13 +70,13 @@ pub fn connect(cfg: &RagMonkConfig) -> Result<ServerBackend, RagMonkError> {
 }
 
 /// The configured backend, verified: in server mode the cluster must be
-/// reachable and every RagMonk index must exist with this build's schema.
-pub fn open(home: &Home) -> Result<Backend, RagMonkError> {
+/// reachable and every DocMonk index must exist with this build's schema.
+pub fn open(home: &Home) -> Result<Backend, DocMonkError> {
     let cfg = load(home)?;
     open_with(&cfg)
 }
 
-pub fn open_with(cfg: &RagMonkConfig) -> Result<Backend, RagMonkError> {
+pub fn open_with(cfg: &DocMonkConfig) -> Result<Backend, DocMonkError> {
     if cfg.storage.mode != "server" {
         return Ok(Backend::Local);
     }
@@ -84,8 +84,8 @@ pub fn open_with(cfg: &RagMonkConfig) -> Result<Backend, RagMonkError> {
     // One request verifies every existing index and lists missing ones.
     let missing = server.check_schema().map_err(server_err)?;
     if !missing.is_empty() {
-        return Err(RagMonkError::config(format!(
-            "server indexes are missing ({}); run `ragmonk server init` first",
+        return Err(DocMonkError::config(format!(
+            "server indexes are missing ({}); run `docmonk server init` first",
             missing.join(", ")
         ))
         .with_class("BackendSchemaMismatchError"));
@@ -95,7 +95,7 @@ pub fn open_with(cfg: &RagMonkConfig) -> Result<Backend, RagMonkError> {
 
 /// The configured backend, creating missing server indexes (idempotent;
 /// existing indexes are verified, never changed). Used by writers.
-pub fn open_for_write(home: &Home) -> Result<Backend, RagMonkError> {
+pub fn open_for_write(home: &Home) -> Result<Backend, DocMonkError> {
     let cfg = load(home)?;
     if cfg.storage.mode != "server" {
         return Ok(Backend::Local);
@@ -106,8 +106,8 @@ pub fn open_for_write(home: &Home) -> Result<Backend, RagMonkError> {
 }
 
 /// Errors for an operation that exists only in local mode.
-pub fn local_only(what: &str) -> RagMonkError {
-    RagMonkError::new(
+pub fn local_only(what: &str) -> DocMonkError {
+    DocMonkError::new(
         ErrorKind::LocalStorageModeRequired,
         format!(
             "{what} is not available with storage.mode = 'server'; \
@@ -118,7 +118,7 @@ pub fn local_only(what: &str) -> RagMonkError {
 }
 
 /// The local control plane (local mode only).
-pub fn local_control_plane(home: &Home) -> Result<ControlPlane, RagMonkError> {
+pub fn local_control_plane(home: &Home) -> Result<ControlPlane, DocMonkError> {
     let cfg = load(home)?;
     ControlPlane::open(&StorageLayout::new(home), cfg.runtime.sqlite_cache_size_mb).map_err(db)
 }
@@ -145,8 +145,8 @@ pub fn record_of(e: &CatalogEntry) -> SourceRecord {
 mod tests {
     use super::*;
 
-    fn cfg(mode: &str, url: &str) -> RagMonkConfig {
-        let mut c = RagMonkConfig::default();
+    fn cfg(mode: &str, url: &str) -> DocMonkConfig {
+        let mut c = DocMonkConfig::default();
         c.storage.mode = mode.into();
         c.storage.server.url = url.into();
         c

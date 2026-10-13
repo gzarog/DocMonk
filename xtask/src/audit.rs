@@ -1,7 +1,7 @@
 //! `cargo xtask clean-slate-audit`: keeps migration, legacy-format,
 //! V1/V2 product naming and Python tooling out of the repository.
 //!
-//! RagMonk 1.0 is fresh-install / fresh-index only (see the clean-slate
+//! DocMonk 1.0 is fresh-install / fresh-index only (see the clean-slate
 //! ADR). Every tracked text file is scanned line by line against [`RULES`].
 //! A finding is accepted only when it is
 //!
@@ -89,7 +89,7 @@ const NEUTRAL_TOKENS: &[&str] = &[
     r#"\blanguage: "python""#,
     // Semantic-version tags (`v1.0.0`).
     r"\bv[0-9]+\.[0-9]+",
-    // The Python grammar RagMonk uses to index Python source.
+    // The Python grammar DocMonk uses to index Python source.
     r"tree[-_]sitter[-_]python",
 ];
 
@@ -110,7 +110,7 @@ const ALLOWED_PATHS: &[(&str, &str)] = &[
     ("migration", "fixtures/"),
     ("version-naming", "fixtures/"),
     // The vendored WordPiece vocabulary of the pinned embedding model:
-    // English word pieces, not RagMonk text.
+    // English word pieces, not DocMonk text.
     ("*", "crates/docmonk-documents/assets/all-MiniLM-L6-v2/"),
 ];
 
@@ -345,7 +345,7 @@ mod tests {
     #[test]
     fn version_naming_ignores_models_and_semver() {
         assert!(matches("version-naming", "pub struct V2Layout;"));
-        assert!(matches("version-naming", "let prefix = \"ragmonk-v2\";"));
+        assert!(matches("version-naming", "let prefix = \"docmonk-v2\";"));
         assert!(matches("version-naming", "mod v1;"));
         assert!(matches("version-naming", "tags: rust-v*"));
         assert!(matches("version-naming", "let dir = home.join(\"v1\");"));

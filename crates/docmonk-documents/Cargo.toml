@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-documents"
-description = "RagMonk document core: normalized document model, exact tokenizer, chunker and table rendering"
+description = "DocMonk document core: normalized document model, exact tokenizer, chunker and table rendering"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

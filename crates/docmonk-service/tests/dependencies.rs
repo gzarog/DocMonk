@@ -7,7 +7,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use docmonk_config::RagMonkConfig;
+use docmonk_config::DocMonkConfig;
 use docmonk_core::paths::{project_id_for_canonical, Home};
 use docmonk_service::dependencies::DependencyOutcome;
 use docmonk_service::indexing::{index_sources, selected_sources, SourceEvent};
@@ -34,7 +34,7 @@ fn setup(declared: &[&str]) -> Env {
     let d = tempfile::tempdir().unwrap();
     let home = Home::new(d.path().join("home"));
     home.ensure_layout().unwrap();
-    let mut cfg = RagMonkConfig::default();
+    let mut cfg = DocMonkConfig::default();
     cfg.updates.enabled = false;
     docmonk_config::write_user_config(&cfg, &home).unwrap();
     let mut roots = BTreeMap::new();

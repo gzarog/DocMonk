@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-config"
-description = "RagMonk config.yaml parsing, defaults, validation and environment layering"
+description = "DocMonk config.yaml parsing, defaults, validation and environment layering"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

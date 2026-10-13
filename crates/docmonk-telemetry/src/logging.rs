@@ -189,7 +189,7 @@ impl JsonFileLayer {
         let file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(logs_dir.join("ragmonk.log"))?;
+            .open(logs_dir.join("docmonk.log"))?;
         Ok(Self {
             file: Mutex::new(file),
             max_level,
@@ -309,7 +309,7 @@ mod tests {
             );
             tracing::debug!(component = "x", event = "dropped");
         });
-        let text = std::fs::read_to_string(dir.path().join("ragmonk.log")).unwrap();
+        let text = std::fs::read_to_string(dir.path().join("docmonk.log")).unwrap();
         let lines: Vec<_> = text.lines().collect();
         assert_eq!(lines.len(), 1);
         let v: serde_json::Value = serde_json::from_str(lines[0]).unwrap();

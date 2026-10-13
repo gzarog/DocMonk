@@ -26,7 +26,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use docmonk_core::errors::{ErrorKind, RagMonkError};
+use docmonk_core::errors::{DocMonkError, ErrorKind};
 use docmonk_core::paths::Home;
 use docmonk_indexing::coordinator::{run_source_with, Options, SourceResult};
 use docmonk_indexing::lock::RunLock;
@@ -45,12 +45,12 @@ pub enum SourceEvent<'a> {
     /// Another process holds the source's lock (or server writer lease).
     Blocked {
         source: &'a SourceRecord,
-        error: &'a RagMonkError,
+        error: &'a DocMonkError,
     },
     /// The pass failed before completing.
     Failed {
         source: &'a SourceRecord,
-        error: &'a RagMonkError,
+        error: &'a DocMonkError,
     },
     /// The pass ran; `run` says what it did (including offline/incomplete).
     Completed {
@@ -111,7 +111,7 @@ impl RunSummary {
 
     /// An `IndexingPartialFailure` error when anything failed. Indexing
     /// failures and relationship failures are reported separately.
-    pub fn into_result(self) -> Result<Self, RagMonkError> {
+    pub fn into_result(self) -> Result<Self, DocMonkError> {
         let graph = self.relationships.not_current();
         if self.failed_sources == 0 && self.failed_files == 0 && graph == 0 {
             return Ok(self);
@@ -125,12 +125,12 @@ impl RunSummary {
         }
         if graph > 0 {
             parts.push(format!(
-                "relationships were not published for {graph} source(s) (their index is published and searchable; retry with 'ragmonk relationships build')"
+                "relationships were not published for {graph} source(s) (their index is published and searchable; retry with 'docmonk relationships build')"
             ));
         }
-        Err(RagMonkError::new(
+        Err(DocMonkError::new(
             ErrorKind::IndexingPartialFailure,
-            format!("{}; see 'ragmonk doctor' for details", parts.join("; ")),
+            format!("{}; see 'docmonk doctor' for details", parts.join("; ")),
         ))
     }
 }
@@ -138,7 +138,7 @@ impl RunSummary {
 /// Run-level options beyond the configuration.
 #[derive(Debug, Clone, Default)]
 pub struct RunOptions {
-    /// Rebuild every selected source from scratch (`ragmonk rebuild`).
+    /// Rebuild every selected source from scratch (`docmonk rebuild`).
     pub force_full: bool,
     /// Only examine these absolute paths (a watcher-triggered pass).
     pub targets: Option<std::collections::BTreeSet<PathBuf>>,
@@ -185,7 +185,7 @@ impl HomeLocks {
 }
 
 /// `locks/index.lock`, then every registered source's lock in id order.
-pub fn home_exclusive(home: &Home, operation: &str) -> Result<HomeLocks, RagMonkError> {
+pub fn home_exclusive(home: &Home, operation: &str) -> Result<HomeLocks, DocMonkError> {
     let cfg = load(home)?;
     let timeout = Duration::from_secs_f64(cfg.indexing.lock_timeout_seconds);
     let mut locks = vec![RunLock::acquire(
@@ -220,7 +220,7 @@ pub fn home_exclusive(home: &Home, operation: &str) -> Result<HomeLocks, RagMonk
 pub fn selected_sources(
     home: &Home,
     source_id: Option<&str>,
-) -> Result<Vec<SourceRecord>, RagMonkError> {
+) -> Result<Vec<SourceRecord>, DocMonkError> {
     let c = catalog(home)?;
     match source_id {
         Some(id) => Ok(vec![c.get(id)?]),
@@ -234,15 +234,15 @@ pub fn index_sources(
     sources: &[SourceRecord],
     operation: &str,
     on_event: impl FnMut(SourceEvent<'_>),
-) -> Result<RunSummary, RagMonkError> {
+) -> Result<RunSummary, DocMonkError> {
     index_sources_with(home, sources, operation, &RunOptions::default(), on_event)
 }
 
 /// What a worker reports to the calling thread.
 enum Outcome {
     Started,
-    Blocked(RagMonkError),
-    Failed(RagMonkError),
+    Blocked(DocMonkError),
+    Failed(DocMonkError),
     Completed(Box<SourceResult>),
 }
 
@@ -254,7 +254,7 @@ pub fn index_sources_with(
     operation: &str,
     run: &RunOptions,
     mut on_event: impl FnMut(SourceEvent<'_>),
-) -> Result<RunSummary, RagMonkError> {
+) -> Result<RunSummary, DocMonkError> {
     let cfg = load(home)?;
     let backend = crate::backend::open_for_write(home)?;
     let registry =
@@ -331,7 +331,7 @@ pub fn index_sources_with(
                 emit.emit(outcome);
             },
             |_| {
-                Outcome::Failed(RagMonkError::new(
+                Outcome::Failed(DocMonkError::new(
                     ErrorKind::Generic,
                     "source pass panicked; its pending build was discarded",
                 ))
@@ -435,7 +435,7 @@ pub fn index_sources_with(
         }
         tracker.set_phase("done");
         tracker.set_resources(&governor.snapshot());
-        Ok::<(), RagMonkError>(())
+        Ok::<(), DocMonkError>(())
     })?;
     Ok(summary)
 }
@@ -445,14 +445,14 @@ pub fn index_sources_with(
 #[allow(clippy::too_many_arguments)]
 fn run_one(
     home: &Home,
-    cfg: &docmonk_config::RagMonkConfig,
+    cfg: &docmonk_config::DocMonkConfig,
     backend: &Backend,
     source: &SourceRecord,
     registry: &docmonk_indexing::coordinator::Registry,
     opts: &Options,
     run: &RunOptions,
     progress: &mut ProgressTracker,
-) -> Result<SourceResult, RagMonkError> {
+) -> Result<SourceResult, DocMonkError> {
     match backend {
         Backend::Local => {
             // Each worker owns its connection (rusqlite connections are not

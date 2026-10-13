@@ -61,7 +61,7 @@ fn index(rel: &str) -> Indexed {
         })
         .unwrap()
         .0;
-    let cfg = docmonk_config::RagMonkConfig::default();
+    let cfg = docmonk_config::DocMonkConfig::default();
     run_source(
         &layout,
         &mut cp,

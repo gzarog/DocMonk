@@ -1,4 +1,4 @@
-//! RagMonk status: the single status model and its producers.
+//! DocMonk status: the single status model and its producers.
 //!
 //! * [`model`]: the canonical status contract every surface renders.
 //! * [`local`]: the local SQLite collector.

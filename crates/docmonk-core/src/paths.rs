@@ -1,5 +1,5 @@
-//! On-disk runtime layout. `RAGMONK_HOME` always
-//! wins; otherwise `%LOCALAPPDATA%\RagMonk` on Windows and `~/.ragmonk`
+//! On-disk runtime layout. `DOCMONK_HOME` always
+//! wins; otherwise `%LOCALAPPDATA%\DocMonk` on Windows and `~/.docmonk`
 //! elsewhere (macOS included).
 
 use std::path::{Component, Path, PathBuf};
@@ -51,27 +51,27 @@ pub fn expand_user(path: &str, env: &dyn Env, windows: bool) -> PathBuf {
 }
 
 pub fn runtime_dir_with(env: &dyn Env, windows: bool) -> PathBuf {
-    if let Some(over) = env.var("RAGMONK_HOME").filter(|v| !v.is_empty()) {
+    if let Some(over) = env.var("DOCMONK_HOME").filter(|v| !v.is_empty()) {
         return expand_user(&over, env, windows);
     }
     if windows {
         if let Some(base) = env.var("LOCALAPPDATA").filter(|v| !v.is_empty()) {
-            return PathBuf::from(base).join("RagMonk");
+            return PathBuf::from(base).join("DocMonk");
         }
         return home_dir(env, windows)
             .join("AppData")
             .join("Local")
-            .join("RagMonk");
+            .join("DocMonk");
     }
-    home_dir(env, windows).join(".ragmonk")
+    home_dir(env, windows).join(".docmonk")
 }
 
-/// The RagMonk home for this process.
+/// The DocMonk home for this process.
 pub fn runtime_dir() -> PathBuf {
     runtime_dir_with(&ProcessEnv, cfg!(windows))
 }
 
-/// Layout of one RagMonk home. Every path is part of the on-disk contract.
+/// Layout of one DocMonk home. Every path is part of the on-disk contract.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Home {
     root: PathBuf,
@@ -183,9 +183,9 @@ impl Home {
     }
 }
 
-/// `./.ragmonk.yaml` relative to `cwd`.
+/// `./.docmonk.yaml` relative to `cwd`.
 pub fn project_config_path(cwd: &Path) -> PathBuf {
-    cwd.join(".ragmonk.yaml")
+    cwd.join(".docmonk.yaml")
 }
 
 /// Non-strict path resolution (like `realpath`): components
@@ -269,10 +269,10 @@ mod tests {
     }
 
     #[test]
-    fn ragmonk_home_wins_and_expands_tilde() {
-        let e = env(&[("RAGMONK_HOME", "~/rm"), ("HOME", "/home/u")]);
+    fn docmonk_home_wins_and_expands_tilde() {
+        let e = env(&[("DOCMONK_HOME", "~/rm"), ("HOME", "/home/u")]);
         assert_eq!(runtime_dir_with(&e, false), PathBuf::from("/home/u/rm"));
-        let e = env(&[("RAGMONK_HOME", "/x"), ("LOCALAPPDATA", "C:\\L")]);
+        let e = env(&[("DOCMONK_HOME", "/x"), ("LOCALAPPDATA", "C:\\L")]);
         assert_eq!(runtime_dir_with(&e, true), PathBuf::from("/x"));
     }
 
@@ -281,12 +281,12 @@ mod tests {
         let e = env(&[("HOME", "/home/u")]);
         assert_eq!(
             runtime_dir_with(&e, false),
-            PathBuf::from("/home/u/.ragmonk")
+            PathBuf::from("/home/u/.docmonk")
         );
         let e = env(&[("LOCALAPPDATA", "L")]);
         assert_eq!(
             runtime_dir_with(&e, true),
-            PathBuf::from("L").join("RagMonk")
+            PathBuf::from("L").join("DocMonk")
         );
         let e = env(&[("USERPROFILE", "U")]);
         assert_eq!(
@@ -294,11 +294,11 @@ mod tests {
             PathBuf::from("U")
                 .join("AppData")
                 .join("Local")
-                .join("RagMonk")
+                .join("DocMonk")
         );
         // An empty override is ignored, like an unset one.
-        let e = env(&[("RAGMONK_HOME", ""), ("HOME", "/h")]);
-        assert_eq!(runtime_dir_with(&e, false), PathBuf::from("/h/.ragmonk"));
+        let e = env(&[("DOCMONK_HOME", ""), ("HOME", "/h")]);
+        assert_eq!(runtime_dir_with(&e, false), PathBuf::from("/h/.docmonk"));
     }
 
     #[test]

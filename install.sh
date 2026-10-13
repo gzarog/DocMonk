@@ -1,24 +1,24 @@
 #!/bin/sh
-# Installs the native RagMonk CLI: downloads the release archive
+# Installs the native DocMonk CLI: downloads the release archive
 # for this platform, verifies it against the release's SHA256SUMS (and the
 # minisign signature over it, when a key is configured below and
-# `minisign` is installed), unpacks it under $RAGMONK_INSTALL_DIR/versions,
-# and links `ragmonk` onto a per-user bin directory.
+# `minisign` is installed), unpacks it under $DOCMONK_INSTALL_DIR/versions,
+# and links `docmonk` onto a per-user bin directory.
 #
-#   RAGMONK_VERSION        version to install (default: the latest release)
-#   RAGMONK_INSTALL_DIR    default: ~/.ragmonk
-#   RAGMONK_BIN_DIR        default: ~/.local/bin
-#   RAGMONK_HOME           default: ~/.ragmonk
-#   RAGMONK_DOWNLOAD_BASE  a URL or local directory holding the release
+#   DOCMONK_VERSION        version to install (default: the latest release)
+#   DOCMONK_INSTALL_DIR    default: ~/.docmonk
+#   DOCMONK_BIN_DIR        default: ~/.local/bin
+#   DOCMONK_HOME           default: ~/.docmonk
+#   DOCMONK_DOWNLOAD_BASE  a URL or local directory holding the release
 #                          assets (testing and mirrors)
 set -eu
 
 REPO="gzarog/RagMonk"
 # The release-signing public key (minisign). Empty: checksums only.
 MINISIGN_PUBKEY=""
-INSTALL_DIR="${RAGMONK_INSTALL_DIR:-$HOME/.ragmonk}"
-BIN_DIR="${RAGMONK_BIN_DIR:-$HOME/.local/bin}"
-RAGMONK_HOME="${RAGMONK_HOME:-$HOME/.ragmonk}"
+INSTALL_DIR="${DOCMONK_INSTALL_DIR:-$HOME/.docmonk}"
+BIN_DIR="${DOCMONK_BIN_DIR:-$HOME/.local/bin}"
+DOCMONK_HOME="${DOCMONK_HOME:-$HOME/.docmonk}"
 
 fail() {
     echo "error: $*" >&2
@@ -29,7 +29,7 @@ case "$(uname -s)-$(uname -m)" in
     Linux-x86_64 | Linux-amd64) TARGET="x86_64-unknown-linux-gnu" ;;
     Darwin-arm64 | Darwin-aarch64) TARGET="aarch64-apple-darwin" ;;
     Darwin-x86_64) TARGET="x86_64-apple-darwin" ;;
-    *) fail "no RagMonk release for $(uname -s) $(uname -m); build from source (see README.md)" ;;
+    *) fail "no DocMonk release for $(uname -s) $(uname -m); build from source (see README.md)" ;;
 esac
 
 fetch() { # <url-or-path> <dest>
@@ -46,7 +46,7 @@ fetch() { # <url-or-path> <dest>
     esac
 }
 
-VERSION="${RAGMONK_VERSION:-}"
+VERSION="${DOCMONK_VERSION:-}"
 if [ -z "$VERSION" ]; then
     TAG="$(curl -fsSL -H "Accept: application/vnd.github+json" \
         "https://api.github.com/repos/$REPO/releases/latest" \
@@ -62,12 +62,12 @@ VERSION="${VERSION#v}"
 case "$VERSION" in
     *[!0-9A-Za-z.+-]* | "" | .*) fail "invalid version '$VERSION'" ;;
 esac
-BASE="${RAGMONK_DOWNLOAD_BASE:-https://github.com/$REPO/releases/download/v$VERSION}"
-ASSET="ragmonk-$VERSION-$TARGET.tar.gz"
+BASE="${DOCMONK_DOWNLOAD_BASE:-https://github.com/$REPO/releases/download/v$VERSION}"
+ASSET="docmonk-$VERSION-$TARGET.tar.gz"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-echo "Downloading RagMonk $VERSION ($TARGET)..."
+echo "Downloading DocMonk $VERSION ($TARGET)..."
 fetch "$BASE/$ASSET" "$TMP/$ASSET"
 fetch "$BASE/SHA256SUMS" "$TMP/SHA256SUMS"
 
@@ -99,14 +99,14 @@ mkdir -p "$VERSIONS"
 rm -rf "$PARTIAL"
 mkdir -p "$PARTIAL"
 tar -xzf "$TMP/$ASSET" -C "$PARTIAL" --strip-components=1
-[ -x "$PARTIAL/ragmonk" ] || fail "$ASSET does not contain the ragmonk binary"
-"$PARTIAL/ragmonk" version >/dev/null || fail "the downloaded binary does not run on this machine"
+[ -x "$PARTIAL/docmonk" ] || fail "$ASSET does not contain the docmonk binary"
+"$PARTIAL/docmonk" version >/dev/null || fail "the downloaded binary does not run on this machine"
 rm -rf "${VERSIONS:?}/$VERSION"
 mv "$PARTIAL" "$VERSIONS/$VERSION"
 
 if [ -d "$VERSIONS/$VERSION/models" ]; then
-    mkdir -p "$RAGMONK_HOME/models"
-    cp -R "$VERSIONS/$VERSION/models/." "$RAGMONK_HOME/models/"
+    mkdir -p "$DOCMONK_HOME/models"
+    cp -R "$VERSIONS/$VERSION/models/." "$DOCMONK_HOME/models/"
 fi
 
 STATE="$INSTALL_DIR/install_state.json"
@@ -123,12 +123,12 @@ ln -sfn "versions/$VERSION" "$INSTALL_DIR/current"
 printf '{\n  "current": "%s",\n  "previous": %s\n}\n' "$VERSION" "$PREV" > "$STATE"
 
 mkdir -p "$BIN_DIR"
-ln -sf "$INSTALL_DIR/current/ragmonk" "$BIN_DIR/ragmonk"
-echo "RagMonk $VERSION installed: $BIN_DIR/ragmonk"
+ln -sf "$INSTALL_DIR/current/docmonk" "$BIN_DIR/docmonk"
+echo "DocMonk $VERSION installed: $BIN_DIR/docmonk"
 
-# `ragmonk update` reads this to find the install it manages.
-mkdir -p "$RAGMONK_HOME"
-cat > "$RAGMONK_HOME/install_info.json" <<JSON
+# `docmonk update` reads this to find the install it manages.
+mkdir -p "$DOCMONK_HOME"
+cat > "$DOCMONK_HOME/install_info.json" <<JSON
 {
   "install_method": "native",
   "repository": "$REPO",
@@ -149,6 +149,6 @@ esac
 
 echo ""
 echo "Get started:"
-echo "  ragmonk init"
-echo "  ragmonk source add <path>"
-echo "  ragmonk index"
+echo "  docmonk init"
+echo "  docmonk source add <path>"
+echo "  docmonk index"

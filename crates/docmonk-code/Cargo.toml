@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-code"
-description = "RagMonk Tree-sitter code intelligence: extraction, resolution, framework rules and the code graph"
+description = "DocMonk Tree-sitter code intelligence: extraction, resolution, framework rules and the code graph"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

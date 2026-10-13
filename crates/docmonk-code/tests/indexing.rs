@@ -41,7 +41,7 @@ fn copy_tree(from: &Path, to: &Path) {
 }
 
 fn opts() -> Options {
-    let mut o = Options::from_config(&docmonk_config::RagMonkConfig::default());
+    let mut o = Options::from_config(&docmonk_config::DocMonkConfig::default());
     o.workers = 4;
     o
 }
@@ -102,7 +102,7 @@ impl Fixture {
         )
     }
 
-    /// Both phases, like `ragmonk index`.
+    /// Both phases, like `docmonk index`.
     fn index(&mut self) -> docmonk_indexing::coordinator::SourceResult {
         let r = self.index_base();
         self.graph().unwrap();

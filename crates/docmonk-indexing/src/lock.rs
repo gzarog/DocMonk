@@ -11,7 +11,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use docmonk_core::errors::{LockOwner, RagMonkError};
+use docmonk_core::errors::{DocMonkError, LockOwner};
 use serde_json::{json, Value};
 
 const POLL: Duration = Duration::from_millis(50);
@@ -158,9 +158,9 @@ impl RunLock {
         operation: &str,
         source_id: Option<&str>,
         timeout: Duration,
-    ) -> Result<Self, RagMonkError> {
+    ) -> Result<Self, DocMonkError> {
         let io_err = |e: std::io::Error| {
-            RagMonkError::new(
+            DocMonkError::new(
                 docmonk_core::ErrorKind::Generic,
                 format!("cannot open lock {}: {e}", path.display()),
             )
@@ -174,7 +174,7 @@ impl RunLock {
                     if Instant::now() >= deadline {
                         let owner = read_lock_owner(path).unwrap_or_default();
                         tracing::warn!(component = "lock", event = "lock_wait_timeout", lock = %path.display());
-                        return Err(RagMonkError::run_lock_timeout(
+                        return Err(DocMonkError::run_lock_timeout(
                             &path.display().to_string(),
                             timeout.as_secs_f64(),
                             &owner,
@@ -259,7 +259,7 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(2), "bounded wait");
         assert!(
             err.message()
-                .contains("Another RagMonk process holds index.lock"),
+                .contains("Another DocMonk process holds index.lock"),
             "{}",
             err.message()
         );

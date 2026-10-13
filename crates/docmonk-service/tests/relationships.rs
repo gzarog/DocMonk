@@ -6,7 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
-use docmonk_config::RagMonkConfig;
+use docmonk_config::DocMonkConfig;
 use docmonk_core::errors::ErrorKind;
 use docmonk_core::paths::{project_id_for_canonical, Home};
 use docmonk_service::indexing::{index_sources, selected_sources, SourceEvent};
@@ -31,7 +31,7 @@ fn setup(relationships: bool) -> Env {
     let d = tempfile::tempdir().unwrap();
     let home = Home::new(d.path().join("home"));
     home.ensure_layout().unwrap();
-    let mut cfg = RagMonkConfig::default();
+    let mut cfg = DocMonkConfig::default();
     cfg.updates.enabled = false;
     cfg.indexing.relationships_enabled = relationships;
     docmonk_config::write_user_config(&cfg, &home).unwrap();

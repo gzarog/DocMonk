@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use docmonk_config::RagMonkConfig;
+use docmonk_config::DocMonkConfig;
 use docmonk_core::paths::Home;
 use docmonk_retrieval::grounding::{self, EvidenceRef};
 use docmonk_retrieval::route::SearchFilters;
@@ -31,7 +31,7 @@ fn setup() -> Env {
     let d = tempfile::tempdir().unwrap();
     let home = Home::new(d.path().join("home"));
     home.ensure_layout().unwrap();
-    let mut cfg = RagMonkConfig::default();
+    let mut cfg = DocMonkConfig::default();
     cfg.updates.enabled = false;
     docmonk_config::write_user_config(&cfg, &home).unwrap();
     let ra = d.path().join("alpha");

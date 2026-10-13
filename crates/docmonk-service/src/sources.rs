@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use docmonk_core::errors::{ErrorKind, RagMonkError};
+use docmonk_core::errors::{DocMonkError, ErrorKind};
 use docmonk_core::paths::{project_id_for_canonical, Home};
 use docmonk_indexing::daemon::pid;
 use docmonk_indexing::lock::RunLock;
@@ -17,7 +17,7 @@ use crate::{db, generic, load};
 /// The control plane (created on first use). Local mode only: in server
 /// mode the server catalog is authoritative and the local control plane is
 /// never opened (use [`catalog`]).
-pub fn control_plane(home: &Home) -> Result<ControlPlane, RagMonkError> {
+pub fn control_plane(home: &Home) -> Result<ControlPlane, DocMonkError> {
     let cfg = load(home)?;
     if cfg.storage.mode == "server" {
         return Err(crate::backend::local_only(
@@ -35,7 +35,7 @@ pub enum Catalog {
 
 /// The catalog for `home` (server mode: the server catalog, created if
 /// missing; an unreachable server is an error).
-pub fn catalog(home: &Home) -> Result<Catalog, RagMonkError> {
+pub fn catalog(home: &Home) -> Result<Catalog, DocMonkError> {
     match crate::backend::open_for_write(home)? {
         Backend::Local => Ok(Catalog::Local(control_plane(home)?)),
         Backend::Server(s) => Ok(Catalog::Server(s)),
@@ -54,7 +54,7 @@ impl Catalog {
     }
 
     /// Registered sources in registration order.
-    pub fn list(&self, enabled_only: bool) -> Result<Vec<SourceRecord>, RagMonkError> {
+    pub fn list(&self, enabled_only: bool) -> Result<Vec<SourceRecord>, DocMonkError> {
         match self {
             Catalog::Local(cp) => cp.list_sources(enabled_only).map_err(db),
             Catalog::Server(s) => {
@@ -74,18 +74,18 @@ impl Catalog {
         }
     }
 
-    pub fn get(&self, id: &str) -> Result<SourceRecord, RagMonkError> {
+    pub fn get(&self, id: &str) -> Result<SourceRecord, DocMonkError> {
         match self {
             Catalog::Local(cp) => get_source(cp, id),
             Catalog::Server(s) => s
                 .catalog_entry(id)
                 .map_err(server_err)?
                 .map(|e| record_of(&e))
-                .ok_or_else(|| RagMonkError::usage(format!("no such source: {id}"))),
+                .ok_or_else(|| DocMonkError::usage(format!("no such source: {id}"))),
         }
     }
 
-    pub fn summary(&self, id: &str) -> Result<SourceSummary, RagMonkError> {
+    pub fn summary(&self, id: &str) -> Result<SourceSummary, DocMonkError> {
         match self {
             Catalog::Local(cp) => {
                 let st = cp.state(id).map_err(db)?;
@@ -111,7 +111,7 @@ impl Catalog {
         path: &str,
         include: Vec<String>,
         exclude: Vec<String>,
-    ) -> Result<SourceRecord, RagMonkError> {
+    ) -> Result<SourceRecord, DocMonkError> {
         match self {
             Catalog::Local(cp) => add_source(cp, path, include, exclude),
             Catalog::Server(s) => {
@@ -133,7 +133,7 @@ impl Catalog {
         }
     }
 
-    pub fn set_enabled(&mut self, id: &str, enabled: bool) -> Result<(), RagMonkError> {
+    pub fn set_enabled(&mut self, id: &str, enabled: bool) -> Result<(), DocMonkError> {
         match self {
             Catalog::Local(cp) => set_source_enabled(cp, id, enabled),
             Catalog::Server(s) => s.set_source_enabled(id, enabled).map_err(server_err),
@@ -141,7 +141,7 @@ impl Catalog {
     }
 
     /// `source info` JSON.
-    pub fn info(&self, s: &SourceRecord) -> Result<Value, RagMonkError> {
+    pub fn info(&self, s: &SourceRecord) -> Result<Value, DocMonkError> {
         match self {
             Catalog::Local(cp) => source_info(cp, s),
             Catalog::Server(b) => {
@@ -185,11 +185,11 @@ fn pad_millis(v: &str) -> String {
 }
 
 /// `(canonical path, source type)` of an existing directory.
-fn canonical_dir(path: &str) -> Result<(String, docmonk_core::models::SourceType), RagMonkError> {
+fn canonical_dir(path: &str) -> Result<(String, docmonk_core::models::SourceType), DocMonkError> {
     let source_type = docmonk_core::ids::detect_source_type(path);
     let p = expand_user(path);
     if !p.exists() {
-        return Err(RagMonkError::new(
+        return Err(DocMonkError::new(
             ErrorKind::SourceUnavailable,
             format!("source path does not exist: {path}"),
         ));
@@ -199,7 +199,7 @@ fn canonical_dir(path: &str) -> Result<(String, docmonk_core::models::SourceType
         .to_string_lossy()
         .into_owned();
     if !p.is_dir() {
-        return Err(RagMonkError::new(
+        return Err(DocMonkError::new(
             ErrorKind::SourceUnavailable,
             format!("source path is not a directory: {canonical}"),
         ));
@@ -207,10 +207,10 @@ fn canonical_dir(path: &str) -> Result<(String, docmonk_core::models::SourceType
     Ok((canonical, source_type))
 }
 
-pub fn get_source(cp: &ControlPlane, id: &str) -> Result<SourceRecord, RagMonkError> {
+pub fn get_source(cp: &ControlPlane, id: &str) -> Result<SourceRecord, DocMonkError> {
     cp.get_source(id)
         .map_err(db)?
-        .ok_or_else(|| RagMonkError::usage(format!("no such source: {id}")))
+        .ok_or_else(|| DocMonkError::usage(format!("no such source: {id}")))
 }
 
 fn expand_user(raw: &str) -> std::path::PathBuf {
@@ -227,7 +227,7 @@ fn expand_user(raw: &str) -> std::path::PathBuf {
     raw.into()
 }
 
-pub fn source_info(cp: &ControlPlane, s: &SourceRecord) -> Result<Value, RagMonkError> {
+pub fn source_info(cp: &ControlPlane, s: &SourceRecord) -> Result<Value, DocMonkError> {
     let state = cp.state(&s.id).map_err(db)?;
     Ok(json!({
         "id": s.id,
@@ -248,11 +248,11 @@ pub fn source_info(cp: &ControlPlane, s: &SourceRecord) -> Result<Value, RagMonk
     }))
 }
 
-pub fn assert_no_active_daemon(home: &Home) -> Result<(), RagMonkError> {
+pub fn assert_no_active_daemon(home: &Home) -> Result<(), DocMonkError> {
     if pid::running_daemon(home).is_some() {
-        return Err(RagMonkError::usage(
-            "a RagMonk daemon is running and may be actively indexing sources; \
-             run `ragmonk daemon stop` first, then retry.",
+        return Err(DocMonkError::usage(
+            "a DocMonk daemon is running and may be actively indexing sources; \
+             run `docmonk daemon stop` first, then retry.",
         ));
     }
     Ok(())
@@ -264,7 +264,7 @@ pub fn add_source(
     path: &str,
     include: Vec<String>,
     exclude: Vec<String>,
-) -> Result<SourceRecord, RagMonkError> {
+) -> Result<SourceRecord, DocMonkError> {
     let (canonical, source_type) = canonical_dir(path)?;
     let (s, _) = cp
         .add_source(&NewSource {
@@ -283,7 +283,7 @@ pub fn set_source_enabled(
     cp: &mut ControlPlane,
     source_id: &str,
     enabled: bool,
-) -> Result<(), RagMonkError> {
+) -> Result<(), DocMonkError> {
     get_source(cp, source_id)?;
     cp.set_enabled(source_id, enabled).map_err(db)
 }
@@ -291,7 +291,7 @@ pub fn set_source_enabled(
 /// Removes a source and its indexed data (never the original files),
 /// under the `index` lock and only while no daemon is running. Returns
 /// whether indexed data was deleted.
-pub fn remove_source(home: &Home, source_id: &str) -> Result<bool, RagMonkError> {
+pub fn remove_source(home: &Home, source_id: &str) -> Result<bool, DocMonkError> {
     if let Catalog::Server(server) = catalog(home)? {
         Catalog::Server(server.clone()).get(source_id)?;
         assert_no_active_daemon(home)?;
@@ -346,7 +346,7 @@ pub fn remove_source(home: &Home, source_id: &str) -> Result<bool, RagMonkError>
 
 /// `docs` rows (`cli/docs._run`): every document-kind file of each
 /// source's active build, with its document metadata when there is one.
-pub fn docs_rows(home: &Home, source_id: Option<&str>) -> Result<Vec<Value>, RagMonkError> {
+pub fn docs_rows(home: &Home, source_id: Option<&str>) -> Result<Vec<Value>, DocMonkError> {
     if let Catalog::Server(_) = catalog(home)? {
         return server_docs_rows(home, source_id);
     }
@@ -415,8 +415,8 @@ pub fn project_data_dir(home: &Home, source: &SourceRecord) -> std::path::PathBu
 }
 
 /// [`docs_rows`] from the server's published builds.
-fn server_docs_rows(home: &Home, source_id: Option<&str>) -> Result<Vec<Value>, RagMonkError> {
-    let e = |e: docmonk_storage::StorageError| -> RagMonkError { e.into() };
+fn server_docs_rows(home: &Home, source_id: Option<&str>) -> Result<Vec<Value>, DocMonkError> {
+    let e = |e: docmonk_storage::StorageError| -> DocMonkError { e.into() };
     let mut rows = Vec::new();
     for o in crate::query::open_sources(home, source_id)? {
         let Some(server) = o.store.server() else {

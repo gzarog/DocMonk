@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use clap::Subcommand;
-use docmonk_core::errors::{ErrorKind, RagMonkError};
+use docmonk_core::errors::{DocMonkError, ErrorKind};
 use docmonk_core::paths::Home;
 use docmonk_ops::backup::{create_backup, restore_archive};
 use docmonk_ops::rebuild::rebuild_sources;
@@ -17,11 +17,11 @@ use crate::{prepared_home, print_json};
 fn index_lock(
     home: &Home,
     operation: &str,
-) -> Result<docmonk_service::indexing::HomeLocks, RagMonkError> {
+) -> Result<docmonk_service::indexing::HomeLocks, DocMonkError> {
     docmonk_service::indexing::home_exclusive(home, operation)
 }
 
-pub fn backup(dest: Option<String>, json_output: bool) -> Result<(), RagMonkError> {
+pub fn backup(dest: Option<String>, json_output: bool) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     control_plane(&home)?;
     let lock = index_lock(&home, "backup")?;
@@ -30,7 +30,7 @@ pub fn backup(dest: Option<String>, json_output: bool) -> Result<(), RagMonkErro
     let (archive, m) = result?;
     let data = json!({
         "archive": archive.to_string_lossy(),
-        "ragmonk_version": m["ragmonk_version"],
+        "docmonk_version": m["docmonk_version"],
         "created_at": m["created_at"],
         "control_schema": m["control_schema"],
         "projects": m["projects"],
@@ -46,7 +46,7 @@ pub fn backup(dest: Option<String>, json_output: bool) -> Result<(), RagMonkErro
     Ok(())
 }
 
-pub fn restore(archive: &str, json_output: bool) -> Result<(), RagMonkError> {
+pub fn restore(archive: &str, json_output: bool) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let archive = PathBuf::from(archive);
     let report = restore_archive(&home, &archive)?;
@@ -80,7 +80,7 @@ pub fn rebuild(
     fresh: bool,
     yes: bool,
     json_output: bool,
-) -> Result<(), RagMonkError> {
+) -> Result<(), DocMonkError> {
     if fresh && !yes && !json_output {
         print!(
             "rebuild --fresh will re-index every selected source from its source files \
@@ -92,7 +92,7 @@ pub fn rebuild(
         let ok = std::io::stdin().read_line(&mut line).is_ok()
             && matches!(line.trim().to_ascii_lowercase().as_str(), "y" | "yes");
         if !ok {
-            return Err(RagMonkError::usage(
+            return Err(DocMonkError::usage(
                 "aborted: rebuild --fresh not confirmed (pass --yes to skip)",
             ));
         }
@@ -129,25 +129,25 @@ pub fn rebuild(
         if failed > 0 {
             parts.push(format!("{failed} file(s) failed to (re)index"));
         }
-        return Err(RagMonkError::new(
+        return Err(DocMonkError::new(
             ErrorKind::IndexingPartialFailure,
-            format!("{}; see 'ragmonk doctor' for details", parts.join("; ")),
+            format!("{}; see 'docmonk doctor' for details", parts.join("; ")),
         ));
     }
     Ok(())
 }
 
-/// Purges `RAGMONK_HOME` (stopping a running daemon first) unless
+/// Purges `DOCMONK_HOME` (stopping a running daemon first) unless
 /// `--keep-data`. A standalone Rust binary is never deleted by itself
 /// (on Windows a running executable cannot be), so its removal is a
 /// manual instruction.
-pub fn uninstall(keep_data: bool, yes: bool, json_output: bool) -> Result<(), RagMonkError> {
+pub fn uninstall(keep_data: bool, yes: bool, json_output: bool) -> Result<(), DocMonkError> {
     let home = Home::discover();
     let exe = std::env::current_exe()
         .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| "ragmonk".into());
+        .unwrap_or_else(|_| "docmonk".into());
     let manual = format!(
-        "this is a standalone RagMonk binary; remove it by deleting {exe} (and any launcher or PATH entry you added)."
+        "this is a standalone DocMonk binary; remove it by deleting {exe} (and any launcher or PATH entry you added)."
     );
     if !yes {
         println!("This will permanently remove:");
@@ -205,7 +205,7 @@ pub enum VectorsCommand {
     },
 }
 
-pub fn vectors(cmd: VectorsCommand) -> Result<(), RagMonkError> {
+pub fn vectors(cmd: VectorsCommand) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     match cmd {
         VectorsCommand::Rebuild { source, json: j } => {

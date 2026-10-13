@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-telemetry"
-description = "RagMonk structured logging, credential/URL redaction and event names"
+description = "DocMonk structured logging, credential/URL redaction and event names"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

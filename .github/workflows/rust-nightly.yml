@@ -44,15 +44,15 @@ jobs:
           --health-cmd "curl -fs http://localhost:9200/_cluster/health || exit 1"
           --health-interval 10s --health-timeout 5s --health-retries 30
     env:
-      RAGMONK_TEST_OPENSEARCH_URL: http://localhost:9201
-      RAGMONK_TEST_ELASTICSEARCH_URL: http://localhost:9202
-      RAGMONK_REQUIRE_LIVE_SERVER: "1"
+      DOCMONK_TEST_OPENSEARCH_URL: http://localhost:9201
+      DOCMONK_TEST_ELASTICSEARCH_URL: http://localhost:9202
+      DOCMONK_REQUIRE_LIVE_SERVER: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - name: Wait for clusters
         run: |
-          for url in "$RAGMONK_TEST_OPENSEARCH_URL" "$RAGMONK_TEST_ELASTICSEARCH_URL"; do
+          for url in "$DOCMONK_TEST_OPENSEARCH_URL" "$DOCMONK_TEST_ELASTICSEARCH_URL"; do
             for i in $(seq 1 60); do
               curl -fs "$url/_cluster/health?wait_for_status=yellow&timeout=5s" && break
               sleep 5

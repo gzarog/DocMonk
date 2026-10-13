@@ -1,7 +1,7 @@
 //! ANN index maintenance: rebuild from stored vectors, and backfill
 //! vectors that were never computed.
 
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use docmonk_core::paths::{project_id_for_canonical, Home};
 use docmonk_service::load;
 use docmonk_service::query::open_sources;
@@ -13,9 +13,9 @@ use crate::{dberr, generic, index_lock, require_local};
 /// Rebuilds each selected source's ANN index from its stored vectors.
 /// One `{source_id, backend, vectors}` per source; `backend` is null when
 /// the source has no vectors yet.
-pub fn rebuild(home: &Home, source: Option<&str>) -> Result<Vec<Value>, RagMonkError> {
+pub fn rebuild(home: &Home, source: Option<&str>) -> Result<Vec<Value>, DocMonkError> {
     // Server mode: vectors live in the server indexes and are written by
-    // every build (`ragmonk rebuild` recomputes them); there is no local
+    // every build (`docmonk rebuild` recomputes them); there is no local
     // ANN index to maintain.
     require_local(home, "vectors rebuild")?;
     let layout = StorageLayout::new(home);
@@ -42,7 +42,7 @@ pub fn rebuild(home: &Home, source: Option<&str>) -> Result<Vec<Value>, RagMonkE
 
 /// Computes missing vectors for each selected source and syncs its ANN
 /// index. One `{source_id, embedded}` per source.
-pub fn backfill(home: &Home, source: Option<&str>) -> Result<Vec<Value>, RagMonkError> {
+pub fn backfill(home: &Home, source: Option<&str>) -> Result<Vec<Value>, DocMonkError> {
     require_local(home, "vectors backfill")?;
     let layout = StorageLayout::new(home);
     let spec = docmonk_ml::manifest::DEFAULT_EMBEDDING_MODEL;
@@ -53,7 +53,7 @@ pub fn backfill(home: &Home, source: Option<&str>) -> Result<Vec<Value>, RagMonk
         cfg.indexing.embedding_batch_size,
     );
     let embedder = lazy.get().map_err(|e| {
-        RagMonkError::usage(format!(
+        DocMonkError::usage(format!(
             "the embedding model is not available ({e}); install it first"
         ))
     })?;

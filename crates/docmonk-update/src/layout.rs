@@ -2,17 +2,17 @@
 //!
 //! ```text
 //! <install_dir>/
-//!   versions/<ver>/ragmonk[.exe]   one unpacked release archive per version
+//!   versions/<ver>/docmonk[.exe]   one unpacked release archive per version
 //!   versions/<ver>/models/...      the models bundled with that release
 //!   current -> versions/<ver>      POSIX: a relative symlink
-//!   bin/ragmonk.exe                Windows: a copy of the current binary
+//!   bin/docmonk.exe                Windows: a copy of the current binary
 //!   install_state.json             {"current": <ver>, "previous": <ver>|null}
 //! ```
 //!
-//! On POSIX `<bin_dir>/ragmonk` links to `<install_dir>/current/ragmonk`,
+//! On POSIX `<bin_dir>/docmonk` links to `<install_dir>/current/docmonk`,
 //! so switching versions is one atomic rename of the `current` symlink.
 //! Windows cannot replace a running executable, but it can rename one:
-//! the old `bin/ragmonk.exe` becomes `ragmonk.exe.old` (removed on the
+//! the old `bin/docmonk.exe` becomes `docmonk.exe.old` (removed on the
 //! next switch) and the new one is copied in. The current and the
 //! previous version are kept; older ones are pruned.
 
@@ -21,12 +21,12 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 pub const BINARY: &str = if cfg!(windows) {
-    "ragmonk.exe"
+    "docmonk.exe"
 } else {
-    "ragmonk"
+    "docmonk"
 };
 
-/// `<RAGMONK_HOME>/install_info.json`, written by the native installers.
+/// `<DOCMONK_HOME>/install_info.json`, written by the native installers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InstallInfo {
     pub install_method: String,
@@ -87,7 +87,7 @@ impl Layout {
             }
         }
         Err(
-            "this RagMonk was not installed by the native installer, so it cannot \
+            "this DocMonk was not installed by the native installer, so it cannot \
              update itself; reinstall with install.sh / install.ps1 or update it the \
              way it was installed"
                 .into(),

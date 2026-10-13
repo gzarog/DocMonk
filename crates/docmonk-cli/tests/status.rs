@@ -1,4 +1,4 @@
-//! `ragmonk status` end to end: the watch loop stops cleanly on Ctrl+C,
+//! `docmonk status` end to end: the watch loop stops cleanly on Ctrl+C,
 //! an unreachable server is a nonzero exit (never an empty report), and
 //! server mode never shows the home's local SQLite data.
 
@@ -6,10 +6,10 @@ use std::path::Path;
 use std::process::{Command, Output, Stdio};
 
 fn cmd(home: &Path, args: &[&str], env: &[(&str, &str)]) -> Command {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_ragmonk"));
+    let mut c = Command::new(env!("CARGO_BIN_EXE_docmonk"));
     c.args(args)
-        .env("RAGMONK_HOME", home)
-        .env("RAGMONK_SEARCH__SEMANTIC", "false")
+        .env("DOCMONK_HOME", home)
+        .env("DOCMONK_SEARCH__SEMANTIC", "false")
         .stdin(Stdio::null());
     for (k, v) in env {
         c.env(k, v);
@@ -62,7 +62,7 @@ fn watch_stops_cleanly_on_ctrl_c() {
     assert!(started.elapsed() < Duration::from_secs(5));
     assert_eq!(o.status.code(), Some(0), "{o:?}");
     let text = String::from_utf8_lossy(&o.stdout);
-    assert!(text.contains("RagMonk status"), "{text}");
+    assert!(text.contains("DocMonk status"), "{text}");
     assert!(text.contains("Ctrl+C to exit"), "{text}");
 }
 
@@ -98,9 +98,9 @@ fn unreachable_server_fails_with_exit_code_four() {
     let dir = tempfile::tempdir().unwrap();
     let home = local_home(dir.path());
     let env = [
-        ("RAGMONK_STORAGE__MODE", "server"),
-        ("RAGMONK_STORAGE__SERVER__URL", "http://127.0.0.1:9"),
-        ("RAGMONK_STORAGE__SERVER__REQUEST_TIMEOUT_SECONDS", "2"),
+        ("DOCMONK_STORAGE__MODE", "server"),
+        ("DOCMONK_STORAGE__SERVER__URL", "http://127.0.0.1:9"),
+        ("DOCMONK_STORAGE__SERVER__REQUEST_TIMEOUT_SECONDS", "2"),
     ];
     for args in [
         &["status"][..],
@@ -117,19 +117,19 @@ fn unreachable_server_fails_with_exit_code_four() {
 /// shows the (empty) server catalog, never the local counts.
 #[test]
 fn server_mode_never_reads_local_sqlite() {
-    let Some(url) = std::env::var("RAGMONK_TEST_OPENSEARCH_URL")
+    let Some(url) = std::env::var("DOCMONK_TEST_OPENSEARCH_URL")
         .ok()
-        .or_else(|| std::env::var("RAGMONK_TEST_ELASTICSEARCH_URL").ok())
+        .or_else(|| std::env::var("DOCMONK_TEST_ELASTICSEARCH_URL").ok())
         .filter(|u| !u.is_empty())
     else {
         assert!(
-            std::env::var("RAGMONK_REQUIRE_LIVE_SERVER").as_deref() != Ok("1"),
-            "a test cluster URL is required when RAGMONK_REQUIRE_LIVE_SERVER=1"
+            std::env::var("DOCMONK_REQUIRE_LIVE_SERVER").as_deref() != Ok("1"),
+            "a test cluster URL is required when DOCMONK_REQUIRE_LIVE_SERVER=1"
         );
         eprintln!("skipping: no test cluster");
         return;
     };
-    let engine = if std::env::var("RAGMONK_TEST_OPENSEARCH_URL").is_ok_and(|u| u == url) {
+    let engine = if std::env::var("DOCMONK_TEST_OPENSEARCH_URL").is_ok_and(|u| u == url) {
         "opensearch"
     } else {
         "elasticsearch"
@@ -147,10 +147,10 @@ fn server_mode_never_reads_local_sqlite() {
             % 1_000_000_000
     );
     let env = [
-        ("RAGMONK_STORAGE__MODE", "server"),
-        ("RAGMONK_STORAGE__SERVER__URL", url.as_str()),
-        ("RAGMONK_STORAGE__SERVER__ENGINE", engine),
-        ("RAGMONK_STORAGE__SERVER__INDEX_PREFIX", prefix.as_str()),
+        ("DOCMONK_STORAGE__MODE", "server"),
+        ("DOCMONK_STORAGE__SERVER__URL", url.as_str()),
+        ("DOCMONK_STORAGE__SERVER__ENGINE", engine),
+        ("DOCMONK_STORAGE__SERVER__INDEX_PREFIX", prefix.as_str()),
     ];
     // No schema yet: a typed failure that names the fix.
     let o = run(&home, &["status", "--json"], &env);

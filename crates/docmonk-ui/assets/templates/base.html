@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}RagMonk Admin{% endblock %} — RagMonk</title>
+  <title>{% block title %}DocMonk Admin{% endblock %} — DocMonk</title>
   <link rel="stylesheet" href="/static/css/app.css">
   <script src="/static/js/htmx.min.js" defer></script>
 </head>
@@ -13,8 +13,8 @@
   <div class="layout">
     <nav class="sidebar">
       <div class="brand">
-        <span>RagMonk</span>
-        <span class="ver">v{{ ragmonk_version }}</span>
+        <span>DocMonk</span>
+        <span class="ver">v{{ docmonk_version }}</span>
       </div>
       <ul class="nav">
         {% for slug, label, url in nav_items %}

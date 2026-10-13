@@ -605,19 +605,19 @@ section! {
 
 section! {
     /// Never holds credentials: they come from
-    /// `RAGMONK_{OPENSEARCH,ELASTICSEARCH}_{USERNAME,PASSWORD,API_KEY}`.
+    /// `DOCMONK_{OPENSEARCH,ELASTICSEARCH}_{USERNAME,PASSWORD,API_KEY}`.
     ServerStorageConfig {
         engine: StorageEngine = StorageEngine::OpenSearch;
         url: String = String::new(), check = |v| {
             if docmonk_telemetry::redact::url_has_userinfo(v) {
                 Err("must not contain credentials (user-info such as \
-                     'user:password@'); set RAGMONK_OPENSEARCH_USERNAME/_PASSWORD/_API_KEY \
-                     or RAGMONK_ELASTICSEARCH_USERNAME/_PASSWORD/_API_KEY instead".into())
+                     'user:password@'); set DOCMONK_OPENSEARCH_USERNAME/_PASSWORD/_API_KEY \
+                     or DOCMONK_ELASTICSEARCH_USERNAME/_PASSWORD/_API_KEY instead".into())
             } else {
                 Ok(())
             }
         };
-        index_prefix: String = "ragmonk".into();
+        index_prefix: String = "docmonk".into();
         verify_tls: bool = true;
         request_timeout_seconds: f64 = 30.0, check = |v| {
             if *v <= 0.0 { Err("must be > 0".into()) } else { Ok(()) }
@@ -641,7 +641,7 @@ section! {
 }
 
 section! {
-    RagMonkConfig {
+    DocMonkConfig {
         runtime: RuntimeConfig = RuntimeConfig::default();
         indexing: IndexingConfig = IndexingConfig::default();
         documents: DocumentsConfig = DocumentsConfig::default();
@@ -655,7 +655,7 @@ section! {
     }
 }
 
-/// Top-level sections recognized by the `RAGMONK_<SECTION>__...` env layer.
+/// Top-level sections recognized by the `DOCMONK_<SECTION>__...` env layer.
 pub const KNOWN_SECTIONS: &[&str] = &[
     "runtime",
     "indexing",
@@ -669,7 +669,7 @@ pub const KNOWN_SECTIONS: &[&str] = &[
     "storage",
 ];
 
-impl RagMonkConfig {
+impl DocMonkConfig {
     /// Validates a merged value tree into the typed configuration.
     pub fn validate(value: &Value) -> Result<Self, Errors> {
         let mut errors = Errors::default();
@@ -695,8 +695,8 @@ mod tests {
             "runtime:\n  log_level: debug\n  max_workers: 4\nsearch:\n  semantic: maybe\nstorage:\n  mode: cloud\n",
         )
         .unwrap();
-        let merged = crate::value::deep_merge(&RagMonkConfig::default().to_value(), &v);
-        let err = RagMonkConfig::validate(&merged).unwrap_err().render();
+        let merged = crate::value::deep_merge(&DocMonkConfig::default().to_value(), &v);
+        let err = DocMonkConfig::validate(&merged).unwrap_err().render();
         assert_eq!(
             err,
             "runtime.max_workers: unknown setting; search.semantic: expected true or false; \
@@ -706,8 +706,8 @@ mod tests {
 
     #[test]
     fn defaults_round_trip() {
-        let cfg = RagMonkConfig::default();
-        assert_eq!(RagMonkConfig::validate(&cfg.to_value()).unwrap(), cfg);
+        let cfg = DocMonkConfig::default();
+        assert_eq!(DocMonkConfig::validate(&cfg.to_value()).unwrap(), cfg);
         assert_eq!(
             cfg.documents.chunking.resolved_max_tokens(),
             MAX_SEQUENCE_TOKENS

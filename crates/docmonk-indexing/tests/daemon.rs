@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use docmonk_core::models::SourceType;
 use docmonk_core::paths::Home;
 use docmonk_indexing::coordinator::{Progress, SourceResult};
@@ -32,13 +32,13 @@ fn source(id: &str, path: &str) -> SourceRecord {
 #[derive(Clone)]
 struct Fake(Arc<Mutex<Vec<SourceRecord>>>);
 impl Catalog for Fake {
-    fn list_sources(&mut self, enabled_only: bool) -> Result<Vec<SourceRecord>, RagMonkError> {
+    fn list_sources(&mut self, enabled_only: bool) -> Result<Vec<SourceRecord>, DocMonkError> {
         let v = self.0.lock().unwrap().clone();
         Ok(v.into_iter()
             .filter(|s| !enabled_only || s.enabled)
             .collect())
     }
-    fn get_source(&mut self, id: &str) -> Result<Option<SourceRecord>, RagMonkError> {
+    fn get_source(&mut self, id: &str) -> Result<Option<SourceRecord>, DocMonkError> {
         Ok(self.0.lock().unwrap().iter().find(|s| s.id == id).cloned())
     }
 }
@@ -58,7 +58,7 @@ impl PassRunner for Scripted {
         source: &SourceRecord,
         request: &ScanRequest,
         _p: &mut dyn Progress,
-    ) -> Result<SourceResult, RagMonkError> {
+    ) -> Result<SourceResult, DocMonkError> {
         self.log.lock().unwrap().push(request.clone());
         let (m, cv) = &*self.gate;
         let _g = cv.wait_while(m.lock().unwrap(), |closed| *closed).unwrap();
@@ -300,7 +300,7 @@ fn coordinator_runner_indexes_and_publishes_progress() {
         layout: StorageLayout::new(&home),
         control: common::control(&home),
         registry: Registry::raw(),
-        opts: Options::from_config(&docmonk_config::RagMonkConfig::default()),
+        opts: Options::from_config(&docmonk_config::DocMonkConfig::default()),
         graph: None,
     };
     let d = Daemon::start(home.clone(), opts(), Box::new(cp), Box::new(runner)).unwrap();
@@ -332,7 +332,7 @@ impl PassRunner for Logged {
         source: &SourceRecord,
         request: &ScanRequest,
         p: &mut dyn Progress,
-    ) -> Result<SourceResult, RagMonkError> {
+    ) -> Result<SourceResult, DocMonkError> {
         self.0.lock().unwrap().push(request.clone());
         self.1.run_pass(source, request, p)
     }
@@ -370,7 +370,7 @@ fn watched_daemon(network: bool) -> (tempfile::TempDir, PathBuf, Home, Log, Daem
             layout: StorageLayout::new(&home),
             control: common::control(&home),
             registry: Registry::raw(),
-            opts: Options::from_config(&docmonk_config::RagMonkConfig::default()),
+            opts: Options::from_config(&docmonk_config::DocMonkConfig::default()),
             graph: None,
         },
     );
@@ -445,7 +445,7 @@ impl PassRunner for Staged {
         source: &SourceRecord,
         _request: &ScanRequest,
         _p: &mut dyn Progress,
-    ) -> Result<SourceResult, RagMonkError> {
+    ) -> Result<SourceResult, DocMonkError> {
         self.0.lock().unwrap().push(format!("pass:{}", source.id));
         std::thread::sleep(Duration::from_millis(20));
         Ok(SourceResult {

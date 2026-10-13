@@ -1,7 +1,7 @@
 //! Core workflow commands: `init`, `source …`, `index` and `docs`.
 
 use clap::Subcommand;
-use docmonk_core::errors::{ErrorKind, RagMonkError};
+use docmonk_core::errors::{DocMonkError, ErrorKind};
 use serde_json::{json, Value};
 
 use docmonk_service::indexing::{index_sources, selected_sources, SourceEvent};
@@ -11,8 +11,8 @@ use docmonk_service::sources::{
 
 use crate::{load, prepared_home, print_json};
 
-fn generic(e: impl std::fmt::Display) -> RagMonkError {
-    RagMonkError::new(ErrorKind::Generic, e.to_string())
+fn generic(e: impl std::fmt::Display) -> DocMonkError {
+    DocMonkError::new(ErrorKind::Generic, e.to_string())
 }
 
 /// Plain aligned table: a header row, then rows, columns separated by two
@@ -57,7 +57,7 @@ pub struct InitArgs {
     #[arg(long = "storage-url", default_value = "")]
     storage_url: String,
     /// Index name prefix when --storage-mode=server.
-    #[arg(long = "storage-index-prefix", default_value = "ragmonk")]
+    #[arg(long = "storage-index-prefix", default_value = "docmonk")]
     storage_index_prefix: String,
     /// Do not verify TLS certificates when --storage-mode=server.
     #[arg(long = "storage-no-verify-tls")]
@@ -66,27 +66,27 @@ pub struct InitArgs {
 
 fn validated_server_config(
     a: &InitArgs,
-) -> Result<docmonk_config::model::ServerStorageConfig, RagMonkError> {
+) -> Result<docmonk_config::model::ServerStorageConfig, DocMonkError> {
     if a.storage_url.is_empty() {
-        return Err(RagMonkError::usage(
+        return Err(DocMonkError::usage(
             "--storage-url is required when --storage-mode=server",
         ));
     }
     if docmonk_telemetry::redact::url_has_userinfo(&a.storage_url) {
-        return Err(RagMonkError::usage(
+        return Err(DocMonkError::usage(
             "--storage-url must not contain credentials (user-info such as 'user:password@'); \
-             set RAGMONK_OPENSEARCH_USERNAME/_PASSWORD/_API_KEY or \
-             RAGMONK_ELASTICSEARCH_USERNAME/_PASSWORD/_API_KEY instead; \
+             set DOCMONK_OPENSEARCH_USERNAME/_PASSWORD/_API_KEY or \
+             DOCMONK_ELASTICSEARCH_USERNAME/_PASSWORD/_API_KEY instead; \
              no config file was written",
         ));
     }
     if !matches!(a.storage_engine.as_str(), "opensearch" | "elasticsearch") {
-        return Err(RagMonkError::usage(format!(
+        return Err(DocMonkError::usage(format!(
             "unknown --storage-engine {:?}; expected 'opensearch' or 'elasticsearch'",
             a.storage_engine
         )));
     }
-    let mut cfg = docmonk_config::RagMonkConfig::default();
+    let mut cfg = docmonk_config::DocMonkConfig::default();
     let server = &mut cfg.storage.server;
     server.engine = if a.storage_engine == "elasticsearch" {
         docmonk_config::model::StorageEngine::Elasticsearch
@@ -99,7 +99,7 @@ fn validated_server_config(
     let server = cfg.storage.server;
     let redacted = docmonk_telemetry::redact::redact_urls_in_text(&a.storage_url);
     docmonk_backends::ServerBackend::connect(&server, None).map_err(|e| {
-        RagMonkError::usage(format!(
+        DocMonkError::usage(format!(
             "storage validation failed: {}; no config file was written",
             docmonk_telemetry::redact::redact_urls_in_text(&e.to_string())
         ))
@@ -111,7 +111,7 @@ fn validated_server_config(
     Ok(server)
 }
 
-pub fn init(a: &InitArgs) -> Result<(), RagMonkError> {
+pub fn init(a: &InitArgs) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let config_path = home.user_config();
     if config_path.is_file() {
@@ -120,11 +120,11 @@ pub fn init(a: &InitArgs) -> Result<(), RagMonkError> {
         println!("Using existing configuration at {}", config_path.display());
     } else {
         if a.local && a.storage_mode != "local" {
-            return Err(RagMonkError::usage(
+            return Err(DocMonkError::usage(
                 "--local conflicts with --storage-mode=server",
             ));
         }
-        let mut cfg = docmonk_config::RagMonkConfig::default();
+        let mut cfg = docmonk_config::DocMonkConfig::default();
         match a.storage_mode.as_str() {
             "local" => {}
             "server" => {
@@ -132,7 +132,7 @@ pub fn init(a: &InitArgs) -> Result<(), RagMonkError> {
                 cfg.storage.server = validated_server_config(a)?;
             }
             other => {
-                return Err(RagMonkError::usage(format!(
+                return Err(DocMonkError::usage(format!(
                     "unknown --storage-mode {other:?}; expected 'local' or 'server'"
                 )))
             }
@@ -147,7 +147,7 @@ pub fn init(a: &InitArgs) -> Result<(), RagMonkError> {
     if c.is_server() {
         println!("Server indexes are ready (storage.mode = server).");
     }
-    println!("RagMonk initialized at {}", home.root().display());
+    println!("DocMonk initialized at {}", home.root().display());
     Ok(())
 }
 
@@ -193,7 +193,7 @@ fn confirm(prompt: &str) -> bool {
     matches!(line.trim().to_ascii_lowercase().as_str(), "y" | "yes")
 }
 
-pub fn source(cmd: SourceCommand) -> Result<(), RagMonkError> {
+pub fn source(cmd: SourceCommand) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let mut cp = catalog(&home)?;
     match cmd {
@@ -268,7 +268,7 @@ pub fn source(cmd: SourceCommand) -> Result<(), RagMonkError> {
 
 // --------------------------------------------------------------- index ---
 
-pub fn index(source_id: Option<String>) -> Result<(), RagMonkError> {
+pub fn index(source_id: Option<String>) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let sources = selected_sources(&home, source_id.as_deref())?;
     if sources.is_empty() {
@@ -447,11 +447,11 @@ fn graph_work(r: &docmonk_service::relationships::StageSummary) -> String {
 
 // ------------------------------------------------------- relationships ---
 
-/// `ragmonk relationships build [--source ID]`: the graph stage alone.
+/// `docmonk relationships build [--source ID]`: the graph stage alone.
 pub fn relationships_build(
     source_id: Option<String>,
     json_output: bool,
-) -> Result<(), RagMonkError> {
+) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let sources = selected_sources(&home, source_id.as_deref())?;
     if sources.is_empty() {
@@ -487,10 +487,10 @@ pub fn relationships_build(
         println!("  {}", graph_work(&summary));
     }
     if summary.not_current() > 0 {
-        return Err(RagMonkError::new(
+        return Err(DocMonkError::new(
             docmonk_core::errors::ErrorKind::IndexingPartialFailure,
             format!(
-                "relationships were not published for {} source(s); see 'ragmonk status' for details",
+                "relationships were not published for {} source(s); see 'docmonk status' for details",
                 summary.not_current()
             ),
         ));
@@ -500,7 +500,7 @@ pub fn relationships_build(
 
 // ---------------------------------------------------------------- docs ---
 
-pub fn docs(source_id: Option<String>, json_output: bool) -> Result<(), RagMonkError> {
+pub fn docs(source_id: Option<String>, json_output: bool) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let rows = docs_rows(&home, source_id.as_deref())?;
     if json_output {

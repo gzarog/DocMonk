@@ -1,7 +1,7 @@
-//! RagMonk indexing core.
+//! DocMonk indexing core.
 //!
 //! * [`classify`], [`ignore`], [`scan`], [`fingerprint`]: file discovery,
-//!   ported from `ragmonk.sources.{detector,ignore,scanner,fingerprint}`.
+//!   ported from `docmonk.sources.{detector,ignore,scanner,fingerprint}`.
 //! * [`diff`]: metadata-first change classification with conditional
 //!   hashing, rename detection and incomplete/offline-scan safety
 //!   (with the coordinator's reconciliation).

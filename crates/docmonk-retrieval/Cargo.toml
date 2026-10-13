@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-retrieval"
-description = "RagMonk retrieval: lexical search, hybrid RRF fusion and neural reranking (RUST-10)"
+description = "DocMonk retrieval: lexical search, hybrid RRF fusion and neural reranking (RUST-10)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

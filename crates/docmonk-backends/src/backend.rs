@@ -339,7 +339,7 @@ impl ServerBackend {
 
     // ---- schema --------------------------------------------------------
 
-    /// Creates missing RagMonk indexes and verifies existing ones. Never
+    /// Creates missing DocMonk indexes and verifies existing ones. Never
     /// modifies an existing index.
     pub fn init(&self) -> Result<InitReport> {
         let mut report = InitReport {
@@ -379,7 +379,7 @@ impl ServerBackend {
         Ok(report)
     }
 
-    /// Verifies every RagMonk index's schema identity (never creates or
+    /// Verifies every DocMonk index's schema identity (never creates or
     /// changes anything). Missing indexes are reported by
     /// [`Self::index_status`].
     pub fn verify_schema(&self) -> Result<()> {
@@ -389,7 +389,7 @@ impl ServerBackend {
         Ok(())
     }
 
-    /// One request: the names of missing RagMonk indexes, after verifying
+    /// One request: the names of missing DocMonk indexes, after verifying
     /// the schema identity of every existing one (never creates or
     /// changes anything).
     pub fn check_schema(&self) -> Result<Vec<String>> {
@@ -418,7 +418,7 @@ impl ServerBackend {
         Ok(missing)
     }
 
-    /// Whether each RagMonk index exists (`HEAD`; never creates anything).
+    /// Whether each DocMonk index exists (`HEAD`; never creates anything).
     pub fn index_status(&self) -> Result<Vec<(String, bool)>> {
         let mut out = Vec::new();
         for kind in IndexKind::ALL {
@@ -429,7 +429,7 @@ impl ServerBackend {
         Ok(out)
     }
 
-    /// Waits until every RagMonk index has its primaries allocated (yellow), so
+    /// Waits until every DocMonk index has its primaries allocated (yellow), so
     /// the first write/read after creation does not hit an unassigned shard.
     fn wait_for_shards(&self) -> Result<()> {
         let names: Vec<String> = IndexKind::ALL.iter().map(|k| self.index(*k)).collect();
@@ -440,7 +440,7 @@ impl ServerBackend {
         let v = self.call_ok(Method::Get, &path, None)?;
         if v["timed_out"].as_bool() == Some(true) {
             return Err(BackendError::Transport(format!(
-                "RagMonk indexes did not become available (cluster health {}); check cluster disk/allocation",
+                "DocMonk indexes did not become available (cluster health {}); check cluster disk/allocation",
                 v["status"]
             )));
         }
@@ -505,7 +505,7 @@ impl ServerBackend {
         let resp = self.call(Method::Put, &path, Some(doc))?;
         if resp.status == 409 {
             return Err(BackendError::Conflict(format!(
-                "source {source_id} state changed concurrently; another RagMonk process is publishing it"
+                "source {source_id} state changed concurrently; another DocMonk process is publishing it"
             )));
         }
         ok(resp, "PUT", &path).map(|_| ())
@@ -1137,7 +1137,7 @@ impl ServerBackend {
 
     /// Disables refresh and replicas on the build-scoped indexes for a
     /// large rebuild. Restore with [`BuildMode::restore`]. Only use while
-    /// no other process serves searches from this cluster's RagMonk indexes.
+    /// no other process serves searches from this cluster's DocMonk indexes.
     pub fn enter_build_mode(&self) -> Result<BuildMode<'_>> {
         let mut saved = Vec::new();
         for kind in IndexKind::BUILD_SCOPED {

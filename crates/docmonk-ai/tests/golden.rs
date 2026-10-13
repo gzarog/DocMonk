@@ -12,7 +12,7 @@ use docmonk_ai::factory::create_provider_with_env;
 use docmonk_ai::prompt::{build_prompt, AiRequest};
 use docmonk_ai::transport::JsonRpcClient;
 use docmonk_config::model::{AiConfig, PrivacyConfig};
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use serde_json::{json, Value};
 
 const GOLDEN: &str = concat!(
@@ -24,9 +24,9 @@ fn golden() -> Value {
     serde_json::from_str(&std::fs::read_to_string(GOLDEN).unwrap()).unwrap()
 }
 
-/// `RAGMONK_BLESS=1` rewrites expected results from this build's output.
+/// `DOCMONK_BLESS=1` rewrites expected results from this build's output.
 fn bless() -> bool {
-    std::env::var_os("RAGMONK_BLESS").is_some()
+    std::env::var_os("DOCMONK_BLESS").is_some()
 }
 
 fn write_section(section: &str, cases: Vec<Value>) {
@@ -70,9 +70,9 @@ fn request(v: &Value) -> AiRequest {
     }
 }
 
-fn error_json(e: &RagMonkError) -> Value {
+fn error_json(e: &DocMonkError) -> Value {
     json!({
-        "type": e.class().unwrap_or("RagMonkError"),
+        "type": e.class().unwrap_or("DocMonkError"),
         "exit_code": e.exit_code(),
         "message": e.message(),
     })
@@ -203,7 +203,7 @@ fn http_providers_behave_as_expected() {
     let env = |k: &str| match k {
         "OPENAI_API_KEY" => Some("sk-test".to_owned()),
         "ANTHROPIC_API_KEY" => Some("ak-test".to_owned()),
-        "RAGMONK_AI_API_KEY" => Some("ck".to_owned()),
+        "DOCMONK_AI_API_KEY" => Some("ck".to_owned()),
         _ => None,
     };
     let privacy = PrivacyConfig {

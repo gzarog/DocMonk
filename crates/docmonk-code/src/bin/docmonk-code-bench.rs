@@ -1,7 +1,7 @@
 //! C# code-intelligence stress benchmark.
 //!
 //! ```text
-//! ragmonk-code-bench [--files N] [--out report.json] [--emit-only DIR] [--cache-mb MB]
+//! docmonk-code-bench [--files N] [--out report.json] [--emit-only DIR] [--cache-mb MB]
 //! ```
 //!
 //! Generates a representative ASP.NET-style C# repository (namespaces,
@@ -165,7 +165,7 @@ fn main() {
     }
     let out = arg("--out");
     let tmp: PathBuf =
-        std::env::temp_dir().join(format!("ragmonk-code-bench-{}", std::process::id()));
+        std::env::temp_dir().join(format!("docmonk-code-bench-{}", std::process::id()));
     let root = tmp.join("source");
     emit(&root, n);
 
@@ -186,7 +186,7 @@ fn main() {
         })
         .expect("add source");
     let reg = docmonk_code::registry();
-    let mut opts = Options::from_config(&docmonk_config::RagMonkConfig::default());
+    let mut opts = Options::from_config(&docmonk_config::DocMonkConfig::default());
     if let Some(mb) = arg("--cache-mb").and_then(|v| v.parse().ok()) {
         opts.cache_size_mb = mb;
     }
@@ -239,7 +239,7 @@ fn main() {
     run("delete", &mut cp);
 
     let report = json!({
-        "plan_id": "ragmonk-1.0-clean-slate",
+        "plan_id": "docmonk-1.0-clean-slate",
 
         "language": "csharp",
         "files": groups * 3 + 1,

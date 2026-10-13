@@ -59,26 +59,26 @@ pub mod record {
     /// A file is identified by its source and path relative to the source root
     /// (normalized to `/` separators by the caller).
     pub fn file_id(source_id: &str, rel_path: &str) -> String {
-        id("ragmonk:file", &[source_id, rel_path])
+        id("docmonk:file", &[source_id, rel_path])
     }
 
     /// Top-level document of a file, or an EML attachment child document
     /// keyed by its stable MIME ordinal.
     pub fn document_id(file_id: &str, attachment_index: Option<u64>) -> String {
         match attachment_index {
-            None => id("ragmonk:document", &[file_id]),
-            Some(i) => id("ragmonk:document", &[file_id, "attachment", &i.to_string()]),
+            None => id("docmonk:document", &[file_id]),
+            Some(i) => id("docmonk:document", &[file_id, "attachment", &i.to_string()]),
         }
     }
 
     pub fn chunk_id(document_id: &str, ordinal: u64) -> String {
-        id("ragmonk:chunk", &[document_id, &ordinal.to_string()])
+        id("docmonk:chunk", &[document_id, &ordinal.to_string()])
     }
 
     /// `ordinal` disambiguates same-named overloads within one file.
     pub fn entity_id(file_id: &str, kind: &str, qualified_name: &str, ordinal: u64) -> String {
         id(
-            "ragmonk:entity",
+            "docmonk:entity",
             &[file_id, kind, qualified_name, &ordinal.to_string()],
         )
     }
@@ -90,7 +90,7 @@ pub mod record {
         ordinal: u64,
     ) -> String {
         id(
-            "ragmonk:relationship",
+            "docmonk:relationship",
             &[
                 source_entity_id,
                 relationship_type,
@@ -108,7 +108,7 @@ pub mod record {
         resolver: &str,
     ) -> String {
         id(
-            "ragmonk:link",
+            "docmonk:link",
             &[
                 entity_id,
                 document_id,
@@ -121,7 +121,7 @@ pub mod record {
 
     /// A build of one source; `nonce` makes each attempt distinct.
     pub fn build_id(source_id: &str, nonce: &str) -> String {
-        id("ragmonk:build", &[source_id, nonce])
+        id("docmonk:build", &[source_id, nonce])
     }
 
     #[cfg(test)]
@@ -137,7 +137,7 @@ pub mod record {
             assert_ne!(document_id(&f, None), document_id(&f, Some(0)));
             assert_ne!(document_id(&f, Some(1)), document_id(&f, Some(2)));
             // Same parts under different domains never collide.
-            assert_ne!(id("ragmonk:file", &["x"]), id("ragmonk:document", &["x"]));
+            assert_ne!(id("docmonk:file", &["x"]), id("docmonk:document", &["x"]));
             assert_ne!(
                 link_id("e", "d", None, "documented_by", "exact"),
                 link_id("e", "d", Some(""), "documented_by", "x")

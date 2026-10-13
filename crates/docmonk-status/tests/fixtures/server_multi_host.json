@@ -5,7 +5,7 @@
   "mode": "server",
   "backend": {
     "kind": "opensearch",
-    "index_prefix": "ragmonk",
+    "index_prefix": "docmonk",
     "endpoint": "http://search.example:9200",
     "reachable": true,
     "authoritative": true,
@@ -13,7 +13,7 @@
       "health": "yellow",
       "unassigned_shards": 7,
       "number_of_nodes": 1,
-      "indexes": ["ragmonk-source-state", "ragmonk-files", "ragmonk-runtime"]
+      "indexes": ["docmonk-source-state", "docmonk-files", "docmonk-runtime"]
     },
     "latency_ms": 4
   },
@@ -151,7 +151,7 @@
       "source_id": "src_alpha",
       "host": null,
       "message": "4 file(s) failed in the published build",
-      "hint": "ragmonk status --errors",
+      "hint": "docmonk status --errors",
       "observed_at": "2026-10-08T15:00:00.000000Z"
     }
   ],

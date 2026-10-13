@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-core"
-description = "RagMonk domain models, errors, IDs, paths and shared contracts"
+description = "DocMonk domain models, errors, IDs, paths and shared contracts"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

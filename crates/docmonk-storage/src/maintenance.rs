@@ -1,4 +1,4 @@
-//! Read-only inspection and consistent snapshots of RagMonk databases, for
+//! Read-only inspection and consistent snapshots of DocMonk databases, for
 //! `backup`, `restore` and `doctor`. Nothing here writes to the database it
 //! inspects.
 

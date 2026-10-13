@@ -1,9 +1,9 @@
-//! `ragmonk update [check|status|install|rollback]`,
+//! `docmonk update [check|status|install|rollback]`,
 //! plus the throttled background check and the startup notice every
 //! other command runs. `update` alone is `update check`.
 
 use clap::Subcommand;
-use docmonk_core::{ErrorKind, RagMonkError};
+use docmonk_core::{DocMonkError, ErrorKind};
 use docmonk_update::release::Channel;
 use docmonk_update::{cache, check, install, versioning};
 
@@ -47,11 +47,11 @@ fn channel(home: &docmonk_core::paths::Home) -> Channel {
         .unwrap_or(Channel::Stable)
 }
 
-fn err(message: String) -> RagMonkError {
-    RagMonkError::new(ErrorKind::Generic, message)
+fn err(message: String) -> DocMonkError {
+    DocMonkError::new(ErrorKind::Generic, message)
 }
 
-pub fn run(cmd: Option<UpdateCommand>) -> Result<(), RagMonkError> {
+pub fn run(cmd: Option<UpdateCommand>) -> Result<(), DocMonkError> {
     match cmd.unwrap_or(UpdateCommand::Check { json: false }) {
         UpdateCommand::Check { json } => check_cmd(json),
         UpdateCommand::Status { json } => status(json),
@@ -68,7 +68,7 @@ pub fn run(cmd: Option<UpdateCommand>) -> Result<(), RagMonkError> {
     }
 }
 
-fn check_cmd(json: bool) -> Result<(), RagMonkError> {
+fn check_cmd(json: bool) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let installed = installed();
     let latest = check::check_now(home.root(), installed, channel(&home))
@@ -88,14 +88,14 @@ fn check_cmd(json: bool) -> Result<(), RagMonkError> {
     if available {
         println!("Update available. Run:");
         println!();
-        println!("    ragmonk update install");
+        println!("    docmonk update install");
     } else {
-        println!("RagMonk {installed} is up to date.");
+        println!("DocMonk {installed} is up to date.");
     }
     Ok(())
 }
 
-fn status(json: bool) -> Result<(), RagMonkError> {
+fn status(json: bool) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let installed = installed();
     let Some(cached) = cache::read(home.root()) else {
@@ -108,7 +108,7 @@ fn status(json: bool) -> Result<(), RagMonkError> {
             }));
         }
         println!("Installed: {installed}");
-        println!("Latest:    unknown -- run `ragmonk update check`");
+        println!("Latest:    unknown -- run `docmonk update check`");
         return Ok(());
     };
     let label = if versioning::is_newer(&cached.latest_version, installed) {
@@ -131,7 +131,7 @@ fn status(json: bool) -> Result<(), RagMonkError> {
     Ok(())
 }
 
-fn install_cmd(json: bool) -> Result<(), RagMonkError> {
+fn install_cmd(json: bool) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let out = install::install_latest(home.root(), installed(), channel(&home)).map_err(err)?;
     if json {
@@ -141,29 +141,29 @@ fn install_cmd(json: bool) -> Result<(), RagMonkError> {
             "healthy": out.healthy,
         }))?;
     } else if !out.upgraded {
-        println!("RagMonk {} is already up to date.", out.installed_version);
+        println!("DocMonk {} is already up to date.", out.installed_version);
     } else {
-        println!("✓ Installed RagMonk {}", out.installed_version);
+        println!("✓ Installed DocMonk {}", out.installed_version);
         if out.healthy {
             println!("✓ Health check passed");
         } else {
-            println!("! Health check reported issues -- see `ragmonk doctor`");
+            println!("! Health check reported issues -- see `docmonk doctor`");
         }
-        println!("\nRagMonk {} is ready.", out.installed_version);
+        println!("\nDocMonk {} is ready.", out.installed_version);
     }
     if out.upgraded && !out.healthy {
-        return Err(RagMonkError::new(ErrorKind::HealthCheck, String::new()));
+        return Err(DocMonkError::new(ErrorKind::HealthCheck, String::new()));
     }
     Ok(())
 }
 
-fn rollback(json: bool) -> Result<(), RagMonkError> {
+fn rollback(json: bool) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let (from, to) = install::rollback(home.root()).map_err(err)?;
     if json {
         return print_json(&serde_json::json!({ "from_version": from, "installed_version": to }));
     }
-    println!("✓ Rolled back RagMonk {from} → {to}");
+    println!("✓ Rolled back DocMonk {from} → {to}");
     Ok(())
 }
 

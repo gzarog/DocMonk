@@ -13,7 +13,7 @@
 //!    edge/link counts of each source's visible relationship graph
 //!    generation (graph records are never scoped to a base build);
 //! 5. run heartbeats (`{prefix}-runtime`);
-//! 6. cluster health of the RagMonk indexes;
+//! 6. cluster health of the DocMonk indexes;
 //! 7. one cheap re-read of the active builds to detect a publication that
 //!    happened while reading (changed sources are re-read once).
 //!
@@ -67,7 +67,7 @@ pub struct FileErrorEvent {
     pub last_error_at: Option<String>,
 }
 
-/// Cluster health of the RagMonk indexes.
+/// Cluster health of the DocMonk indexes.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ClusterStatus {
     pub status: Option<String>,
@@ -480,7 +480,7 @@ impl ServerBackend {
         Ok(out)
     }
 
-    /// Health of the cluster as it affects the RagMonk indexes.
+    /// Health of the cluster as it affects the DocMonk indexes.
     pub fn cluster_status(&self) -> Result<ClusterStatus> {
         let names: Vec<String> = IndexKind::ALL.iter().map(|k| self.index(*k)).collect();
         let v = self.get_json(&format!(

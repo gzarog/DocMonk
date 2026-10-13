@@ -1,4 +1,4 @@
-//! Local ML for RagMonk: pinned model assets, pure-Rust
+//! Local ML for DocMonk: pinned model assets, pure-Rust
 //! (Candle) embeddings and the build finalizer that keeps every build's
 //! vectors complete under the current model.
 

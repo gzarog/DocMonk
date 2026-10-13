@@ -1,5 +1,5 @@
 //! Process and host probes shared by indexing runs, the daemon and
-//! `ragmonk status` (which never treats them as cluster-wide proof).
+//! `docmonk status` (which never treats them as cluster-wide proof).
 
 /// Whether process `pid` exists on this host (safe, cross-platform). An
 /// exited-but-unreaped child (zombie) is not running.

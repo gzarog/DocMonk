@@ -1,6 +1,6 @@
 //! The background daemon's lifecycle.
 //!
-//! `start` spawns `ragmonk daemon run` detached, logging to
+//! `start` spawns `docmonk daemon run` detached, logging to
 //! `logs/daemon.out.log`, records its PID and waits for its first health
 //! snapshot. `stop` signals it and waits. Status comes from the PID and
 //! health files; nothing talks to the daemon process directly.
@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use docmonk_core::paths::Home;
 use docmonk_indexing::coordinator::Options;
 use docmonk_indexing::coordinator::{Progress, Registry, SourceResult};
@@ -42,7 +42,7 @@ pub enum Stopped {
 }
 
 /// Spawns this executable's `daemon run` in its own process group.
-fn spawn(home: &Home) -> Result<u32, RagMonkError> {
+fn spawn(home: &Home) -> Result<u32, DocMonkError> {
     let log_path = home.logs_dir().join("daemon.out.log");
     std::fs::create_dir_all(home.logs_dir()).map_err(generic)?;
     let log = std::fs::OpenOptions::new()
@@ -73,7 +73,7 @@ fn spawn(home: &Home) -> Result<u32, RagMonkError> {
 }
 
 /// Starts the daemon unless one is running, and waits until it is healthy.
-pub fn start(home: &Home) -> Result<Started, RagMonkError> {
+pub fn start(home: &Home) -> Result<Started, DocMonkError> {
     if let Some(existing) = pid::running_daemon(home) {
         return Ok(Started::AlreadyRunning(existing.pid));
     }
@@ -92,7 +92,7 @@ pub fn start(home: &Home) -> Result<Started, RagMonkError> {
         std::thread::sleep(POLL);
     }
     pid::remove_pid_file(home);
-    Err(RagMonkError::usage(format!(
+    Err(DocMonkError::usage(format!(
         "daemon did not report healthy within {:.0}s; see {}",
         START_TIMEOUT.as_secs_f64(),
         home.logs_dir().join("daemon.out.log").display()
@@ -100,7 +100,7 @@ pub fn start(home: &Home) -> Result<Started, RagMonkError> {
 }
 
 /// Stops the running daemon and waits for it to exit.
-pub fn stop(home: &Home) -> Result<Stopped, RagMonkError> {
+pub fn stop(home: &Home) -> Result<Stopped, DocMonkError> {
     let Some(info) = pid::running_daemon(home) else {
         pid::remove_pid_file(home);
         return Ok(Stopped::NotRunning);
@@ -111,7 +111,7 @@ pub fn stop(home: &Home) -> Result<Stopped, RagMonkError> {
         std::thread::sleep(POLL);
     }
     if is_process_alive(info.pid) {
-        return Err(RagMonkError::usage(format!(
+        return Err(DocMonkError::usage(format!(
             "daemon (pid {}) did not stop within {:.0}s",
             info.pid,
             STOP_TIMEOUT.as_secs_f64()
@@ -121,7 +121,7 @@ pub fn stop(home: &Home) -> Result<Stopped, RagMonkError> {
     Ok(Stopped::Stopped(info.pid))
 }
 
-fn stop_flag() -> Result<Arc<AtomicBool>, RagMonkError> {
+fn stop_flag() -> Result<Arc<AtomicBool>, DocMonkError> {
     let flag = Arc::new(AtomicBool::new(false));
     #[cfg(unix)]
     for sig in [signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT] {
@@ -132,10 +132,10 @@ fn stop_flag() -> Result<Arc<AtomicBool>, RagMonkError> {
 
 /// Runs the daemon in this process until SIGTERM/SIGINT. `on_ready` is
 /// called with this process's PID once the daemon is running.
-pub fn run_foreground(home: &Home, on_ready: impl FnOnce(i64)) -> Result<(), RagMonkError> {
+pub fn run_foreground(home: &Home, on_ready: impl FnOnce(i64)) -> Result<(), DocMonkError> {
     let me = i64::from(std::process::id());
     if let Some(other) = pid::running_daemon(home).filter(|i| i.pid != me) {
-        return Err(RagMonkError::usage(format!(
+        return Err(DocMonkError::usage(format!(
             "daemon already running (pid {})",
             other.pid
         )));
@@ -223,10 +223,10 @@ pub fn run_foreground(home: &Home, on_ready: impl FnOnce(i64)) -> Result<(), Rag
 struct ServerCatalog(Arc<docmonk_backends::ServerBackend>);
 
 impl Catalog for ServerCatalog {
-    fn list_sources(&mut self, enabled_only: bool) -> Result<Vec<SourceRecord>, RagMonkError> {
+    fn list_sources(&mut self, enabled_only: bool) -> Result<Vec<SourceRecord>, DocMonkError> {
         crate::sources::Catalog::Server(self.0.clone()).list(enabled_only)
     }
-    fn get_source(&mut self, id: &str) -> Result<Option<SourceRecord>, RagMonkError> {
+    fn get_source(&mut self, id: &str) -> Result<Option<SourceRecord>, DocMonkError> {
         Ok(self
             .0
             .catalog_entry(id)
@@ -239,7 +239,7 @@ impl Catalog for ServerCatalog {
 /// (see [`crate::server_index`]).
 struct ServerRunner {
     home: docmonk_core::paths::Home,
-    cfg: docmonk_config::RagMonkConfig,
+    cfg: docmonk_config::DocMonkConfig,
     server: Arc<docmonk_backends::ServerBackend>,
     registry: Registry,
     opts: Options,
@@ -251,7 +251,7 @@ impl PassRunner for ServerRunner {
         source: &SourceRecord,
         request: &ScanRequest,
         progress: &mut dyn Progress,
-    ) -> Result<SourceResult, RagMonkError> {
+    ) -> Result<SourceResult, DocMonkError> {
         crate::server_index::run_source(
             &self.home,
             &self.cfg,
@@ -281,7 +281,7 @@ impl PassRunner for ServerRunner {
 /// lock): built when enabled, marked disabled otherwise.
 fn daemon_graph(
     home: &docmonk_core::paths::Home,
-    cfg: &docmonk_config::RagMonkConfig,
+    cfg: &docmonk_config::DocMonkConfig,
     backend: &crate::backend::Backend,
     source: &SourceRecord,
 ) -> String {

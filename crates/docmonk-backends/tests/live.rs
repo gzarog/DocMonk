@@ -1,7 +1,7 @@
 //! Real-cluster acceptance tests for the server index schema.
 //!
-//! Set `RAGMONK_TEST_OPENSEARCH_URL` / `RAGMONK_TEST_ELASTICSEARCH_URL` to a
-//! disposable test cluster. With `RAGMONK_REQUIRE_LIVE_SERVER=1` a missing
+//! Set `DOCMONK_TEST_OPENSEARCH_URL` / `DOCMONK_TEST_ELASTICSEARCH_URL` to a
+//! disposable test cluster. With `DOCMONK_REQUIRE_LIVE_SERVER=1` a missing
 //! URL is a failure instead of a skip (CI). The scenario creates and deletes
 //! uniquely named indexes, so never point these variables at a real
 //! deployment.
@@ -22,8 +22,8 @@ fn url(var: &str) -> Option<String> {
         Ok(u) if !u.is_empty() => Some(u),
         _ => {
             assert!(
-                std::env::var("RAGMONK_REQUIRE_LIVE_SERVER").as_deref() != Ok("1"),
-                "{var} is required when RAGMONK_REQUIRE_LIVE_SERVER=1"
+                std::env::var("DOCMONK_REQUIRE_LIVE_SERVER").as_deref() != Ok("1"),
+                "{var} is required when DOCMONK_REQUIRE_LIVE_SERVER=1"
             );
             eprintln!("skipping: {var} not set");
             None
@@ -232,7 +232,7 @@ fn scenario(base: &str, engine: Engine) {
         .unwrap();
     assert!(r.status < 300, "{}", String::from_utf8_lossy(&r.body));
     let err = backend(base, engine, &foreign, 4, 40).init().unwrap_err();
-    assert!(err.to_string().contains("not a RagMonk index"), "{err}");
+    assert!(err.to_string().contains("not a DocMonk index"), "{err}");
     let mapping = c
         .send(Method::Get, &format!("/{foreign}-files/_mapping"), None)
         .unwrap();
@@ -404,14 +404,14 @@ fn scenario(base: &str, engine: Engine) {
 
 #[test]
 fn opensearch_lifecycle() {
-    if let Some(u) = url("RAGMONK_TEST_OPENSEARCH_URL") {
+    if let Some(u) = url("DOCMONK_TEST_OPENSEARCH_URL") {
         scenario(&u, Engine::OpenSearch);
     }
 }
 
 #[test]
 fn elasticsearch_lifecycle() {
-    if let Some(u) = url("RAGMONK_TEST_ELASTICSEARCH_URL") {
+    if let Some(u) = url("DOCMONK_TEST_ELASTICSEARCH_URL") {
         scenario(&u, Engine::Elasticsearch);
     }
 }
@@ -660,7 +660,7 @@ fn schema_identity(base: &str, engine: Engine) {
             Method::Put,
             &format!("/{prefix}-files"),
             Some((
-                br#"{"mappings":{"_meta":{"schema":"ragmonk","schema_version":2,"index_kind":"files","vector":null},"properties":{"x":{"type":"keyword"}}}}"#,
+                br#"{"mappings":{"_meta":{"schema":"docmonk","schema_version":2,"index_kind":"files","vector":null},"properties":{"x":{"type":"keyword"}}}}"#,
                 "application/json",
             )),
         )
@@ -679,21 +679,21 @@ fn schema_identity(base: &str, engine: Engine) {
 
 #[test]
 fn opensearch_schema_identity() {
-    if let Some(u) = url("RAGMONK_TEST_OPENSEARCH_URL") {
+    if let Some(u) = url("DOCMONK_TEST_OPENSEARCH_URL") {
         schema_identity(&u, Engine::OpenSearch);
     }
 }
 
 #[test]
 fn elasticsearch_schema_identity() {
-    if let Some(u) = url("RAGMONK_TEST_ELASTICSEARCH_URL") {
+    if let Some(u) = url("DOCMONK_TEST_ELASTICSEARCH_URL") {
         schema_identity(&u, Engine::Elasticsearch);
     }
 }
 
 #[test]
 fn opensearch_p0_catalog_leases_vectors() {
-    if let Some(u) = url("RAGMONK_TEST_OPENSEARCH_URL") {
+    if let Some(u) = url("DOCMONK_TEST_OPENSEARCH_URL") {
         catalog_paging(&u, Engine::OpenSearch);
         leases_and_grace(&u, Engine::OpenSearch);
         vectors(&u, Engine::OpenSearch);
@@ -702,7 +702,7 @@ fn opensearch_p0_catalog_leases_vectors() {
 
 #[test]
 fn elasticsearch_p0_catalog_leases_vectors() {
-    if let Some(u) = url("RAGMONK_TEST_ELASTICSEARCH_URL") {
+    if let Some(u) = url("DOCMONK_TEST_ELASTICSEARCH_URL") {
         catalog_paging(&u, Engine::Elasticsearch);
         leases_and_grace(&u, Engine::Elasticsearch);
         vectors(&u, Engine::Elasticsearch);

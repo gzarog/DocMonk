@@ -10,7 +10,7 @@
   <form class="inline" hx-post="/backups" hx-swap="none">
     <button class="btn primary" type="submit">Create backup</button>
   </form>
-  <span class="muted">Backups are written to the RagMonk home <code>backups/</code> directory.</span>
+  <span class="muted">Backups are written to the DocMonk home <code>backups/</code> directory.</span>
 </div>
 
 <div class="panel">
@@ -24,7 +24,7 @@
         <td class="right">
           <a class="btn small" href="/backups/download/{{ b.name }}">Download</a>
           <form class="inline" hx-post="/backups/restore" hx-swap="none"
-                hx-confirm="Restore this backup? This REPLACES the current RagMonk databases. The daemon will be restarted.">
+                hx-confirm="Restore this backup? This REPLACES the current DocMonk databases. The daemon will be restarted.">
             <input type="hidden" name="name" value="{{ b.name }}">
             <button class="btn small danger" type="submit">Restore</button>
           </form>
@@ -41,7 +41,7 @@
 <div class="panel">
   <table>
     <tr><th>Installed version</th><td>{{ update.installed_version }}</td></tr>
-    <tr><th>Latest known</th><td>{{ update.latest_version or "unknown — run `ragmonk update check`" }}</td></tr>
+    <tr><th>Latest known</th><td>{{ update.latest_version or "unknown — run `docmonk update check`" }}</td></tr>
     <tr><th>Update available</th><td>
       {% if update.update_available is none %}unknown{% else %}{{ "yes" if update.update_available else "no" }}{% endif %}
     </td></tr>
@@ -49,7 +49,7 @@
     <tr><th>Last checked</th><td>{{ update.last_checked or "—" }}</td></tr>
   </table>
   {% if update.update_available %}
-  <p class="alert info">A newer version is available. Update from the CLI: <code>ragmonk update install</code>.</p>
+  <p class="alert info">A newer version is available. Update from the CLI: <code>docmonk update install</code>.</p>
   {% endif %}
 </div>
 {% endblock %}

@@ -1,6 +1,6 @@
 //! Server status against real, disposable OpenSearch and Elasticsearch
-//! clusters (`RAGMONK_TEST_{OPENSEARCH,ELASTICSEARCH}_URL`; with
-//! `RAGMONK_REQUIRE_LIVE_SERVER=1` a missing URL fails instead of
+//! clusters (`DOCMONK_TEST_{OPENSEARCH,ELASTICSEARCH}_URL`; with
+//! `DOCMONK_REQUIRE_LIVE_SERVER=1` a missing URL fails instead of
 //! skipping). Each scenario uses a fresh unique prefix and deletes it.
 //!
 //! * 150 registered sources: one snapshot costs ≤ 30 HTTP requests and
@@ -32,8 +32,8 @@ fn url(var: &str) -> Option<String> {
         Ok(u) if !u.is_empty() => Some(u),
         _ => {
             assert!(
-                std::env::var("RAGMONK_REQUIRE_LIVE_SERVER").as_deref() != Ok("1"),
-                "{var} is required when RAGMONK_REQUIRE_LIVE_SERVER=1"
+                std::env::var("DOCMONK_REQUIRE_LIVE_SERVER").as_deref() != Ok("1"),
+                "{var} is required when DOCMONK_REQUIRE_LIVE_SERVER=1"
             );
             eprintln!("skipping: {var} not set");
             None
@@ -373,14 +373,14 @@ fn scenario(base: &str, engine: Engine) {
 
 #[test]
 fn opensearch_status() {
-    if let Some(u) = url("RAGMONK_TEST_OPENSEARCH_URL") {
+    if let Some(u) = url("DOCMONK_TEST_OPENSEARCH_URL") {
         scenario(&u, Engine::OpenSearch);
     }
 }
 
 #[test]
 fn elasticsearch_status() {
-    if let Some(u) = url("RAGMONK_TEST_ELASTICSEARCH_URL") {
+    if let Some(u) = url("DOCMONK_TEST_ELASTICSEARCH_URL") {
         scenario(&u, Engine::Elasticsearch);
     }
 }
@@ -476,8 +476,8 @@ fn bench(base: &str, engine: Engine) -> serde_json::Value {
 #[ignore = "benchmark: cargo test --release -p docmonk-status --test live_server -- --ignored"]
 fn bench_status_150_sources() {
     for (var, engine) in [
-        ("RAGMONK_TEST_OPENSEARCH_URL", Engine::OpenSearch),
-        ("RAGMONK_TEST_ELASTICSEARCH_URL", Engine::Elasticsearch),
+        ("DOCMONK_TEST_OPENSEARCH_URL", Engine::OpenSearch),
+        ("DOCMONK_TEST_ELASTICSEARCH_URL", Engine::Elasticsearch),
     ] {
         if let Some(u) = url(var) {
             println!("BENCH {}", bench(&u, engine));

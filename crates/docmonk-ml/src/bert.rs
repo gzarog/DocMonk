@@ -140,7 +140,7 @@ struct RowBias<'a> {
 
 impl CustomOp1 for RowBias<'_> {
     fn name(&self) -> &'static str {
-        "ragmonk-row-bias"
+        "docmonk-row-bias"
     }
 
     fn cpu_fwd(&self, storage: &CpuStorage, layout: &Layout) -> Result<(CpuStorage, Shape)> {
@@ -174,7 +174,7 @@ struct MaskedSoftmax<'a> {
 
 impl CustomOp1 for MaskedSoftmax<'_> {
     fn name(&self) -> &'static str {
-        "ragmonk-masked-softmax"
+        "docmonk-masked-softmax"
     }
 
     fn cpu_fwd(&self, storage: &CpuStorage, layout: &Layout) -> Result<(CpuStorage, Shape)> {

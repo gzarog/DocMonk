@@ -1,8 +1,8 @@
 //! Embedding vectors against fixtures/expected/embeddings-minilm.json
 //! (cosine tolerance).
 //!
-//! Needs the pinned model under `RAGMONK_MODELS_DIR/<slug>`. Without it the
-//! test is skipped, unless `RAGMONK_REQUIRE_MODELS=1` (set in CI).
+//! Needs the pinned model under `DOCMONK_MODELS_DIR/<slug>`. Without it the
+//! test is skipped, unless `DOCMONK_REQUIRE_MODELS=1` (set in CI).
 
 use std::path::PathBuf;
 
@@ -14,16 +14,16 @@ fn repo_root() -> PathBuf {
 }
 
 pub fn model_dir() -> Option<PathBuf> {
-    let dir = std::env::var_os("RAGMONK_MODELS_DIR")
+    let dir = std::env::var_os("DOCMONK_MODELS_DIR")
         .map(PathBuf::from)
         .map(|d| d.join(DEFAULT_EMBEDDING_MODEL.slug));
     match dir {
         Some(d) if d.join("model.safetensors").exists() => Some(d),
-        _ if std::env::var("RAGMONK_REQUIRE_MODELS").as_deref() == Ok("1") => {
-            panic!("RAGMONK_REQUIRE_MODELS=1 but the embedding model is not installed")
+        _ if std::env::var("DOCMONK_REQUIRE_MODELS").as_deref() == Ok("1") => {
+            panic!("DOCMONK_REQUIRE_MODELS=1 but the embedding model is not installed")
         }
         _ => {
-            eprintln!("skipping: embedding model not installed (set RAGMONK_MODELS_DIR)");
+            eprintln!("skipping: embedding model not installed (set DOCMONK_MODELS_DIR)");
             None
         }
     }

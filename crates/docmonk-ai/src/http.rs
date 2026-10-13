@@ -15,7 +15,7 @@ use crate::errors::provider_error;
 use crate::prompt::{build_messages, AiAnswer, AiRequest, AiUsage};
 use crate::text::json_body;
 use crate::AiProvider;
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 
 pub const OPENAI_DEFAULT_MODEL: &str = "gpt-4o-mini";
 pub const OPENAI_DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
@@ -58,7 +58,7 @@ fn sdk_status_error(status: u16, body: &str) -> String {
 fn sdk_call(
     label: &str,
     request: reqwest::blocking::RequestBuilder,
-) -> Result<Value, RagMonkError> {
+) -> Result<Value, DocMonkError> {
     let response: Response = request.send().map_err(|e| {
         provider_error(format!(
             "{label} request failed: {}",
@@ -154,7 +154,7 @@ impl OpenAiProvider {
 }
 
 impl AiProvider for OpenAiProvider {
-    fn answer(&mut self, request: &AiRequest) -> Result<AiAnswer, RagMonkError> {
+    fn answer(&mut self, request: &AiRequest) -> Result<AiAnswer, DocMonkError> {
         let body = json!({"model": self.model, "messages": build_messages(request)});
         let r = sdk_call(
             self.label,
@@ -210,7 +210,7 @@ impl AnthropicProvider {
 }
 
 impl AiProvider for AnthropicProvider {
-    fn answer(&mut self, request: &AiRequest) -> Result<AiAnswer, RagMonkError> {
+    fn answer(&mut self, request: &AiRequest) -> Result<AiAnswer, DocMonkError> {
         let messages = build_messages(request);
         let all = messages.as_array().cloned().unwrap_or_default();
         let system = all
@@ -272,7 +272,7 @@ impl OllamaProvider {
 }
 
 impl AiProvider for OllamaProvider {
-    fn answer(&mut self, request: &AiRequest) -> Result<AiAnswer, RagMonkError> {
+    fn answer(&mut self, request: &AiRequest) -> Result<AiAnswer, DocMonkError> {
         let body = json!({
             "model": self.model,
             "messages": build_messages(request),

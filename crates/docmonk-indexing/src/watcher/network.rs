@@ -122,7 +122,7 @@ impl NetworkWatcher {
         let stop = Arc::new((Mutex::new(false), Condvar::new()));
         let s = Arc::clone(&stop);
         let thread = std::thread::Builder::new()
-            .name("ragmonk-network-poll".into())
+            .name("docmonk-network-poll".into())
             .spawn(move || loop {
                 let g = s.0.lock().unwrap_or_else(|p| p.into_inner());
                 let (g, _) =

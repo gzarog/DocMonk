@@ -44,7 +44,7 @@ jobs:
           scripts/ci_changes.sh --self-test
           scripts/ci_changes.sh < "$RUNNER_TEMP/changed" | tee -a "$GITHUB_OUTPUT"
 
-  # The former product name must not come back, and RagMonk 1.0 stays
+  # The former product name must not come back, and DocMonk 1.0 stays
   # fresh-install/fresh-index only (ADR 0032): the clean-slate baseline
   # only shrinks.
   repository-audits:
@@ -75,10 +75,10 @@ jobs:
       - name: cargo test
         run: cargo test --workspace --no-fail-fast
         env:
-          RAGMONK_OCR_MODELS_DIR: ${{ runner.temp }}/ocr-models
-          RAGMONK_REQUIRE_OCR: "1"
-          RAGMONK_MODELS_DIR: ${{ runner.temp }}/models
-          RAGMONK_REQUIRE_MODELS: "1"
+          DOCMONK_OCR_MODELS_DIR: ${{ runner.temp }}/ocr-models
+          DOCMONK_REQUIRE_OCR: "1"
+          DOCMONK_MODELS_DIR: ${{ runner.temp }}/models
+          DOCMONK_REQUIRE_MODELS: "1"
       # Release-mode build only on pushes; PRs stop at the debug tests.
       - name: cargo build --release
         if: github.event_name == 'push'
@@ -110,10 +110,10 @@ jobs:
       - name: cargo test
         run: cargo test --workspace --no-fail-fast
         env:
-          RAGMONK_OCR_MODELS_DIR: ${{ runner.temp }}/ocr-models
-          RAGMONK_REQUIRE_OCR: "1"
-          RAGMONK_MODELS_DIR: ${{ runner.temp }}/models
-          RAGMONK_REQUIRE_MODELS: "1"
+          DOCMONK_OCR_MODELS_DIR: ${{ runner.temp }}/ocr-models
+          DOCMONK_REQUIRE_OCR: "1"
+          DOCMONK_MODELS_DIR: ${{ runner.temp }}/models
+          DOCMONK_REQUIRE_MODELS: "1"
       - name: cargo build --release
         run: cargo build --workspace --release
 
@@ -149,15 +149,15 @@ jobs:
           --health-cmd "curl -fs http://localhost:9200/_cluster/health || exit 1"
           --health-interval 10s --health-timeout 5s --health-retries 30
     env:
-      RAGMONK_TEST_OPENSEARCH_URL: http://localhost:9201
-      RAGMONK_TEST_ELASTICSEARCH_URL: http://localhost:9202
-      RAGMONK_REQUIRE_LIVE_SERVER: "1"
+      DOCMONK_TEST_OPENSEARCH_URL: http://localhost:9201
+      DOCMONK_TEST_ELASTICSEARCH_URL: http://localhost:9202
+      DOCMONK_REQUIRE_LIVE_SERVER: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - name: Wait for clusters
         run: |
-          for url in "$RAGMONK_TEST_OPENSEARCH_URL" "$RAGMONK_TEST_ELASTICSEARCH_URL"; do
+          for url in "$DOCMONK_TEST_OPENSEARCH_URL" "$DOCMONK_TEST_ELASTICSEARCH_URL"; do
             for i in $(seq 1 60); do
               curl -fs "$url/_cluster/health?wait_for_status=yellow&timeout=5s" && break
               sleep 5
@@ -182,8 +182,8 @@ jobs:
 
   # The native installers end to end, against release archives
   # packaged from this commit's build and served from a local directory
-  # (RAGMONK_DOWNLOAD_BASE): install, re-install a second version, then
-  # `ragmonk update rollback` back to the first.
+  # (DOCMONK_DOWNLOAD_BASE): install, re-install a second version, then
+  # `docmonk update rollback` back to the first.
   install-script-tests:
     name: Install script (${{ matrix.os }})
     strategy:
@@ -201,8 +201,8 @@ jobs:
       # runner.temp is not available in job-level env.
       - name: Paths
         run: |
-          for kv in DIST=dist RAGMONK_DOWNLOAD_BASE=dist RAGMONK_INSTALL_DIR=ragmonk-install \
-                    RAGMONK_BIN_DIR=ragmonk-bin RAGMONK_HOME=ragmonk-home; do
+          for kv in DIST=dist DOCMONK_DOWNLOAD_BASE=dist DOCMONK_INSTALL_DIR=docmonk-install \
+                    DOCMONK_BIN_DIR=docmonk-bin DOCMONK_HOME=docmonk-home; do
             echo "${kv%%=*}=$RUNNER_TEMP/${kv#*=}" >> "$GITHUB_ENV"
           done
       - uses: actions/checkout@v4
@@ -211,29 +211,29 @@ jobs:
         run: |
           cargo build -p docmonk-cli
           for v in 0.9.0 0.9.1; do
-            cargo xtask package --binary target/debug/ragmonk \
+            cargo xtask package --binary target/debug/docmonk \
               --version "$v" --target "${{ matrix.target }}" --out "$DIST"
           done
           cat "$DIST/SHA256SUMS"
       - name: Install 0.9.0
-        run: RAGMONK_VERSION=0.9.0 sh ./install.sh
+        run: DOCMONK_VERSION=0.9.0 sh ./install.sh
       - name: Verify the installed CLI works
         run: |
-          "$RAGMONK_BIN_DIR/ragmonk" version
-          "$RAGMONK_BIN_DIR/ragmonk" doctor
-          grep -q '"install_method": "native"' "$RAGMONK_HOME/install_info.json"
+          "$DOCMONK_BIN_DIR/docmonk" version
+          "$DOCMONK_BIN_DIR/docmonk" doctor
+          grep -q '"install_method": "native"' "$DOCMONK_HOME/install_info.json"
       - name: A tampered archive is refused
         run: |
-          cp -R "$DIST" "$RUNNER_TEMP/bad" && echo x >> "$RUNNER_TEMP/bad/ragmonk-0.9.1-${{ matrix.target }}.tar.gz"
-          if RAGMONK_VERSION=0.9.1 RAGMONK_DOWNLOAD_BASE="$RUNNER_TEMP/bad" sh ./install.sh; then exit 1; fi
-          test "$(readlink "$RAGMONK_INSTALL_DIR/current")" = "versions/0.9.0"
+          cp -R "$DIST" "$RUNNER_TEMP/bad" && echo x >> "$RUNNER_TEMP/bad/docmonk-0.9.1-${{ matrix.target }}.tar.gz"
+          if DOCMONK_VERSION=0.9.1 DOCMONK_DOWNLOAD_BASE="$RUNNER_TEMP/bad" sh ./install.sh; then exit 1; fi
+          test "$(readlink "$DOCMONK_INSTALL_DIR/current")" = "versions/0.9.0"
       - name: Install 0.9.1, then roll back
         run: |
-          RAGMONK_VERSION=0.9.1 sh ./install.sh
-          test "$(readlink "$RAGMONK_INSTALL_DIR/current")" = "versions/0.9.1"
-          "$RAGMONK_BIN_DIR/ragmonk" update rollback
-          test "$(readlink "$RAGMONK_INSTALL_DIR/current")" = "versions/0.9.0"
-          "$RAGMONK_BIN_DIR/ragmonk" version
+          DOCMONK_VERSION=0.9.1 sh ./install.sh
+          test "$(readlink "$DOCMONK_INSTALL_DIR/current")" = "versions/0.9.1"
+          "$DOCMONK_BIN_DIR/docmonk" update rollback
+          test "$(readlink "$DOCMONK_INSTALL_DIR/current")" = "versions/0.9.0"
+          "$DOCMONK_BIN_DIR/docmonk" version
 
   install-script-tests-windows:
     name: Install script (windows-latest)
@@ -245,8 +245,8 @@ jobs:
       - name: Paths
         run: |
           $t = $env:RUNNER_TEMP
-          @("DIST=$t\dist", "RAGMONK_DOWNLOAD_BASE=$t\dist", "RAGMONK_INSTALL_DIR=$t\ragmonk-install",
-            "RAGMONK_BIN_DIR=$t\ragmonk-bin", "RAGMONK_HOME=$t\ragmonk-home") |
+          @("DIST=$t\dist", "DOCMONK_DOWNLOAD_BASE=$t\dist", "DOCMONK_INSTALL_DIR=$t\docmonk-install",
+            "DOCMONK_BIN_DIR=$t\docmonk-bin", "DOCMONK_HOME=$t\docmonk-home") |
             Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
@@ -255,39 +255,39 @@ jobs:
           cargo build -p docmonk-cli
           if ($LASTEXITCODE -ne 0) { throw "build failed" }
           foreach ($v in "0.9.0", "0.9.1") {
-            cargo xtask package --binary target/debug/ragmonk.exe `
+            cargo xtask package --binary target/debug/docmonk.exe `
               --version $v --target x86_64-pc-windows-msvc --out $env:DIST
             if ($LASTEXITCODE -ne 0) { throw "packaging failed" }
           }
       - name: Install 0.9.0
         run: |
-          $env:RAGMONK_VERSION = "0.9.0"
+          $env:DOCMONK_VERSION = "0.9.0"
           ./install.ps1
       - name: Verify the installed CLI works
         run: |
-          & "$env:RAGMONK_BIN_DIR\ragmonk.cmd" version
+          & "$env:DOCMONK_BIN_DIR\docmonk.cmd" version
           if ($LASTEXITCODE -ne 0) { throw "version failed" }
-          & "$env:RAGMONK_BIN_DIR\ragmonk.cmd" doctor
+          & "$env:DOCMONK_BIN_DIR\docmonk.cmd" doctor
           if ($LASTEXITCODE -ne 0) { throw "doctor failed" }
-          $info = Get-Content "$env:RAGMONK_HOME\install_info.json" -Raw | ConvertFrom-Json
+          $info = Get-Content "$env:DOCMONK_HOME\install_info.json" -Raw | ConvertFrom-Json
           if ($info.install_method -ne "native") { throw "unexpected install_method: $($info.install_method)" }
       # Windows cannot overwrite a running exe: re-installing while the
-      # daemon runs from bin\ragmonk.exe proves the rename-based swap.
+      # daemon runs from bin\docmonk.exe proves the rename-based swap.
       - name: Install 0.9.1 while the daemon holds the current exe, then roll back
         run: |
-          & "$env:RAGMONK_BIN_DIR\ragmonk.cmd" daemon start
+          & "$env:DOCMONK_BIN_DIR\docmonk.cmd" daemon start
           if ($LASTEXITCODE -ne 0) { throw "daemon start failed" }
           try {
-            $env:RAGMONK_VERSION = "0.9.1"
+            $env:DOCMONK_VERSION = "0.9.1"
             ./install.ps1
           } finally {
-            & "$env:RAGMONK_BIN_DIR\ragmonk.cmd" daemon stop
+            & "$env:DOCMONK_BIN_DIR\docmonk.cmd" daemon stop
           }
-          if ((Get-Content "$env:RAGMONK_INSTALL_DIR\current" -Raw).Trim() -ne "0.9.1") { throw "not switched" }
-          & "$env:RAGMONK_BIN_DIR\ragmonk.cmd" update rollback
+          if ((Get-Content "$env:DOCMONK_INSTALL_DIR\current" -Raw).Trim() -ne "0.9.1") { throw "not switched" }
+          & "$env:DOCMONK_BIN_DIR\docmonk.cmd" update rollback
           if ($LASTEXITCODE -ne 0) { throw "rollback failed" }
-          if ((Get-Content "$env:RAGMONK_INSTALL_DIR\current" -Raw).Trim() -ne "0.9.0") { throw "not rolled back" }
-          & "$env:RAGMONK_BIN_DIR\ragmonk.cmd" version
+          if ((Get-Content "$env:DOCMONK_INSTALL_DIR\current" -Raw).Trim() -ne "0.9.0") { throw "not rolled back" }
+          & "$env:DOCMONK_BIN_DIR\docmonk.cmd" version
           if ($LASTEXITCODE -ne 0) { throw "version failed after rollback" }
 
   # The release image builds (amd64; arm64 builds natively in
@@ -304,19 +304,19 @@ jobs:
         with:
           context: .
           file: Dockerfile
-          build-args: RAGMONK_VERSION=0.9.0
-          tags: ragmonk:ci
+          build-args: DOCMONK_VERSION=0.9.0
+          tags: docmonk:ci
           load: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Smoke test
         run: |
-          docker run --rm ragmonk:ci version --json | grep -q '"0.9.0"'
+          docker run --rm docmonk:ci version --json | grep -q '"0.9.0"'
           # clean-slate-audit: allow-start (asserts the image has no interpreter)
-          docker run --rm --entrypoint sh ragmonk:ci -c '! command -v python3 && ! command -v python'
+          docker run --rm --entrypoint sh docmonk:ci -c '! command -v python3 && ! command -v python'
           # clean-slate-audit: allow-end
-          docker run --rm --entrypoint sh ragmonk:ci -c 'ragmonk init && ragmonk doctor'
-          test -n "$(docker run --rm --entrypoint ls ragmonk:ci /opt/ragmonk/models/all-minilm-l6-v2/model.safetensors)"
+          docker run --rm --entrypoint sh docmonk:ci -c 'docmonk init && docmonk doctor'
+          test -n "$(docker run --rm --entrypoint ls docmonk:ci /opt/docmonk/models/all-minilm-l6-v2/model.safetensors)"
 
   # The one stable required status. Mandatory jobs must succeed; on
   # pushes every job is mandatory; on PRs a conditional job may be

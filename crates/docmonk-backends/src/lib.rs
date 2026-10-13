@@ -1,4 +1,4 @@
-//! RagMonk server backends (OpenSearch and Elasticsearch).
+//! DocMonk server backends (OpenSearch and Elasticsearch).
 //!
 //! * [`schema`]: the index set `{prefix}-{source-state,files,code,
 //!   documents,chunks,relationships,runtime}` with strict mappings,

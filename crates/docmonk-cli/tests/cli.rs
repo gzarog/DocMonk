@@ -1,12 +1,12 @@
 use std::process::Command;
 
-fn ragmonk() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_ragmonk"))
+fn docmonk() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_docmonk"))
 }
 
 #[test]
 fn version_json_envelope() {
-    let out = ragmonk().args(["version", "--json"]).output().unwrap();
+    let out = docmonk().args(["version", "--json"]).output().unwrap();
     assert!(out.status.success());
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["schema_version"], "1");
@@ -15,18 +15,18 @@ fn version_json_envelope() {
 
 #[test]
 fn unknown_command_exits_with_invalid_arguments_code() {
-    let out = ragmonk().arg("definitely-not-a-command").output().unwrap();
+    let out = docmonk().arg("definitely-not-a-command").output().unwrap();
     assert_eq!(out.status.code(), Some(2));
 }
 
 fn with_home(home: &std::path::Path) -> Command {
-    let mut cmd = ragmonk();
+    let mut cmd = docmonk();
     for (key, _) in std::env::vars_os() {
-        if key.to_string_lossy().starts_with("RAGMONK_") {
+        if key.to_string_lossy().starts_with("DOCMONK_") {
             cmd.env_remove(key);
         }
     }
-    cmd.env("RAGMONK_HOME", home);
+    cmd.env("DOCMONK_HOME", home);
     cmd
 }
 
@@ -139,8 +139,8 @@ fn server_requires_server_mode() {
     assert!(out.status.success());
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["data"]["indexes"].as_array().unwrap().len(), 7);
-    assert_eq!(v["data"]["indexes"][6]["name"], "ragmonk-runtime");
-    assert_eq!(v["data"]["indexes"][0]["name"], "ragmonk-source-state");
+    assert_eq!(v["data"]["indexes"][6]["name"], "docmonk-runtime");
+    assert_eq!(v["data"]["indexes"][0]["name"], "docmonk-source-state");
 }
 
 #[test]
@@ -162,6 +162,6 @@ fn incompatible_control_database_is_refused_not_converted() {
         .unwrap();
     assert!(!out.status.success());
     let err = String::from_utf8_lossy(&out.stderr);
-    assert!(err.contains("ragmonk index"), "{err}");
+    assert!(err.contains("docmonk index"), "{err}");
     assert_eq!(std::fs::read(&db).unwrap(), before, "never altered");
 }

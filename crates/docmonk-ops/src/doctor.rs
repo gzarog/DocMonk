@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use docmonk_core::errors::{ErrorKind, RagMonkError};
+use docmonk_core::errors::{DocMonkError, ErrorKind};
 use docmonk_core::paths::{project_id_for_canonical, Home};
 use docmonk_indexing::lock::{inspect_lock, LockState};
 use docmonk_indexing::scan::check_root_accessible;
@@ -68,7 +68,7 @@ fn free_gb(path: &Path) -> Option<f64> {
         .map(|d| d.available_space() as f64 / 1024f64.powi(3))
 }
 
-pub fn run_checks(home: &Home) -> Result<Vec<Section>, RagMonkError> {
+pub fn run_checks(home: &Home) -> Result<Vec<Section>, DocMonkError> {
     let cfg = load(home)?;
     if cfg.storage.mode == "server" {
         return server_checks(home);
@@ -76,7 +76,7 @@ pub fn run_checks(home: &Home) -> Result<Vec<Section>, RagMonkError> {
     let cp = control_plane(home)?;
     let layout = StorageLayout::new(home);
     let db =
-        |e: docmonk_storage::StorageError| RagMonkError::new(ErrorKind::Database, e.to_string());
+        |e: docmonk_storage::StorageError| DocMonkError::new(ErrorKind::Database, e.to_string());
     let mut sections = vec![Section {
         name: "Core",
         checks: vec![check(
@@ -237,7 +237,7 @@ pub fn run_checks(home: &Home) -> Result<Vec<Section>, RagMonkError> {
 
 /// The configured AI provider and privacy posture; offline and
 /// secret-free, never more than a warning (`_ai_section`).
-fn ai_section(cfg: &docmonk_config::RagMonkConfig) -> Section {
+fn ai_section(cfg: &docmonk_config::DocMonkConfig) -> Section {
     let provider = &cfg.ai.provider;
     let allowed = cfg.privacy.external_ai_allowed;
     let mut checks = vec![check(
@@ -262,7 +262,7 @@ fn ai_section(cfg: &docmonk_config::RagMonkConfig) -> Section {
             "codex" => check(
                 "runtime",
                 "warn",
-                "codex runtime not found on PATH; run 'ragmonk ai login codex' setup",
+                "codex runtime not found on PATH; run 'docmonk ai login codex' setup",
             ),
             // The Rust adapter drives the Copilot CLI (ADR 0026).
             _ if found("copilot") => check("runtime", "ok", "Copilot CLI found on PATH"),
@@ -277,9 +277,9 @@ fn ai_section(cfg: &docmonk_config::RagMonkConfig) -> Section {
 }
 
 fn tokenizer_section(
-    cfg: &docmonk_config::RagMonkConfig,
+    cfg: &docmonk_config::DocMonkConfig,
     stores: &[(String, ProjectStore, String)],
-) -> Result<Section, RagMonkError> {
+) -> Result<Section, DocMonkError> {
     use docmonk_documents::tokenizer as t;
     let fp = t::tokenizer_fingerprint();
     let mut checks = vec![
@@ -326,10 +326,10 @@ fn tokenizer_section(
                 "SELECT embedding_text FROM chunks
                  WHERE build_id = ?1 AND embedding_text IS NOT NULL AND embedding_text <> ''",
             )
-            .map_err(|e| RagMonkError::new(ErrorKind::Database, e.to_string()))?;
+            .map_err(|e| DocMonkError::new(ErrorKind::Database, e.to_string()))?;
         let texts = stmt
             .query_map([build], |r| r.get::<_, String>(0))
-            .map_err(|e| RagMonkError::new(ErrorKind::Database, e.to_string()))?;
+            .map_err(|e| DocMonkError::new(ErrorKind::Database, e.to_string()))?;
         for text in texts.flatten() {
             let n = tok.count(&text, true);
             scanned += 1;
@@ -357,7 +357,7 @@ fn tokenizer_section(
     })
 }
 
-fn server_section(cfg: &docmonk_config::RagMonkConfig) -> Section {
+fn server_section(cfg: &docmonk_config::DocMonkConfig) -> Section {
     let s = &cfg.storage.server;
     let mut checks = vec![check(
         "engine",
@@ -401,7 +401,7 @@ fn server_section(cfg: &docmonk_config::RagMonkConfig) -> Section {
                             "indices",
                             "warn",
                             format!(
-                                "{}/{n} indices present; missing: {} (run 'ragmonk server init' to create)",
+                                "{}/{n} indices present; missing: {} (run 'docmonk server init' to create)",
                                 n - missing.len(),
                                 missing.join(", ")
                             ),
@@ -435,9 +435,9 @@ pub fn sections_json(sections: &[Section], result: &str) -> Value {
 }
 
 /// Unhealthy: exit with the health-check code and no extra error line.
-pub fn verdict(result: &str) -> Result<(), RagMonkError> {
+pub fn verdict(result: &str) -> Result<(), DocMonkError> {
     if result == "UNHEALTHY" {
-        return Err(RagMonkError::new(ErrorKind::HealthCheck, ""));
+        return Err(DocMonkError::new(ErrorKind::HealthCheck, ""));
     }
     Ok(())
 }
@@ -445,7 +445,7 @@ pub fn verdict(result: &str) -> Result<(), RagMonkError> {
 /// Server-mode checks: the cluster is the authoritative store, so its
 /// reachability, schema and per-source state are what is checked; no
 /// local database is opened.
-fn server_checks(home: &Home) -> Result<Vec<Section>, RagMonkError> {
+fn server_checks(home: &Home) -> Result<Vec<Section>, DocMonkError> {
     let mut sections = vec![Section {
         name: "Core",
         checks: vec![check(
@@ -490,7 +490,7 @@ fn server_checks(home: &Home) -> Result<Vec<Section>, RagMonkError> {
             "schema",
             "fail",
             format!(
-                "missing indexes: {}; run `ragmonk server init`",
+                "missing indexes: {}; run `docmonk server init`",
                 missing.join(", ")
             ),
         ),

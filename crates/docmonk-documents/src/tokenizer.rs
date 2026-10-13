@@ -88,7 +88,7 @@ fn verify_assets() -> Result<(), TokenizerAssetError> {
     for (name, expected) in TOKENIZER_ASSET_MANIFEST {
         let Some((_, data)) = ASSETS.iter().find(|(n, _)| n == name) else {
             return Err(TokenizerAssetError(format!(
-                "bundled tokenizer asset {name:?} is missing -- the RagMonk build is incomplete"
+                "bundled tokenizer asset {name:?} is missing -- the DocMonk build is incomplete"
             )));
         };
         let actual = format!("{:x}", Sha256::digest(data));

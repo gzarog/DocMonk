@@ -74,9 +74,9 @@ pub fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
-/// `RAGMONK_MODELS_DIR` when it holds the default model.
+/// `DOCMONK_MODELS_DIR` when it holds the default model.
 pub fn models_root() -> Option<PathBuf> {
-    let root = std::env::var_os("RAGMONK_MODELS_DIR").map(PathBuf::from);
+    let root = std::env::var_os("DOCMONK_MODELS_DIR").map(PathBuf::from);
     match root {
         Some(r)
             if r.join(DEFAULT_EMBEDDING_MODEL.slug)
@@ -85,11 +85,11 @@ pub fn models_root() -> Option<PathBuf> {
         {
             Some(r)
         }
-        _ if std::env::var("RAGMONK_REQUIRE_MODELS").as_deref() == Ok("1") => {
-            panic!("RAGMONK_REQUIRE_MODELS=1 but the embedding model is not installed")
+        _ if std::env::var("DOCMONK_REQUIRE_MODELS").as_deref() == Ok("1") => {
+            panic!("DOCMONK_REQUIRE_MODELS=1 but the embedding model is not installed")
         }
         _ => {
-            eprintln!("skipping: embedding model not installed (set RAGMONK_MODELS_DIR)");
+            eprintln!("skipping: embedding model not installed (set DOCMONK_MODELS_DIR)");
             None
         }
     }
@@ -127,7 +127,7 @@ pub fn fixture_of(rel: &str) -> Fx {
 
 impl Fx {
     pub fn index(&mut self, models_root: &Path) {
-        let mut cfg = docmonk_config::RagMonkConfig::default();
+        let mut cfg = docmonk_config::DocMonkConfig::default();
         cfg.search.semantic = true;
         let opts = docmonk_convert::RegistryOptions {
             models_root: Some(models_root.to_path_buf()),
