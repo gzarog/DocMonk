@@ -299,8 +299,8 @@ mod tests {
             names,
             [
                 "docmonk-1.0.0-x86_64-unknown-linux-gnu/README.md",
-                "docmonk-1.0.0-x86_64-unknown-linux-gnu/models/m/w.bin",
                 "docmonk-1.0.0-x86_64-unknown-linux-gnu/docmonk",
+                "docmonk-1.0.0-x86_64-unknown-linux-gnu/models/m/w.bin",
             ]
         );
 
