@@ -11,7 +11,7 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use docmonk_config::model::AiConfig;
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use serde_json::{json, Value};
 
 use crate::errors::{
@@ -73,7 +73,7 @@ pub fn parse_version(text: &str) -> Option<(u32, u32, u32)> {
     None
 }
 
-pub fn check_supported_version(v: Option<(u32, u32, u32)>) -> Result<(), RagMonkError> {
+pub fn check_supported_version(v: Option<(u32, u32, u32)>) -> Result<(), DocMonkError> {
     match v {
         Some(v) if v < MIN_TESTED_VERSION => Err(unsupported_version(format!(
             "the installed {EXECUTABLE} runtime {}.{}.{} is older than the tested minimum {}.{}.{}; \
@@ -85,7 +85,7 @@ pub fn check_supported_version(v: Option<(u32, u32, u32)>) -> Result<(), RagMonk
 }
 
 /// The runtime's error reply as a semantic error (`_map_runtime_error`).
-pub fn map_runtime_error(e: RpcError) -> RagMonkError {
+pub fn map_runtime_error(e: RpcError) -> DocMonkError {
     let RpcError::Remote { code, message } = e else {
         return e.into_error();
     };
@@ -106,7 +106,7 @@ pub fn map_runtime_error(e: RpcError) -> RagMonkError {
         || text.contains("auth")
     {
         return authentication_required(format!(
-            "the Codex runtime needs sign-in: {message}. Run: ragmonk ai login codex"
+            "the Codex runtime needs sign-in: {message}. Run: docmonk ai login codex"
         ));
     }
     if is(&["403", "forbidden", "policy"]) || text.contains("policy") || text.contains("forbidden")
@@ -122,7 +122,7 @@ fn opt_str(v: &Value) -> Option<String> {
     v.as_str().map(str::to_owned)
 }
 
-pub fn status_from_result(r: &Value) -> Result<RuntimeStatus, RagMonkError> {
+pub fn status_from_result(r: &Value) -> Result<RuntimeStatus, DocMonkError> {
     let authenticated = truthy(&r["authenticated"]);
     let account = match &r["account"] {
         Value::Object(a) => ["email", "id", "name"]
@@ -136,7 +136,7 @@ pub fn status_from_result(r: &Value) -> Result<RuntimeStatus, RagMonkError> {
     let mode = &r["authMode"];
     if authenticated && !mode.is_null() && mode != "chatgpt" {
         return Err(policy_blocked(format!(
-            "the Codex runtime is signed in with an unexpected auth mode {}; RagMonk's codex \
+            "the Codex runtime is signed in with an unexpected auth mode {}; DocMonk's codex \
              provider requires ChatGPT (subscription) sign-in, not an API key",
             quoted(mode)
         )));
@@ -149,7 +149,7 @@ pub fn status_from_result(r: &Value) -> Result<RuntimeStatus, RagMonkError> {
         detail: if authenticated {
             "signed in".into()
         } else {
-            "not signed in; run 'ragmonk ai login codex'".into()
+            "not signed in; run 'docmonk ai login codex'".into()
         },
     })
 }
@@ -171,7 +171,7 @@ fn int(v: &Value) -> Option<i64> {
     v.as_i64().filter(|_| !v.is_f64())
 }
 
-pub fn answer_from_result(r: &Value) -> Result<(String, String, AiUsage), RagMonkError> {
+pub fn answer_from_result(r: &Value) -> Result<(String, String, AiUsage), DocMonkError> {
     let status = &r["status"];
     if !status.is_null() && status != "completed" {
         return Err(invalid_response(format!(
@@ -226,20 +226,20 @@ impl CodexSession {
         }
     }
 
-    fn request(&mut self, method: &str, params: Option<Value>) -> Result<Value, RagMonkError> {
+    fn request(&mut self, method: &str, params: Option<Value>) -> Result<Value, DocMonkError> {
         self.client
             .request(method, params, self.timeout)
             .map_err(map_runtime_error)
     }
 
-    pub fn initialize(&mut self) -> Result<(), RagMonkError> {
+    pub fn initialize(&mut self) -> Result<(), DocMonkError> {
         if self.initialized {
             return Ok(());
         }
         self.request(
             "initialize",
             Some(json!({
-                "clientInfo": {"name": "ragmonk", "title": "RagMonk"},
+                "clientInfo": {"name": "docmonk", "title": "DocMonk"},
                 "capabilities": {"isolation": isolation()},
                 "authMode": "chatgpt",
             })),
@@ -249,24 +249,24 @@ impl CodexSession {
         Ok(())
     }
 
-    pub fn account_status(&mut self) -> Result<RuntimeStatus, RagMonkError> {
+    pub fn account_status(&mut self) -> Result<RuntimeStatus, DocMonkError> {
         self.initialize()?;
         let r = self.request("account/getStatus", None)?;
         status_from_result(&r)
     }
 
-    pub fn login(&mut self) -> Result<RuntimeStatus, RagMonkError> {
+    pub fn login(&mut self) -> Result<RuntimeStatus, DocMonkError> {
         self.initialize()?;
         let r = self.request("account/login", Some(json!({"mode": "chatgpt"})))?;
         status_from_result(&r)
     }
 
-    pub fn logout(&mut self) -> Result<(), RagMonkError> {
+    pub fn logout(&mut self) -> Result<(), DocMonkError> {
         self.initialize()?;
         self.request("account/logout", None).map(|_| ())
     }
 
-    pub fn models(&mut self) -> Result<Vec<String>, RagMonkError> {
+    pub fn models(&mut self) -> Result<Vec<String>, DocMonkError> {
         self.initialize()?;
         let r = self.request("model/list", None)?;
         Ok(r["models"]
@@ -290,7 +290,7 @@ impl CodexSession {
         system: &str,
         user: &str,
         model: &str,
-    ) -> Result<(String, String, AiUsage), RagMonkError> {
+    ) -> Result<(String, String, AiUsage), DocMonkError> {
         self.initialize()?;
         let thread = self.request("thread/create", Some(json!({"isolation": isolation()})))?;
         let thread_id = [&thread["threadId"], &thread["id"]]
@@ -334,7 +334,7 @@ impl Drop for Spawned {
     }
 }
 
-fn verify_version() -> Result<(), RagMonkError> {
+fn verify_version() -> Result<(), DocMonkError> {
     let Ok(mut child) = Command::new(EXECUTABLE)
         .arg("--version")
         .stdin(Stdio::null())
@@ -363,7 +363,7 @@ fn verify_version() -> Result<(), RagMonkError> {
     check_supported_version(parse_version(&out))
 }
 
-fn spawn(timeout: f64) -> Result<Spawned, RagMonkError> {
+fn spawn(timeout: f64) -> Result<Spawned, DocMonkError> {
     if which(EXECUTABLE).is_none() {
         return Err(runtime_unavailable(format!(
             "the '{EXECUTABLE}' runtime is not installed or not on PATH; install it to use the \
@@ -410,7 +410,7 @@ impl CodexRuntime {
         }
     }
 
-    fn session(&mut self) -> Result<&mut CodexSession, RagMonkError> {
+    fn session(&mut self) -> Result<&mut CodexSession, DocMonkError> {
         if self.spawned.is_none() {
             self.spawned = Some(spawn(self.timeout)?);
         }
@@ -419,21 +419,21 @@ impl CodexRuntime {
 }
 
 impl SubscriptionRuntime for CodexRuntime {
-    fn status(&mut self) -> Result<RuntimeStatus, RagMonkError> {
+    fn status(&mut self) -> Result<RuntimeStatus, DocMonkError> {
         self.session()?.account_status()
     }
-    fn login(&mut self) -> Result<RuntimeStatus, RagMonkError> {
+    fn login(&mut self) -> Result<RuntimeStatus, DocMonkError> {
         self.session()?.login()
     }
-    fn logout(&mut self) -> Result<(), RagMonkError> {
+    fn logout(&mut self) -> Result<(), DocMonkError> {
         self.session()?.logout()
     }
-    fn models(&mut self) -> Result<Vec<String>, RagMonkError> {
+    fn models(&mut self) -> Result<Vec<String>, DocMonkError> {
         self.session()?.models()
     }
 }
 
-/// `ragmonk ask` through a fresh, isolated Codex turn.
+/// `docmonk ask` through a fresh, isolated Codex turn.
 pub struct CodexProvider {
     runtime: CodexRuntime,
     model: String,
@@ -449,7 +449,7 @@ impl CodexProvider {
 }
 
 impl AiProvider for CodexProvider {
-    fn answer(&mut self, request: &AiRequest) -> Result<AiAnswer, RagMonkError> {
+    fn answer(&mut self, request: &AiRequest) -> Result<AiAnswer, DocMonkError> {
         let model = self.model.clone();
         let (text, model, usage) =
             self.runtime

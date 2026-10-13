@@ -535,7 +535,7 @@ impl ProgressTracker {
 /// finished or every tracker handle was dropped.
 fn spawn_ticker(inner: Weak<Mutex<Inner>>) {
     let spawned = std::thread::Builder::new()
-        .name("ragmonk-progress-heartbeat".into())
+        .name("docmonk-progress-heartbeat".into())
         .spawn(move || loop {
             let mut waited = Duration::ZERO;
             while waited < HEARTBEAT_INTERVAL {

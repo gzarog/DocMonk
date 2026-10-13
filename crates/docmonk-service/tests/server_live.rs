@@ -1,8 +1,8 @@
 //! Server mode end to end against real, disposable OpenSearch and
 //! Elasticsearch clusters (ADR 0033, P0-S01..S04).
 //!
-//! Set `RAGMONK_TEST_OPENSEARCH_URL` / `RAGMONK_TEST_ELASTICSEARCH_URL`;
-//! with `RAGMONK_REQUIRE_LIVE_SERVER=1` a missing URL fails instead of
+//! Set `DOCMONK_TEST_OPENSEARCH_URL` / `DOCMONK_TEST_ELASTICSEARCH_URL`;
+//! with `DOCMONK_REQUIRE_LIVE_SERVER=1` a missing URL fails instead of
 //! skipping. Every scenario uses a fresh home and a unique index prefix and
 //! deletes its indexes afterwards. Never point these at a real deployment.
 
@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use docmonk_backends::schema::IndexKind;
-use docmonk_config::RagMonkConfig;
+use docmonk_config::DocMonkConfig;
 use docmonk_core::errors::ErrorKind;
 use docmonk_core::paths::Home;
 use docmonk_service::indexing::{index_sources_with, selected_sources, RunOptions, SourceEvent};
@@ -23,8 +23,8 @@ fn url(var: &str) -> Option<String> {
         Ok(u) if !u.is_empty() => Some(u),
         _ => {
             assert!(
-                std::env::var("RAGMONK_REQUIRE_LIVE_SERVER").as_deref() != Ok("1"),
-                "{var} is required when RAGMONK_REQUIRE_LIVE_SERVER=1"
+                std::env::var("DOCMONK_REQUIRE_LIVE_SERVER").as_deref() != Ok("1"),
+                "{var} is required when DOCMONK_REQUIRE_LIVE_SERVER=1"
             );
             eprintln!("skipping: {var} not set");
             None
@@ -78,7 +78,7 @@ fn setup(base: &str, engine: &str, tag: &str) -> Env {
     let home = Home::new(dir.path().join("home"));
     home.ensure_layout().unwrap();
     let prefix = unique(tag);
-    let mut cfg = RagMonkConfig::default();
+    let mut cfg = DocMonkConfig::default();
     cfg.storage.mode = "server".into();
     cfg.storage.server.engine = match engine {
         "opensearch" => docmonk_config::model::StorageEngine::OpenSearch,
@@ -455,7 +455,7 @@ fn no_local_fallback() {
     // Populate a local index first (local mode).
     let src = dir.path().join("src");
     copy_dir(&fixtures().join("search_quality/project"), &src);
-    let mut cfg = RagMonkConfig::default();
+    let mut cfg = DocMonkConfig::default();
     cfg.updates.enabled = false;
     docmonk_config::write_user_config(&cfg, &home).unwrap();
     catalog(&home)
@@ -496,14 +496,14 @@ fn unavailable_server_never_reads_local_knowledge() {
 
 #[test]
 fn opensearch_end_to_end() {
-    if let Some(u) = url("RAGMONK_TEST_OPENSEARCH_URL") {
+    if let Some(u) = url("DOCMONK_TEST_OPENSEARCH_URL") {
         scenario(&u, "opensearch");
     }
 }
 
 #[test]
 fn elasticsearch_end_to_end() {
-    if let Some(u) = url("RAGMONK_TEST_ELASTICSEARCH_URL") {
+    if let Some(u) = url("DOCMONK_TEST_ELASTICSEARCH_URL") {
         scenario(&u, "elasticsearch");
     }
 }

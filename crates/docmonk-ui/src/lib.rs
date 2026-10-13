@@ -1,4 +1,4 @@
-//! The local Admin UI (`ragmonk ui`).
+//! The local Admin UI (`docmonk ui`).
 //!
 //! An axum server rendering embedded Jinja templates (see [`templates`])
 //! from the same services the CLI uses. It binds to localhost by default
@@ -23,7 +23,7 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Form, Json, Router};
-use docmonk_core::errors::{ErrorKind, RagMonkError};
+use docmonk_core::errors::{DocMonkError, ErrorKind};
 use docmonk_core::paths::Home;
 use serde_json::{json, Value};
 
@@ -31,7 +31,7 @@ use indexer::Indexer;
 
 type Params = HashMap<String, String>;
 
-const CSRF_COOKIE: &str = "ragmonk_csrf";
+const CSRF_COOKIE: &str = "docmonk_csrf";
 const CSRF_HEADER: &str = "x-csrf-token";
 const CSRF_FIELD: &str = "csrf_token";
 
@@ -225,7 +225,7 @@ fn constant_eq(a: &str, b: &str) -> bool {
 
 // ----------------------------------------------------------- responses ---
 
-fn error_response(e: &RagMonkError) -> Response {
+fn error_response(e: &DocMonkError) -> Response {
     let status = if matches!(
         e.kind(),
         ErrorKind::LocalStorageModeRequired | ErrorKind::SourceUnavailable
@@ -257,7 +257,7 @@ fn html(name: &str, active: &str, csrf: &CsrfToken, mut ctx: Value) -> Response 
         );
         o.insert("active".into(), json!(active));
         o.insert(
-            "ragmonk_version".into(),
+            "docmonk_version".into(),
             json!(docmonk_core::version::version()),
         );
         o.insert("csrf_token".into(), json!(csrf.0));
@@ -327,7 +327,7 @@ async fn ready_probe(State(st): State<AppState>) -> Response {
         .into_response(),
         Err(e) => (
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({"ready": false, "error": {"type": e.class().unwrap_or("RagMonkError"), "message": e.message()}})),
+            Json(json!({"ready": false, "error": {"type": e.class().unwrap_or("DocMonkError"), "message": e.message()}})),
         )
             .into_response(),
     }
@@ -343,7 +343,7 @@ async fn status_api(State(st): State<AppState>) -> Response {
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             },
-            Json(json!({"error": {"type": e.class().unwrap_or("RagMonkError"), "message": e.message()}})),
+            Json(json!({"error": {"type": e.class().unwrap_or("DocMonkError"), "message": e.message()}})),
         )
             .into_response(),
     }
@@ -426,14 +426,14 @@ async fn source_action(
     State(st): State<AppState>,
     Path((id, action)): Path<(String, String)>,
 ) -> Response {
-    let r = locked(&st, move |home| -> Result<(), RagMonkError> {
+    let r = locked(&st, move |home| -> Result<(), DocMonkError> {
         match action.as_str() {
             "enable" | "disable" => {
                 let mut cp = docmonk_service::sources::catalog(home)?;
                 cp.set_enabled(&id, action == "enable")
             }
             "remove" => docmonk_service::sources::remove_source(home, &id).map(|_| ()),
-            _ => Err(RagMonkError::usage("unknown action")),
+            _ => Err(DocMonkError::usage("unknown action")),
         }
     })
     .await;
@@ -557,7 +557,7 @@ async fn documents_page(
         "q": q.clone().unwrap_or_default(),
         "fmt": fmt.clone().unwrap_or_default(),
     });
-    let r = locked(&st, move |home| -> Result<Value, RagMonkError> {
+    let r = locked(&st, move |home| -> Result<Value, DocMonkError> {
         Ok(json!({
             "result": data::list_documents(home, source.as_deref(), q.as_deref(), fmt.as_deref(), page)?,
             "sources": data::list_sources(home)?,
@@ -670,7 +670,7 @@ async fn ai_page(
     Query(p): Query<Params>,
 ) -> Response {
     let test = param(&p, "test").map(str::to_owned);
-    let r = locked(&st, move |home| -> Result<Value, RagMonkError> {
+    let r = locked(&st, move |home| -> Result<Value, DocMonkError> {
         Ok(json!({
             "overview": data::ai_overview(home)?,
             "test_result": match &test {
@@ -771,7 +771,7 @@ async fn daemon_status_api(State(st): State<AppState>) -> Response {
 }
 
 async fn daemon_action(State(st): State<AppState>, Path(action): Path<String>) -> Response {
-    let r = unlocked(&st, move |home| -> Result<(), RagMonkError> {
+    let r = unlocked(&st, move |home| -> Result<(), DocMonkError> {
         match action.as_str() {
             "start" => docmonk_service::daemon::start(home).map(drop),
             "stop" => docmonk_service::daemon::stop(home).map(drop),
@@ -779,7 +779,7 @@ async fn daemon_action(State(st): State<AppState>, Path(action): Path<String>) -
                 docmonk_service::daemon::stop(home)?;
                 docmonk_service::daemon::start(home).map(drop)
             }
-            _ => Err(RagMonkError::usage("unknown action")),
+            _ => Err(DocMonkError::usage("unknown action")),
         }
     })
     .await;
@@ -809,7 +809,7 @@ async fn backups_page(
     axum::Extension(csrf): axum::Extension<CsrfToken>,
     Query(p): Query<Params>,
 ) -> Response {
-    let r = locked(&st, |home| -> Result<Value, RagMonkError> {
+    let r = locked(&st, |home| -> Result<Value, DocMonkError> {
         Ok(json!({"backups": data::list_backups(home), "update": data::update_status(home)?}))
     })
     .await;
@@ -824,7 +824,7 @@ async fn backups_page(
 }
 
 async fn create_backup(State(st): State<AppState>) -> Response {
-    let r = locked(&st, |home| -> Result<(), RagMonkError> {
+    let r = locked(&st, |home| -> Result<(), DocMonkError> {
         let lock = docmonk_service::indexing::home_exclusive(home, "backup")?;
         let r = docmonk_ops::backup::create_backup(home, None);
         lock.release();
@@ -913,7 +913,7 @@ async fn system_page(
     State(st): State<AppState>,
     axum::Extension(csrf): axum::Extension<CsrfToken>,
 ) -> Response {
-    let r = locked(&st, |home| -> Result<Value, RagMonkError> {
+    let r = locked(&st, |home| -> Result<Value, DocMonkError> {
         let cfg = docmonk_service::load(home)?;
         Ok(json!({
             "update": data::update_status(home)?,
@@ -1004,9 +1004,9 @@ fn open_browser(url: &str) {
     });
 }
 
-/// `ragmonk ui [--host H] [--port P] [--no-browser]`: blocks until
+/// `docmonk ui [--host H] [--port P] [--no-browser]`: blocks until
 /// Ctrl+C.
-pub fn serve(host: &str, port: u16, no_browser: bool) -> Result<(), RagMonkError> {
+pub fn serve(host: &str, port: u16, no_browser: bool) -> Result<(), DocMonkError> {
     let home = docmonk_service::prepared_home()?;
     docmonk_service::load(&home)?;
     let display_host = if host.contains(':') && !host.starts_with('[') {
@@ -1015,7 +1015,7 @@ pub fn serve(host: &str, port: u16, no_browser: bool) -> Result<(), RagMonkError
         host.to_owned()
     };
     let url = format!("http://{display_host}:{port}");
-    println!("RagMonk Admin UI");
+    println!("DocMonk Admin UI");
     println!("URL: {url}");
     if !matches!(host, "127.0.0.1" | "localhost" | "::1") {
         println!(
@@ -1032,12 +1032,12 @@ pub fn serve(host: &str, port: u16, no_browser: bool) -> Result<(), RagMonkError
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
-        .map_err(|e| RagMonkError::new(ErrorKind::Generic, e.to_string()))?;
+        .map_err(|e| DocMonkError::new(ErrorKind::Generic, e.to_string()))?;
     runtime.block_on(async move {
         let listener = tokio::net::TcpListener::bind((host, port))
             .await
             .map_err(|e| {
-                RagMonkError::new(ErrorKind::Generic, format!("cannot listen on {url}: {e}"))
+                DocMonkError::new(ErrorKind::Generic, format!("cannot listen on {url}: {e}"))
             })?;
         if !no_browser {
             println!("Opening browser...");
@@ -1051,6 +1051,6 @@ pub fn serve(host: &str, port: u16, no_browser: bool) -> Result<(), RagMonkError
                 let _ = tokio::signal::ctrl_c().await;
             })
             .await
-            .map_err(|e| RagMonkError::new(ErrorKind::Generic, e.to_string()))
+            .map_err(|e| DocMonkError::new(ErrorKind::Generic, e.to_string()))
     })
 }

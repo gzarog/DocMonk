@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-indexing"
-description = "RagMonk scanning, incremental diff, jobs/retries, locks and the bounded indexing coordinator"
+description = "DocMonk scanning, incremental diff, jobs/retries, locks and the bounded indexing coordinator"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

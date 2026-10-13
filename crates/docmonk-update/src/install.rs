@@ -1,8 +1,8 @@
-//! `ragmonk update install` / `rollback` for a native install
+//! `docmonk update install` / `rollback` for a native install
 //! of a binary release:
 //!
 //! 1. the latest release (a validated tag), stop if not newer;
-//! 2. download `ragmonk-<ver>-<target>.<ext>` and `SHA256SUMS` (plus
+//! 2. download `docmonk-<ver>-<target>.<ext>` and `SHA256SUMS` (plus
 //!    `SHA256SUMS.minisig` when a public key is compiled in) from that
 //!    tag's assets, and verify them;
 //! 3. unpack into `versions/<ver>.partial`, then rename it into place;
@@ -147,7 +147,7 @@ fn self_check(bin: &Path, version: &str) -> Result<(), String> {
 fn run_quiet(bin: &Path, args: &[&str], home: &Path) -> bool {
     Command::new(bin)
         .args(args)
-        .env("RAGMONK_HOME", home)
+        .env("DOCMONK_HOME", home)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -161,7 +161,7 @@ fn unpack(archive: &[u8], zip: bool, dest: &Path) -> Result<(), String> {
     let bad = |e: &dyn std::fmt::Display| format!("corrupt release archive: {e}");
     let place = |raw: &Path| -> Result<Option<PathBuf>, String> {
         let mut parts = raw.components();
-        parts.next(); // ragmonk-<ver>-<target>/
+        parts.next(); // docmonk-<ver>-<target>/
         let mut out = dest.to_path_buf();
         let mut any = false;
         for c in parts {
@@ -267,9 +267,9 @@ mod tests {
     #[test]
     fn unpack_strips_top_dir() {
         let dir = tempfile::tempdir().unwrap();
-        let a = targz(&[("r-1/ragmonk", b"bin"), ("r-1/models/m/a.onnx", b"m")]);
+        let a = targz(&[("r-1/docmonk", b"bin"), ("r-1/models/m/a.onnx", b"m")]);
         unpack(&a, false, dir.path()).unwrap();
-        assert_eq!(std::fs::read(dir.path().join("ragmonk")).unwrap(), b"bin");
+        assert_eq!(std::fs::read(dir.path().join("docmonk")).unwrap(), b"bin");
         assert!(dir.path().join("models/m/a.onnx").is_file());
         copy_models(&dir.path().join("models"), &dir.path().join("home/models")).unwrap();
         assert!(dir.path().join("home/models/m/a.onnx").is_file());
@@ -299,13 +299,13 @@ mod tests {
         use std::io::Write;
         let dir = tempfile::tempdir().unwrap();
         let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
-        w.start_file("r-1/ragmonk.exe", zip::write::SimpleFileOptions::default())
+        w.start_file("r-1/docmonk.exe", zip::write::SimpleFileOptions::default())
             .unwrap();
         w.write_all(b"exe").unwrap();
         let a = w.finish().unwrap().into_inner();
         unpack(&a, true, dir.path()).unwrap();
         assert_eq!(
-            std::fs::read(dir.path().join("ragmonk.exe")).unwrap(),
+            std::fs::read(dir.path().join("docmonk.exe")).unwrap(),
             b"exe"
         );
     }

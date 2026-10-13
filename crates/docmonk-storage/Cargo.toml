@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-storage"
-description = "RagMonk SQLite control plane and project knowledge store"
+description = "DocMonk SQLite control plane and project knowledge store"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,4 +1,4 @@
-use docmonk_core::errors::{ErrorKind, RagMonkError};
+use docmonk_core::errors::{DocMonkError, ErrorKind};
 
 #[derive(Debug, thiserror::Error)]
 pub enum BackendError {
@@ -29,7 +29,7 @@ pub enum BackendError {
     Invalid(String),
 }
 
-impl From<BackendError> for RagMonkError {
+impl From<BackendError> for DocMonkError {
     fn from(e: BackendError) -> Self {
         let (kind, class) = match e {
             BackendError::Transport(_) => (ErrorKind::SourceUnavailable, "BackendUnavailableError"),
@@ -41,7 +41,7 @@ impl From<BackendError> for RagMonkError {
                 (ErrorKind::Database, "BackendRequestError")
             }
         };
-        RagMonkError::new(
+        DocMonkError::new(
             kind,
             docmonk_telemetry::redact::redact_urls_in_text(&e.to_string()),
         )

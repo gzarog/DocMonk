@@ -1,4 +1,4 @@
-//! Retrieval for RagMonk.
+//! Retrieval for DocMonk.
 //!
 //! * [`lexical`]: exact / qualified / alias symbol lookups, document title
 //!   and FTS hits, and path hits, tiered and merged in a fixed

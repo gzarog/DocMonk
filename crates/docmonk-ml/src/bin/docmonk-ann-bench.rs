@@ -82,7 +82,7 @@ fn main() {
     for (r, t) in results.iter().zip(&truth) {
         hit += t.iter().filter(|x| r.iter().any(|y| y.0 == x.0)).count();
     }
-    let path = std::env::temp_dir().join(format!("ragmonk-ann-bench-{}.hnsw", std::process::id()));
+    let path = std::env::temp_dir().join(format!("docmonk-ann-bench-{}.hnsw", std::process::id()));
     let meta = docmonk_ml::ann::IndexMeta {
         format_version: docmonk_ml::ann::FORMAT_VERSION,
         fingerprint: "bench".into(),

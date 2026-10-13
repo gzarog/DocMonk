@@ -1,6 +1,6 @@
 //! GitHub Copilot through the signed-in Copilot CLI (beta).
 //!
-//! Copilot has no Rust SDK, so RagMonk runs the official `copilot` CLI in
+//! Copilot has no Rust SDK, so DocMonk runs the official `copilot` CLI in
 //! non-interactive mode (`copilot -p PROMPT`), which uses the CLI's own
 //! sign-in. Token variables (`GH_TOKEN`, `GITHUB_TOKEN`, ...) are removed
 //! from the child's environment so a token can never stand in for the
@@ -12,7 +12,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use docmonk_config::model::AiConfig;
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 
 use crate::errors::{
     authentication_required, invalid_response, policy_blocked, quota_exhausted,
@@ -36,7 +36,7 @@ pub const CONFLICTING_ENV: &[&str] = &[
 const SIGN_IN_HINT: &str = "sign in with the Copilot CLI itself: run `copilot` and use /login";
 
 /// A CLI failure as a semantic error (`_map_client_error`).
-pub fn map_client_error(text: &str) -> RagMonkError {
+pub fn map_client_error(text: &str) -> DocMonkError {
     let lower = text.to_lowercase();
     let has = |s: &str| lower.contains(s);
     if has("quota") || has("rate limit") || has("429") {
@@ -65,7 +65,7 @@ struct Output {
     stderr: String,
 }
 
-fn run(args: &[&str], timeout_s: f64) -> Result<Output, RagMonkError> {
+fn run(args: &[&str], timeout_s: f64) -> Result<Output, DocMonkError> {
     if which(EXECUTABLE).is_none() {
         return Err(runtime_unavailable(
             "the GitHub Copilot CLI ('copilot') is not installed or not on PATH; install it and \
@@ -118,7 +118,7 @@ fn run(args: &[&str], timeout_s: f64) -> Result<Output, RagMonkError> {
 }
 
 /// The CLI's version line, if it answers `--version`.
-fn version(timeout_s: f64) -> Result<Option<String>, RagMonkError> {
+fn version(timeout_s: f64) -> Result<Option<String>, DocMonkError> {
     let o = run(&["--version"], timeout_s.min(10.0))?;
     Ok((o.code == Some(0))
         .then(|| {
@@ -147,7 +147,7 @@ impl CopilotRuntime {
         &self,
         prompt: &str,
         model: &str,
-    ) -> Result<(String, String, AiUsage), RagMonkError> {
+    ) -> Result<(String, String, AiUsage), DocMonkError> {
         let mut args = vec!["-p", prompt];
         if !model.is_empty() {
             args.extend(["--model", model]);
@@ -174,7 +174,7 @@ impl CopilotRuntime {
 }
 
 impl SubscriptionRuntime for CopilotRuntime {
-    fn status(&mut self) -> Result<RuntimeStatus, RagMonkError> {
+    fn status(&mut self) -> Result<RuntimeStatus, DocMonkError> {
         let version = version(self.timeout)?;
         Ok(RuntimeStatus {
             provider_id: PROVIDER_ID.into(),
@@ -186,28 +186,28 @@ impl SubscriptionRuntime for CopilotRuntime {
         })
     }
 
-    fn login(&mut self) -> Result<RuntimeStatus, RagMonkError> {
+    fn login(&mut self) -> Result<RuntimeStatus, DocMonkError> {
         version(self.timeout)?;
         Err(authentication_required(format!(
-            "RagMonk does not sign in to Copilot for you; {SIGN_IN_HINT}"
+            "DocMonk does not sign in to Copilot for you; {SIGN_IN_HINT}"
         )))
     }
 
-    fn logout(&mut self) -> Result<(), RagMonkError> {
+    fn logout(&mut self) -> Result<(), DocMonkError> {
         version(self.timeout)?;
         Err(authentication_required(
-            "RagMonk does not sign out of Copilot for you; run `copilot` and use /logout",
+            "DocMonk does not sign out of Copilot for you; run `copilot` and use /logout",
         ))
     }
 
-    fn models(&mut self) -> Result<Vec<String>, RagMonkError> {
+    fn models(&mut self) -> Result<Vec<String>, DocMonkError> {
         version(self.timeout)?;
         // The CLI lists its models interactively only.
         Ok(Vec::new())
     }
 }
 
-/// `ragmonk ask` through `copilot -p`.
+/// `docmonk ask` through `copilot -p`.
 pub struct CopilotProvider {
     runtime: CopilotRuntime,
     model: String,
@@ -223,7 +223,7 @@ impl CopilotProvider {
 }
 
 impl AiProvider for CopilotProvider {
-    fn answer(&mut self, request: &AiRequest) -> Result<AiAnswer, RagMonkError> {
+    fn answer(&mut self, request: &AiRequest) -> Result<AiAnswer, DocMonkError> {
         let prompt = format!("{SYSTEM_PROMPT}\n\n{}", build_prompt(request));
         let (text, model, usage) = self.runtime.complete(&prompt, &self.model)?;
         Ok(AiAnswer {

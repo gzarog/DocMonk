@@ -13,25 +13,25 @@ pub mod process;
 
 use std::sync::Arc;
 
-use docmonk_config::RagMonkConfig;
+use docmonk_config::DocMonkConfig;
 use docmonk_indexing::coordinator::Registry;
 
 /// The full registry: Rust-native code extraction plus Rust-native
 /// document conversion and chunking. Version identities make any change in
 /// the converter, chunker or tokenizer force a full rebuild.
-pub fn registry(config: &RagMonkConfig) -> Registry {
+pub fn registry(config: &DocMonkConfig) -> Registry {
     registry_with(config, &RegistryOptions::default())
 }
 
 /// Where OCR models and the conversion cache live.
 #[derive(Debug, Clone, Default)]
 pub struct RegistryOptions {
-    /// Default `<home>/models/ocrs` (overridden by `RAGMONK_OCR_MODELS_DIR`).
+    /// Default `<home>/models/ocrs` (overridden by `DOCMONK_OCR_MODELS_DIR`).
     pub ocr_models_dir: Option<std::path::PathBuf>,
     /// Default: no cache.
     pub cache_dir: Option<std::path::PathBuf>,
     /// Embedding models root. Default `<home>/models` (overridden by
-    /// `RAGMONK_MODELS_DIR`).
+    /// `DOCMONK_MODELS_DIR`).
     pub models_root: Option<std::path::PathBuf>,
 }
 
@@ -46,7 +46,7 @@ impl RegistryOptions {
     }
 }
 
-pub fn registry_with(config: &RagMonkConfig, opts: &RegistryOptions) -> Registry {
+pub fn registry_with(config: &DocMonkConfig, opts: &RegistryOptions) -> Registry {
     let d = &config.documents;
     let pdf = converter::PdfOptions {
         ocr: d.ocr.clone(),

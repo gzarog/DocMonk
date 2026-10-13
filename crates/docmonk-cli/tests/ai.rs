@@ -142,8 +142,8 @@ fn ask_and_ai_commands_are_as_expected() {
     let golden_path = repo().join("fixtures/expected/ai_cli.json");
     let mut golden: Vec<Value> =
         serde_json::from_str(&std::fs::read_to_string(&golden_path).unwrap()).unwrap();
-    // `RAGMONK_BLESS=1` rewrites the expected output from this build.
-    let bless = std::env::var_os("RAGMONK_BLESS").is_some();
+    // `DOCMONK_BLESS=1` rewrites the expected output from this build.
+    let bless = std::env::var_os("DOCMONK_BLESS").is_some();
     let dir = tempfile::tempdir().unwrap();
     let home = dir.path().join("home");
     let corpus = dir.path().join("source");
@@ -154,11 +154,11 @@ fn ask_and_ai_commands_are_as_expected() {
     }
     let (port, state) = mock();
     let base = |c: &mut Command| {
-        c.env("RAGMONK_HOME", &home)
-            .env("RAGMONK_SEARCH__SEMANTIC", "false")
-            .env("RAGMONK_UPDATES__ENABLED", "false")
-            .env("RAGMONK_AI__PROVIDER", "ollama")
-            .env("RAGMONK_AI__BASE_URL", format!("http://127.0.0.1:{port}"))
+        c.env("DOCMONK_HOME", &home)
+            .env("DOCMONK_SEARCH__SEMANTIC", "false")
+            .env("DOCMONK_UPDATES__ENABLED", "false")
+            .env("DOCMONK_AI__PROVIDER", "ollama")
+            .env("DOCMONK_AI__BASE_URL", format!("http://127.0.0.1:{port}"))
             .env("PATH", &bin)
             .stdin(Stdio::null());
     };
@@ -167,7 +167,7 @@ fn ask_and_ai_commands_are_as_expected() {
         vec!["source", "add", corpus.to_str().unwrap()],
         vec!["index"],
     ] {
-        let mut c = Command::new(env!("CARGO_BIN_EXE_ragmonk"));
+        let mut c = Command::new(env!("CARGO_BIN_EXE_docmonk"));
         base(&mut c);
         let o = c.args(&args).output().unwrap();
         assert!(o.status.success(), "{args:?}: {o:?}");
@@ -198,7 +198,7 @@ fn ask_and_ai_commands_are_as_expected() {
             };
         }
         state.lock().unwrap().2.clear();
-        let mut c = Command::new(env!("CARGO_BIN_EXE_ragmonk"));
+        let mut c = Command::new(env!("CARGO_BIN_EXE_docmonk"));
         base(&mut c);
         for (k, v) in case["env"].as_object().unwrap() {
             c.env(k, v.as_str().unwrap());

@@ -324,7 +324,7 @@ fn fresh_home_creates_current_schema_and_refuses_anything_else() {
             .unwrap();
     }
     let err = ProjectStore::open(&layout, "q", "s", 8).err().unwrap();
-    assert!(err.to_string().contains("ragmonk index"), "{err}");
+    assert!(err.to_string().contains("docmonk index"), "{err}");
     let conn = rusqlite::Connection::open(&foreign).unwrap();
     let tables: i64 = conn
         .query_row(

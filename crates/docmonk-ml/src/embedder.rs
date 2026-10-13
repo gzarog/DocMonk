@@ -221,9 +221,9 @@ impl Embedder {
     }
 }
 
-/// Models root: `RAGMONK_MODELS_DIR`, else `<home>/models`.
+/// Models root: `DOCMONK_MODELS_DIR`, else `<home>/models`.
 pub fn models_root(home_models: Option<&Path>) -> PathBuf {
-    std::env::var_os("RAGMONK_MODELS_DIR")
+    std::env::var_os("DOCMONK_MODELS_DIR")
         .map(PathBuf::from)
         .or_else(|| home_models.map(Path::to_path_buf))
         .unwrap_or_else(|| PathBuf::from("models"))

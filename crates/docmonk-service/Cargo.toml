@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-service"
-description = "RagMonk application services shared by the CLI, Admin UI and MCP server: sources, indexing runs, queries, status, ask and daemon lifecycle"
+description = "DocMonk application services shared by the CLI, Admin UI and MCP server: sources, indexing runs, queries, status, ask and daemon lifecycle"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,4 +1,4 @@
-//! AI providers for `ragmonk ask`. A provider only consumes the evidence `explore` already
+//! AI providers for `docmonk ask`. A provider only consumes the evidence `explore` already
 //! assembled; nothing here reads a database or ranks anything.
 //!
 //! * [`prompt`]: the shared evidence prompt and request/answer shapes.
@@ -22,9 +22,9 @@ pub mod transport;
 pub use factory::create_provider;
 pub use prompt::{AiAnswer, AiRequest, AiUsage};
 
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 
 /// Turns an [`AiRequest`] into an [`AiAnswer`].
 pub trait AiProvider: Send {
-    fn answer(&mut self, request: &AiRequest) -> Result<AiAnswer, RagMonkError>;
+    fn answer(&mut self, request: &AiRequest) -> Result<AiAnswer, DocMonkError>;
 }

@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-ui"
-description = "RagMonk local Admin UI: HTTP server, templates and live indexing events"
+description = "DocMonk local Admin UI: HTTP server, templates and live indexing events"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

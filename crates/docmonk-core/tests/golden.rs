@@ -1,7 +1,7 @@
 //! Core identities, secret detection, lock messages and the home layout
 //! against fixtures/expected/core_*.json.
 
-use docmonk_core::errors::{LockOwner, RagMonkError};
+use docmonk_core::errors::{DocMonkError, LockOwner};
 use docmonk_core::ids;
 use docmonk_core::paths::{project_id_for_canonical, Home};
 use docmonk_core::security::is_secret_filename_for;
@@ -77,7 +77,7 @@ fn lock_timeout_messages_are_as_expected() {
             }
             _ => LockOwner::default(),
         };
-        let err = RagMonkError::run_lock_timeout(
+        let err = DocMonkError::run_lock_timeout(
             "/x/locks/index.lock",
             c["timeout"].as_f64().unwrap(),
             &owner,

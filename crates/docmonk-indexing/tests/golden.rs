@@ -69,7 +69,7 @@ fn scan_and_change_counts_are_as_expected() {
     let source = common::add_source(&mut cp, &root, &inc, &exc);
     let layout = StorageLayout::new(&home);
     let registry = Registry::raw();
-    let opts = Options::from_config(&docmonk_config::RagMonkConfig::default());
+    let opts = Options::from_config(&docmonk_config::DocMonkConfig::default());
     for step in g["steps"].as_array().unwrap() {
         if let Some(w) = step.get("write").and_then(Value::as_object) {
             for (rel, c) in w {

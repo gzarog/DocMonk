@@ -25,8 +25,8 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::time::Instant;
 
-use docmonk_config::RagMonkConfig;
-use docmonk_core::errors::RagMonkError;
+use docmonk_config::DocMonkConfig;
+use docmonk_core::errors::DocMonkError;
 use docmonk_core::paths::Home;
 use docmonk_retrieval::decompose::{decompose, Subquery};
 use docmonk_retrieval::grounding::{self, EvidenceRef};
@@ -53,7 +53,7 @@ fn lexical_allowed(
     c: &Corpus<'_>,
     r: &SearchResult,
     f: &SearchFilters,
-) -> Result<bool, RagMonkError> {
+) -> Result<bool, DocMonkError> {
     let attachment = r.location.as_ref().is_some_and(|l| l.attachment.is_some());
     let doc_id = if r.kind == "document" && !f.document_ids.is_empty() {
         match c.store.chunk(c.build_id, &r.id).map_err(search_err_s)? {
@@ -67,7 +67,7 @@ fn lexical_allowed(
     Ok(f.allows(&r.source_id, &r.path, r.kind, doc_id.as_deref(), attachment))
 }
 
-fn search_err_s(e: docmonk_storage::StorageError) -> RagMonkError {
+fn search_err_s(e: docmonk_storage::StorageError) -> DocMonkError {
     e.into()
 }
 
@@ -90,14 +90,14 @@ fn semantic_allowed(h: &SourcedHit, f: &SearchFilters) -> bool {
 #[allow(clippy::too_many_arguments)]
 fn run_part(
     home: &Home,
-    cfg: &RagMonkConfig,
+    cfg: &DocMonkConfig,
     corp: &[Corpus<'_>],
     text: &str,
     plan: &Route,
     filters: &SearchFilters,
     limit: usize,
     degraded: &mut Vec<String>,
-) -> Result<Vec<RankedHit>, RagMonkError> {
+) -> Result<Vec<RankedHit>, DocMonkError> {
     // Over-fetch so filtering still leaves enough candidates.
     let fetch = (limit * 4).max(20);
     let mut lex = Vec::new();
@@ -235,13 +235,13 @@ fn absolute(opened: &[Opened], source_id: &str, rel: &str) -> String {
     }
 }
 
-/// The `evidence` payload (CLI `ragmonk evidence --json`, MCP
-/// `ragmonk_evidence`).
+/// The `evidence` payload (CLI `docmonk evidence --json`, MCP
+/// `docmonk_evidence`).
 pub fn evidence_value(
     home: &Home,
-    cfg: &RagMonkConfig,
+    cfg: &DocMonkConfig,
     req: &EvidenceRequest<'_>,
-) -> Result<Value, RagMonkError> {
+) -> Result<Value, DocMonkError> {
     let started = Instant::now();
     let budget_ms = cfg.search.max_query_budget_ms.max(1) as u128;
     let over = |t: &Instant| t.elapsed().as_millis() > budget_ms;

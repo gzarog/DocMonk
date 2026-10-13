@@ -1,5 +1,5 @@
 //! Ignore rules: default excluded
-//! directories, secret filenames, `.gitignore`/`.ragmonkignore`, source
+//! directories, secret filenames, `.gitignore`/`.docmonkignore`, source
 //! exclude patterns, and include patterns that re-include an ignored path.
 
 use std::path::{Component, Path, PathBuf};
@@ -8,7 +8,7 @@ use docmonk_core::security::{fnmatch, is_secret_filename};
 
 pub const DEFAULT_EXCLUDE_DIRS: &[&str] = &[
     ".git",
-    ".ragmonk",
+    ".docmonk",
     "node_modules",
     "bin",
     "obj",
@@ -64,7 +64,7 @@ impl IgnoreMatcher {
     pub fn new(root: &Path, extra_patterns: &[String], include_patterns: &[String]) -> Self {
         let mut patterns = extra_patterns.to_vec();
         patterns.extend(read_pattern_file(&root.join(".gitignore")));
-        patterns.extend(read_pattern_file(&root.join(".ragmonkignore")));
+        patterns.extend(read_pattern_file(&root.join(".docmonkignore")));
         Self {
             root: root.to_path_buf(),
             patterns,

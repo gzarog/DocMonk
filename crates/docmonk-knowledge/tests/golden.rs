@@ -61,7 +61,7 @@ fn fixture() -> Fx {
 
 impl Fx {
     fn index(&mut self) {
-        let cfg = docmonk_config::RagMonkConfig::default();
+        let cfg = docmonk_config::DocMonkConfig::default();
         let r = run_source(
             &self.layout,
             &mut self.cp,
@@ -266,7 +266,7 @@ fn manual_links_are_exact_persistent_and_removable() {
 #[test]
 fn links_appear_only_after_the_graph_stage_and_manual_intent_is_reapplied() {
     let mut f = fixture();
-    let cfg = docmonk_config::RagMonkConfig::default();
+    let cfg = docmonk_config::DocMonkConfig::default();
     run_source(
         &f.layout,
         &mut f.cp,

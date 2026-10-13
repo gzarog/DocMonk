@@ -36,7 +36,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
 
 use docmonk_config::model::parse_dependency;
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use docmonk_core::paths::{project_id_for_canonical, Home};
 use docmonk_indexing::lock::RunLock;
 use docmonk_storage::control::SourceRecord;
@@ -93,10 +93,10 @@ pub(crate) struct View {
 
 pub(crate) fn open_view(
     home: &Home,
-    cfg: &docmonk_config::RagMonkConfig,
+    cfg: &docmonk_config::DocMonkConfig,
     backend: &Backend,
     source: &SourceRecord,
-) -> Result<Option<View>, RagMonkError> {
+) -> Result<Option<View>, DocMonkError> {
     let (store, build) = match backend {
         Backend::Local => {
             let Some(build) = control_plane(home)?
@@ -183,7 +183,7 @@ pub fn csproj_references(text: &str) -> (Vec<String>, Vec<String>) {
 /// Collects the declared and discovered dependencies of `sources`.
 pub fn discover(
     home: &Home,
-    cfg: &docmonk_config::RagMonkConfig,
+    cfg: &docmonk_config::DocMonkConfig,
     backend: &Backend,
     sources: &[SourceRecord],
 ) -> Registry {
@@ -318,12 +318,12 @@ fn stale(reason: impl Into<String>) -> DependencyOutcome {
 
 /// Records `m` on the consumer (and on the server, the authoritative copy).
 fn persist(
-    cfg: &docmonk_config::RagMonkConfig,
+    cfg: &docmonk_config::DocMonkConfig,
     backend: &Backend,
     consumer: &SourceRecord,
     store: &mut ProjectStore,
     m: &ExternalManifest,
-) -> Result<(), RagMonkError> {
+) -> Result<(), DocMonkError> {
     store.put_external_manifest(m).map_err(db)?;
     if let Backend::Server(server) = backend {
         let ttl = std::time::Duration::from_secs_f64(cfg.storage.server.lease_seconds);
@@ -343,12 +343,12 @@ fn persist(
 /// Updates one consumer's bindings. The caller holds its lock.
 fn update_consumer(
     home: &Home,
-    cfg: &docmonk_config::RagMonkConfig,
+    cfg: &docmonk_config::DocMonkConfig,
     backend: &Backend,
     reg: &Registry,
     sources: &[SourceRecord],
     consumer: &SourceRecord,
-) -> Result<DependencyOutcome, RagMonkError> {
+) -> Result<DependencyOutcome, DocMonkError> {
     if !consumer.enabled {
         return Ok(DependencyOutcome::Pending {
             reason: "consumer source is disabled".into(),
@@ -577,7 +577,7 @@ fn update_consumer(
 /// catalog, enabled or not), each visited once under its own lock.
 pub fn run_stage(
     home: &Home,
-    cfg: &docmonk_config::RagMonkConfig,
+    cfg: &docmonk_config::DocMonkConfig,
     backend: &Backend,
     sources: &[SourceRecord],
     lock_timeout: std::time::Duration,
@@ -591,7 +591,7 @@ pub fn run_stage(
 /// again.
 pub fn run_stage_holding(
     home: &Home,
-    cfg: &docmonk_config::RagMonkConfig,
+    cfg: &docmonk_config::DocMonkConfig,
     backend: &Backend,
     sources: &[SourceRecord],
     lock_timeout: std::time::Duration,
@@ -637,11 +637,11 @@ pub fn run_stage_holding(
     }
 }
 
-/// `ragmonk`-level helper: the dependency stage over the whole catalog.
+/// `docmonk`-level helper: the dependency stage over the whole catalog.
 pub fn refresh(
     home: &Home,
     mut on_outcome: impl FnMut(&SourceRecord, &DependencyOutcome),
-) -> Result<DependencySummary, RagMonkError> {
+) -> Result<DependencySummary, DocMonkError> {
     let cfg = load(home)?;
     let backend = crate::backend::open_for_write(home)?;
     let sources = crate::sources::catalog(home)?.list(false)?;

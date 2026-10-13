@@ -1,4 +1,4 @@
-//! Docling document JSON -> RagMonk's canonical normalized document.
+//! Docling document JSON -> DocMonk's canonical normalized document.
 //!
 //! Operates on the Docling document JSON schema (`texts`, `tables`,
 //! `pictures`, `groups`, `body`, `pages`) that both Docling

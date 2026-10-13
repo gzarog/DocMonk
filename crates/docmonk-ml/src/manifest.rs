@@ -105,7 +105,7 @@ pub const ALL_MINILM_L6_V2: EmbeddingModelSpec = EmbeddingModelSpec {
     ],
 };
 
-/// The model RagMonk embeds with.
+/// The model DocMonk embeds with.
 pub const DEFAULT_EMBEDDING_MODEL: EmbeddingModelSpec = ALL_MINILM_L6_V2;
 
 /// A pinned cross-encoder (`BertForSequenceClassification` with one
@@ -154,7 +154,7 @@ pub const MS_MARCO_MINILM_L6_V2: RerankerModelSpec = RerankerModelSpec {
     ],
 };
 
-/// The reranker RagMonk uses.
+/// The reranker DocMonk uses.
 pub const DEFAULT_RERANKER_MODEL: RerankerModelSpec = MS_MARCO_MINILM_L6_V2;
 
 #[cfg(test)]

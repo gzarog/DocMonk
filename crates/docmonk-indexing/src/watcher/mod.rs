@@ -1,4 +1,4 @@
-//! Change detection feeding the daemon (`ragmonk.watcher`).
+//! Change detection feeding the daemon (`docmonk.watcher`).
 //!
 //! * [`local::LocalWatcher`]: native filesystem events through `notify`
 //!   (inotify, FSEvents, ReadDirectoryChangesW), falling back to `notify`'s

@@ -1,5 +1,5 @@
 //! HTTP transport with request telemetry. Credentials come only from
-//! `RAGMONK_{OPENSEARCH,ELASTICSEARCH}_{USERNAME,PASSWORD,API_KEY}`, never
+//! `DOCMONK_{OPENSEARCH,ELASTICSEARCH}_{USERNAME,PASSWORD,API_KEY}`, never
 //! from config, and never appear in errors.
 
 use std::collections::BTreeMap;
@@ -163,7 +163,7 @@ impl HttpTransport {
     pub fn new(base_url: &str, auth: Auth, timeout: Duration, verify_tls: bool) -> Result<Self> {
         if docmonk_telemetry::redact::url_has_userinfo(base_url) {
             return Err(BackendError::Invalid(
-                "server URL must not contain credentials; use the RAGMONK_<ENGINE>_* env vars"
+                "server URL must not contain credentials; use the DOCMONK_<ENGINE>_* env vars"
                     .into(),
             ));
         }
@@ -230,8 +230,8 @@ mod tests {
 
     #[test]
     fn endpoints_hide_index_names() {
-        assert_eq!(endpoint_of("/ragmonk-chunks/_bulk?refresh=false"), "_bulk");
-        assert_eq!(endpoint_of("/ragmonk-files"), "<index>");
+        assert_eq!(endpoint_of("/docmonk-chunks/_bulk?refresh=false"), "_bulk");
+        assert_eq!(endpoint_of("/docmonk-files"), "<index>");
         assert_eq!(endpoint_of("/_cat/indices"), "_cat");
         assert_eq!(endpoint_of("/x/_doc/abc"), "_doc");
     }

@@ -2,7 +2,7 @@
 //! HTTPS only, no project data sent, and a tag
 //! that is not a strict `MAJOR.MINOR.PATCH` is rejected.
 //!
-//! Debug builds read `RAGMONK_UPDATE_TEST_BASE` (a stand-in for both the
+//! Debug builds read `DOCMONK_UPDATE_TEST_BASE` (a stand-in for both the
 //! API and the download host) so the tests can serve fake releases.
 //! Release builds ignore it: nothing in config or the environment can
 //! point an update elsewhere.
@@ -27,7 +27,7 @@ pub struct Release {
 /// The test stand-in host (debug builds only).
 pub fn test_base() -> Option<String> {
     if cfg!(debug_assertions) {
-        std::env::var("RAGMONK_UPDATE_TEST_BASE")
+        std::env::var("DOCMONK_UPDATE_TEST_BASE")
             .ok()
             .filter(|b| !b.is_empty())
             .map(|b| b.trim_end_matches('/').to_owned())
@@ -59,12 +59,12 @@ pub fn asset_url(tag: &str, name: &str) -> String {
 pub fn client(timeout: Duration) -> reqwest::blocking::Client {
     reqwest::blocking::Client::builder()
         .timeout(timeout)
-        .user_agent(format!("ragmonk/{}", docmonk_core::version::version()))
+        .user_agent(format!("docmonk/{}", docmonk_core::version::version()))
         .build()
         .unwrap_or_else(|_| reqwest::blocking::Client::new())
 }
 
-/// Which releases `ragmonk update` follows (`updates.channel`).
+/// Which releases `docmonk update` follows (`updates.channel`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Channel {
     /// GitHub's "latest release": full releases only (the default).
@@ -192,7 +192,7 @@ mod tests {
         let with = |v: &str| json!([{"name": crate::asset_name(v, t)}, {"name": "SHA256SUMS"}]);
         let list = json!([
             // An older release: newest version, but no native archive.
-            {"tag_name": "v0.3.30", "html_url": "a", "assets": [{"name": "ragmonk-0.3.30.tar.gz"}]},
+            {"tag_name": "v0.3.30", "html_url": "a", "assets": [{"name": "docmonk-0.3.30.tar.gz"}]},
             {"tag_name": "v0.10.0", "html_url": "d", "draft": true, "assets": with("0.10.0")},
             {"tag_name": "v0.0.6", "html_url": "b", "prerelease": true, "assets": with("0.0.6")},
             {"tag_name": "release-0.0.9", "html_url": "c", "assets": with("0.0.9")},

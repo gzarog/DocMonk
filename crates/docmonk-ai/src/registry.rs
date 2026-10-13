@@ -20,7 +20,7 @@ pub struct ProviderCapability {
 
 const LOCAL_NOTE: &str = "Local inference; loopback host is exempt from the privacy flag.";
 
-/// Every provider, name-sorted (the order `ragmonk ai providers` prints).
+/// Every provider, name-sorted (the order `docmonk ai providers` prints).
 pub const REGISTRY: &[ProviderCapability] = &[
     ProviderCapability {
         provider_id: "anthropic",
@@ -98,7 +98,7 @@ pub const REGISTRY: &[ProviderCapability] = &[
         default_auth_mode: "api_key",
         cloud_egress: true,
         subscription: false,
-        api_key_env: Some("RAGMONK_OPENAI_COMPATIBLE_API_KEY"),
+        api_key_env: Some("DOCMONK_OPENAI_COMPATIBLE_API_KEY"),
         model_discovery: "config",
         usage_reporting: "unknown",
         beta: false,

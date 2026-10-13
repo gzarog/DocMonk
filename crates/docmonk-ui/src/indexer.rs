@@ -2,7 +2,7 @@
 //! time on a worker thread, recording progress events the
 //! `/events/indexing` stream tails.
 //!
-//! Each source pass takes the same `index` lock as `ragmonk index`, so a
+//! Each source pass takes the same `index` lock as `docmonk index`, so a
 //! UI run and a CLI run never index the same home concurrently.
 
 use std::collections::VecDeque;
@@ -84,7 +84,7 @@ impl Indexer {
         }
         let this = self.clone();
         std::thread::Builder::new()
-            .name("ragmonk-ui-indexer".into())
+            .name("docmonk-ui-indexer".into())
             .spawn(move || this.run(&home, source_id.as_deref(), rebuild, fresh))
             .map(|_| true)
             .unwrap_or_else(|_| {
@@ -139,7 +139,7 @@ impl Indexer {
         &self,
         home: &Home,
         source_id: Option<&str>,
-    ) -> Result<Value, docmonk_core::errors::RagMonkError> {
+    ) -> Result<Value, docmonk_core::errors::DocMonkError> {
         use docmonk_service::indexing::{index_sources, selected_sources, SourceEvent};
         let sources = selected_sources(home, source_id)?;
         let mut rows = Vec::new();

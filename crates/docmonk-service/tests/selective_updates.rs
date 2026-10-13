@@ -15,7 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use docmonk_code::graph_stage::PlanAction;
-use docmonk_config::RagMonkConfig;
+use docmonk_config::DocMonkConfig;
 use docmonk_core::paths::{project_id_for_canonical, Home};
 use docmonk_service::dependencies::DependencyOutcome;
 use docmonk_service::indexing::{index_sources, SourceEvent};
@@ -84,7 +84,7 @@ fn corpus(n: usize) -> Corpus {
         );
         roots.push(r);
     }
-    let mut cfg = RagMonkConfig::default();
+    let mut cfg = DocMonkConfig::default();
     cfg.updates.enabled = false;
     cfg.indexing.relationship_dependencies = (0..n)
         .flat_map(|i| {

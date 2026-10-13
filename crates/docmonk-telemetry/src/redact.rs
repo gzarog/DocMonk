@@ -11,17 +11,17 @@ pub const CREDENTIAL_ENV_VARS: &[(&str, [&str; 3])] = &[
     (
         "opensearch",
         [
-            "RAGMONK_OPENSEARCH_USERNAME",
-            "RAGMONK_OPENSEARCH_PASSWORD",
-            "RAGMONK_OPENSEARCH_API_KEY",
+            "DOCMONK_OPENSEARCH_USERNAME",
+            "DOCMONK_OPENSEARCH_PASSWORD",
+            "DOCMONK_OPENSEARCH_API_KEY",
         ],
     ),
     (
         "elasticsearch",
         [
-            "RAGMONK_ELASTICSEARCH_USERNAME",
-            "RAGMONK_ELASTICSEARCH_PASSWORD",
-            "RAGMONK_ELASTICSEARCH_API_KEY",
+            "DOCMONK_ELASTICSEARCH_USERNAME",
+            "DOCMONK_ELASTICSEARCH_PASSWORD",
+            "DOCMONK_ELASTICSEARCH_API_KEY",
         ],
     ),
 ];

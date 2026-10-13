@@ -1,4 +1,4 @@
-//! `ragmonk daemon` process lifecycle: start, status, a second start, stop.
+//! `docmonk daemon` process lifecycle: start, status, a second start, stop.
 
 use std::path::Path;
 use std::process::{Command, Output};
@@ -6,12 +6,12 @@ use std::process::{Command, Output};
 /// Output goes to files, not pipes: on Windows the detached daemon
 /// inherits the CLI's inheritable handles, so a pipe would never reach EOF
 /// while the daemon runs.
-fn ragmonk(home: &Path, args: &[&str]) -> Output {
+fn docmonk(home: &Path, args: &[&str]) -> Output {
     let dir = tempfile::tempdir().unwrap();
     let (out, err) = (dir.path().join("out"), dir.path().join("err"));
-    let mut child = Command::new(env!("CARGO_BIN_EXE_ragmonk"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_docmonk"))
         .args(args)
-        .env("RAGMONK_HOME", home)
+        .env("DOCMONK_HOME", home)
         .stdin(std::process::Stdio::null())
         .stdout(std::fs::File::create(&out).unwrap())
         .stderr(std::fs::File::create(&err).unwrap())
@@ -25,7 +25,7 @@ fn ragmonk(home: &Path, args: &[&str]) -> Output {
         }
         if std::time::Instant::now() > deadline {
             let _ = child.kill();
-            panic!("`ragmonk {}` did not finish within 60s", args.join(" "));
+            panic!("`docmonk {}` did not finish within 60s", args.join(" "));
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     };
@@ -37,7 +37,7 @@ fn ragmonk(home: &Path, args: &[&str]) -> Output {
 }
 
 fn status(home: &Path) -> serde_json::Value {
-    let out = ragmonk(home, &["daemon", "status", "--json"]);
+    let out = docmonk(home, &["daemon", "status", "--json"]);
     assert!(out.status.success(), "{out:?}");
     serde_json::from_slice::<serde_json::Value>(&out.stdout).unwrap()["data"].clone()
 }
@@ -83,7 +83,7 @@ fn start_status_stop() {
         ]
     );
 
-    let out = ragmonk(&home, &["daemon", "start"]);
+    let out = docmonk(&home, &["daemon", "start"]);
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(out.status.success(), "{out:?}");
     assert!(text.starts_with("Daemon started (pid "), "{text}");
@@ -94,16 +94,16 @@ fn start_status_stop() {
     assert!(s["uptime_seconds"].as_f64().unwrap() >= 0.0);
     assert!(home.join("daemon_health.json").is_file());
 
-    let out = ragmonk(&home, &["daemon", "start"]);
+    let out = docmonk(&home, &["daemon", "start"]);
     assert_eq!(
         String::from_utf8_lossy(&out.stdout).trim(),
         format!("Daemon already running (pid {pid})")
     );
     // A foreground run refuses while another daemon owns the home.
-    let out = ragmonk(&home, &["daemon", "run"]);
+    let out = docmonk(&home, &["daemon", "run"]);
     assert!(!out.status.success());
 
-    let out = ragmonk(&home, &["daemon", "stop"]);
+    let out = docmonk(&home, &["daemon", "stop"]);
     assert!(out.status.success(), "{out:?}");
     assert_eq!(
         String::from_utf8_lossy(&out.stdout).trim(),
@@ -111,7 +111,7 @@ fn start_status_stop() {
     );
     assert!(!home.join("daemon.pid").exists());
     assert_eq!(status(&home)["running"], false);
-    let out = ragmonk(&home, &["daemon", "stop"]);
+    let out = docmonk(&home, &["daemon", "stop"]);
     assert_eq!(
         String::from_utf8_lossy(&out.stdout).trim(),
         "Daemon is not running"

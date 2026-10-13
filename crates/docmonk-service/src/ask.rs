@@ -9,7 +9,7 @@
 //! as invalid and substantive uncited sentences as unsupported.
 
 use docmonk_ai::AiRequest;
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use docmonk_retrieval::grounding;
 use serde_json::{json, Value};
 
@@ -18,7 +18,7 @@ use crate::load;
 use crate::query::{config_budget, explore_value, open_sources};
 
 /// `ask` data: the answer plus the evidence behind it.
-pub fn ask_value(question: &str) -> Result<Value, RagMonkError> {
+pub fn ask_value(question: &str) -> Result<Value, DocMonkError> {
     let home = crate::prepared_home()?;
     let cfg = load(&home)?;
     let question = question.trim();

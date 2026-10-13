@@ -1,7 +1,7 @@
 //! Indexing benchmark harness.
 //!
 //! ```text
-//! ragmonk-index-bench [--files N] [--out path.json]
+//! docmonk-index-bench [--files N] [--out path.json]
 //! ```
 //!
 //! Generates a synthetic corpus (N source-code modules plus N/20 text
@@ -43,7 +43,7 @@ fn main() {
     let n: usize = arg("--files").and_then(|v| v.parse().ok()).unwrap_or(50);
     let out = arg("--out");
 
-    let tmp = std::env::temp_dir().join(format!("ragmonk-index-bench-{}", std::process::id()));
+    let tmp = std::env::temp_dir().join(format!("docmonk-index-bench-{}", std::process::id()));
     let root = tmp.join("source");
     for i in 0..n {
         write(&root, &format!("pkg{}/module_{i}.py", i % 10), &module(i));
@@ -72,7 +72,7 @@ fn main() {
         })
         .expect("add source");
     let reg = Registry::raw();
-    let opts = Options::from_config(&docmonk_config::RagMonkConfig::default());
+    let opts = Options::from_config(&docmonk_config::DocMonkConfig::default());
     let mut results = Vec::new();
     let mut run = |name: &str, cp: &mut ControlPlane| {
         let started = Instant::now();
@@ -119,7 +119,7 @@ fn main() {
     run("delete", &mut cp);
 
     let report = json!({
-        "plan_id": "ragmonk-1.0-clean-slate",
+        "plan_id": "docmonk-1.0-clean-slate",
 
         "files": n,
         "processing": "raw (scan/diff/hash/storage/publication only)",

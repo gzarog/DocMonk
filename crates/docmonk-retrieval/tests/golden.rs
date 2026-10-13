@@ -9,7 +9,7 @@
 //!
 //! Lexical rankings are always checked. Hybrid rankings need the embedding
 //! model, and the neural pass also needs the reranker (see docmonk-ml's tests
-//! for the `RAGMONK_MODELS_DIR` / `RAGMONK_REQUIRE_MODELS` contract).
+//! for the `DOCMONK_MODELS_DIR` / `DOCMONK_REQUIRE_MODELS` contract).
 
 use std::path::{Path, PathBuf};
 
@@ -55,14 +55,14 @@ fn copy_pinned(from: &Path, to: &Path) {
 }
 
 fn models_root(slug: &str) -> Option<PathBuf> {
-    let root = std::env::var_os("RAGMONK_MODELS_DIR").map(PathBuf::from)?;
+    let root = std::env::var_os("DOCMONK_MODELS_DIR").map(PathBuf::from)?;
     if root.join(slug).join("model.safetensors").exists() {
         Some(root)
     } else {
         assert_ne!(
-            std::env::var("RAGMONK_REQUIRE_MODELS").as_deref(),
+            std::env::var("DOCMONK_REQUIRE_MODELS").as_deref(),
             Ok("1"),
-            "RAGMONK_REQUIRE_MODELS=1 but {slug} is not installed"
+            "DOCMONK_REQUIRE_MODELS=1 but {slug} is not installed"
         );
         None
     }
@@ -95,7 +95,7 @@ fn index(rel: &str, models: Option<&Path>) -> Indexed {
         })
         .unwrap()
         .0;
-    let mut cfg = docmonk_config::RagMonkConfig::default();
+    let mut cfg = docmonk_config::DocMonkConfig::default();
     cfg.search.semantic = models.is_some();
     let opts = docmonk_convert::RegistryOptions {
         models_root: models.map(Path::to_path_buf),

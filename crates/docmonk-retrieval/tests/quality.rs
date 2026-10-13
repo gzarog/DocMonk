@@ -4,7 +4,7 @@
 //!
 //! Metrics are Recall@1/3/5/10, MRR and NDCG@10 over `kind:path` keys, in
 //! total and per query category; each must reach its floor in
-//! fixtures/search_quality/gates.json. `RAGMONK_QUALITY_OUT=<file>` writes
+//! fixtures/search_quality/gates.json. `DOCMONK_QUALITY_OUT=<file>` writes
 //! the measured numbers.
 
 use std::collections::{BTreeMap, HashSet};
@@ -44,14 +44,14 @@ fn copy_tree(from: &Path, to: &Path) {
 }
 
 fn models_root() -> Option<PathBuf> {
-    let root = std::env::var_os("RAGMONK_MODELS_DIR").map(PathBuf::from)?;
+    let root = std::env::var_os("DOCMONK_MODELS_DIR").map(PathBuf::from)?;
     let ok = root
         .join(DEFAULT_EMBEDDING_MODEL.slug)
         .join("model.safetensors")
         .exists();
     assert!(
-        ok || std::env::var("RAGMONK_REQUIRE_MODELS").as_deref() != Ok("1"),
-        "RAGMONK_REQUIRE_MODELS=1 but the embedding model is not installed"
+        ok || std::env::var("DOCMONK_REQUIRE_MODELS").as_deref() != Ok("1"),
+        "DOCMONK_REQUIRE_MODELS=1 but the embedding model is not installed"
     );
     ok.then_some(root)
 }
@@ -127,7 +127,7 @@ fn retrieval_meets_the_quality_gates() {
         })
         .unwrap()
         .0;
-    let mut cfg = docmonk_config::RagMonkConfig::default();
+    let mut cfg = docmonk_config::DocMonkConfig::default();
     cfg.search.semantic = models.is_some();
     let reg_opts = docmonk_convert::RegistryOptions {
         models_root: models.clone(),
@@ -219,7 +219,7 @@ fn retrieval_meets_the_quality_gates() {
         })
         .collect();
     eprintln!("{}", serde_json::to_string_pretty(&measured).unwrap());
-    if let Some(out) = std::env::var_os("RAGMONK_QUALITY_OUT") {
+    if let Some(out) = std::env::var_os("DOCMONK_QUALITY_OUT") {
         std::fs::write(out, serde_json::to_string_pretty(&json!(measured)).unwrap()).unwrap();
     }
 

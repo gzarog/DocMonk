@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-convert"
-description = "RagMonk Rust-native document conversion: docling.rs converter, normalizer and the document processor"
+description = "DocMonk Rust-native document conversion: docling.rs converter, normalizer and the document processor"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

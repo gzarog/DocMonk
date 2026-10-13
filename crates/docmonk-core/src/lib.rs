@@ -1,4 +1,4 @@
-//! RagMonk core contracts shared by every other crate: errors,
+//! DocMonk core contracts shared by every other crate: errors,
 //! models, paths, source IDs, server document IDs and security checks.
 
 pub mod errors;
@@ -8,4 +8,4 @@ pub mod paths;
 pub mod security;
 pub mod version;
 
-pub use errors::{ErrorKind, RagMonkError};
+pub use errors::{DocMonkError, ErrorKind};

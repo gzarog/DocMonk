@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use docmonk_core::paths::Home;
 use docmonk_service::indexing::{index_sources_with, selected_sources, RunOptions, SourceEvent};
 use serde_json::{json, Value};
@@ -16,10 +16,10 @@ pub fn rebuild_sources(
     source_id: Option<&str>,
     fresh: bool,
     mut each: impl FnMut(&Value),
-) -> Result<Vec<Value>, RagMonkError> {
+) -> Result<Vec<Value>, DocMonkError> {
     let sources = selected_sources(home, source_id)?;
     if sources.is_empty() {
-        return Err(RagMonkError::usage("no sources to rebuild"));
+        return Err(DocMonkError::usage("no sources to rebuild"));
     }
     if fresh {
         let unreachable: Vec<String> = sources
@@ -28,7 +28,7 @@ pub fn rebuild_sources(
             .map(|s| format!("{} ({})", s.id, s.path))
             .collect();
         if !unreachable.is_empty() {
-            return Err(RagMonkError::usage(format!(
+            return Err(DocMonkError::usage(format!(
                 "cannot rebuild --fresh: source root(s) not reachable: {}. Reconnect them (or remove the sources) and try again; the existing index was left untouched.",
                 unreachable.join(", ")
             )));

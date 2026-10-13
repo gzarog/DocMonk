@@ -1,9 +1,9 @@
-//! The RagMonk MCP server (`ragmonk serve --mcp`) over stdio.
+//! The DocMonk MCP server (`docmonk serve --mcp`) over stdio.
 //!
 //! A JSON-RPC 2.0 loop over newline-delimited stdin/stdout exposing the
-//! read-only `ragmonk_*` tools (catalog in `mcp_tools.json`) with
-//! `{schema_version, ok, error, ...}` results. `ragmonk_ask` answers
-//! through the configured AI provider, like `ragmonk ask`.
+//! read-only `docmonk_*` tools (catalog in `mcp_tools.json`) with
+//! `{schema_version, ok, error, ...}` results. `docmonk_ask` answers
+//! through the configured AI provider, like `docmonk ask`.
 //!
 //! Each tool call loads the config and opens the indexed sources afresh,
 //! like a CLI invocation, on a worker thread bounded by
@@ -16,7 +16,7 @@ use std::sync::mpsc;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use docmonk_core::errors::{ErrorKind, RagMonkError};
+use docmonk_core::errors::{DocMonkError, ErrorKind};
 use docmonk_core::paths::Home;
 use docmonk_retrieval::graph::{self, Direction};
 use docmonk_retrieval::lexical;
@@ -32,19 +32,19 @@ const LATEST_PROTOCOL_VERSION: &str = "2025-11-25";
 const SCHEMA_VERSION: &str = "1";
 
 pub const INSTRUCTIONS: &str =
-    "RagMonk exposes code and document knowledge already indexed locally \
-on this machine (see `ragmonk index`). Start with ragmonk_explore for a natural-language or \
-identifier query -- it is the primary tool and runs RagMonk's deterministic query planner. Use \
-ragmonk_evidence when you need hard source/path/document filters or verified [E#] citations \
+    "DocMonk exposes code and document knowledge already indexed locally \
+on this machine (see `docmonk index`). Start with docmonk_explore for a natural-language or \
+identifier query -- it is the primary tool and runs DocMonk's deterministic query planner. Use \
+docmonk_evidence when you need hard source/path/document filters or verified [E#] citations \
 with an explicit insufficient_evidence verdict. The other read-only tools \
-(ragmonk_search/symbol/callers/callees/impact/documents/status) are narrower, single-purpose \
+(docmonk_search/symbol/callers/callees/impact/documents/status) are narrower, single-purpose \
 lookups; all 9 of them return a bounded, versioned JSON result \
 (schema_version/ok/error) and never call an LLM or the network -- results are \
-retrieved/structured data for the calling agent to reason over. ragmonk_ask is the one \
+retrieved/structured data for the calling agent to reason over. docmonk_ask is the one \
 exception: it calls the locally configured `ai:` provider (which may be a real cloud endpoint, \
 gated by privacy.external_ai_allowed) to synthesize an answer over the same evidence \
-ragmonk_explore would return -- prefer ragmonk_explore when the calling agent can reason over \
-evidence itself; use ragmonk_ask only when a synthesized natural-language answer is \
+docmonk_explore would return -- prefer docmonk_explore when the calling agent can reason over \
+evidence itself; use docmonk_ask only when a synthesized natural-language answer is \
 specifically wanted.";
 
 /// The tool catalog `tools/list` returns.
@@ -59,23 +59,23 @@ fn tool(name: &str) -> Option<&'static Value> {
     tools().iter().find(|t| t["name"] == name)
 }
 
-/// `ragmonk serve [--mcp]`.
-pub fn serve(mcp: bool) -> Result<(), RagMonkError> {
+/// `docmonk serve [--mcp]`.
+pub fn serve(mcp: bool) -> Result<(), DocMonkError> {
     if !mcp {
-        return Err(RagMonkError::usage(
-            "ragmonk serve currently requires --mcp (the REST API lands in a later phase).",
+        return Err(DocMonkError::usage(
+            "docmonk serve currently requires --mcp (the REST API lands in a later phase).",
         ));
     }
     let home = prepared_home()?;
     if !load(&home)?.mcp.enabled {
-        return Err(RagMonkError::new(
+        return Err(DocMonkError::new(
             ErrorKind::Config,
-            "the MCP server is disabled (mcp.enabled=false in config); run `ragmonk config set \
+            "the MCP server is disabled (mcp.enabled=false in config); run `docmonk config set \
              mcp.enabled true` to enable it.",
         ));
     }
     // stdout is the transport: diagnostics go to stderr only.
-    eprintln!("RagMonk MCP server starting on stdio...");
+    eprintln!("DocMonk MCP server starting on stdio...");
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     for line in stdin.lock().lines() {
@@ -146,7 +146,7 @@ fn initialize(params: &Value) -> Value {
             "tools": {"listChanged": false},
         },
         "serverInfo": {
-            "name": format!("ragmonk v{}", docmonk_core::version::version()),
+            "name": format!("docmonk v{}", docmonk_core::version::version()),
             "version": docmonk_core::version::version(),
         },
         "instructions": INSTRUCTIONS,
@@ -336,12 +336,12 @@ fn project(value: &Value, schema: &Value, root: &Value) -> Value {
 // --------------------------------------------------------------- tools ---
 
 /// The error type name reported in a failed tool result.
-fn error_type(e: &RagMonkError) -> &'static str {
+fn error_type(e: &DocMonkError) -> &'static str {
     if let Some(class) = e.class() {
         return class;
     }
     match e.kind() {
-        ErrorKind::Generic => "RagMonkError",
+        ErrorKind::Generic => "DocMonkError",
         ErrorKind::Usage => "UsageError",
         ErrorKind::Config => "ConfigError",
         ErrorKind::SourceUnavailable => "SourceUnavailableError",
@@ -407,10 +407,10 @@ fn run_tool(name: &str, args: Map<String, Value>) -> Value {
     }
 }
 
-fn required(args: &Map<String, Value>, field: &str) -> Result<String, RagMonkError> {
+fn required(args: &Map<String, Value>, field: &str) -> Result<String, DocMonkError> {
     let value = args[field].as_str().unwrap_or_default().trim();
     if value.is_empty() {
-        return Err(RagMonkError::usage(format!("{field} must not be empty")));
+        return Err(DocMonkError::usage(format!("{field} must not be empty")));
     }
     Ok(value.to_owned())
 }
@@ -423,10 +423,10 @@ fn optional(args: &Map<String, Value>, field: &str, default: usize) -> usize {
     }
 }
 
-fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, RagMonkError> {
+fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, DocMonkError> {
     let cfg = load(home)?;
     match name {
-        "ragmonk_explore" => {
+        "docmonk_explore" => {
             let query = required(args, "query")?;
             let mut budget = query_cmd::config_budget(&cfg);
             let set = |field: &str, slot: &mut usize| {
@@ -451,7 +451,7 @@ fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, Rag
             let empty = |k: &str| r[k].as_array().is_none_or(Vec::is_empty);
             if empty("requirements") && empty("incidents") {
                 warnings.push(json!(
-                    "Requirements/Incidents are always empty: RagMonk has no document \
+                    "Requirements/Incidents are always empty: DocMonk has no document \
                      classifier yet to populate these categories."
                 ));
             }
@@ -468,12 +468,12 @@ fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, Rag
                 "warnings": warnings,
             }))
         }
-        "ragmonk_search" => {
+        "docmonk_search" => {
             let query = required(args, "query")?;
             let limit = optional(args, "limit", lexical::DEFAULT_LIMIT);
             query_cmd::lexical_value(&cfg, &open_sources(home, None)?, &query, limit)
         }
-        "ragmonk_evidence" => {
+        "docmonk_evidence" => {
             let query = required(args, "query")?;
             let list = |k: &str| -> Vec<String> {
                 args.get(k)
@@ -503,13 +503,13 @@ fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, Rag
                 },
             )
         }
-        "ragmonk_symbol" => {
+        "docmonk_symbol" => {
             let name = required(args, "name")?;
             query_cmd::symbol_value(&open_sources(home, None)?, &name)
         }
-        "ragmonk_callers" | "ragmonk_callees" => {
+        "docmonk_callers" | "docmonk_callees" => {
             let symbol = required(args, "name")?;
-            let direction = if name == "ragmonk_callers" {
+            let direction = if name == "docmonk_callers" {
                 Direction::Incoming
             } else {
                 Direction::Outgoing
@@ -522,7 +522,7 @@ fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, Rag
                 optional(args, "limit", graph::DEFAULT_LIMIT),
             )
         }
-        "ragmonk_impact" => {
+        "docmonk_impact" => {
             let symbol = required(args, "name")?;
             query_cmd::impact_value(
                 &open_sources(home, None)?,
@@ -531,7 +531,7 @@ fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, Rag
                 optional(args, "limit", graph::DEFAULT_LIMIT),
             )
         }
-        "ragmonk_documents" => {
+        "docmonk_documents" => {
             let source = args
                 .get("source_id")
                 .and_then(Value::as_str)
@@ -539,7 +539,7 @@ fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, Rag
                 .filter(|s| !s.is_empty());
             Ok(json!({"documents": docmonk_service::sources::docs_rows(home, source)?}))
         }
-        "ragmonk_status" => {
+        "docmonk_status" => {
             let source = args
                 .get("source_id")
                 .and_then(Value::as_str)
@@ -555,13 +555,13 @@ fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, Rag
             })?;
             if let Some(id) = &source {
                 if report.source(id).is_none() {
-                    return Err(RagMonkError::usage(format!("no such source: {id}")));
+                    return Err(DocMonkError::usage(format!("no such source: {id}")));
                 }
                 report.sources.retain(|s| &s.source_id == id);
             }
             Ok(json!({ "status": report }))
         }
-        "ragmonk_ask" => {
+        "docmonk_ask" => {
             let question = required(args, "question")?;
             let r = docmonk_service::ask::ask_value(&question)?;
             let mut warnings: Vec<Value> = Vec::new();
@@ -580,7 +580,7 @@ fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, Rag
                 "warnings": warnings,
             }))
         }
-        other => Err(RagMonkError::usage(format!("Unknown tool: {other}"))),
+        other => Err(DocMonkError::usage(format!("Unknown tool: {other}"))),
     }
 }
 
@@ -592,20 +592,20 @@ mod tests {
     fn catalog_has_all_ten_tools() {
         let names: Vec<&str> = tools().iter().filter_map(|t| t["name"].as_str()).collect();
         assert_eq!(names.len(), 10);
-        assert!(names.contains(&"ragmonk_evidence"));
-        assert!(names.contains(&"ragmonk_ask"));
+        assert!(names.contains(&"docmonk_evidence"));
+        assert!(names.contains(&"docmonk_ask"));
     }
 
     #[test]
     fn validation_lists_every_invalid_field() {
-        let schema = &tool("ragmonk_search").unwrap()["inputSchema"];
-        let err = validate("ragmonk_search", schema, &json!({"limit": "x"})).unwrap_err();
+        let schema = &tool("docmonk_search").unwrap()["inputSchema"];
+        let err = validate("docmonk_search", schema, &json!({"limit": "x"})).unwrap_err();
         assert_eq!(
             err,
-            "invalid arguments for ragmonk_search: query: required; limit: expected an integer"
+            "invalid arguments for docmonk_search: query: required; limit: expected an integer"
         );
         let ok = validate(
-            "ragmonk_search",
+            "docmonk_search",
             schema,
             &json!({"query": "q", "limit": "3", "extra": 1}),
         )
@@ -616,7 +616,7 @@ mod tests {
 
     #[test]
     fn projection_keeps_schema_fields_with_defaults() {
-        let schema = &tool("ragmonk_documents").unwrap()["outputSchema"];
+        let schema = &tool("docmonk_documents").unwrap()["outputSchema"];
         let v = project(
             &json!({"ok": true, "documents": [{"source_id": "s", "file_id": "f", "path": "p", "status": "indexed", "section_count": 1, "paragraph_count": 0, "table_count": 0, "is_scanned": false, "attachments": []}]}),
             schema,
@@ -634,7 +634,7 @@ mod tests {
             "../../docmonk-status/tests/fixtures/server_multi_host.json"
         ))
         .unwrap();
-        let schema = &tool("ragmonk_status").unwrap()["outputSchema"];
+        let schema = &tool("docmonk_status").unwrap()["outputSchema"];
         let out = project(&json!({"ok": true, "status": report}), schema, schema);
         assert_eq!(out["status"], report, "every canonical field survives");
         assert_eq!(out["schema_version"], "1");

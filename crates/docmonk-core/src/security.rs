@@ -1,8 +1,8 @@
-//! Secret-file filtering and source-root confinement (`ragmonk.security`).
+//! Secret-file filtering and source-root confinement (`docmonk.security`).
 
 use std::path::{Path, PathBuf};
 
-use crate::errors::RagMonkError;
+use crate::errors::DocMonkError;
 
 pub const SECRET_FILENAME_PATTERNS: &[&str] = &[
     ".env",
@@ -112,14 +112,14 @@ impl PathGuard {
         &self.roots
     }
 
-    pub fn resolve(&self, path: &Path) -> Result<PathBuf, RagMonkError> {
+    pub fn resolve(&self, path: &Path) -> Result<PathBuf, DocMonkError> {
         let resolved = crate::paths::resolve(path).map_err(|e| {
-            RagMonkError::security(format!("cannot resolve '{}': {e}", path.display()))
+            DocMonkError::security(format!("cannot resolve '{}': {e}", path.display()))
         })?;
         if self.roots.iter().any(|root| resolved.starts_with(root)) {
             return Ok(resolved);
         }
-        Err(RagMonkError::security(format!(
+        Err(DocMonkError::security(format!(
             "path '{}' resolves to '{}', which escapes all allowed source roots",
             path.display(),
             resolved.display()

@@ -19,8 +19,8 @@ use std::sync::mpsc::{sync_channel, Receiver};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use docmonk_config::RagMonkConfig;
-use docmonk_core::errors::{ErrorKind, RagMonkError};
+use docmonk_config::DocMonkConfig;
+use docmonk_core::errors::{DocMonkError, ErrorKind};
 use docmonk_core::ids::record;
 use docmonk_core::models::FileKind;
 use docmonk_core::paths::{project_id_for_canonical, Home};
@@ -269,7 +269,7 @@ pub struct Options {
 }
 
 impl Options {
-    pub fn from_config(cfg: &RagMonkConfig) -> Self {
+    pub fn from_config(cfg: &DocMonkConfig) -> Self {
         let cpus = std::thread::available_parallelism().map_or(1, |n| n.get());
         // Worker threads per pass may exceed the CPU budget: actual CPU use
         // is bounded process-wide by the resource governor's `cpu` permits
@@ -295,8 +295,8 @@ fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, false)
 }
 
-fn db_err(e: impl std::fmt::Display) -> RagMonkError {
-    RagMonkError::new(ErrorKind::Database, e.to_string())
+fn db_err(e: impl std::fmt::Display) -> DocMonkError {
+    DocMonkError::new(ErrorKind::Database, e.to_string())
 }
 
 struct Work {
@@ -349,8 +349,8 @@ fn run_workers(
     items: Vec<Work>,
     workers: usize,
     registry: &Registry,
-    mut on_done: impl FnMut(Vec<Done>) -> Result<(), RagMonkError>,
-) -> Result<PipelineStats, RagMonkError> {
+    mut on_done: impl FnMut(Vec<Done>) -> Result<(), DocMonkError>,
+) -> Result<PipelineStats, DocMonkError> {
     use std::sync::atomic::AtomicUsize;
     let bound = workers.saturating_mul(2).max(1);
     let in_flight = AtomicUsize::new(0);
@@ -468,7 +468,7 @@ pub fn run_source(
     registry: &Registry,
     opts: &Options,
     progress: &mut dyn Progress,
-) -> Result<SourceResult, RagMonkError> {
+) -> Result<SourceResult, DocMonkError> {
     run_source_with(layout, control, source, registry, opts, None, progress)
 }
 
@@ -487,7 +487,7 @@ pub fn run_source_with(
     opts: &Options,
     targets: Option<&std::collections::BTreeSet<PathBuf>>,
     progress: &mut dyn Progress,
-) -> Result<SourceResult, RagMonkError> {
+) -> Result<SourceResult, DocMonkError> {
     let mut result = SourceResult {
         source_id: source.id.clone(),
         ..SourceResult::default()
@@ -555,7 +555,7 @@ pub fn run_source_with(
     let (scanned, missing) = match targets {
         Some(t) => {
             let ts = scan_targets(root, &ignore, t, opts.follow_symlinks).map_err(|e| {
-                RagMonkError::new(ErrorKind::SourceUnavailable, format!("scan failed: {e}"))
+                DocMonkError::new(ErrorKind::SourceUnavailable, format!("scan failed: {e}"))
             })?;
             result.targeted = true;
             (ts.present, Some(ts.missing))
@@ -570,7 +570,7 @@ pub fn run_source_with(
                 },
             )
             .map_err(|e| {
-                RagMonkError::new(ErrorKind::SourceUnavailable, format!("scan failed: {e}"))
+                DocMonkError::new(ErrorKind::SourceUnavailable, format!("scan failed: {e}"))
             })?,
             None,
         ),
@@ -632,7 +632,7 @@ pub fn run_source_with(
                 finalizer
                     .on_warm_pass(&mut store, active_build_id)
                     .map_err(|e| {
-                        RagMonkError::new(
+                        DocMonkError::new(
                             ErrorKind::Generic,
                             format!("warm pass repair failed ({}): {}", e.code, e.message),
                         )
@@ -743,7 +743,7 @@ fn build(
     opts: &Options,
     progress: &mut dyn Progress,
     result: &mut SourceResult,
-) -> Result<(), RagMonkError> {
+) -> Result<(), DocMonkError> {
     if full {
         store
             .create_build(build_id, full, &registry.versions)
@@ -903,7 +903,7 @@ fn build(
     }
     for finalizer in &registry.finalizers {
         let report = finalizer.finalize(store, build_id, &touched).map_err(|e| {
-            RagMonkError::new(
+            DocMonkError::new(
                 ErrorKind::Generic,
                 format!("build finalization failed ({}): {}", e.code, e.message),
             )
@@ -930,7 +930,7 @@ pub fn index_all(
     registry: &Registry,
     opts: &Options,
     progress: &mut dyn Progress,
-) -> Result<RunSummary, RagMonkError> {
+) -> Result<RunSummary, DocMonkError> {
     let lock = RunLock::acquire(
         &home.locks_dir().join("index.lock"),
         "index",

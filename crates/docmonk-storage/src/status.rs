@@ -19,7 +19,7 @@ pub struct ErrorRecord {
 /// A file's `(last_indexed_at, updated_at)`.
 pub type FileTimes = (Option<String>, Option<String>);
 
-/// Every counter `ragmonk status` shows for one build, read by a single
+/// Every counter `docmonk status` shows for one build, read by a single
 /// SQL statement (one consistent read snapshot under WAL).
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
 pub struct BuildSummary {

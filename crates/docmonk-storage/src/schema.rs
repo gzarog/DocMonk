@@ -4,7 +4,7 @@
 //! existing database is used only when the schema fingerprint it recorded
 //! at creation equals [`control_fingerprint`] / [`knowledge_fingerprint`];
 //! anything else is refused with a reset/reindex instruction and left
-//! untouched. RagMonk never upgrades a database in place: every source can
+//! untouched. DocMonk never upgrades a database in place: every source can
 //! be rebuilt from its original files.
 //!
 //! Every index-derived row carries the `build_id` that produced it. Reads
@@ -335,9 +335,9 @@ pub fn recorded_fingerprint(conn: &Connection) -> std::result::Result<Option<Str
         |r| r.get::<_, String>(0),
     )
     .optional()
-    .map_err(|_| "no RagMonk schema fingerprint".to_owned())?
+    .map_err(|_| "no DocMonk schema fingerprint".to_owned())?
     .map(Some)
-    .ok_or_else(|| "no RagMonk schema fingerprint".to_owned())
+    .ok_or_else(|| "no DocMonk schema fingerprint".to_owned())
 }
 
 /// Opens the database at `path` read-write at schema `ddl`: an existing
@@ -452,7 +452,7 @@ mod tests {
         let before = tables(&conn);
         let err = create_or_verify(&mut conn, &path, CONTROL_SCHEMA).unwrap_err();
         assert!(matches!(err, StorageError::IncompatibleSchema { .. }));
-        assert!(err.to_string().contains("ragmonk index"), "{err}");
+        assert!(err.to_string().contains("docmonk index"), "{err}");
         assert_eq!(
             tables(&conn),
             before,

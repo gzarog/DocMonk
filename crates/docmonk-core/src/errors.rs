@@ -1,4 +1,4 @@
-//! Error hierarchy mapped onto RagMonk's stable CLI exit codes.
+//! Error hierarchy mapped onto DocMonk's stable CLI exit codes.
 
 use std::fmt;
 
@@ -47,7 +47,7 @@ impl ErrorKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RagMonkError {
+pub struct DocMonkError {
     kind: ErrorKind,
     message: String,
     exit_code: u8,
@@ -56,7 +56,7 @@ pub struct RagMonkError {
     class: Option<&'static str>,
 }
 
-impl RagMonkError {
+impl DocMonkError {
     pub fn new(kind: ErrorKind, message: impl Into<String>) -> Self {
         Self {
             kind,
@@ -117,7 +117,7 @@ impl RagMonkError {
         let timeout = format_g(timeout_seconds);
         let message = if owner.is_empty() {
             format!(
-                "Another RagMonk process holds {name} (owner unknown); \
+                "Another DocMonk process holds {name} (owner unknown); \
                  timed out after {timeout}s waiting for it."
             )
         } else {
@@ -140,7 +140,7 @@ impl RagMonkError {
                 details.join(", ")
             };
             format!(
-                "Another RagMonk process holds {name} ({joined}); \
+                "Another DocMonk process holds {name} ({joined}); \
                  timed out after {timeout}s waiting for it."
             )
         };
@@ -199,13 +199,13 @@ fn strip_zeros(s: &str) -> String {
     }
 }
 
-impl fmt::Display for RagMonkError {
+impl fmt::Display for DocMonkError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.message)
     }
 }
 
-impl std::error::Error for RagMonkError {}
+impl std::error::Error for DocMonkError {}
 
 #[cfg(test)]
 mod tests {
@@ -213,14 +213,14 @@ mod tests {
 
     #[test]
     fn exit_codes_by_error_kind() {
-        assert_eq!(RagMonkError::usage("x").exit_code(), 2);
-        assert_eq!(RagMonkError::config("x").exit_code(), 3);
+        assert_eq!(DocMonkError::usage("x").exit_code(), 2);
+        assert_eq!(DocMonkError::config("x").exit_code(), 3);
         assert_eq!(
-            RagMonkError::new(ErrorKind::LocalStorageModeRequired, "x").exit_code(),
+            DocMonkError::new(ErrorKind::LocalStorageModeRequired, "x").exit_code(),
             3
         );
-        assert_eq!(RagMonkError::security("x").exit_code(), 8);
-        assert_eq!(RagMonkError::usage("x").with_exit_code(6).exit_code(), 6);
+        assert_eq!(DocMonkError::security("x").exit_code(), 8);
+        assert_eq!(DocMonkError::usage("x").with_exit_code(6).exit_code(), 6);
     }
 
     #[test]

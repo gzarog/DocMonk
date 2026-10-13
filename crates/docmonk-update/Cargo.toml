@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-update"
-description = "RagMonk native self-update: release check, verified download, versioned install layout with atomic switch and rollback"
+description = "DocMonk native self-update: release check, verified download, versioned install layout with atomic switch and rollback"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

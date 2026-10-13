@@ -1,18 +1,18 @@
 //! Layered configuration loading.
 //!
 //! Precedence, highest wins: CLI overrides > environment variables
-//! (`RAGMONK_` prefix, `__` nesting) > project config (`./.ragmonk.yaml`)
+//! (`DOCMONK_` prefix, `__` nesting) > project config (`./.docmonk.yaml`)
 //! > user config (`<home>/config.yaml`) > built-in defaults.
 
 use std::path::{Path, PathBuf};
 
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use docmonk_core::paths::{project_config_path, Home};
 
-use crate::model::{RagMonkConfig, KNOWN_SECTIONS};
+use crate::model::{DocMonkConfig, KNOWN_SECTIONS};
 use crate::value::{deep_merge, Value};
 
-const ENV_PREFIX: &str = "RAGMONK_";
+const ENV_PREFIX: &str = "DOCMONK_";
 
 /// Inputs to [`load_config`]; `None` fields mean "use the process value".
 #[derive(Debug, Clone, Default)]
@@ -25,12 +25,12 @@ pub struct LoadOptions {
 }
 
 /// Reads a YAML config file; a missing or empty file is an empty mapping.
-pub fn load_yaml_file(path: &Path) -> Result<Value, RagMonkError> {
+pub fn load_yaml_file(path: &Path) -> Result<Value, DocMonkError> {
     if !path.is_file() {
         return Ok(Value::empty_map());
     }
     let read_err = |e: &dyn std::fmt::Display| {
-        RagMonkError::config(format!(
+        DocMonkError::config(format!(
             "failed to read config file {}: {e}",
             path.display()
         ))
@@ -39,14 +39,14 @@ pub fn load_yaml_file(path: &Path) -> Result<Value, RagMonkError> {
     match crate::yaml::parse(&raw).map_err(|e| read_err(&e))? {
         Value::Null => Ok(Value::empty_map()),
         map @ Value::Map(_) => Ok(map),
-        _ => Err(RagMonkError::config(format!(
+        _ => Err(DocMonkError::config(format!(
             "config file {} must contain a mapping at the top level",
             path.display()
         ))),
     }
 }
 
-/// `RAGMONK_<SECTION>__<KEY>[__<KEY>...]=value` variables as a value tree.
+/// `DOCMONK_<SECTION>__<KEY>[__<KEY>...]=value` variables as a value tree.
 /// Values stay strings; validation parses them into each field's type.
 pub fn env_overrides(environ: &[(String, String)]) -> Value {
     let mut overrides = Value::empty_map();
@@ -87,7 +87,7 @@ fn set_nested(root: &mut Value, segments: &[String], value: Value) {
 }
 
 /// The merged, not-yet-validated layers.
-pub fn merged_layers(opts: &LoadOptions) -> Result<Value, RagMonkError> {
+pub fn merged_layers(opts: &LoadOptions) -> Result<Value, DocMonkError> {
     let home = opts
         .home
         .clone()
@@ -95,7 +95,7 @@ pub fn merged_layers(opts: &LoadOptions) -> Result<Value, RagMonkError> {
         .unwrap_or_else(Home::discover);
     let cwd = match &opts.cwd {
         Some(c) => c.clone(),
-        None => std::env::current_dir().map_err(|e| RagMonkError::config(e.to_string()))?,
+        None => std::env::current_dir().map_err(|e| DocMonkError::config(e.to_string()))?,
     };
     let environ = opts.environ.clone().unwrap_or_else(|| {
         std::env::vars_os()
@@ -107,7 +107,7 @@ pub fn merged_layers(opts: &LoadOptions) -> Result<Value, RagMonkError> {
             })
             .collect()
     });
-    let defaults = RagMonkConfig::default().to_value();
+    let defaults = DocMonkConfig::default().to_value();
     let user = load_yaml_file(&home.user_config())?;
     let project = load_yaml_file(&project_config_path(&cwd))?;
     let env = env_overrides(&environ);
@@ -122,11 +122,11 @@ pub fn merged_layers(opts: &LoadOptions) -> Result<Value, RagMonkError> {
 
 /// Loads and validates the layered configuration. Validation errors are a
 /// config error (exit code 3) whose message has URL user-info scrubbed.
-pub fn load_config(opts: &LoadOptions) -> Result<RagMonkConfig, RagMonkError> {
+pub fn load_config(opts: &LoadOptions) -> Result<DocMonkConfig, DocMonkError> {
     let merged = merged_layers(opts)?;
-    RagMonkConfig::validate(&merged).map_err(|errors| {
+    DocMonkConfig::validate(&merged).map_err(|errors| {
         let message = scrub_url_userinfo(&errors.render());
-        RagMonkError::config(format!("invalid configuration: {message}"))
+        DocMonkError::config(format!("invalid configuration: {message}"))
     })
 }
 
@@ -141,12 +141,12 @@ fn scrub_url_userinfo(text: &str) -> String {
 }
 
 /// The configuration as YAML (`config show`, `config.yaml`).
-pub fn dump_yaml(config: &RagMonkConfig) -> String {
+pub fn dump_yaml(config: &DocMonkConfig) -> String {
     crate::yaml::emit(&config.to_value())
 }
 
 /// Writes the full configuration to `<home>/config.yaml`.
-pub fn write_user_config(config: &RagMonkConfig, home: &Home) -> std::io::Result<PathBuf> {
+pub fn write_user_config(config: &DocMonkConfig, home: &Home) -> std::io::Result<PathBuf> {
     let path = home.user_config();
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -156,8 +156,8 @@ pub fn write_user_config(config: &RagMonkConfig, home: &Home) -> std::io::Result
 }
 
 /// `config get`: the value at a dotted key.
-pub fn get_path(config: &RagMonkConfig, dotted: &str) -> Result<Value, RagMonkError> {
-    let unknown = || RagMonkError::usage(format!("unknown config key: {dotted}"));
+pub fn get_path(config: &DocMonkConfig, dotted: &str) -> Result<Value, DocMonkError> {
+    let unknown = || DocMonkError::usage(format!("unknown config key: {dotted}"));
     let mut cursor = config.to_value();
     for segment in dotted.split('.') {
         cursor = cursor.get(segment).cloned().ok_or_else(unknown)?;
@@ -170,11 +170,11 @@ pub fn get_path(config: &RagMonkConfig, dotted: &str) -> Result<Value, RagMonkEr
 /// key is a usage error (exit code 2); an unparsable or invalid value is a
 /// generic failure (exit code 1).
 pub fn set_path(
-    config: &RagMonkConfig,
+    config: &DocMonkConfig,
     dotted: &str,
     raw: &str,
-) -> Result<(RagMonkConfig, Value), RagMonkError> {
-    let unknown = || RagMonkError::usage(format!("unknown config key: {dotted}"));
+) -> Result<(DocMonkConfig, Value), DocMonkError> {
+    let unknown = || DocMonkError::usage(format!("unknown config key: {dotted}"));
     let mut data = config.to_value();
     let mut cursor = &mut data;
     for segment in dotted.split('.') {
@@ -184,8 +184,8 @@ pub fn set_path(
         return Err(unknown());
     }
     *cursor = Value::str(raw);
-    let updated = RagMonkConfig::validate(&data).map_err(|errors| {
-        RagMonkError::new(
+    let updated = DocMonkConfig::validate(&data).map_err(|errors| {
+        DocMonkError::new(
             docmonk_core::ErrorKind::Generic,
             format!(
                 "invalid configuration: {}",
@@ -204,13 +204,13 @@ mod tests {
     #[test]
     fn env_layer_is_typed_by_validation() {
         let env = vec![
-            ("RAGMONK_SEARCH__SEMANTIC".to_owned(), " TrUe ".to_owned()),
+            ("DOCMONK_SEARCH__SEMANTIC".to_owned(), " TrUe ".to_owned()),
             (
-                "RAGMONK_RUNTIME__SQLITE_CACHE_SIZE_MB".to_owned(),
+                "DOCMONK_RUNTIME__SQLITE_CACHE_SIZE_MB".to_owned(),
                 "16".to_owned(),
             ),
-            ("RAGMONK_NOT_A_SECTION__X".to_owned(), "1".to_owned()),
-            ("RAGMONK_HOME".to_owned(), "/x".to_owned()),
+            ("DOCMONK_NOT_A_SECTION__X".to_owned(), "1".to_owned()),
+            ("DOCMONK_HOME".to_owned(), "/x".to_owned()),
         ];
         let tmp = tempfile::tempdir().unwrap();
         let cfg = load_config(&LoadOptions {
@@ -240,7 +240,7 @@ mod tests {
         )
         .unwrap();
         std::fs::write(
-            tmp.path().join(".ragmonk.yaml"),
+            tmp.path().join(".docmonk.yaml"),
             "runtime:\n  log_level: warning\n",
         )
         .unwrap();
@@ -248,7 +248,7 @@ mod tests {
         assert_eq!(cfg.runtime.log_level, "warning");
         assert!(!cfg.search.lexical);
         std::fs::write(
-            tmp.path().join(".ragmonk.yaml"),
+            tmp.path().join(".docmonk.yaml"),
             "runtime:\n  max_workers: 2\n",
         )
         .unwrap();
@@ -263,7 +263,7 @@ mod tests {
 
     #[test]
     fn set_and_get() {
-        let cfg = RagMonkConfig::default();
+        let cfg = DocMonkConfig::default();
         let (cfg, v) = set_path(&cfg, "runtime.sqlite_cache_size_mb", "32").unwrap();
         assert_eq!(v, Value::Int(32));
         assert_eq!(cfg.runtime.sqlite_cache_size_mb, 32);
@@ -298,10 +298,10 @@ mod tests {
 
     #[test]
     fn dump_is_loadable() {
-        let cfg = RagMonkConfig::default();
+        let cfg = DocMonkConfig::default();
         let text = dump_yaml(&cfg);
         assert!(text.starts_with("runtime:\n"), "{text}");
         let back = crate::yaml::parse(&text).unwrap();
-        assert_eq!(RagMonkConfig::validate(&back).unwrap(), cfg);
+        assert_eq!(DocMonkConfig::validate(&back).unwrap(), cfg);
     }
 }

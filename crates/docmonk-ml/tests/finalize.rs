@@ -16,9 +16,9 @@ fn subjects(s: &ProjectStore, b: &str) -> i64 {
 fn missing_model_leaves_vectors_pending_until_it_is_installed() {
     let mut fx = fixture();
     let empty = tempfile::tempdir().unwrap();
-    // RAGMONK_MODELS_DIR would override the explicit root; this test only
+    // DOCMONK_MODELS_DIR would override the explicit root; this test only
     // runs the unavailable path when it is unset.
-    if std::env::var_os("RAGMONK_MODELS_DIR").is_some() {
+    if std::env::var_os("DOCMONK_MODELS_DIR").is_some() {
         return;
     }
     fx.index(empty.path());

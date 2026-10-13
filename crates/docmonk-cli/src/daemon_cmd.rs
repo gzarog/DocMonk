@@ -1,7 +1,7 @@
-//! `ragmonk daemon start|stop|restart|status|run`.
+//! `docmonk daemon start|stop|restart|status|run`.
 
 use clap::Subcommand;
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use docmonk_core::paths::Home;
 use docmonk_indexing::daemon::format_uptime;
 use docmonk_service::daemon::{self, Started, Stopped};
@@ -25,7 +25,7 @@ pub enum DaemonCommand {
     Run,
 }
 
-pub fn run(cmd: DaemonCommand) -> Result<(), RagMonkError> {
+pub fn run(cmd: DaemonCommand) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     match cmd {
         DaemonCommand::Start => start(&home),
@@ -36,23 +36,23 @@ pub fn run(cmd: DaemonCommand) -> Result<(), RagMonkError> {
         }
         DaemonCommand::Status { json } => status(&home, json),
         DaemonCommand::Run => daemon::run_foreground(&home, |me| {
-            println!("Daemon running (pid {me}); stop with: ragmonk daemon stop");
+            println!("Daemon running (pid {me}); stop with: docmonk daemon stop");
         }),
     }
 }
 
-fn start(home: &Home) -> Result<(), RagMonkError> {
+fn start(home: &Home) -> Result<(), DocMonkError> {
     match daemon::start(home)? {
         Started::AlreadyRunning(pid) => println!("Daemon already running (pid {pid})"),
         Started::Started(pid) => {
             println!("Daemon started (pid {pid})");
-            println!("  Monitor via: ragmonk daemon status");
+            println!("  Monitor via: docmonk daemon status");
         }
     }
     Ok(())
 }
 
-fn stop(home: &Home) -> Result<(), RagMonkError> {
+fn stop(home: &Home) -> Result<(), DocMonkError> {
     match daemon::stop(home)? {
         Stopped::NotRunning => println!("Daemon is not running"),
         Stopped::Stopped(pid) => println!("Daemon stopped (pid {pid})"),
@@ -60,7 +60,7 @@ fn stop(home: &Home) -> Result<(), RagMonkError> {
     Ok(())
 }
 
-fn status(home: &Home, json: bool) -> Result<(), RagMonkError> {
+fn status(home: &Home, json: bool) -> Result<(), DocMonkError> {
     let data = docmonk_indexing::daemon::status_payload(home);
     if json {
         return print_json(&data);

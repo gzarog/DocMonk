@@ -1,4 +1,4 @@
-//! `ragmonk ui` end to end.
+//! `docmonk ui` end to end.
 //!
 //! Replays `fixtures/expected/ui.json` against the server on the fixture
 //! corpus: status codes, content types, `HX-Redirect` targets and bodies
@@ -42,16 +42,16 @@ fn copy(from: &Path, to: &Path) {
     }
 }
 
-fn ragmonk(home: &Path) -> Command {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_ragmonk"));
+fn docmonk(home: &Path) -> Command {
+    let mut c = Command::new(env!("CARGO_BIN_EXE_docmonk"));
     for (k, _) in std::env::vars() {
-        if k.starts_with("RAGMONK_") || k == "OPENAI_API_KEY" || k == "ANTHROPIC_API_KEY" {
+        if k.starts_with("DOCMONK_") || k == "OPENAI_API_KEY" || k == "ANTHROPIC_API_KEY" {
             c.env_remove(k);
         }
     }
-    c.env("RAGMONK_HOME", home)
-        .env("RAGMONK_SEARCH__SEMANTIC", "false")
-        .env("RAGMONK_UPDATES__ENABLED", "false");
+    c.env("DOCMONK_HOME", home)
+        .env("DOCMONK_SEARCH__SEMANTIC", "false")
+        .env("DOCMONK_UPDATES__ENABLED", "false");
     c
 }
 
@@ -182,8 +182,8 @@ fn admin_ui_is_as_expected() {
     let golden_path = repo().join("fixtures/expected/ui.json");
     let mut golden: Vec<Value> =
         serde_json::from_str(&std::fs::read_to_string(&golden_path).unwrap()).unwrap();
-    // `RAGMONK_BLESS=1` rewrites the expected pages from this build's output.
-    let bless = std::env::var_os("RAGMONK_BLESS").is_some();
+    // `DOCMONK_BLESS=1` rewrites the expected pages from this build's output.
+    let bless = std::env::var_os("DOCMONK_BLESS").is_some();
     let dir = tempfile::tempdir().unwrap();
     let home = dir.path().join("home");
     let corpus = dir.path().join("source");
@@ -192,7 +192,7 @@ fn admin_ui_is_as_expected() {
     }
     pin_mtimes(&corpus);
     let run = |args: &[&str]| {
-        let o = ragmonk(&home)
+        let o = docmonk(&home)
             .args(args)
             .stdin(Stdio::null())
             .output()
@@ -215,7 +215,7 @@ fn admin_ui_is_as_expected() {
         .unwrap()
         .port();
     let _server = Server(
-        ragmonk(&home)
+        docmonk(&home)
             .args(["ui", "--no-browser", "--port", &port.to_string()])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -234,14 +234,14 @@ fn admin_ui_is_as_expected() {
     let token = first
         .header("set-cookie")
         .and_then(|c| c.split(';').next())
-        .and_then(|kv| kv.strip_prefix("ragmonk_csrf="))
+        .and_then(|kv| kv.strip_prefix("docmonk_csrf="))
         .expect("csrf cookie")
         .to_owned();
     let docs = request(
         port,
         "GET",
         &format!("/documents?source_id={source_id}&q=simple.md"),
-        &[(String::from("cookie"), format!("ragmonk_csrf={token}"))],
+        &[(String::from("cookie"), format!("docmonk_csrf={token}"))],
         "",
     )
     .body;
@@ -249,7 +249,7 @@ fn admin_ui_is_as_expected() {
     let doc_id = doc_re.captures(&docs).expect("document link")[1].to_owned();
 
     let version = env!("CARGO_PKG_VERSION");
-    let build_version = option_env!("RAGMONK_BUILD_VERSION")
+    let build_version = option_env!("DOCMONK_BUILD_VERSION")
         .filter(|v| !v.is_empty())
         .unwrap_or(version);
     let mut subs: Vec<(String, String)> = vec![
@@ -306,7 +306,7 @@ fn admin_ui_is_as_expected() {
     for rec in golden.iter_mut() {
         let method = rec["method"].as_str().unwrap();
         if method == "WRITE_LOG" {
-            let log = home.join("logs").join("ragmonk.log");
+            let log = home.join("logs").join("docmonk.log");
             std::fs::create_dir_all(log.parent().unwrap()).unwrap();
             let lines: Vec<&str> = rec["log_lines"]
                 .as_array()
@@ -323,7 +323,7 @@ fn admin_ui_is_as_expected() {
             .replace("{source}", &source_id)
             .replace("{doc}", &doc_id);
         let mut headers: Vec<(String, String)> =
-            vec![("cookie".into(), format!("ragmonk_csrf={token}"))];
+            vec![("cookie".into(), format!("docmonk_csrf={token}"))];
         for (k, v) in rec["headers"].as_object().unwrap() {
             headers.push((k.clone(), v.as_str().unwrap().to_owned()));
         }
@@ -439,7 +439,7 @@ fn admin_ui_is_as_expected() {
         port,
         "GET",
         "/config",
-        &[("cookie".into(), format!("ragmonk_csrf={token}"))],
+        &[("cookie".into(), format!("docmonk_csrf={token}"))],
         "",
     );
     assert!(
@@ -483,7 +483,7 @@ fn admin_ui_actions() {
     std::fs::create_dir_all(&src).unwrap();
     std::fs::write(src.join("a.py"), "def alpha():\n    return 1\n").unwrap();
     let run = |args: &[&str]| {
-        let o = ragmonk(&home)
+        let o = docmonk(&home)
             .args(args)
             .stdin(Stdio::null())
             .output()
@@ -504,7 +504,7 @@ fn admin_ui_actions() {
         .unwrap()
         .port();
     let _server = Server(
-        ragmonk(&home)
+        docmonk(&home)
             .args(["ui", "--no-browser", "--port", &port.to_string()])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -520,11 +520,11 @@ fn admin_ui_actions() {
     let token = request(port, "GET", "/", &[], "")
         .header("set-cookie")
         .and_then(|c| c.split(';').next())
-        .and_then(|kv| kv.strip_prefix("ragmonk_csrf="))
+        .and_then(|kv| kv.strip_prefix("docmonk_csrf="))
         .unwrap()
         .to_owned();
     let auth = vec![
-        ("cookie".to_owned(), format!("ragmonk_csrf={token}")),
+        ("cookie".to_owned(), format!("docmonk_csrf={token}")),
         ("x-csrf-token".to_owned(), token.clone()),
     ];
 
@@ -566,7 +566,7 @@ fn admin_ui_actions() {
         r.body
     );
     let page = request(port, "GET", "/backups", &auth[..1], "").body;
-    let name = Regex::new(r#"ragmonk-backup-[^\s<"]+\.tar\.gz"#)
+    let name = Regex::new(r#"docmonk-backup-[^\s<"]+\.tar\.gz"#)
         .unwrap()
         .find(&page)
         .expect("listed backup")
@@ -623,7 +623,7 @@ fn start_ui(home: &Path, env: &[(&str, &str)]) -> (Server, u16) {
         .local_addr()
         .unwrap()
         .port();
-    let mut c = ragmonk(home);
+    let mut c = docmonk(home);
     for (k, v) in env {
         c.env(k, v);
     }
@@ -657,10 +657,10 @@ fn status_api_matches_cli_and_readiness_tracks_the_backend() {
         &["source", "add", corpus.to_str().unwrap()],
         &["index"],
     ] {
-        assert!(ragmonk(&home).args(args).output().unwrap().status.success());
+        assert!(docmonk(&home).args(args).output().unwrap().status.success());
     }
     let cli: Value = serde_json::from_slice(
-        &ragmonk(&home)
+        &docmonk(&home)
             .args(["status", "--json"])
             .output()
             .unwrap()
@@ -694,9 +694,9 @@ fn status_api_matches_cli_and_readiness_tracks_the_backend() {
     let (_server, port) = start_ui(
         &home,
         &[
-            ("RAGMONK_STORAGE__MODE", "server"),
-            ("RAGMONK_STORAGE__SERVER__URL", "http://127.0.0.1:9"),
-            ("RAGMONK_STORAGE__SERVER__REQUEST_TIMEOUT_SECONDS", "2"),
+            ("DOCMONK_STORAGE__MODE", "server"),
+            ("DOCMONK_STORAGE__SERVER__URL", "http://127.0.0.1:9"),
+            ("DOCMONK_STORAGE__SERVER__REQUEST_TIMEOUT_SECONDS", "2"),
         ],
     );
     assert_eq!(request(port, "GET", "/health", &[], "").status, 200);

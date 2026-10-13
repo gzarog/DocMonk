@@ -8,13 +8,13 @@
 use clap::Subcommand;
 use docmonk_ai::registry::{self, ProviderCapability};
 use docmonk_ai::runtime::resolve_runtime;
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use serde_json::json;
 
 use crate::{load, prepared_home, print_json};
 use docmonk_service::ask::ask_value;
 
-pub fn ask(question: &str, json_output: bool) -> Result<(), RagMonkError> {
+pub fn ask(question: &str, json_output: bool) -> Result<(), DocMonkError> {
     let r = ask_value(question)?;
     if json_output {
         return print_json(&r);
@@ -36,7 +36,7 @@ pub fn ask(question: &str, json_output: bool) -> Result<(), RagMonkError> {
 
 #[derive(Subcommand)]
 pub enum AiCommand {
-    /// List every AI provider RagMonk knows about and its capabilities.
+    /// List every AI provider DocMonk knows about and its capabilities.
     Providers {
         #[arg(long = "json")]
         json: bool,
@@ -67,14 +67,14 @@ pub enum AiCommand {
     },
 }
 
-fn require_subscription(provider: &str) -> Result<&'static ProviderCapability, RagMonkError> {
+fn require_subscription(provider: &str) -> Result<&'static ProviderCapability, DocMonkError> {
     let cap = registry::get(provider).ok_or_else(|| {
-        RagMonkError::usage(format!(
-            "unknown ai provider '{provider}'; run 'ragmonk ai providers' to list them"
+        DocMonkError::usage(format!(
+            "unknown ai provider '{provider}'; run 'docmonk ai providers' to list them"
         ))
     })?;
     if !cap.subscription {
-        return Err(RagMonkError::usage(format!(
+        return Err(DocMonkError::usage(format!(
             "provider '{provider}' does not use account sign-in (it is an API-key or local \
              provider); this command applies only to subscription providers: {}",
             registry::SUBSCRIPTION_PROVIDERS.join(", ")
@@ -85,11 +85,11 @@ fn require_subscription(provider: &str) -> Result<&'static ProviderCapability, R
 
 /// Refuses to contact a cloud runtime while the privacy flag is off,
 /// before any runtime is started.
-fn gate_privacy(external_ai_allowed: bool, cap: &ProviderCapability) -> Result<(), RagMonkError> {
+fn gate_privacy(external_ai_allowed: bool, cap: &ProviderCapability) -> Result<(), DocMonkError> {
     if cap.cloud_egress && !external_ai_allowed {
         return Err(docmonk_ai::errors::policy_blocked(format!(
             "ai provider '{}' contacts a cloud runtime, which requires \
-             privacy.external_ai_allowed=true (it defaults to false). Set it with: ragmonk config \
+             privacy.external_ai_allowed=true (it defaults to false). Set it with: docmonk config \
              set privacy.external_ai_allowed true",
             cap.provider_id
         )));
@@ -97,8 +97,8 @@ fn gate_privacy(external_ai_allowed: bool, cap: &ProviderCapability) -> Result<(
     Ok(())
 }
 
-pub fn run(cmd: AiCommand) -> Result<(), RagMonkError> {
-    let gated = |provider: &str, gate: bool| -> Result<_, RagMonkError> {
+pub fn run(cmd: AiCommand) -> Result<(), DocMonkError> {
+    let gated = |provider: &str, gate: bool| -> Result<_, DocMonkError> {
         let cap = require_subscription(provider)?;
         let cfg = load(&prepared_home()?)?;
         if gate {

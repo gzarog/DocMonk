@@ -6,7 +6,7 @@ use serde_json::{json, Map, Value};
 
 use crate::text::plain;
 
-pub const SYSTEM_PROMPT: &str = "You are RagMonk's evidence-grounded assistant. Answer the user's \
+pub const SYSTEM_PROMPT: &str = "You are DocMonk's evidence-grounded assistant. Answer the user's \
 question using ONLY the evidence and call-graph paths provided below -- they were retrieved \
 deterministically from the user's own locally indexed code and documents, not written by you. If \
 the evidence does not answer the question, say so plainly rather than guessing. Cite the relevant \

@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-status"
-description = "RagMonk's single status model, local/server snapshot collectors and health evaluator"
+description = "DocMonk's single status model, local/server snapshot collectors and health evaluator"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

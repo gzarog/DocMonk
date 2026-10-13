@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-mcp"
-description = "RagMonk MCP server: JSON-RPC over stdio exposing read-only knowledge tools"
+description = "DocMonk MCP server: JSON-RPC over stdio exposing read-only knowledge tools"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

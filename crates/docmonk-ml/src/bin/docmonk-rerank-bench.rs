@@ -2,7 +2,7 @@
 //! fixtures/embeddings/queries.json against all 20 passages of texts.json,
 //! 3 rounds, and reports p50/p95 per 20-pair call.
 //!
-//! `ragmonk-rerank-bench <models root> [--out file]`
+//! `docmonk-rerank-bench <models root> [--out file]`
 
 use std::time::Instant;
 

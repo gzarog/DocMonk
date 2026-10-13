@@ -1,7 +1,7 @@
 //! Cold-linking benchmark.
 //!
 //! ```text
-//! ragmonk-link-bench [--code N] [--docs M] [--out report.json] [--emit-only DIR]
+//! docmonk-link-bench [--code N] [--docs M] [--out report.json] [--emit-only DIR]
 //! ```
 //!
 //! Generates N source-code modules and M Markdown documents that mention
@@ -66,7 +66,7 @@ fn main() {
         emit(Path::new(&dir), n_code, n_docs);
         return;
     }
-    let tmp = std::env::temp_dir().join(format!("ragmonk-link-bench-{}", std::process::id()));
+    let tmp = std::env::temp_dir().join(format!("docmonk-link-bench-{}", std::process::id()));
     let root = tmp.join("source");
     emit(&root, n_code, n_docs);
     let home = Home::new(tmp.join("home"));
@@ -85,7 +85,7 @@ fn main() {
             exclude_patterns: vec![],
         })
         .expect("source");
-    let cfg = docmonk_config::RagMonkConfig::default();
+    let cfg = docmonk_config::DocMonkConfig::default();
     let t = Instant::now();
     let r = run_source(
         &layout,

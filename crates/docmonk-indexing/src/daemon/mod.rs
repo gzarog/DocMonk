@@ -16,7 +16,7 @@
 //! Relationship graphs are a separate, later stage: a source whose pass
 //! published is remembered as graph-pending, and graph work
 //! ([`PassRunner::run_graph`]) is only dispatched once no index pass is
-//! queued or running (the same barrier as `ragmonk index`). A pass that
+//! queued or running (the same barrier as `docmonk index`). A pass that
 //! changes nothing still lets a missing, failed or outdated graph be
 //! rebuilt without reindexing.
 
@@ -30,7 +30,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, Weak};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use docmonk_core::errors::{ErrorKind, RagMonkError};
+use docmonk_core::errors::{DocMonkError, ErrorKind};
 use docmonk_core::models::SourceType;
 use docmonk_core::paths::Home;
 use docmonk_storage::control::{ControlPlane, SourceRecord};
@@ -63,19 +63,19 @@ pub struct ScanRequest {
 
 /// Source reads for the daemon's own bookkeeping.
 pub trait Catalog: Send {
-    fn list_sources(&mut self, enabled_only: bool) -> Result<Vec<SourceRecord>, RagMonkError>;
-    fn get_source(&mut self, id: &str) -> Result<Option<SourceRecord>, RagMonkError>;
+    fn list_sources(&mut self, enabled_only: bool) -> Result<Vec<SourceRecord>, DocMonkError>;
+    fn get_source(&mut self, id: &str) -> Result<Option<SourceRecord>, DocMonkError>;
 }
 
-fn db_err(e: impl std::fmt::Display) -> RagMonkError {
-    RagMonkError::new(ErrorKind::Database, e.to_string())
+fn db_err(e: impl std::fmt::Display) -> DocMonkError {
+    DocMonkError::new(ErrorKind::Database, e.to_string())
 }
 
 impl Catalog for ControlPlane {
-    fn list_sources(&mut self, enabled_only: bool) -> Result<Vec<SourceRecord>, RagMonkError> {
+    fn list_sources(&mut self, enabled_only: bool) -> Result<Vec<SourceRecord>, DocMonkError> {
         ControlPlane::list_sources(self, enabled_only).map_err(db_err)
     }
-    fn get_source(&mut self, id: &str) -> Result<Option<SourceRecord>, RagMonkError> {
+    fn get_source(&mut self, id: &str) -> Result<Option<SourceRecord>, DocMonkError> {
         ControlPlane::get_source(self, id).map_err(db_err)
     }
 }
@@ -88,7 +88,7 @@ pub trait PassRunner: Send {
         source: &SourceRecord,
         request: &ScanRequest,
         progress: &mut dyn Progress,
-    ) -> Result<SourceResult, RagMonkError>;
+    ) -> Result<SourceResult, DocMonkError>;
 
     /// The relationship graph stage of one source whose base index is
     /// published (the caller holds the source's lock). Returns the graph
@@ -120,7 +120,7 @@ impl PassRunner for CoordinatorRunner {
         source: &SourceRecord,
         request: &ScanRequest,
         progress: &mut dyn Progress,
-    ) -> Result<SourceResult, RagMonkError> {
+    ) -> Result<SourceResult, DocMonkError> {
         let targets = (!request.full).then_some(&request.changed_paths);
         run_source_with(
             &self.layout,
@@ -174,7 +174,7 @@ impl Default for DaemonOptions {
 }
 
 impl DaemonOptions {
-    pub fn from_config(cfg: &docmonk_config::RagMonkConfig) -> Self {
+    pub fn from_config(cfg: &docmonk_config::DocMonkConfig) -> Self {
         Self {
             policy: scheduler::Policy {
                 urgent_first: true,
@@ -406,7 +406,7 @@ impl Shared {
             runner.run_pass(&source, &request, &mut tracker)
         }))
         .unwrap_or_else(|_| {
-            Err(RagMonkError::new(
+            Err(DocMonkError::new(
                 ErrorKind::Generic,
                 "daemon pass panicked; its pending build was discarded",
             ))
@@ -462,14 +462,14 @@ impl Shared {
         &self,
         source_id: &str,
         tracker: &crate::progress::ProgressTracker,
-        error: Option<&RagMonkError>,
+        error: Option<&DocMonkError>,
     ) {
         tracker.source_finished(source_id, error.is_none());
         let mut p = lock(&self.progress);
         p.active = p.active.saturating_sub(1);
         if p.active == 0 {
             if let Some(t) = p.tracker.take() {
-                t.finish(error.map(RagMonkError::message));
+                t.finish(error.map(DocMonkError::message));
             }
         }
     }
@@ -594,7 +594,7 @@ impl Daemon {
         opts: DaemonOptions,
         catalog: Box<dyn Catalog>,
         runner: Box<dyn PassRunner>,
-    ) -> Result<Self, RagMonkError> {
+    ) -> Result<Self, DocMonkError> {
         Self::start_with_runners(home, opts, catalog, vec![runner])
     }
 
@@ -605,9 +605,9 @@ impl Daemon {
         opts: DaemonOptions,
         catalog: Box<dyn Catalog>,
         runners: Vec<Box<dyn PassRunner>>,
-    ) -> Result<Self, RagMonkError> {
+    ) -> Result<Self, DocMonkError> {
         if runners.is_empty() {
-            return Err(RagMonkError::usage("daemon needs at least one pass runner"));
+            return Err(DocMonkError::usage("daemon needs at least one pass runner"));
         }
         let opts_policy = opts.policy;
         let shared = Arc::new_cyclic(|me| Shared {
@@ -628,13 +628,13 @@ impl Daemon {
         for s in &sources {
             shared.attach_watcher(s);
         }
-        let spawn_err = |e: std::io::Error| RagMonkError::new(ErrorKind::Generic, e.to_string());
+        let spawn_err = |e: std::io::Error| DocMonkError::new(ErrorKind::Generic, e.to_string());
         let mut workers = Vec::with_capacity(runners.len());
         for (i, runner) in runners.into_iter().enumerate() {
             let w = Arc::clone(&shared);
             workers.push(
                 std::thread::Builder::new()
-                    .name(format!("ragmonk-daemon-worker-{i}"))
+                    .name(format!("docmonk-daemon-worker-{i}"))
                     .spawn(move || {
                         let mut runner = runner;
                         w.worker_loop(runner.as_mut());
@@ -644,7 +644,7 @@ impl Daemon {
         }
         let r = Arc::clone(&shared);
         let reconciler = std::thread::Builder::new()
-            .name("ragmonk-daemon-reconcile".into())
+            .name("docmonk-daemon-reconcile".into())
             .spawn(move || {
                 while !r.wait_stopped(r.opts.reconciliation_interval) {
                     r.reconcile();

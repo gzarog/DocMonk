@@ -1,9 +1,9 @@
 # Storage backend abstraction plan, Phase 9 (packaging/docs).
 #
-# OPTIONAL, dev-only convenience for exercising RagMonk's OpenSearch
+# OPTIONAL, dev-only convenience for exercising DocMonk's OpenSearch
 # server backend (crates/docmonk-backends) and its live integration
-# tests (RAGMONK_TEST_OPENSEARCH_URL, see CONTRIBUTING.md)
-# against a REAL cluster. This file is NEVER required to run RagMonk --
+# tests (DOCMONK_TEST_OPENSEARCH_URL, see CONTRIBUTING.md)
+# against a REAL cluster. This file is NEVER required to run DocMonk --
 # the default `storage.mode="local"` (SQLite/FTS5 + HNSW vectors) needs no server
 # at all, and even `storage.mode="server"` only needs *some* reachable
 # OpenSearch cluster, not specifically this compose file.
@@ -16,12 +16,12 @@
 #
 #   docker compose -f docker/docker-compose.opensearch.yml up -d
 #
-#   # Point the integration tests / a real `ragmonk init --storage-mode
+#   # Point the integration tests / a real `docmonk init --storage-mode
 #   # server` at it:
 #   export OPENSEARCH_URL=http://localhost:9200          # for the test suite
 #   pytest -m opensearch_integration tests/unit/test_backends_opensearch_integration.py
 #
-#   ragmonk init --storage-mode server --storage-engine opensearch \
+#   docmonk init --storage-mode server --storage-engine opensearch \
 #       --storage-url http://localhost:9200 --storage-no-verify-tls
 #
 #   docker compose -f docker/docker-compose.opensearch.yml down -v
@@ -29,7 +29,7 @@
 services:
   opensearch:
     image: opensearchproject/opensearch:2.15.0
-    container_name: ragmonk-dev-opensearch
+    container_name: docmonk-dev-opensearch
     environment:
       - discovery.type=single-node
       - plugins.security.disabled=true
@@ -44,7 +44,7 @@ services:
       - "9200:9200"
       - "9600:9600"
     volumes:
-      - ragmonk-dev-opensearch-data:/usr/share/opensearch/data
+      - docmonk-dev-opensearch-data:/usr/share/opensearch/data
 
 volumes:
-  ragmonk-dev-opensearch-data:
+  docmonk-dev-opensearch-data:

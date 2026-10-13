@@ -48,7 +48,7 @@ pub fn take_notice(home: &Path, installed: &str, enabled: bool, notify: bool) ->
         return None;
     }
     let text = format!(
-        "\nA newer RagMonk version is available: {installed} → {}\nRun `ragmonk update install` to upgrade.",
+        "\nA newer DocMonk version is available: {installed} → {}\nRun `docmonk update install` to upgrade.",
         cached.latest_version
     );
     let _ = cache::write(

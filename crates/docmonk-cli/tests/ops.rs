@@ -4,11 +4,11 @@
 use std::path::Path;
 use std::process::{Command, Output};
 
-fn ragmonk(home: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_ragmonk"))
+fn docmonk(home: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_docmonk"))
         .args(args)
-        .env("RAGMONK_HOME", home)
-        .env("RAGMONK_SEARCH__SEMANTIC", "false")
+        .env("DOCMONK_HOME", home)
+        .env("DOCMONK_SEARCH__SEMANTIC", "false")
         .stdin(std::process::Stdio::null())
         .output()
         .unwrap()
@@ -20,7 +20,7 @@ fn out(o: &Output) -> String {
 }
 
 fn json(home: &Path, args: &[&str]) -> serde_json::Value {
-    serde_json::from_str::<serde_json::Value>(&out(&ragmonk(home, args))).unwrap()["data"].clone()
+    serde_json::from_str::<serde_json::Value>(&out(&docmonk(home, args))).unwrap()["data"].clone()
 }
 
 fn setup() -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf) {
@@ -30,9 +30,9 @@ fn setup() -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf) {
     std::fs::create_dir_all(&src).unwrap();
     std::fs::write(src.join("app.py"), "def main():\n    return 1\n").unwrap();
     std::fs::write(src.join("notes.md"), "# Notes\n\nSome text.\n").unwrap();
-    out(&ragmonk(&home, &["init"]));
-    out(&ragmonk(&home, &["source", "add", src.to_str().unwrap()]));
-    out(&ragmonk(&home, &["index"]));
+    out(&docmonk(&home, &["init"]));
+    out(&docmonk(&home, &["source", "add", src.to_str().unwrap()]));
+    out(&docmonk(&home, &["index"]));
     (dir, home, src)
 }
 
@@ -65,8 +65,8 @@ fn doctor_and_health() {
         tok[4]["detail"].as_str().unwrap().contains("truncated 0"),
         "{tok}"
     );
-    let t = out(&ragmonk(&home, &["doctor"]));
-    assert!(t.contains("RagMonk Doctor") && t.contains("Result:"), "{t}");
+    let t = out(&docmonk(&home, &["doctor"]));
+    assert!(t.contains("DocMonk Doctor") && t.contains("Result:"), "{t}");
     let h = json(&home, &["health", "--json"]);
     assert_eq!(h["result"], d["result"]);
 }
@@ -84,7 +84,7 @@ fn backup_restore_round_trip_and_foreign_refusal() {
         .as_str()
         .unwrap()
         .to_owned();
-    out(&ragmonk(&home, &["source", "remove", &id, "--yes"]));
+    out(&docmonk(&home, &["source", "remove", &id, "--yes"]));
     assert!(json(&home, &["status", "--json"])["sources"]
         .as_array()
         .unwrap()
@@ -106,7 +106,7 @@ fn backup_restore_round_trip_and_foreign_refusal() {
     std::fs::create_dir_all(&stage).unwrap();
     std::fs::write(
         stage.join("manifest.json"),
-        r#"{"format_version": 0, "ragmonk_version": "0.9"}"#,
+        r#"{"format_version": 0, "docmonk_version": "0.9"}"#,
     )
     .unwrap();
     std::fs::write(stage.join("sources.db"), b"").unwrap();
@@ -117,7 +117,7 @@ fn backup_restore_round_trip_and_foreign_refusal() {
     ));
     t.append_dir_all(".", &stage).unwrap();
     t.into_inner().unwrap().finish().unwrap();
-    let o = ragmonk(&home, &["restore", foreign.to_str().unwrap()]);
+    let o = docmonk(&home, &["restore", foreign.to_str().unwrap()]);
     assert!(!o.status.success());
     assert!(
         String::from_utf8_lossy(&o.stderr).contains("unsupported backup archive format"),
@@ -130,12 +130,12 @@ fn backup_restore_round_trip_and_foreign_refusal() {
 
     // Garbage is refused before anything is touched.
     std::fs::write(dir.path().join("junk.tar.gz"), b"junk").unwrap();
-    let o = ragmonk(
+    let o = docmonk(
         &home,
         &["restore", dir.path().join("junk.tar.gz").to_str().unwrap()],
     );
     assert!(!o.status.success());
-    let o = ragmonk(&home, &["restore", "/no/such/archive.tar.gz"]);
+    let o = docmonk(&home, &["restore", "/no/such/archive.tar.gz"]);
     assert_eq!(o.status.code(), Some(2));
 }
 
@@ -145,7 +145,7 @@ fn rebuild_vectors_uninstall() {
     let r = json(&home, &["rebuild", "--json"]);
     assert_eq!(r["sources"][0]["scanned"], 2);
     assert_eq!(r["sources"][0]["indexed"], 2);
-    let t = out(&ragmonk(&home, &["rebuild", "--fresh", "--yes"]));
+    let t = out(&docmonk(&home, &["rebuild", "--fresh", "--yes"]));
     assert!(t.contains("rebuilt scanned=2 indexed=2"), "{t}");
 
     let v = json(&home, &["vectors", "rebuild", "--json"]);
@@ -168,8 +168,8 @@ fn rebuild_continues_past_a_failing_source() {
     let other = dir.path().join("other");
     std::fs::create_dir_all(&other).unwrap();
     std::fs::write(other.join("lib.py"), "def helper():\n    return 2\n").unwrap();
-    out(&ragmonk(&home, &["source", "add", other.to_str().unwrap()]));
-    out(&ragmonk(&home, &["index"]));
+    out(&docmonk(&home, &["source", "add", other.to_str().unwrap()]));
+    out(&docmonk(&home, &["index"]));
     // Break the first source's knowledge database: its rebuild must fail
     // on its own while the other source still rebuilds.
     let mut dbs: Vec<_> = std::fs::read_dir(home.join("projects"))
@@ -183,7 +183,7 @@ fn rebuild_continues_past_a_failing_source() {
         let _ = std::fs::remove_file(format!("{}{sidecar}", dbs[0].display()));
     }
     std::fs::write(&dbs[0], b"not a database").unwrap();
-    let o = ragmonk(&home, &["rebuild", "--json"]);
+    let o = docmonk(&home, &["rebuild", "--json"]);
     assert!(!o.status.success(), "a failed source makes the run partial");
     let v: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
     let sources = v["data"]["sources"].as_array().unwrap();

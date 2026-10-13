@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-ops"
-description = "RagMonk operations: health checks, backup/restore, rebuild, vector maintenance and data removal"
+description = "DocMonk operations: health checks, backup/restore, rebuild, vector maintenance and data removal"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

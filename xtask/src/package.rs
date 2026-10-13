@@ -1,6 +1,6 @@
 //! `cargo xtask package` and `cargo xtask release-manifest`.
 //!
-//! `package` writes `ragmonk-<ver>-<target>.tar.gz` (`.zip` for Windows
+//! `package` writes `docmonk-<ver>-<target>.tar.gz` (`.zip` for Windows
 //! targets) holding one top-level directory with the binary, the bundled
 //! models under `models/`, README.md and LICENSE, and adds or replaces the
 //! archive's line in `<out>/SHA256SUMS`. Entries are sorted and carry a
@@ -83,7 +83,7 @@ pub fn is_semver(v: &str) -> bool {
 
 /// `(path in archive, source file, unix mode)`, sorted.
 fn entries(root: &Path, a: &PackageArgs, windows: bool) -> Result<Vec<(String, PathBuf, u32)>> {
-    let name = if windows { "ragmonk.exe" } else { "ragmonk" };
+    let name = if windows { "docmonk.exe" } else { "docmonk" };
     if !a.binary.is_file() {
         bail!("binary {} does not exist", a.binary.display());
     }
@@ -124,7 +124,7 @@ fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
 /// Builds the archive and records it in `SHA256SUMS`; returns its path.
 pub fn package(root: &Path, a: &PackageArgs) -> Result<PathBuf> {
     let windows = a.target.contains("windows");
-    let top = format!("ragmonk-{}-{}", a.version, a.target);
+    let top = format!("docmonk-{}-{}", a.version, a.target);
     let archive = a
         .out
         .join(format!("{top}.{}", if windows { "zip" } else { "tar.gz" }));
@@ -215,7 +215,7 @@ fn update_sums(out: &Path, archive: &Path) -> Result<()> {
 }
 
 fn is_release_archive(name: &str) -> bool {
-    name.starts_with("ragmonk-") && (name.ends_with(".tar.gz") || name.ends_with(".zip"))
+    name.starts_with("docmonk-") && (name.ends_with(".tar.gz") || name.ends_with(".zip"))
 }
 
 /// Writes `<dist>/SHA256SUMS` over every release archive in `dist` and
@@ -236,7 +236,7 @@ pub fn release_manifest(dist: &Path) -> Result<Vec<String>> {
     }
     if lines.is_empty() {
         bail!(
-            "no ragmonk-*.tar.gz / ragmonk-*.zip archives in {}",
+            "no docmonk-*.tar.gz / docmonk-*.zip archives in {}",
             dist.display()
         );
     }
@@ -266,7 +266,7 @@ mod tests {
         std::fs::create_dir_all(root.join("models/m")).unwrap();
         std::fs::write(root.join("README.md"), "readme").unwrap();
         std::fs::write(root.join("models/m/w.bin"), "weights").unwrap();
-        let bin = root.join("ragmonk");
+        let bin = root.join("docmonk");
         std::fs::write(&bin, "#!/bin/sh\n").unwrap();
         let args = |out: &Path, target: &str| PackageArgs {
             binary: bin.clone(),
@@ -285,7 +285,7 @@ mod tests {
         package(&root, &args(&a, "x86_64-pc-windows-msvc")).unwrap();
         let sums = std::fs::read_to_string(a.join(SUMS)).unwrap();
         assert_eq!(sums.lines().count(), 2, "{sums}");
-        assert!(sums.contains("  ragmonk-1.0.0-x86_64-pc-windows-msvc.zip\n"));
+        assert!(sums.contains("  docmonk-1.0.0-x86_64-pc-windows-msvc.zip\n"));
 
         // The tar.gz holds one top directory with binary, docs and models.
         let gz = flate2::read::GzDecoder::new(std::fs::File::open(&first).unwrap());
@@ -298,9 +298,9 @@ mod tests {
         assert_eq!(
             names,
             [
-                "ragmonk-1.0.0-x86_64-unknown-linux-gnu/README.md",
-                "ragmonk-1.0.0-x86_64-unknown-linux-gnu/models/m/w.bin",
-                "ragmonk-1.0.0-x86_64-unknown-linux-gnu/ragmonk",
+                "docmonk-1.0.0-x86_64-unknown-linux-gnu/README.md",
+                "docmonk-1.0.0-x86_64-unknown-linux-gnu/models/m/w.bin",
+                "docmonk-1.0.0-x86_64-unknown-linux-gnu/docmonk",
             ]
         );
 

@@ -157,7 +157,7 @@ impl DocumentProcessor {
         // Materialized under an internal name; the sender's filename never
         // touches the filesystem. Removed on every path.
         let dir = tempfile::Builder::new()
-            .prefix("ragmonk-attachment-")
+            .prefix("docmonk-attachment-")
             .tempdir()
             .map_err(|e| e.to_string())?;
         let path = dir.path().join(format!("attachment{ext}"));

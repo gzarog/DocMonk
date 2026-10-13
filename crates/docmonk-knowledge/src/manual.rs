@@ -1,4 +1,4 @@
-//! Explicit, user-defined links (`ragmonk link add|remove|list`).
+//! Explicit, user-defined links (`docmonk link add|remove|list`).
 //!
 //! Stored persistently in `manual_links` by entity qualified name and
 //! document path (plus attachment index and optional chunk ordinal), so they

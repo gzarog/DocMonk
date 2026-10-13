@@ -38,7 +38,7 @@ fn documents_are_converted_chunked_and_searchable() {
     let layout = StorageLayout::new(&home);
     let mut cp = common::control(&home);
     let src = common::add_source(&mut cp, &root, &[], &[]);
-    let cfg = docmonk_config::RagMonkConfig::default();
+    let cfg = docmonk_config::DocMonkConfig::default();
     let reg = docmonk_convert::registry(&cfg);
     let mut opts = Options::from_config(&cfg);
     opts.workers = 4;

@@ -1,10 +1,10 @@
 //! Subscription runtime lifecycle: the status snapshot,
-//! the lifecycle trait `ragmonk ai` drives, and executable lookup.
+//! the lifecycle trait `docmonk ai` drives, and executable lookup.
 
 use std::path::PathBuf;
 
 use docmonk_config::model::AiConfig;
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use serde_json::{json, Value};
 
 use crate::errors::runtime_unavailable;
@@ -34,17 +34,17 @@ impl RuntimeStatus {
 
 /// Sign-in, sign-out, state and models of an account-based provider.
 pub trait SubscriptionRuntime {
-    fn status(&mut self) -> Result<RuntimeStatus, RagMonkError>;
-    fn login(&mut self) -> Result<RuntimeStatus, RagMonkError>;
-    fn logout(&mut self) -> Result<(), RagMonkError>;
-    fn models(&mut self) -> Result<Vec<String>, RagMonkError>;
+    fn status(&mut self) -> Result<RuntimeStatus, DocMonkError>;
+    fn login(&mut self) -> Result<RuntimeStatus, DocMonkError>;
+    fn logout(&mut self) -> Result<(), DocMonkError>;
+    fn models(&mut self) -> Result<Vec<String>, DocMonkError>;
 }
 
 /// The runtime for a subscription provider; nothing starts until used.
 pub fn resolve_runtime(
     provider_id: &str,
     ai: &AiConfig,
-) -> Result<Box<dyn SubscriptionRuntime>, RagMonkError> {
+) -> Result<Box<dyn SubscriptionRuntime>, DocMonkError> {
     let cap = registry::get(provider_id).filter(|c| c.subscription);
     match cap.map(|c| c.provider_id) {
         Some("codex") => Ok(Box::new(crate::codex::CodexRuntime::new(ai))),

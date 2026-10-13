@@ -1,16 +1,16 @@
 //! Version/build metadata. Release builds of the Rust binary set
-//! `RAGMONK_BUILD_VERSION` (and optionally `RAGMONK_BUILD_COMMIT`) at compile
+//! `DOCMONK_BUILD_VERSION` (and optionally `DOCMONK_BUILD_COMMIT`) at compile
 //! time so both report the same release string.
 
 pub fn version() -> &'static str {
-    match option_env!("RAGMONK_BUILD_VERSION") {
+    match option_env!("DOCMONK_BUILD_VERSION") {
         Some(v) if !v.is_empty() => v,
         _ => env!("CARGO_PKG_VERSION"),
     }
 }
 
 pub fn commit() -> Option<&'static str> {
-    option_env!("RAGMONK_BUILD_COMMIT").filter(|c| !c.is_empty())
+    option_env!("DOCMONK_BUILD_COMMIT").filter(|c| !c.is_empty())
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

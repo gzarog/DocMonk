@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use clap::Subcommand;
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use docmonk_retrieval::graph::{self, Direction, SourceMatch, TraversalEdge};
 use docmonk_retrieval::lexical::{self, SearchResult};
 use docmonk_retrieval::{classify, explore, hybrid};
@@ -77,7 +77,7 @@ pub struct GraphArgs {
     json: bool,
 }
 
-pub fn symbol(name: &str, json_output: bool) -> Result<(), RagMonkError> {
+pub fn symbol(name: &str, json_output: bool) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let opened = open_sources(&home, None)?;
     if json_output {
@@ -93,7 +93,7 @@ pub fn symbol(name: &str, json_output: bool) -> Result<(), RagMonkError> {
 }
 
 /// `callers` (incoming CALLS) and `callees` (outgoing CALLS).
-pub fn calls(a: &GraphArgs, direction: Direction) -> Result<(), RagMonkError> {
+pub fn calls(a: &GraphArgs, direction: Direction) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let opened = open_sources(&home, None)?;
     let (matches, edges) = graph::traverse_symbol(
@@ -114,7 +114,7 @@ pub fn calls(a: &GraphArgs, direction: Direction) -> Result<(), RagMonkError> {
     )
 }
 
-pub fn references(a: &GraphArgs) -> Result<(), RagMonkError> {
+pub fn references(a: &GraphArgs) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let opened = open_sources(&home, None)?;
     let (matches, edges) =
@@ -128,7 +128,7 @@ fn graph_output(
     matches: &[SourceMatch],
     edges: &[TraversalEdge],
     nothing: bool,
-) -> Result<(), RagMonkError> {
+) -> Result<(), DocMonkError> {
     if a.json {
         return print_json(&json!({
             "query": a.name,
@@ -156,7 +156,7 @@ fn format_location(d: &Value) -> String {
     path.to_owned()
 }
 
-pub fn impact(a: &GraphArgs) -> Result<(), RagMonkError> {
+pub fn impact(a: &GraphArgs) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let opened = open_sources(&home, None)?;
     let payload = impact_value(&opened, &a.name, a.max_depth, a.limit)?;
@@ -222,7 +222,7 @@ pub fn impact(a: &GraphArgs) -> Result<(), RagMonkError> {
 
 // ---------------------------------------------------------- explore ---
 
-pub fn explore(query: &str, json_output: bool) -> Result<(), RagMonkError> {
+pub fn explore(query: &str, json_output: bool) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let cfg = load(&home)?;
     let opened = open_sources(&home, None)?;
@@ -497,7 +497,7 @@ pub enum LinkCommand {
         #[arg(long = "source")]
         source: Option<String>,
     },
-    /// Remove a manual link by id, as shown by 'ragmonk link list'.
+    /// Remove a manual link by id, as shown by 'docmonk link list'.
     Remove {
         link_id: String,
         #[arg(long = "source")]
@@ -518,7 +518,7 @@ pub enum LinkCommand {
     },
 }
 
-pub fn search(a: &SearchArgs) -> Result<(), RagMonkError> {
+pub fn search(a: &SearchArgs) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let cfg = load(&home)?;
     let sc = &cfg.search;
@@ -708,7 +708,7 @@ pub fn search(a: &SearchArgs) -> Result<(), RagMonkError> {
     Ok(())
 }
 
-pub fn link(cmd: LinkCommand) -> Result<(), RagMonkError> {
+pub fn link(cmd: LinkCommand) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     match cmd {
         LinkCommand::Add {
@@ -780,7 +780,7 @@ pub fn link(cmd: LinkCommand) -> Result<(), RagMonkError> {
     Ok(())
 }
 
-/// `ragmonk evidence`: hard-filtered, routed, decomposed and grounded
+/// `docmonk evidence`: hard-filtered, routed, decomposed and grounded
 /// evidence with typed citations (ADR 0033).
 #[derive(clap::Args)]
 pub struct EvidenceArgs {
@@ -808,7 +808,7 @@ pub struct EvidenceArgs {
     json: bool,
 }
 
-pub fn evidence(a: &EvidenceArgs) -> Result<(), RagMonkError> {
+pub fn evidence(a: &EvidenceArgs) -> Result<(), DocMonkError> {
     let home = prepared_home()?;
     let cfg = load(&home)?;
     let v = docmonk_service::evidence::evidence_value(

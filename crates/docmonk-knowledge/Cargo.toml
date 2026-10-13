@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-knowledge"
-description = "RagMonk cross-domain knowledge linker (code entities <-> document chunks) and explicit links"
+description = "DocMonk cross-domain knowledge linker (code entities <-> document chunks) and explicit links"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

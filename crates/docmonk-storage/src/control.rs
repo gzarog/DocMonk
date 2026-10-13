@@ -404,7 +404,7 @@ impl ControlPlane {
         Ok(())
     }
 
-    /// Forces a full rebuild (e.g. `ragmonk rebuild`, version change).
+    /// Forces a full rebuild (e.g. `docmonk rebuild`, version change).
     pub fn require_full_rebuild(&mut self, source_id: &str, reason: &str) -> Result<()> {
         let n = self
             .conn

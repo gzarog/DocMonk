@@ -3,7 +3,7 @@
 //!
 //! Metrics are Recall@1/3/5/10, MRR and NDCG@10 over `kind:path` keys;
 //! each must reach its floor in `fixtures/search_quality/gates.json`.
-//! `RAGMONK_QUALITY_OUT=<file>` also writes the measured numbers as a
+//! `DOCMONK_QUALITY_OUT=<file>` also writes the measured numbers as a
 //! benchmark record.
 
 mod common;
@@ -70,7 +70,7 @@ fn semantic_and_reranked_quality_meet_the_gates() {
     let rerank_dir = models.join(DEFAULT_RERANKER_MODEL.slug);
     if !rerank_dir.join("model.safetensors").exists() {
         assert_ne!(
-            std::env::var("RAGMONK_REQUIRE_MODELS").as_deref(),
+            std::env::var("DOCMONK_REQUIRE_MODELS").as_deref(),
             Ok("1"),
             "reranker model not installed"
         );
@@ -153,7 +153,7 @@ fn semantic_and_reranked_quality_meet_the_gates() {
             );
         }
     }
-    if let Some(out) = std::env::var_os("RAGMONK_QUALITY_OUT") {
+    if let Some(out) = std::env::var_os("DOCMONK_QUALITY_OUT") {
         let round = |m: &Value| -> Value {
             m.as_object()
                 .unwrap()

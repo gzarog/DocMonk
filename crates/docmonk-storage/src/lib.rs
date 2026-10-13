@@ -1,6 +1,6 @@
-//! RagMonk local storage.
+//! DocMonk local storage.
 //!
-//! Layout inside a RagMonk home:
+//! Layout inside a DocMonk home:
 //!
 //! ```text
 //! <home>/state/control.db                       control plane (sources, build state)
@@ -28,7 +28,7 @@ pub use error::StorageError;
 
 use std::path::{Path, PathBuf};
 
-/// Storage paths under a RagMonk home.
+/// Storage paths under a DocMonk home.
 #[derive(Debug, Clone)]
 pub struct StorageLayout {
     state: PathBuf,

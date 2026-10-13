@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-ai"
-description = "RagMonk AI providers for `ask`: OpenAI, Anthropic, Ollama, OpenAI-compatible, and the Codex/Copilot subscription runtimes"
+description = "DocMonk AI providers for `ask`: OpenAI, Anthropic, Ollama, OpenAI-compatible, and the Codex/Copilot subscription runtimes"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

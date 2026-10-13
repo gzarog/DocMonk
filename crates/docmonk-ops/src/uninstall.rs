@@ -1,15 +1,15 @@
 //! Data removal for `uninstall`.
 
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use docmonk_core::paths::Home;
 use docmonk_indexing::daemon::pid;
 
 use crate::backup::STOP_TIMEOUT;
 use crate::generic;
 
-/// Deletes the whole RagMonk home, stopping a running daemon first.
+/// Deletes the whole DocMonk home, stopping a running daemon first.
 /// Returns whether anything was deleted.
-pub fn purge_data(home: &Home) -> Result<bool, RagMonkError> {
+pub fn purge_data(home: &Home) -> Result<bool, DocMonkError> {
     if !home.root().exists() {
         return Ok(false);
     }

@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use docmonk_core::paths::{project_id_for_canonical, Home};
 use docmonk_indexing::daemon::pid;
 use docmonk_storage::maintenance;
@@ -31,7 +31,7 @@ pub(crate) const STOP_TIMEOUT: Duration = Duration::from_secs(15);
 struct Scratch(PathBuf);
 
 impl Scratch {
-    fn new(home: &Home, label: &str) -> Result<Self, RagMonkError> {
+    fn new(home: &Home, label: &str) -> Result<Self, DocMonkError> {
         let stamp = chrono::Utc::now().format("%Y%m%d%H%M%S%f");
         let dir = home
             .tmp_dir()
@@ -49,7 +49,7 @@ impl Drop for Scratch {
 
 /// Writes a backup archive and returns `(path, manifest)`. Reads every
 /// database through read-only snapshots.
-pub fn create_backup(home: &Home, dest: Option<&Path>) -> Result<(PathBuf, Value), RagMonkError> {
+pub fn create_backup(home: &Home, dest: Option<&Path>) -> Result<(PathBuf, Value), DocMonkError> {
     // Server mode: the knowledge lives in the cluster; back it up with the
     // cluster's snapshot API. A local archive would not contain it.
     crate::require_local(home, "backup")?;
@@ -67,7 +67,7 @@ pub fn create_backup(home: &Home, dest: Option<&Path>) -> Result<(PathBuf, Value
     let created_at = now_iso();
     let manifest = json!({
         "format_version": MANIFEST_FORMAT_VERSION,
-        "ragmonk_version": docmonk_core::version::version(),
+        "docmonk_version": docmonk_core::version::version(),
         "created_at": created_at,
         "control_schema": control_fingerprint(),
         "projects": projects,
@@ -81,7 +81,7 @@ pub fn create_backup(home: &Home, dest: Option<&Path>) -> Result<(PathBuf, Value
                 .filter(|c| !matches!(c, ':' | '-' | '.'))
                 .collect();
             home.backups_dir()
-                .join(format!("ragmonk-backup-{stamp}.tar.gz"))
+                .join(format!("docmonk-backup-{stamp}.tar.gz"))
         }
     };
     if let Some(dir) = archive.parent().filter(|p| !p.as_os_str().is_empty()) {
@@ -118,7 +118,7 @@ pub fn create_backup(home: &Home, dest: Option<&Path>) -> Result<(PathBuf, Value
     Ok((archive, manifest))
 }
 
-fn extract(archive: &Path, into: &Path) -> Result<(), RagMonkError> {
+fn extract(archive: &Path, into: &Path) -> Result<(), DocMonkError> {
     let file = std::fs::File::open(archive).map_err(generic)?;
     let mut tar = tar::Archive::new(flate2::read::GzDecoder::new(file));
     tar.set_preserve_permissions(false);
@@ -127,7 +127,7 @@ fn extract(archive: &Path, into: &Path) -> Result<(), RagMonkError> {
         .map_err(|e| dberr(format!("archive is corrupt or unreadable: {e}")))
 }
 
-fn move_aside(path: &Path, holding: &Path) -> Result<Option<PathBuf>, RagMonkError> {
+fn move_aside(path: &Path, holding: &Path) -> Result<Option<PathBuf>, DocMonkError> {
     if !path.exists() {
         return Ok(None);
     }
@@ -137,12 +137,12 @@ fn move_aside(path: &Path, holding: &Path) -> Result<Option<PathBuf>, RagMonkErr
 }
 
 /// Verifies and restores an archive into `home` (the `restore` report).
-pub fn restore_archive(home: &Home, archive: &Path) -> Result<Value, RagMonkError> {
+pub fn restore_archive(home: &Home, archive: &Path) -> Result<Value, DocMonkError> {
     crate::require_local(home, "restore")?;
     let home = home.clone();
     let archive = archive.to_path_buf();
     if !archive.is_file() {
-        return Err(RagMonkError::usage(format!(
+        return Err(DocMonkError::usage(format!(
             "no such archive: {}",
             archive.display()
         )));
@@ -159,14 +159,14 @@ pub fn restore_archive(home: &Home, archive: &Path) -> Result<Value, RagMonkErro
     let format = manifest["format_version"].as_i64();
     if format != Some(MANIFEST_FORMAT_VERSION) {
         return Err(dberr(format!(
-            "unsupported backup archive format v{} (this RagMonk restores v{MANIFEST_FORMAT_VERSION}); \
+            "unsupported backup archive format v{} (this DocMonk restores v{MANIFEST_FORMAT_VERSION}); \
              refusing to restore, nothing was changed",
             format.map_or_else(|| "?".to_owned(), |v| v.to_string())
         )));
     }
     let incompatible = |what: &str, detail: &str| {
         dberr(format!(
-            "{what} in this archive does not match this RagMonk's storage format ({detail}); \
+            "{what} in this archive does not match this DocMonk's storage format ({detail}); \
              refusing to restore, nothing was changed. Reindex your sources instead"
         ))
     };

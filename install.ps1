@@ -1,15 +1,15 @@
-# Installs the native RagMonk CLI on Windows: downloads the
+# Installs the native DocMonk CLI on Windows: downloads the
 # release archive, verifies it against the release's SHA256SUMS (and the
 # minisign signature over it, when a key is configured below and
 # minisign.exe is on PATH), unpacks it under
-# $env:RAGMONK_INSTALL_DIR\versions, and puts ragmonk.exe on a per-user
+# $env:DOCMONK_INSTALL_DIR\versions, and puts docmonk.exe on a per-user
 # bin directory added to the user's PATH.
 #
-#   RAGMONK_VERSION        version to install (default: the latest release)
-#   RAGMONK_INSTALL_DIR    default: %LOCALAPPDATA%\RagMonk
-#   RAGMONK_BIN_DIR        default: <install dir>\bin
-#   RAGMONK_HOME           default: %LOCALAPPDATA%\RagMonk
-#   RAGMONK_DOWNLOAD_BASE  a URL or local directory holding the release
+#   DOCMONK_VERSION        version to install (default: the latest release)
+#   DOCMONK_INSTALL_DIR    default: %LOCALAPPDATA%\DocMonk
+#   DOCMONK_BIN_DIR        default: <install dir>\bin
+#   DOCMONK_HOME           default: %LOCALAPPDATA%\DocMonk
+#   DOCMONK_DOWNLOAD_BASE  a URL or local directory holding the release
 #                          assets (testing and mirrors)
 
 $ErrorActionPreference = "Stop"
@@ -18,13 +18,13 @@ $Repo = "gzarog/RagMonk"
 # The release-signing public key (minisign). Empty: checksums only.
 $MinisignPubkey = ""
 $Target = "x86_64-pc-windows-msvc"
-$InstallDir = if ($env:RAGMONK_INSTALL_DIR) { $env:RAGMONK_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "RagMonk" }
+$InstallDir = if ($env:DOCMONK_INSTALL_DIR) { $env:DOCMONK_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "DocMonk" }
 $LayoutBin = Join-Path $InstallDir "bin"
-$BinDir = if ($env:RAGMONK_BIN_DIR) { $env:RAGMONK_BIN_DIR } else { $LayoutBin }
-$RagMonkHome = if ($env:RAGMONK_HOME) { $env:RAGMONK_HOME } else { Join-Path $env:LOCALAPPDATA "RagMonk" }
+$BinDir = if ($env:DOCMONK_BIN_DIR) { $env:DOCMONK_BIN_DIR } else { $LayoutBin }
+$DocMonkHome = if ($env:DOCMONK_HOME) { $env:DOCMONK_HOME } else { Join-Path $env:LOCALAPPDATA "DocMonk" }
 
 if ($env:PROCESSOR_ARCHITECTURE -ne "AMD64") {
-    throw "No RagMonk release for $($env:PROCESSOR_ARCHITECTURE) Windows; build from source (see README.md)."
+    throw "No DocMonk release for $($env:PROCESSOR_ARCHITECTURE) Windows; build from source (see README.md)."
 }
 
 function Get-Asset([string]$From, [string]$Dest) {
@@ -39,7 +39,7 @@ function Get-Asset([string]$From, [string]$Dest) {
     }
 }
 
-$Version = $env:RAGMONK_VERSION
+$Version = $env:DOCMONK_VERSION
 if (-not $Version) {
     $latest = Invoke-RestMethod -UseBasicParsing -Headers @{ Accept = "application/vnd.github+json" } `
         -Uri "https://api.github.com/repos/$Repo/releases/latest"
@@ -48,14 +48,14 @@ if (-not $Version) {
 }
 $Version = $Version -replace '^v', ''
 if ($Version -notmatch '^[0-9][0-9A-Za-z.+-]*$') { throw "invalid version '$Version'" }
-$Base = if ($env:RAGMONK_DOWNLOAD_BASE) { $env:RAGMONK_DOWNLOAD_BASE.TrimEnd('/', '\') } else { "https://github.com/$Repo/releases/download/v$Version" }
-$Asset = "ragmonk-$Version-$Target.zip"
+$Base = if ($env:DOCMONK_DOWNLOAD_BASE) { $env:DOCMONK_DOWNLOAD_BASE.TrimEnd('/', '\') } else { "https://github.com/$Repo/releases/download/v$Version" }
+$Asset = "docmonk-$Version-$Target.zip"
 $Sep = if ($Base -match '^https?://') { "/" } else { "\" }
 
-$Tmp = Join-Path ([IO.Path]::GetTempPath()) ("ragmonk-" + [Guid]::NewGuid())
+$Tmp = Join-Path ([IO.Path]::GetTempPath()) ("docmonk-" + [Guid]::NewGuid())
 New-Item -ItemType Directory -Path $Tmp | Out-Null
 try {
-    Write-Host "Downloading RagMonk $Version ($Target)..."
+    Write-Host "Downloading DocMonk $Version ($Target)..."
     Get-Asset "$Base$Sep$Asset" (Join-Path $Tmp $Asset)
     Get-Asset "$Base${Sep}SHA256SUMS" (Join-Path $Tmp "SHA256SUMS")
 
@@ -88,8 +88,8 @@ try {
     Expand-Archive -Path (Join-Path $Tmp $Asset) -DestinationPath $Unpack
     $top = Get-ChildItem $Unpack -Directory | Select-Object -First 1
     Move-Item $top.FullName $Partial
-    $exe = Join-Path $Partial "ragmonk.exe"
-    if (-not (Test-Path $exe)) { throw "$Asset does not contain ragmonk.exe" }
+    $exe = Join-Path $Partial "docmonk.exe"
+    if (-not (Test-Path $exe)) { throw "$Asset does not contain docmonk.exe" }
     & $exe version | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "the downloaded binary does not run on this machine" }
     $VersionDir = Join-Path $Versions $Version
@@ -101,22 +101,22 @@ try {
 
 $Models = Join-Path $VersionDir "models"
 if (Test-Path $Models) {
-    $dest = Join-Path $RagMonkHome "models"
+    $dest = Join-Path $DocMonkHome "models"
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
     Copy-Item -Recurse -Force (Join-Path $Models "*") $dest
 }
 
 # Windows cannot replace a running executable but can rename it: the
-# previous ragmonk.exe becomes ragmonk.exe.old (the same swap
-# `ragmonk update install` does).
+# previous docmonk.exe becomes docmonk.exe.old (the same swap
+# `docmonk update install` does).
 New-Item -ItemType Directory -Force -Path $LayoutBin | Out-Null
-$Exe = Join-Path $LayoutBin "ragmonk.exe"
+$Exe = Join-Path $LayoutBin "docmonk.exe"
 $OldExe = "$Exe.old"
 if (Test-Path $OldExe) { Remove-Item -Force $OldExe -ErrorAction SilentlyContinue }
 # Still there: an older exe is still running; park this one elsewhere.
 if (Test-Path $OldExe) { $OldExe = "$Exe.old-$PID" }
 if (Test-Path $Exe) { Move-Item -Force $Exe $OldExe }
-Copy-Item (Join-Path $VersionDir "ragmonk.exe") $Exe
+Copy-Item (Join-Path $VersionDir "docmonk.exe") $Exe
 Set-Content -NoNewline -Path (Join-Path $InstallDir "current") -Value $Version
 
 $StatePath = Join-Path $InstallDir "install_state.json"
@@ -130,19 +130,19 @@ if (Test-Path $StatePath) {
 
 if ($BinDir -ne $LayoutBin) {
     New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
-    Set-Content -Encoding ASCII -Path (Join-Path $BinDir "ragmonk.cmd") -Value "@`"$Exe`" %*"
+    Set-Content -Encoding ASCII -Path (Join-Path $BinDir "docmonk.cmd") -Value "@`"$Exe`" %*"
 }
-Write-Host "RagMonk $Version installed: $Exe"
+Write-Host "DocMonk $Version installed: $Exe"
 
-# `ragmonk update` reads this to find the install it manages.
-New-Item -ItemType Directory -Force -Path $RagMonkHome | Out-Null
+# `docmonk update` reads this to find the install it manages.
+New-Item -ItemType Directory -Force -Path $DocMonkHome | Out-Null
 $info = [ordered]@{
     install_method = "native"
     repository = $Repo
     install_dir = $InstallDir
     bin_dir = $BinDir
 } | ConvertTo-Json
-[IO.File]::WriteAllText((Join-Path $RagMonkHome "install_info.json"), $info)
+[IO.File]::WriteAllText((Join-Path $DocMonkHome "install_info.json"), $info)
 
 $UserPath = [Environment]::GetEnvironmentVariable("PATH", "User")
 if (-not (($UserPath -split ';') -contains $BinDir)) {
@@ -153,6 +153,6 @@ if (-not (($UserPath -split ';') -contains $BinDir)) {
 
 Write-Host ""
 Write-Host "Get started:"
-Write-Host "  ragmonk init"
-Write-Host "  ragmonk source add <path>"
-Write-Host "  ragmonk index"
+Write-Host "  docmonk init"
+Write-Host "  docmonk source add <path>"
+Write-Host "  docmonk index"

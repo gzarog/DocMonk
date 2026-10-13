@@ -1,4 +1,4 @@
-//! `ragmonk status [--json] [--watch] [--interval S] [--errors] [--verbose]`
+//! `docmonk status [--json] [--watch] [--interval S] [--errors] [--verbose]`
 //!
 //! Renders the canonical [`StatusReport`] of `docmonk-status`; `--json`
 //! prints it unchanged inside the CLI's JSON envelope. The text view is
@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use chrono::Utc;
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use docmonk_service::status::{options, StatusSession};
 use docmonk_status::model::*;
 use docmonk_status::snapshot::age_seconds;
@@ -157,7 +157,7 @@ fn header(r: &StatusReport) -> String {
         where_ += &format!(" prefix={p}");
     }
     let mut s = format!(
-        "RagMonk status  [{} mode, {where_}, {}]\n",
+        "DocMonk status  [{} mode, {where_}, {}]\n",
         match r.mode {
             Mode::Local => "local",
             Mode::Server => "server",
@@ -413,7 +413,7 @@ fn sources(r: &StatusReport, errors_only: bool, verbose: bool) -> String {
         return if errors_only {
             String::new()
         } else {
-            "== Sources ==\nNo sources registered. Add one with 'ragmonk add <path>'.\n".into()
+            "== Sources ==\nNo sources registered. Add one with 'docmonk add <path>'.\n".into()
         };
     }
     let mut headers = vec![
@@ -555,14 +555,14 @@ fn render(r: &StatusReport, errors_only: bool, verbose: bool, thr: Option<Option
     out
 }
 
-pub fn status(a: &StatusArgs) -> Result<(), RagMonkError> {
+pub fn status(a: &StatusArgs) -> Result<(), DocMonkError> {
     if a.watch && a.json {
-        return Err(RagMonkError::usage(
+        return Err(DocMonkError::usage(
             "--watch cannot be combined with --json (use --json for one snapshot)",
         ));
     }
     if a.interval <= 0.0 || !a.interval.is_finite() {
-        return Err(RagMonkError::usage("--interval must be > 0"));
+        return Err(DocMonkError::usage("--interval must be > 0"));
     }
     let home = prepared_home()?;
     let mut session = StatusSession::open(&home)?;

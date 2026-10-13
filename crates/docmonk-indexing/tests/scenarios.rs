@@ -18,7 +18,7 @@ use docmonk_storage::knowledge::{FileKnowledge, ProjectStore};
 use docmonk_storage::StorageLayout;
 
 fn opts() -> Options {
-    let mut o = Options::from_config(&docmonk_config::RagMonkConfig::default());
+    let mut o = Options::from_config(&docmonk_config::DocMonkConfig::default());
     o.workers = 4;
     o
 }

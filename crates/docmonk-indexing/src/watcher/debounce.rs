@@ -52,7 +52,7 @@ impl Debouncer {
         let s = Arc::clone(&shared);
         let on_fire: OnFire = Box::new(on_fire);
         let thread = std::thread::Builder::new()
-            .name("ragmonk-debounce".into())
+            .name("docmonk-debounce".into())
             .spawn(move || run(&s, &on_fire))
             .ok();
         Self {

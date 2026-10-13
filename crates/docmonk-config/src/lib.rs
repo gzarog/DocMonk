@@ -1,4 +1,4 @@
-//! RagMonk configuration.
+//! DocMonk configuration.
 //!
 //! * [`value`]: the ordered value tree a YAML document loads into;
 //! * [`yaml`]: YAML 1.2 parsing and emission of that tree;
@@ -17,5 +17,5 @@ pub mod value;
 pub mod yaml;
 
 pub use loader::{load_config, write_user_config, LoadOptions};
-pub use model::RagMonkConfig;
+pub use model::DocMonkConfig;
 pub use value::Value;

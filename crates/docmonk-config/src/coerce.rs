@@ -2,7 +2,7 @@
 //!
 //! YAML values convert when the types match; strings (environment
 //! variables, `config set`, the Admin UI form) are also parsed into the
-//! field's type, so `RAGMONK_SEARCH__SEMANTIC=true` and `semantic: true`
+//! field's type, so `DOCMONK_SEARCH__SEMANTIC=true` and `semantic: true`
 //! mean the same thing.
 
 use crate::value::Value;

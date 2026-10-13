@@ -15,7 +15,7 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 const EVENT_BUFFER: usize = 256;
 use std::time::{Duration, Instant};
 
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 use serde_json::{json, Map, Value};
 
 use crate::errors::{invalid_response, json_rpc, provider_error, timeout};
@@ -35,12 +35,12 @@ enum Event {
 #[derive(Debug)]
 pub enum RpcError {
     Remote { code: Value, message: String },
-    Other(RagMonkError),
+    Other(DocMonkError),
 }
 
 impl RpcError {
     /// The JSON-RPC error text shown to the user.
-    pub fn into_error(self) -> RagMonkError {
+    pub fn into_error(self) -> DocMonkError {
         match self {
             RpcError::Remote { code, message } => {
                 json_rpc(format!("runtime error {}: {message}", plain(&code)))
@@ -54,7 +54,7 @@ pub struct JsonRpcClient {
     writer: Box<dyn Write + Send>,
     events: Receiver<Event>,
     next_id: i64,
-    fatal: Option<RagMonkError>,
+    fatal: Option<DocMonkError>,
     closed: bool,
 }
 
@@ -104,7 +104,7 @@ impl JsonRpcClient {
         }
     }
 
-    fn write(&mut self, payload: &Value) -> Result<(), RagMonkError> {
+    fn write(&mut self, payload: &Value) -> Result<(), DocMonkError> {
         let mut line = serde_json::to_vec(payload).unwrap_or_default();
         line.push(b'\n');
         self.writer
@@ -113,7 +113,7 @@ impl JsonRpcClient {
             .map_err(|e| provider_error(format!("ai runtime transport failed: {e}")))
     }
 
-    fn fail(&mut self, e: RagMonkError) -> RpcError {
+    fn fail(&mut self, e: DocMonkError) -> RpcError {
         self.fatal = Some(e.clone());
         RpcError::Other(e)
     }
@@ -217,7 +217,7 @@ impl JsonRpcClient {
         }
     }
 
-    pub fn notify(&mut self, method: &str, params: Option<Value>) -> Result<(), RagMonkError> {
+    pub fn notify(&mut self, method: &str, params: Option<Value>) -> Result<(), DocMonkError> {
         self.write(&json!({
             "jsonrpc": "2.0",
             "method": method,

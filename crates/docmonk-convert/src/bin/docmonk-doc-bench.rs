@@ -1,7 +1,7 @@
 //! Document indexing benchmark.
 //!
 //! ```text
-//! ragmonk-doc-bench FIXTURE_DIR [--copies N] [--kinds a.pdf,b.md] [--out report.json] [--emit-only DIR]
+//! docmonk-doc-bench FIXTURE_DIR [--copies N] [--kinds a.pdf,b.md] [--out report.json] [--emit-only DIR]
 //! ```
 //!
 //! Builds a corpus of N copies of each Markdown/HTML/TXT/DOCX/PPTX/XLSX
@@ -55,7 +55,7 @@ fn main() {
         emit(&fixtures, Path::new(&dir), copies, &kinds);
         return;
     }
-    let tmp = std::env::temp_dir().join(format!("ragmonk-doc-bench-{}", std::process::id()));
+    let tmp = std::env::temp_dir().join(format!("docmonk-doc-bench-{}", std::process::id()));
     let root = tmp.join("source");
     emit(&fixtures, &root, copies, &kinds);
     let home = Home::new(tmp.join("home"));
@@ -74,9 +74,9 @@ fn main() {
             exclude_patterns: vec![],
         })
         .expect("source");
-    let cfg = docmonk_config::RagMonkConfig::default();
+    let cfg = docmonk_config::DocMonkConfig::default();
     let opts_reg = docmonk_convert::RegistryOptions {
-        ocr_models_dir: std::env::var_os("RAGMONK_OCR_MODELS_DIR").map(PathBuf::from),
+        ocr_models_dir: std::env::var_os("DOCMONK_OCR_MODELS_DIR").map(PathBuf::from),
         cache_dir: None,
         models_root: None,
     };

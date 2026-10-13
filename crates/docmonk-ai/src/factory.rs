@@ -4,7 +4,7 @@
 //! is loopback; a remote Ollama is gated like any cloud provider.
 
 use docmonk_config::model::{AiConfig, PrivacyConfig};
-use docmonk_core::errors::RagMonkError;
+use docmonk_core::errors::DocMonkError;
 
 use crate::errors::{not_configured, privacy_blocked};
 use crate::http::{
@@ -14,7 +14,7 @@ use crate::http::{
 use crate::{codex, copilot, AiProvider};
 
 /// The env var an OpenAI-compatible endpoint's key is read from.
-pub const COMPATIBLE_API_KEY_ENV: &str = "RAGMONK_AI_API_KEY";
+pub const COMPATIBLE_API_KEY_ENV: &str = "DOCMONK_AI_API_KEY";
 
 /// The host of `url` as a standard URL parser reports it:
 /// lowercased, brackets stripped, `None` without a `scheme://`.
@@ -38,13 +38,13 @@ pub fn is_local_host(base_url: &str) -> bool {
 pub fn require_external_ai_allowed(
     privacy: &PrivacyConfig,
     label: &str,
-) -> Result<(), RagMonkError> {
+) -> Result<(), DocMonkError> {
     if privacy.external_ai_allowed {
         return Ok(());
     }
     Err(privacy_blocked(format!(
         "ai.provider='{label}' sends data to a network endpoint outside this machine, which \
-         requires privacy.external_ai_allowed=true (it defaults to false). Set it with: ragmonk \
+         requires privacy.external_ai_allowed=true (it defaults to false). Set it with: docmonk \
          config set privacy.external_ai_allowed true"
     )))
 }
@@ -63,12 +63,12 @@ pub fn create_provider_with_env(
     ai: &AiConfig,
     privacy: &PrivacyConfig,
     env: &dyn Fn(&str) -> Option<String>,
-) -> Result<Box<dyn AiProvider>, RagMonkError> {
+) -> Result<Box<dyn AiProvider>, DocMonkError> {
     let provider = ai.provider.trim().to_lowercase();
     let key = |name: &str| env(name).filter(|v| !v.is_empty());
     match provider.as_str() {
         "" | "none" => Err(not_configured(
-            "no ai.provider is configured. Set one with: ragmonk config set ai.provider \
+            "no ai.provider is configured. Set one with: docmonk config set ai.provider \
              <openai|anthropic|ollama|openai_compatible>",
         )),
         "openai" => {
@@ -151,6 +151,6 @@ pub fn create_provider_with_env(
 pub fn create_provider(
     ai: &AiConfig,
     privacy: &PrivacyConfig,
-) -> Result<Box<dyn AiProvider>, RagMonkError> {
+) -> Result<Box<dyn AiProvider>, DocMonkError> {
     create_provider_with_env(ai, privacy, &|k| std::env::var(k).ok())
 }
