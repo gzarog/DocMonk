@@ -13,17 +13,17 @@ listens to; do not rename them. A failed `CI` push run never releases.
 
 ## What runs when
 
-| Job | Application PR | Installer PR | Docker PR | Docs-only PR | Push (main / release branch) |
-| --- | --- | --- | --- | --- | --- |
-| Detect changes | ✓ | ✓ | ✓ | ✓ | ✓ (selects everything) |
-| Repository audits | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Rust fmt/clippy/test (ubuntu-latest) | ✓ | ✓ | ✓ | ✓ | ✓ + `cargo build --release` |
-| Rust fmt/clippy/test (windows/macos) | – | – | – | – | ✓ incl. `cargo build --release` |
-| Server integration (OpenSearch + Elasticsearch) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Install script (ubuntu, macos, windows) | – | ✓ | – | – | ✓ |
-| Container image (linux/amd64) | – | – | ✓ | – | ✓ |
-| CI gate | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 150-source status benchmark | – | – | – | – | – (nightly) |
+| Job | Application PR | Platform-specific PR | Installer PR | Docker PR | Docs-only PR | Push (main / release branch) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Detect changes | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (selects everything) |
+| Repository audits | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Rust fmt/clippy/test (ubuntu-latest) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ + `cargo build --release` |
+| Rust fmt/clippy/test (windows-latest, macos-latest) | – | ✓ incl. `cargo build --release` | ✓ incl. `cargo build --release` | – | – | ✓ incl. `cargo build --release` |
+| Server integration (OpenSearch + Elasticsearch) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Install script (ubuntu, macos, windows) | – | – | ✓ | – | – | ✓ |
+| Container image (linux/amd64) | – | – | – | ✓ | – | ✓ |
+| CI gate | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 150-source status benchmark | – | – | – | – | – | – (nightly) |
 
 The Linux Rust job always requires the pinned OCR, embedding and reranker
 models (`DOCMONK_REQUIRE_OCR=1`, `DOCMONK_REQUIRE_MODELS=1`).
@@ -37,11 +37,18 @@ against its first parent) and decides:
 
 - **installer**: `install.sh`, `install.ps1`, `crates/docmonk-update/**`, `xtask/**`
 - **docker**: `Dockerfile`, `.dockerignore`, `docker/**`, `scripts/fetch_models.sh`
-- **both**: `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, any crate
+- **cross_platform** (Windows/macOS Rust jobs): everything selected for
+  **installer**, plus the Rust sources with platform-conditional code
+  (`cfg(windows)`, `cfg(unix)`, `target_os`, ...), listed in the
+  classifier's `platform_source`
+- **all three**: `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, any crate
   manifest, `.github/workflows/**`, `.github/actions/**`, the classifier itself
 
 `scripts/ci_changes.sh --self-test` checks representative paths and runs
-first in the job. Any error (diff, classifier, self-test) fails
+first in the job. It also greps every tracked Rust file for
+platform-conditional code and fails when one is missing from
+`platform_source`, so a new platform-specific file cannot slip past the
+Windows/macOS jobs. Any error (diff, classifier, self-test) fails
 `Detect changes`, and the CI gate fails with it. A broken filter cannot
 skip a job and still go green.
 
@@ -51,9 +58,8 @@ skip a job and still go green.
 
 - `Detect changes`, audits, Linux Rust and server integration must succeed.
 - On pushes, every job must succeed.
-- On PRs, the Windows/macOS job may be skipped. Installer and Docker jobs
-  may be skipped only when `Detect changes` succeeded and did not select
-  them. A selected job that fails, is cancelled or is missing fails the gate.
+- On PRs, the Windows/macOS, installer and Docker jobs may be skipped
+  only when `Detect changes` succeeded and did not select them. A selected job that fails, is cancelled or is missing fails the gate.
 
 The gate has no permissions and sees no secrets.
 
