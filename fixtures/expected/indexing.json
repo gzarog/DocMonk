@@ -31,11 +31,11 @@
  ],
  "scan": [
   {
-   "rel_path": ".gitignore",
+   "rel_path": ".docmonkignore",
    "kind": "unknown"
   },
   {
-   "rel_path": ".docmonkignore",
+   "rel_path": ".gitignore",
    "kind": "unknown"
   },
   {
