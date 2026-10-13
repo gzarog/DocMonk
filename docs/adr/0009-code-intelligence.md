@@ -4,9 +4,9 @@ Status: accepted
 
 ## Code intelligence
 
-- `ragmonk-code` holds the parser wiring, query-driven extractor, resolver,
+- `docmonk-code` holds the parser wiring, query-driven extractor, resolver,
   framework rules, code processor and graph traversal. Extraction is driven
-  by one tree-sitter query file per language (`crates/ragmonk-code/queries/*.scm`).
+  by one tree-sitter query file per language (`crates/docmonk-code/queries/*.scm`).
 - Grammars: `tree-sitter` 0.25 with the official grammar crates (C#, Go,
   Java, JavaScript, Python, Rust, TypeScript/TSX). The grammars are C code
   compiled by `cc`; the project itself still has no `unsafe`.

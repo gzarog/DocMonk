@@ -26,7 +26,7 @@ listens to; do not rename them. A failed `CI` push run never releases.
 | 150-source status benchmark | – | – | – | – | – (nightly) |
 
 The Linux Rust job always requires the pinned OCR, embedding and reranker
-models (`RAGMONK_REQUIRE_OCR=1`, `RAGMONK_REQUIRE_MODELS=1`).
+models (`DOCMONK_REQUIRE_OCR=1`, `DOCMONK_REQUIRE_MODELS=1`).
 `.github/actions/fetch-models` checks every model file's sha256 after a
 cache restore, so a cache hit alone is never trusted.
 
@@ -35,7 +35,7 @@ cache restore, so a cache hit alone is never trusted.
 `scripts/ci_changes.sh` reads the PR's changed paths (the merge commit
 against its first parent) and decides:
 
-- **installer**: `install.sh`, `install.ps1`, `crates/ragmonk-update/**`, `xtask/**`
+- **installer**: `install.sh`, `install.ps1`, `crates/docmonk-update/**`, `xtask/**`
 - **docker**: `Dockerfile`, `.dockerignore`, `docker/**`, `scripts/fetch_models.sh`
 - **both**: `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, any crate
   manifest, `.github/workflows/**`, `.github/actions/**`, the classifier itself
@@ -66,7 +66,7 @@ unique group, so a `main` run is never cancelled.
 ## Nightly
 
 `rust-nightly.yml` starts OpenSearch 2.15.0 and Elasticsearch 8.15.0 and
-runs the ignored release-mode `ragmonk-status --test live_server`
+runs the ignored release-mode `docmonk-status --test live_server`
 benchmark unchanged. Its log and duration are uploaded as the
 `status-benchmark-log` artifact (14-day retention). It never publishes.
 

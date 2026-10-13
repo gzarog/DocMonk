@@ -34,7 +34,7 @@ touched paths go to a targeted pass.
   `CoordinatorRunner` runs a targeted pass whenever the scheduler's
   request carries touched paths and is not forced full.
 
-### Watchers (`ragmonk_indexing::watcher`)
+### Watchers (`docmonk_indexing::watcher`)
 
 - **Local sources (`local::LocalWatcher`).**
   - Uses `notify` 8.2 (inotify, FSEvents, ReadDirectoryChangesW),

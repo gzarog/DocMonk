@@ -11,7 +11,7 @@ Status: accepted
    against local mocks.
 3. The Admin UI uses axum, tokio and minijinja.
 
-## Crate `ragmonk-ai`
+## Crate `docmonk-ai`
 
 - **`prompt`:** the system prompt and evidence prompt.
   - Evidence locations keep a fixed key order.
@@ -59,17 +59,17 @@ Status: accepted
   - Sign-in and sign-out are left to the CLI (`/login`, `/logout`). The
     CLI reports no usage and no model list.
 
-Errors carry class names through `RagMonkError::with_class` (for example `AiNotConfiguredError`). Their
+Errors carry class names through `DocMonkError::with_class` (for example `AiNotConfiguredError`). Their
 exit codes are those of the base classes: config 3, policy 8, runtime 1.
 
 ## CLI and MCP
 
-- **`ragmonk ask QUESTION [--json]`:**
+- **`docmonk ask QUESTION [--json]`:**
   - Runs `explore`'s retrieval, then builds the provider, then asks it.
   - Prints the answer as text, or a JSON payload with `--json`.
-- **`ragmonk ai providers|status|login|logout|models`:**
+- **`docmonk ai providers|status|login|logout|models`:**
   - The privacy gate applies to every command except `logout`.
-- **MCP:** `ragmonk_ask` is served (ADR 0025).
+- **MCP:** `docmonk_ask` is served (ADR 0025).
   - Errors are typed by class name (for example `AiNotConfiguredError`).
 
 ## Verification
@@ -83,7 +83,7 @@ exit codes are those of the base classes: config 3, policy 8, runtime 1.
   - 17 Codex exchanges against a scripted runtime that interleaves
     notifications and unknown ids, and splits replies across writes.
     These record every message sent.
-  - Replayed by `crates/ragmonk-ai/tests/golden.rs` against a TCP mock
+  - Replayed by `crates/docmonk-ai/tests/golden.rs` against a TCP mock
     and an OS-pipe fake runtime.
   - The OS text behind a refused Ollama connection is platform-specific,
     so only its prefix is compared.
@@ -91,6 +91,6 @@ exit codes are those of the base classes: config 3, policy 8, runtime 1.
   - `ask` (JSON, text, no evidence, HTTP 500, not configured, privacy)
     and the `ai` lifecycle commands, on the fixture corpus with a mock
     Ollama and no `codex` on `PATH`.
-  - Replayed by `crates/ragmonk-cli/tests/ai.rs`: exit codes, stdout and
+  - Replayed by `crates/docmonk-cli/tests/ai.rs`: exit codes, stdout and
     the provider request match; stderr matches up to line wrapping.
-- **MCP:** the recorded session includes `ragmonk_ask` calls.
+- **MCP:** the recorded session includes `docmonk_ask` calls.

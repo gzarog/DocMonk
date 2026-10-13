@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RagMonk Overview</title>
-<meta name="description" content="RagMonk in slides: what it is, how indexing and relationship graphs work, and how to run it.">
+<title>DocMonk Overview</title>
+<meta name="description" content="DocMonk in slides: what it is, how indexing and relationship graphs work, and how to run it.">
 <style>
 :root {
   --bg: #f7f6f2; --panel: #ffffff; --ink: #1d1f24; --muted: #5d6270;
@@ -99,11 +99,11 @@ ul.tight li { margin: 4px 0; }
 </header>
 <main id="deck">
 
-<section class="slide" data-title="RagMonk">
+<section class="slide" data-title="DocMonk">
   <div class="inner">
     <div class="kicker">Local-first knowledge engine</div>
     <h1>Ask your documents and your code anything.<br>Get answers with exact sources.</h1>
-    <p class="lead">RagMonk indexes folders of documents and repositories on your machine (or on your own OpenSearch / Elasticsearch) and answers with the file, page, heading or line every fact came from.</p>
+    <p class="lead">DocMonk indexes folders of documents and repositories on your machine (or on your own OpenSearch / Elasticsearch) and answers with the file, page, heading or line every fact came from.</p>
     <div class="grid" style="margin-top:24px">
       <div class="card"><h3>📄 Documents</h3><p>PDF, Word, PowerPoint, spreadsheets, HTML, Markdown, e-mail, OCR for scans. Headings, tables and pages preserved.</p></div>
       <div class="card"><h3>💻 Code</h3><p>Symbols, callers, callees, HTTP routes and impact analysis across many languages.</p></div>
@@ -119,7 +119,7 @@ ul.tight li { margin: 4px 0; }
     <div class="kicker">Audience</div>
     <h2>One knowledge base, three ways in</h2>
     <div class="grid">
-      <div class="card"><h3>End users</h3><p>Ask questions in plain language with <code>ragmonk explore</code> or the Admin UI, and open the cited page or line.</p></div>
+      <div class="card"><h3>End users</h3><p>Ask questions in plain language with <code>docmonk explore</code> or the Admin UI, and open the cited page or line.</p></div>
       <div class="card"><h3>Software engineers</h3><p>Navigate code: <code>symbol</code>, <code>callers</code>, <code>callees</code>, <code>impact</code>, plus the specs that describe each function.</p></div>
       <div class="card"><h3>AI agents</h3><p>An MCP server exposes search, explore, code navigation and status to Claude Code, Codex, Cursor or VS Code.</p></div>
     </div>
@@ -137,13 +137,13 @@ ul.tight li { margin: 4px 0; }
 <pre><code><span class="c"># macOS / Linux</span>
 curl -fsSL https://raw.githubusercontent.com/gzarog/RagMonk/main/install.sh | sh
 
-ragmonk init                               <span class="c"># create ~/.ragmonk</span>
-ragmonk source add ~/company-docs          <span class="c"># register folders</span>
-ragmonk source add ~/code/payments
-ragmonk index                              <span class="c"># index, then build relationships</span>
-ragmonk status                             <span class="c"># progress, problems, errors</span>
-ragmonk explore "what breaks if SettlementService changes?"</code></pre>
-    <p class="hint">Keep it fresh with <code>ragmonk daemon start</code>: changed files are re-indexed in the background.</p>
+docmonk init                               <span class="c"># create ~/.docmonk</span>
+docmonk source add ~/company-docs          <span class="c"># register folders</span>
+docmonk source add ~/code/payments
+docmonk index                              <span class="c"># index, then build relationships</span>
+docmonk status                             <span class="c"># progress, problems, errors</span>
+docmonk explore "what breaks if SettlementService changes?"</code></pre>
+    <p class="hint">Keep it fresh with <code>docmonk daemon start</code>: changed files are re-indexed in the background.</p>
   </div>
 </section>
 
@@ -241,14 +241,14 @@ ragmonk explore "what breaks if SettlementService changes?"</code></pre>
     <h2>Everyday commands</h2>
     <table>
       <tr><th>Task</th><th>Command</th></tr>
-      <tr><td>Index now</td><td><code>ragmonk index [--source ID]</code></td></tr>
-      <tr><td>Retry relationship graphs only</td><td><code>ragmonk relationships build [--source ID] [--json]</code></td></tr>
-      <tr><td>Index automatically</td><td><code>ragmonk daemon start</code></td></tr>
-      <tr><td>Is it working?</td><td><code>ragmonk status [--watch] [--errors] [--verbose] [--json]</code></td></tr>
-      <tr><td>Search / ask</td><td><code>ragmonk search "text"</code> · <code>ragmonk explore "question"</code></td></tr>
-      <tr><td>Code navigation</td><td><code>ragmonk symbol</code> · <code>callers</code> · <code>callees</code> · <code>impact</code></td></tr>
-      <tr><td>Pin a doc↔code link</td><td><code>ragmonk link add ENTITY DOCUMENT</code></td></tr>
-      <tr><td>Web UI / agents</td><td><code>ragmonk ui</code> · <code>ragmonk serve --mcp</code></td></tr>
+      <tr><td>Index now</td><td><code>docmonk index [--source ID]</code></td></tr>
+      <tr><td>Retry relationship graphs only</td><td><code>docmonk relationships build [--source ID] [--json]</code></td></tr>
+      <tr><td>Index automatically</td><td><code>docmonk daemon start</code></td></tr>
+      <tr><td>Is it working?</td><td><code>docmonk status [--watch] [--errors] [--verbose] [--json]</code></td></tr>
+      <tr><td>Search / ask</td><td><code>docmonk search "text"</code> · <code>docmonk explore "question"</code></td></tr>
+      <tr><td>Code navigation</td><td><code>docmonk symbol</code> · <code>callers</code> · <code>callees</code> · <code>impact</code></td></tr>
+      <tr><td>Pin a doc↔code link</td><td><code>docmonk link add ENTITY DOCUMENT</code></td></tr>
+      <tr><td>Web UI / agents</td><td><code>docmonk ui</code> · <code>docmonk serve --mcp</code></td></tr>
     </table>
   </div>
 </section>
@@ -267,7 +267,7 @@ src_beta    completed  online  400      0       0
     <ul class="tight">
       <li><code>index_state</code> says whether the source is searchable; <code>relationship_state</code> says whether its graph is current. They never hide each other.</li>
       <li>Run phases are explicit: <code>indexing → indexed → relationships → done</code>.</li>
-      <li>The same report backs the CLI, <code>--json</code>, the Admin UI and the MCP <code>ragmonk_status</code> tool, in local and server mode.</li>
+      <li>The same report backs the CLI, <code>--json</code>, the Admin UI and the MCP <code>docmonk_status</code> tool, in local and server mode.</li>
     </ul>
   </div>
 </section>
@@ -284,7 +284,7 @@ src_beta    completed  online  400      0       0
       <tr><td><code>search.semantic</code></td><td><code>false</code></td><td>Local embedding-based semantic search.</td></tr>
       <tr><td><code>storage.mode</code></td><td><code>local</code></td><td><code>server</code> uses OpenSearch / Elasticsearch as the authoritative store.</td></tr>
     </table>
-    <p class="hint">Change any value with <code>ragmonk config set KEY VALUE</code>.</p>
+    <p class="hint">Change any value with <code>docmonk config set KEY VALUE</code>.</p>
   </div>
 </section>
 
@@ -307,11 +307,11 @@ src_beta    completed  online  400      0       0
     <h2>Troubleshooting</h2>
     <table>
       <tr><th>Symptom</th><th>What to do</th></tr>
-      <tr><td>Relationships <code>stale</code> or <code>failed</code></td><td>The index is fine. Run <code>ragmonk index</code> again (stale) or <code>ragmonk relationships build</code>; see the reason in <code>status --verbose</code>.</td></tr>
-      <tr><td>A folder is <code>offline</code></td><td>Its knowledge is kept. Reconnect it and run <code>ragmonk index</code>.</td></tr>
-      <tr><td>Files <code>failed</code> / <code>retrying</code></td><td><code>ragmonk status --errors</code>. Temporary failures retry automatically.</td></tr>
-      <tr><td>Lock held by another process</td><td>Wait or <code>ragmonk daemon stop</code>. Never delete the lock file.</td></tr>
-      <tr><td>Anything else</td><td><code>ragmonk doctor</code>, then <code>ragmonk rebuild --fresh</code> if the index is damaged.</td></tr>
+      <tr><td>Relationships <code>stale</code> or <code>failed</code></td><td>The index is fine. Run <code>docmonk index</code> again (stale) or <code>docmonk relationships build</code>; see the reason in <code>status --verbose</code>.</td></tr>
+      <tr><td>A folder is <code>offline</code></td><td>Its knowledge is kept. Reconnect it and run <code>docmonk index</code>.</td></tr>
+      <tr><td>Files <code>failed</code> / <code>retrying</code></td><td><code>docmonk status --errors</code>. Temporary failures retry automatically.</td></tr>
+      <tr><td>Lock held by another process</td><td>Wait or <code>docmonk daemon stop</code>. Never delete the lock file.</td></tr>
+      <tr><td>Anything else</td><td><code>docmonk doctor</code>, then <code>docmonk rebuild --fresh</code> if the index is damaged.</td></tr>
     </table>
     <p class="hint">Full details: <a href="reference.md">docs/reference.md</a> · <a href="architecture.md">docs/architecture.md</a> · <a href="../README.md">README</a></p>
   </div>
@@ -329,7 +329,7 @@ src_beta    completed  online  400      0       0
     slides.forEach(function (s, k) { s.classList.toggle('on', k === i); });
     document.getElementById('count').textContent = (i + 1) + ' / ' + slides.length;
     document.getElementById('bar').style.width = ((i + 1) / slides.length * 100) + '%';
-    document.title = slides[i].getAttribute('data-title') + ' · RagMonk Overview';
+    document.title = slides[i].getAttribute('data-title') + ' · DocMonk Overview';
     if (location.hash !== '#' + (i + 1)) history.replaceState(null, '', '#' + (i + 1));
   }
   document.getElementById('prev').onclick = function () { show(i - 1); };
@@ -348,13 +348,13 @@ src_beta    completed  online  400      0       0
     if (Math.abs(dx) > 50) show(i + (dx < 0 ? 1 : -1));
   }, { passive: true });
   var root = document.documentElement;
-  try { var t = localStorage.getItem('ragmonk-theme'); if (t) root.setAttribute('data-theme', t); } catch (e) {}
+  try { var t = localStorage.getItem('docmonk-theme'); if (t) root.setAttribute('data-theme', t); } catch (e) {}
   document.getElementById('theme').onclick = function () {
     var dark = root.getAttribute('data-theme') ? root.getAttribute('data-theme') === 'dark'
       : window.matchMedia('(prefers-color-scheme: dark)').matches;
     var next = dark ? 'light' : 'dark';
     root.setAttribute('data-theme', next);
-    try { localStorage.setItem('ragmonk-theme', next); } catch (e) {}
+    try { localStorage.setItem('docmonk-theme', next); } catch (e) {}
   };
   window.addEventListener('hashchange', function () { show(read()); });
   show(read());

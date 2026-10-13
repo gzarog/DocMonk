@@ -11,7 +11,7 @@ watchers and targeted passes are ADR 0021.
 
 ## Decisions
 
-### Worker and scheduling (`ragmonk_indexing::daemon`)
+### Worker and scheduling (`docmonk_indexing::daemon`)
 
 - **Threads.** One worker thread runs passes from a FIFO queue. A
   reconciliation thread enqueues every enabled source every
@@ -46,7 +46,7 @@ watchers and targeted passes are ADR 0021.
   - Neither connection is shared across threads.
 - **Progress.** Passes share one tracker (`operation="daemon"`) with one
   entry per source pass, so `index_progress.json` (ADR 0019) and
-  `ragmonk status` (ADR 0034) cover daemon passes.
+  `docmonk status` (ADR 0034) cover daemon passes.
 - **Graceful stop.**
   - New triggers are refused, and queued passes are dropped.
   - A pass already running finishes. It commits per file anyway.
@@ -64,10 +64,10 @@ watchers and targeted passes are ADR 0021.
   per-thread temp name. A source entry with unknown keys makes the
   snapshot unreadable.
 
-### CLI (`ragmonk daemon …`)
+### CLI (`docmonk daemon …`)
 
 - **`start`.**
-  - Spawns `ragmonk daemon run` detached: its own process group on POSIX,
+  - Spawns `docmonk daemon run` detached: its own process group on POSIX,
     `CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW` on Windows.
   - Output goes to `logs/daemon.out.log`.
   - Records the child's PID, then waits up to 30 s for its first health
@@ -115,7 +115,7 @@ watchers and targeted passes are ADR 0021.
   - the health snapshot, including offline sources;
   - graceful stop;
   - a real `CoordinatorRunner` pass, publishing progress.
-- **Process test (`ragmonk-cli/tests/daemon.rs`).** Runs `start`, then
+- **Process test (`docmonk-cli/tests/daemon.rs`).** Runs `start`, then
   `status --json`, a second `start`, `run` while another daemon is
   running, `stop`, and `stop` again.
 

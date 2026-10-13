@@ -1,11 +1,11 @@
-# ADR 0034: One canonical status (`ragmonk-status`)
+# ADR 0034: One canonical status (`docmonk-status`)
 
 Status: accepted (replaces the status parts of ADR 0019)
 
 ## Context
 
-`ragmonk status` used to be assembled twice: by a local collector in
-`ragmonk-indexing` and by a server collector in `ragmonk-service`, each
+`docmonk status` used to be assembled twice: by a local collector in
+`docmonk-indexing` and by a server collector in `docmonk-service`, each
 building loosely typed JSON. The server collector issued per-source
 requests (more than 1,000 HTTP calls for 150 sources), read only the
 local host's progress file, ordered errors by path, and reported numbers
@@ -13,17 +13,17 @@ it could not observe (server database size, idle queue depths) as `0`.
 
 ## Decision
 
-`crates/ragmonk-status` owns the only status model, both collectors and
-the only health evaluator. `ragmonk-service::status` is a thin facade;
-the CLI, the MCP `ragmonk_status` tool and the Admin UI render the same
-typed [`StatusReport`]. There is one command, `ragmonk status`; there is
+`crates/docmonk-status` owns the only status model, both collectors and
+the only health evaluator. `docmonk-service::status` is a thin facade;
+the CLI, the MCP `docmonk_status` tool and the Admin UI render the same
+typed [`StatusReport`]. There is one command, `docmonk status`; there is
 no second status command, no alias for an earlier field name, and no
 adapter for an earlier shape.
 
-Dependency direction: `ragmonk-storage` (SQLite reads) and
-`ragmonk-backends` (batched server reads, runtime heartbeats) provide
-primitives; `ragmonk-indexing` provides progress instrumentation and
-lock/process probes; `ragmonk-status` turns them into the report. The
+Dependency direction: `docmonk-storage` (SQLite reads) and
+`docmonk-backends` (batched server reads, runtime heartbeats) provide
+primitives; `docmonk-indexing` provides progress instrumentation and
+lock/process probes; `docmonk-status` turns them into the report. The
 indexing crate never depends on the status crate.
 
 ### Authority
@@ -44,7 +44,7 @@ empty report.
 Root fields: `schema_version`, `snapshot_id`, `observed_at`, `mode`,
 `backend`, `health`, `indexer`, `summary`, `sources`, `problems`,
 `recent_errors`, `diagnostics`. The reference fixture is
-`crates/ragmonk-status/tests/fixtures/server_multi_host.json` (sample
+`crates/docmonk-status/tests/fixtures/server_multi_host.json` (sample
 data, not operational data).
 
 - **Published vs in progress.** `sources[].published` is the active
@@ -92,12 +92,12 @@ redacted (`CollectOptions::redact_paths`, used for shared surfaces).
 
 ## Consumers
 
-- `ragmonk status [--json] [--watch] [--interval S] [--errors] [--verbose]`
-  (`crates/ragmonk-cli/src/status_cmd.rs`).
-- MCP `ragmonk_status` (`crates/ragmonk-mcp`).
+- `docmonk status [--json] [--watch] [--interval S] [--errors] [--verbose]`
+  (`crates/docmonk-cli/src/status_cmd.rs`).
+- MCP `docmonk_status` (`crates/docmonk-mcp`).
 - Admin UI dashboard, sources, indexing pages and `/ready`
-  (`crates/ragmonk-ui`).
-- `ragmonk doctor` queue check (`crates/ragmonk-ops`).
+  (`crates/docmonk-ui`).
+- `docmonk doctor` queue check (`crates/docmonk-ops`).
 
 ## Consequences
 

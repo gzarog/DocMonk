@@ -6,11 +6,11 @@ Status: accepted
 
 - **Layout:** versioned directories plus a `current` pointer. `update rollback`
   switches back to the previous version.
-- **Assets:** `ragmonk-<ver>-<target>.tar.gz`, or `.zip` on Windows. Each
+- **Assets:** `docmonk-<ver>-<target>.tar.gz`, or `.zip` on Windows. Each
   release also carries `SHA256SUMS`, and `SHA256SUMS.minisig` when it is
   signed.
 - **Signatures:** minisign. The public key is compiled in through
-  `RAGMONK_MINISIGN_PUBKEY` at build time, and the installers carry the same
+  `DOCMONK_MINISIGN_PUBKEY` at build time, and the installers carry the same
   key.
 - **Background check:** a periodic background check and a once-per-version
   startup notice.
@@ -18,27 +18,27 @@ Status: accepted
 ## Layout
 
 ```text
-<install_dir>/versions/<ver>/{ragmonk[.exe], models/, README.md, LICENSE}
+<install_dir>/versions/<ver>/{docmonk[.exe], models/, README.md, LICENSE}
 <install_dir>/current            POSIX: symlink -> versions/<ver>
                                  Windows: a text file holding <ver>
-<install_dir>/bin/ragmonk.exe    Windows only: a copy of the current exe
+<install_dir>/bin/docmonk.exe    Windows only: a copy of the current exe
 <install_dir>/install_state.json {"current": <ver>, "previous": <ver>|null}
 <home>/install_info.json         {"install_method": "native", install_dir, bin_dir}
 ```
 
-- **POSIX:** `<bin_dir>/ragmonk` links to `current/ragmonk`. Switching is an
+- **POSIX:** `<bin_dir>/docmonk` links to `current/docmonk`. Switching is an
   atomic rename of a temporary symlink over `current`.
 - **Windows:** a running exe can be renamed but not overwritten. The swap
-  renames it to `ragmonk.exe.old`, or to `.old-<pid>` while an older one is
+  renames it to `docmonk.exe.old`, or to `.old-<pid>` while an older one is
   still running, then copies the new exe in.
 - **Retention:** two versions are kept, the current one and the previous one.
   Older versions and stale `.partial` directories are pruned after an
   install.
 - **Models:** bundled models are copied into `<home>/models`, where
-  `ragmonk-ml` looks for them. This happens on both install and rollback.
+  `docmonk-ml` looks for them. This happens on both install and rollback.
   A release that bundles no models leaves the existing ones untouched.
 
-## `ragmonk update`
+## `docmonk update`
 
 | Command | Behaviour |
 |---------|-----------|
@@ -55,20 +55,20 @@ then, the install rolls back automatically.
 **Download URLs** are built from the validated tag and this repository's
 hardcoded owner and name, never from release text.
 
-**Test host:** `RAGMONK_UPDATE_TEST_BASE` replaces both the API host and the
+**Test host:** `DOCMONK_UPDATE_TEST_BASE` replaces both the API host and the
 download host. Only debug builds honour it.
 
 ## Background check and notice
 
 Every command except `update`, `version`, `serve`, `daemon`, `watch` and
 `doctor` runs the startup step. Setting
-`RAGMONK_NO_UPDATE_CHECK` turns it off entirely. The step does two things:
+`DOCMONK_NO_UPDATE_CHECK` turns it off entirely. The step does two things:
 
 - **Notice:** it reads `update.json` and prints the "newer version" notice
   to stderr, once per version.
 - **Background check:** when the cache is older than
   `updates.check_interval_hours`, it spawns a detached
-  `ragmonk update background-check`. The marker carries over only while the
+  `docmonk update background-check`. The marker carries over only while the
   latest version is unchanged.
 
 Debug builds only run the background check against the test host, so
@@ -80,9 +80,9 @@ development and test runs never contact GitHub.
 
 1. detects the target and refuses any target outside the four release
    targets;
-2. resolves the version from `RAGMONK_VERSION`, or else from the latest
+2. resolves the version from `DOCMONK_VERSION`, or else from the latest
    release;
-3. downloads the archive from GitHub, or from `RAGMONK_DOWNLOAD_BASE` (a URL
+3. downloads the archive from GitHub, or from `DOCMONK_DOWNLOAD_BASE` (a URL
    or a local directory);
 4. verifies the sha256 digest, and the minisign signature when a key is set
    and `minisign` is installed;
@@ -105,7 +105,7 @@ each target.
 - **Unit tests** cover versioning, the cache, digests, minisign, layout
   switch/prune/rollback, and archive unpacking, including path-escape
   rejection. The minisign vectors use a fixed test-only seed.
-- **`ragmonk-cli/tests/update.rs`** (POSIX) runs against a local HTTP stand-in
+- **`docmonk-cli/tests/update.rs`** (POSIX) runs against a local HTTP stand-in
   release host. It covers `check` and `status`, rejection of non-semver tags,
   the once-only notice, a stale cache triggering the background check,
   install refusal on a bad checksum, install refusal when the binary reports
@@ -143,5 +143,5 @@ HTTPS client trusts the operating system's trust store, including
 `SSL_CERT_FILE`, in addition to the bundled Mozilla roots. Those clients
 are update, AI providers, and the OpenSearch/Elasticsearch server backend.
 
-With only the bundled roots, `ragmonk update` and the cloud providers
+With only the bundled roots, `docmonk update` and the cloud providers
 would fail behind TLS-inspecting corporate proxies and with private CAs.

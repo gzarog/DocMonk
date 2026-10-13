@@ -10,7 +10,7 @@ Status: accepted
 
 ## Converter
 
-- `ragmonk-convert` integrates `docling` (docling.rs), pinned at `=1.89.0`,
+- `docmonk-convert` integrates `docling` (docling.rs), pinned at `=1.89.0`,
   with `default-features = false`. That means no ONNX Runtime, no model
   weights, no ASR/VLM and no network access.
 - It sits behind a `DocumentConverter` trait. The trait returns Docling
@@ -82,12 +82,12 @@ order-independent key.
 - **Input:** page images are extracted from the PDF with `lopdf`. JPEG and
   JPEG 2000 images are decoded with `image`. Flate-compressed 8-bit
   DeviceRGB and DeviceGray images are decoded as raw pixels.
-- **Models:** they are not bundled. They load from `RAGMONK_OCR_MODELS_DIR`,
+- **Models:** they are not bundled. They load from `DOCMONK_OCR_MODELS_DIR`,
   else `<home>/models/ocrs`. Both files are verified against pinned SHA-256
   digests (`OCR_MODEL_MANIFEST`). Missing or modified models make OCR
   unavailable; that is logged once and the plain result is kept.
 - **CI:** the workflow downloads the pinned models (cached and
-  SHA-verified) and sets `RAGMONK_REQUIRE_OCR=1`, so the OCR tests can never
+  SHA-verified) and sets `DOCMONK_REQUIRE_OCR=1`, so the OCR tests can never
   silently skip.
 - **Images:** `.png`/`.jpg`/`.tif` files are OCR'd only when
   `documents.image_ocr` is on. Otherwise they are indexed with no derived

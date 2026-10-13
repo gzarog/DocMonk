@@ -5,10 +5,10 @@ Status: accepted (the status report itself is ADR 0034)
 ## Scope
 
 How indexing runs record their progress. The daemon lifecycle is
-ADR 0020; the filesystem watcher is ADR 0021; how `ragmonk status`
+ADR 0020; the filesystem watcher is ADR 0021; how `docmonk status`
 turns progress into a report is ADR 0034.
 
-## Progress snapshot (`ragmonk_indexing::progress`)
+## Progress snapshot (`docmonk_indexing::progress`)
 
 - **One entry per source pass.** `<home>/index_progress.json` (schema
   version 2) holds the run (`run_id`, `pid`, `host`, `operation`,
@@ -41,7 +41,7 @@ counters, from the lease-renewal thread as an independent heartbeat, and
 once with the terminal outcome. Writes are fenced by the lease token and
 never fail the pass.
 
-## Process probes (`ragmonk_indexing::runtime`)
+## Process probes (`docmonk_indexing::runtime`)
 
 `is_process_alive` (a zombie is not alive) and `host_name` serve the
 daemon, the lease owner name and status. They never prove anything about

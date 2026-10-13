@@ -6,20 +6,20 @@ Status: accepted
 
 1. The JSON-RPC layer is hand-rolled (newline-delimited JSON-RPC 2.0
    over stdin/stdout). No MCP SDK or async runtime is added.
-2. The server exposes the read-only `ragmonk_*` tools: `ragmonk_explore`,
-   `ragmonk_search`, `ragmonk_symbol`, `ragmonk_callers`,
-   `ragmonk_callees`, `ragmonk_impact`, `ragmonk_documents`,
-   `ragmonk_status` and `ragmonk_ask` (ADR 0026).
+2. The server exposes the read-only `docmonk_*` tools: `docmonk_explore`,
+   `docmonk_search`, `docmonk_symbol`, `docmonk_callers`,
+   `docmonk_callees`, `docmonk_impact`, `docmonk_documents`,
+   `docmonk_status` and `docmonk_ask` (ADR 0026).
 3. Behavior is pinned by a recorded stdio session
    (`fixtures/expected/mcp.json`).
 
 ## Command
 
-`ragmonk serve --mcp`:
+`docmonk serve --mcp`:
 
 - Without `--mcp` it fails with a usage error (exit 2).
 - With `mcp.enabled=false` it fails with a configuration error.
-- It prints `RagMonk MCP server starting on stdio...` to stderr. Nothing
+- It prints `DocMonk MCP server starting on stdio...` to stderr. Nothing
   but protocol messages is ever written to stdout.
 - EOF on stdin ends the server with exit code 0.
 
@@ -28,7 +28,7 @@ Status: accepted
 - `initialize` returns the tools, prompts and resources capabilities and
   the server instructions. The requested protocol version is echoed when
   supported (2024-11-05, 2025-03-26, 2025-06-18, 2025-11-25); otherwise
-  the latest is returned. `serverInfo` is `ragmonk v<version>` /
+  the latest is returned. `serverInfo` is `docmonk v<version>` /
   `<version>`.
 - `ping`, `tools/list`, `tools/call`, and empty `prompts/list`,
   `resources/list` and `resources/templates/list`.
@@ -38,7 +38,7 @@ Status: accepted
 
 ## Tools
 
-- The catalog (`crates/ragmonk-mcp/src/mcp_tools.json`) holds names,
+- The catalog (`crates/docmonk-mcp/src/mcp_tools.json`) holds names,
   descriptions, input schemas and output schemas.
 - **Arguments** are validated against the input schema: required fields,
   strings, and lax integers (numeric strings and whole floats are
@@ -62,11 +62,11 @@ Status: accepted
 
 ## Verification
 
-`crates/ragmonk-cli/tests/mcp.rs` indexes the fixture code+docs corpus,
-then drives `ragmonk serve --mcp` through a session covering the
+`crates/docmonk-cli/tests/mcp.rs` indexes the fixture code+docs corpus,
+then drives `docmonk serve --mcp` through a session covering the
 protocol, validation errors, and each tool's success and error paths, and
 compares normalized responses with `fixtures/expected/mcp.json`
-(`RAGMONK_BLESS=1` regenerates it).
+(`DOCMONK_BLESS=1` regenerates it).
 
 - Normalization: corpus, home and source id are masked, opaque ids are
   dropped, and volatile values (timestamps, pids, sizes) are masked.

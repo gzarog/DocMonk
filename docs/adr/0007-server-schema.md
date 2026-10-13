@@ -4,7 +4,7 @@ Status: accepted
 
 ## Decision
 * **Names.** Indexes are named `{storage.server.index_prefix}-{kind}`
-  (default prefix `ragmonk`, e.g. `ragmonk-chunks`).
+  (default prefix `docmonk`, e.g. `docmonk-chunks`).
 * **Seven specialized indexes**: `-source-state`, `-files`, `-code`,
   `-documents` (top-level documents and EML attachment children with
   `parent_document_id`/`attachment_*` provenance), `-chunks` (retrieval
@@ -17,16 +17,16 @@ Status: accepted
   bulky text (`text`, `embedding_text`, `evidence`, `table_rows`) is stored
   but not indexed.
 * **Schema identity** is stored in each index's `_meta` (`schema`,
-  `schema_version`, vector spec). `ragmonk server init` creates missing
+  `schema_version`, vector spec). `docmonk server init` creates missing
   indexes, waits for primaries, and verifies existing ones; any mismatch is
   refused — indexes are never mutated in place. A schema change means a
   fresh index set (or prefix) and a full rebuild. The current identity is
-  `schema_version` 3; `ragmonk status` and every other command verify all
+  `schema_version` 3; `docmonk status` and every other command verify all
   seven identities with one `_mapping` request.
 * **Vectors** are defined at creation (`knn_vector`+HNSW/lucene/cosine on
   OpenSearch, `dense_vector`+HNSW/cosine on Elasticsearch), 384 dims for the
   pinned embedding model, m=16, ef_construction=128.
-* **IDs.** Records use `ragmonk_core::ids::record` IDs; the document `_id`
+* **IDs.** Records use `docmonk_core::ids::record` IDs; the document `_id`
   is `<build_id>:<record id>`, deterministic and idempotent, and builds
   never overwrite each other.
 * **Atomic publication.** A source-state document holds `active_build_id`
@@ -48,6 +48,6 @@ Status: accepted
   saved serving settings explicitly or on drop.
 
 ## Evidence
-`crates/ragmonk-backends/tests/live.rs` runs the full lifecycle against real
+`crates/docmonk-backends/tests/live.rs` runs the full lifecycle against real
 OpenSearch and Elasticsearch (CI job "Server integration"), including
 injected crashes/aborts and visibility checks.
