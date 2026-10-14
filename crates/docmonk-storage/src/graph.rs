@@ -25,7 +25,7 @@
 //!   ([`ProjectStore::adopt_graph`]). Either way the rows stay invisible
 //!   until the graph stage rebinds or incrementally updates them.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -33,9 +33,12 @@ use serde::{Deserialize, Serialize};
 use crate::db::{now_iso, write_tx};
 use crate::error::{Result, StorageError};
 use crate::knowledge::{
-    cached, entity_from_row, EntityRow, ProjectStore, RelationshipRow, CROSS_FILE_RESOLVERS,
-    ENTITY_COLUMNS,
+    cached, entity_from_row, relationship_from_row, EntityRow, ProjectStore, RelationshipRow,
+    CROSS_FILE_RESOLVERS, ENTITY_COLUMNS, RELATIONSHIP_COLUMNS,
 };
+
+/// Names or files per batched lookup statement.
+pub const LOOKUP_BATCH: usize = 500;
 
 /// `metadata` key holding the JSON [`GraphState`] (small: status reads it).
 pub const GRAPH_STATE_KEY: &str = "graph_state";
@@ -596,10 +599,14 @@ impl ProjectStore {
     /// Entities whose qualified name is `qn`, in cross-file resolution
     /// order (file, line, id).
     pub fn entities_by_qualified_name(&self, build_id: &str, qn: &str) -> Result<Vec<EntityRow>> {
+        // `INDEXED BY` here and below: to skip the sort the planner would
+        // otherwise pick the index matching the `ORDER BY` and scan every
+        // entity of the build for each lookup.
         self.query_rows(
             "entities by qualified name",
             &format!(
-                "SELECT {ENTITY_COLUMNS} FROM entities WHERE build_id = ?1 AND qualified_name = ?2
+                "SELECT {ENTITY_COLUMNS} FROM entities INDEXED BY idx_entities_qname
+                 WHERE build_id = ?1 AND qualified_name = ?2
                  ORDER BY file_id, start_line, id"
             ),
             &[&build_id, &qn],
@@ -613,12 +620,122 @@ impl ProjectStore {
         self.query_rows(
             "entities by name",
             &format!(
-                "SELECT {ENTITY_COLUMNS} FROM entities WHERE build_id = ?1 AND name = ?2
+                "SELECT {ENTITY_COLUMNS} FROM entities INDEXED BY idx_entities_name
+                 WHERE build_id = ?1 AND name = ?2
                  ORDER BY qualified_name, file_id, start_line, id"
             ),
             &[&build_id, &name],
             entity_from_row,
         )
+    }
+
+    /// [`entities_by_qualified_name`](Self::entities_by_qualified_name) for
+    /// many names at once, in bounded batches; every requested name gets
+    /// an entry (empty when nothing matches), each in the same order.
+    pub fn entities_by_qualified_names(
+        &self,
+        build_id: &str,
+        names: &[&str],
+    ) -> Result<HashMap<String, Vec<EntityRow>>> {
+        self.entities_in(
+            build_id,
+            names,
+            "qualified_name",
+            "idx_entities_qname",
+            "file_id, start_line, id",
+            |e| &e.qualified_name,
+        )
+    }
+
+    /// [`entities_by_bare_name`](Self::entities_by_bare_name) for many
+    /// names at once (see [`entities_by_qualified_names`](Self::entities_by_qualified_names)).
+    pub fn entities_by_bare_names(
+        &self,
+        build_id: &str,
+        names: &[&str],
+    ) -> Result<HashMap<String, Vec<EntityRow>>> {
+        self.entities_in(
+            build_id,
+            names,
+            "name",
+            "idx_entities_name",
+            "qualified_name, file_id, start_line, id",
+            |e| &e.name,
+        )
+    }
+
+    fn entities_in(
+        &self,
+        build_id: &str,
+        names: &[&str],
+        column: &str,
+        index: &str,
+        order: &str,
+        key: fn(&EntityRow) -> &String,
+    ) -> Result<HashMap<String, Vec<EntityRow>>> {
+        let mut out: HashMap<String, Vec<EntityRow>> = names
+            .iter()
+            .map(|n| ((*n).to_owned(), Vec::new()))
+            .collect();
+        for batch in names.chunks(LOOKUP_BATCH) {
+            let marks = (0..batch.len())
+                .map(|i| format!("?{}", i + 2))
+                .collect::<Vec<_>>()
+                .join(",");
+            let mut args: Vec<&dyn rusqlite::ToSql> = vec![&build_id];
+            args.extend(batch.iter().map(|n| n as &dyn rusqlite::ToSql));
+            // Ordered by the name first, so each name's rows keep exactly
+            // the order of the single-name lookup.
+            let rows = self.query_rows(
+                "entities by names",
+                &format!(
+                    "SELECT {ENTITY_COLUMNS} FROM entities INDEXED BY {index}
+                     WHERE build_id = ?1 AND {column} IN ({marks})
+                     ORDER BY {column}, {order}"
+                ),
+                &args,
+                entity_from_row,
+            )?;
+            for e in rows {
+                if let Some(v) = out.get_mut(key(&e).as_str()) {
+                    v.push(e);
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Cross-file references recorded by `files`, by file, each in id
+    /// order (bounded batches of indexed lookups).
+    pub fn files_cross_file_references(
+        &self,
+        build_id: &str,
+        files: &[&str],
+    ) -> Result<BTreeMap<String, Vec<RelationshipRow>>> {
+        let mut out: BTreeMap<String, Vec<RelationshipRow>> = BTreeMap::new();
+        for batch in files.chunks(LOOKUP_BATCH) {
+            let marks = (0..batch.len())
+                .map(|i| format!("?{}", i + 2))
+                .collect::<Vec<_>>()
+                .join(",");
+            let mut args: Vec<&dyn rusqlite::ToSql> = vec![&build_id];
+            args.extend(batch.iter().map(|f| f as &dyn rusqlite::ToSql));
+            let rows = self.query_rows(
+                "cross-file references by file",
+                &format!(
+                    "SELECT {RELATIONSHIP_COLUMNS} FROM relationships INDEXED BY idx_rel_file
+                     WHERE build_id = ?1 AND file_id IN ({marks}) ORDER BY file_id, id"
+                ),
+                &args,
+                relationship_from_row,
+            )?;
+            for r in rows.into_iter().filter(|r| {
+                r.reference_text.is_some() && CROSS_FILE_RESOLVERS.contains(&r.resolver.as_str())
+            }) {
+                out.entry(r.file_id.clone()).or_default().push(r);
+            }
+        }
+        Ok(out)
     }
 
     /// Cross-file references recorded by `file_id`.

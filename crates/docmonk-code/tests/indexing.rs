@@ -792,3 +792,88 @@ fn missing_or_unusable_facts_fall_back_to_parsing_and_never_hide_a_change() {
     let cached = relationships_dump(&f);
     assert_eq!(cached, uncached_oracle(&f));
 }
+
+/// Deterministic pseudo-random numbers (no dependency, stable seeds).
+struct Lcg(u64);
+
+impl Lcg {
+    fn next(&mut self, n: usize) -> usize {
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        ((self.0 >> 33) as usize) % n.max(1)
+    }
+}
+
+/// One generated module: functions `f<k>` that call functions of other
+/// modules by bare and qualified name (shared names make ambiguity).
+fn generated_module(rng: &mut Lcg, modules: usize, defs: &[usize]) -> String {
+    let mut s = String::new();
+    for d in defs {
+        let callee = rng.next(8);
+        let module = rng.next(modules);
+        let body = match rng.next(3) {
+            0 => format!("f{callee}()"),
+            1 => format!("gen.m{module}.f{callee}()"),
+            _ => "0".to_owned(),
+        };
+        s.push_str(&format!("def f{d}():\n    return {body}\n\n"));
+    }
+    s
+}
+
+#[test]
+fn random_change_sequences_resolve_incrementally_exactly_like_a_full_build() {
+    for seed in [7_u64, 1_234, 99_991] {
+        let mut f = fixture();
+        let mut rng = Lcg(seed);
+        let modules = 6;
+        let mut defs: Vec<Vec<usize>> = (0..modules)
+            .map(|_| (0..3).map(|_| rng.next(8)).collect())
+            .collect();
+        let write = |f: &Fixture, rng: &mut Lcg, m: usize, defs: &[usize]| {
+            common::write(
+                &f.root,
+                &format!("gen/m{m}.py"),
+                &generated_module(rng, modules, defs),
+            );
+        };
+        for (m, d) in defs.iter().enumerate() {
+            write(&f, &mut rng, m, d);
+        }
+        f.index();
+        for step in 0..8 {
+            let m = rng.next(modules);
+            match rng.next(4) {
+                // Add, remove or rename a definition.
+                0 => defs[m].push(rng.next(8)),
+                1 if defs[m].len() > 1 => {
+                    let i = rng.next(defs[m].len());
+                    defs[m].remove(i);
+                }
+                2 => {
+                    let i = rng.next(defs[m].len());
+                    defs[m][i] = rng.next(8);
+                }
+                // Body-only edit: same definitions, new calls.
+                _ => {}
+            }
+            if step == 5 {
+                // Delete a module outright, then bring it back next step.
+                std::fs::remove_file(f.root.join(format!("gen/m{m}.py"))).unwrap();
+            } else {
+                write(&f, &mut rng, m, &defs[m]);
+            }
+            f.index_base();
+            let g = f.graph().unwrap();
+            assert!(!g.full, "seed {seed} step {step}: {g:?}");
+            let incremental = relationships_dump(&f);
+            assert_eq!(
+                incremental,
+                uncached_oracle(&f),
+                "seed {seed} step {step}: incremental resolution diverged"
+            );
+        }
+    }
+}

@@ -528,6 +528,9 @@ pub fn resolve_build(
 /// Re-resolves only the cross-file references recorded by `files`, looking
 /// candidates up by symbol (indexed queries) instead of loading the whole
 /// build. Produces exactly what [`resolve_build`] would for those rows.
+/// References and candidates are read in bounded batches (one statement
+/// per [`RESOLVE_BATCH`] files, and per batch of new names), never one per
+/// file or name.
 pub fn resolve_files(
     store: &mut ProjectStore,
     build_id: &str,
@@ -537,25 +540,49 @@ pub fn resolve_files(
     let mut by_name: HashMap<String, Vec<EntityRow>> = HashMap::new();
     let mut outcomes = Vec::new();
     let mut stats = ResolveStats::default();
-    for file in files {
-        for r in store.file_cross_file_references(build_id, file)? {
+    let files: Vec<&str> = files.iter().map(String::as_str).collect();
+    for chunk in files.chunks(RESOLVE_BATCH) {
+        docmonk_indexing::progress::heartbeat();
+        let refs = store.files_cross_file_references(build_id, chunk)?;
+        let refs: Vec<RelationshipRow> = chunk
+            .iter()
+            .filter_map(|f| refs.get(*f))
+            .flatten()
+            .filter(|r| r.reference_text.is_some())
+            .cloned()
+            .collect();
+        let mut qns: Vec<&str> = Vec::new();
+        let mut names: Vec<&str> = Vec::new();
+        for r in &refs {
+            let text = r.reference_text.as_deref().unwrap_or_default();
+            if !by_qn.contains_key(text) {
+                qns.push(text);
+            }
+            let bare = resolve::bare_name(text);
+            if !by_name.contains_key(bare) {
+                names.push(bare);
+            }
+        }
+        qns.sort_unstable();
+        qns.dedup();
+        names.sort_unstable();
+        names.dedup();
+        let batches = |n: usize| n.div_ceil(docmonk_storage::graph::LOOKUP_BATCH);
+        stats.candidate_queries += batches(qns.len()) + batches(names.len());
+        for (k, rows) in store.entities_by_qualified_names(build_id, &qns)? {
+            stats.candidate_rows += rows.len();
+            by_qn.insert(k, rows);
+        }
+        for (k, rows) in store.entities_by_bare_names(build_id, &names)? {
+            stats.candidate_rows += rows.len();
+            by_name.insert(k, rows);
+        }
+        for r in refs {
             let Some(text) = r.reference_text.as_deref() else {
                 continue;
             };
             stats.references_examined += 1;
             let bare = resolve::bare_name(text);
-            if !by_qn.contains_key(text) {
-                let rows = store.entities_by_qualified_name(build_id, text)?;
-                stats.candidate_queries += 1;
-                stats.candidate_rows += rows.len();
-                by_qn.insert(text.to_owned(), rows);
-            }
-            if !by_name.contains_key(bare) {
-                let rows = store.entities_by_bare_name(build_id, bare)?;
-                stats.candidate_queries += 1;
-                stats.candidate_rows += rows.len();
-                by_name.insert(bare.to_owned(), rows);
-            }
             let pick = |rows: &[EntityRow], take: usize| -> Vec<EntityRow> {
                 rows.iter()
                     .filter(|e| e.file_id != r.file_id)
@@ -587,3 +614,6 @@ pub fn resolve_files(
     stats.changed = store.apply_resolutions(build_id, &outcomes)?;
     Ok(stats)
 }
+
+/// Files whose references [`resolve_files`] reads per statement.
+pub const RESOLVE_BATCH: usize = 500;
