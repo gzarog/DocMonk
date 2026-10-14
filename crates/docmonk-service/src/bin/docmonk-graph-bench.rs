@@ -525,7 +525,11 @@ impl Bench {
         let hash: String = h.finalize().iter().map(|b| format!("{b:02x}")).collect();
         v["graph_digest"] = json!(hash);
         v["file_digests"] = json!(promoted.file_digests.len());
-        v["action"] = json!(if r.published { "publish" } else { "unchanged" });
+        v["action"] = json!(match (r.published, r.rebound) {
+            (true, true) => "repoint",
+            (true, false) => "publish",
+            _ => "unchanged",
+        });
         v["http_requests"] = json!(self.server.stats().requests - before);
         v["records_live"] = json!(self.memory.0.lock().expect("engine").records.len());
         v

@@ -452,6 +452,19 @@ fn stage_within(
     })
 }
 
+/// Whether the current generation holds exactly the staged records: the
+/// same files, each with the same record digest, and nothing pending.
+fn records_identical(current: &ServerGraph, staged: &StagedGraph) -> bool {
+    current.generation.is_some()
+        && current.pending.is_none()
+        && matches!(current.state.as_str(), "ready" | "stale")
+        && current.file_digests.len() == staged.files.len()
+        && staged
+            .files
+            .iter()
+            .all(|(id, f)| current.file_digests.get(id) == Some(&f.digest))
+}
+
 /// Whether a staged file's records equal the visible generation's, so they
 /// are copied forward server-side instead of written.
 fn copies_forward(current: &ServerGraph, file_id: &str, digest: &str) -> bool {
@@ -726,6 +739,25 @@ impl ServerBackend {
             report.seconds = started.elapsed().as_secs_f64();
             return Ok(());
         }
+        // The current generation already holds exactly these records (a
+        // new base whose changes did not change any graph record, e.g. a
+        // body edit that moves no line): point it at the new base instead
+        // of copying every record into a new generation.
+        if let Some(generation) = current.generation.as_deref() {
+            if records_identical(&current, &staged) {
+                phase("promoting");
+                let promoting = Instant::now();
+                let repointed = self.repoint_graph(input, &staged, generation)?;
+                report.timings.promotion_seconds = promoting.elapsed().as_secs_f64();
+                if repointed {
+                    report.generation = Some(generation.to_owned());
+                    report.published = true;
+                    report.rebound = true;
+                    report.seconds = started.elapsed().as_secs_f64();
+                    return Ok(());
+                }
+            }
+        }
         // Leftovers of an abandoned pending generation.
         if let Some(old) = current
             .pending
@@ -868,6 +900,63 @@ impl ServerBackend {
         let r = self.refresh_build_indexes();
         report.timings.refresh_seconds = refreshing.elapsed().as_secs_f64();
         r
+    }
+
+    /// Points the visible-or-stale `generation`, whose records equal the
+    /// staged graph file for file, at the new base: one compare-and-swap
+    /// fenced by the lease, the expected active base and the expected
+    /// generation, with no record written. Returns `false` when the
+    /// server's graph is no longer that generation (the caller publishes
+    /// normally).
+    fn repoint_graph(
+        &self,
+        input: &GraphPublishInput<'_>,
+        staged: &StagedGraph,
+        generation: &str,
+    ) -> Result<bool> {
+        let mut repointed = false;
+        self.patch_state(input.source_id, input.lease, None, |doc, p| {
+            let active = p.and_then(|p| p.active_build_id.as_deref());
+            if active != Some(input.base_build_id) {
+                return Err(BackendError::Conflict(format!(
+                    "base build {} of {} was superseded; the graph was not published",
+                    input.base_build_id, input.source_id
+                )));
+            }
+            let mut g = graph_value(doc);
+            let unchanged = g.get("generation").and_then(Value::as_str) == Some(generation)
+                && g.get("pending").is_none_or(Value::is_null)
+                && matches!(
+                    g.get("state").and_then(Value::as_str),
+                    Some("ready" | "stale")
+                );
+            if !unchanged {
+                return Ok(());
+            }
+            g.insert("state".into(), json!("ready"));
+            g.insert("base_build_id".into(), json!(input.base_build_id));
+            g.insert("digest".into(), json!(staged.digest));
+            g.insert("input_digest".into(), json!(input.input_digest));
+            g.insert(
+                "derivation".into(),
+                json!(input.manifest.map(|m| m.derivation)),
+            );
+            g.insert(
+                "manifest_version".into(),
+                json!(input.manifest.map(|m| m.version)),
+            );
+            g.insert(
+                "file_keys".into(),
+                json!(input.manifest.map(|m| m.file_keys)),
+            );
+            g.insert("published_at".into(), json!(crate::backend::now()));
+            g.insert("last_error".into(), Value::Null);
+            g.insert("stale_reason".into(), Value::Null);
+            put_graph(doc, Value::Object(g));
+            repointed = true;
+            Ok(())
+        })?;
+        Ok(repointed)
     }
 
     /// The fenced compare-and-swap that makes the pending generation the
