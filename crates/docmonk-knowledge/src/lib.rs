@@ -85,6 +85,7 @@ pub fn build_graph_phased(
             cancel,
             phase,
             facts,
+            batch: 0,
         },
         progress,
     )

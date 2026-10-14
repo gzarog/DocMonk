@@ -102,6 +102,13 @@ pub fn local_runs(
                 lease_token: None,
                 lease_valid: None,
                 outcome: s.outcome.clone(),
+                relationships: (s.relationships.as_deref() == Some("building")).then(|| {
+                    crate::model::RelationshipProgress {
+                        phase: s.relationships_phase.clone(),
+                        processed: count(s.relationships_processed),
+                        planned: s.relationships_planned.and_then(count),
+                    }
+                }),
             });
         }
         if !p.running {
@@ -157,6 +164,7 @@ pub fn local_runs(
             lease_token: None,
             lease_valid: None,
             outcome: None,
+            relationships: None,
         });
     }
     out
@@ -272,6 +280,7 @@ pub fn server_runs(
             lease_token: token,
             lease_valid: Some(lease_valid),
             outcome: str_field(d, "outcome").map(str::to_owned),
+            relationships: None,
         });
     }
     out

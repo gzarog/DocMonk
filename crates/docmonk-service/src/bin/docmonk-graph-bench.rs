@@ -3,7 +3,7 @@
 //! ```text
 //! docmonk-graph-bench [--files N] [--docs M] [--runs R] [--warmup W]
 //!                     [--workers K] [--scenarios a,b,...] [--server all|none]
-//!                     [--fact-cache] [--work-dir DIR] [--label NAME] [--out report.json]
+//!                     [--fact-cache] [--graph-batch N] [--work-dir DIR] [--label NAME] [--out report.json]
 //!                     [--emit-only DIR]
 //! ```
 //!
@@ -349,6 +349,7 @@ struct Bench {
     selected: Option<std::collections::BTreeSet<String>>,
     with_server: bool,
     facts: Option<Arc<docmonk_storage::facts::FactCache>>,
+    batch: usize,
 }
 
 impl Bench {
@@ -409,6 +410,7 @@ impl Bench {
             selected: sel.scenarios.clone(),
             with_server: sel.server,
             facts,
+            batch: sel.batch,
         }
     }
 
@@ -575,15 +577,19 @@ impl Bench {
         let t = Instant::now();
         let timeline = std::cell::RefCell::new(Vec::<(&'static str, Instant)>::new());
         let phase = |p: &'static str| timeline.borrow_mut().push((p, Instant::now()));
-        let graph = docmonk_knowledge::build_graph_phased(
+        let graph = docmonk_code::graph_stage::build_graph(
             &mut store,
             &self.root,
             &build,
-            self.workers,
-            None,
+            &docmonk_code::graph_stage::GraphOptions {
+                workers: self.workers,
+                linker: Some(&docmonk_knowledge::KnowledgeLinker),
+                cancel: None,
+                phase: Some(&phase),
+                facts: self.facts.as_deref(),
+                batch: self.batch,
+            },
             &mut |_, _| {},
-            Some(&phase),
-            self.facts.as_deref(),
         )
         .expect("graph");
         let end = Instant::now();
@@ -679,6 +685,7 @@ struct Selection {
     scenarios: Option<std::collections::BTreeSet<String>>,
     server: bool,
     fact_cache: bool,
+    batch: usize,
     work_dir: PathBuf,
 }
 
@@ -772,6 +779,7 @@ fn main() {
         scenarios: arg("--scenarios").map(|s| s.split(',').map(str::to_owned).collect()),
         server: arg("--server").as_deref() != Some("none"),
         fact_cache: args.iter().any(|a| a == "--fact-cache"),
+        batch: num("--graph-batch", 0),
         work_dir: arg("--work-dir")
             .map(PathBuf::from)
             .unwrap_or_else(|| std::env::temp_dir().join("docmonk-graph-bench")),
@@ -803,7 +811,11 @@ fn main() {
             "arch": std::env::consts::ARCH,
             "cpus": cpus,
             "worker_count": workers,
-            "graph_batch": docmonk_code::graph_stage::GRAPH_BATCH,
+            "graph_batch": if selection.batch == 0 {
+                docmonk_code::graph_stage::GRAPH_BATCH
+            } else {
+                selection.batch
+            },
             "code_files": files,
             "documents": docs,
             "runs": runs,

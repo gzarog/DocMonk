@@ -234,6 +234,12 @@ fn summary(r: &StatusReport, thr: Option<Option<f64>>) -> String {
 }
 
 fn progress(w: &LiveRun) -> String {
+    if let Some(g) = &w.relationships {
+        return match (g.processed, g.planned) {
+            (Some(p), Some(t)) => format!("{p}/{t} files"),
+            _ => "N/A".into(),
+        };
+    }
     match (w.processed, w.planned, w.percentage) {
         (Some(p), Some(t), Some(pct)) => format!("{p}/{t} ({pct:.0}%)"),
         (Some(p), None, _) => format!("{p}/N/A"),
@@ -258,7 +264,13 @@ fn workers(r: &StatusReport, verbose: bool) -> String {
                 },
                 na(w.host.as_deref()),
                 format!("{:?}", w.liveness).to_lowercase(),
-                na(w.stage.as_deref()),
+                match (
+                    w.stage.as_deref(),
+                    w.relationships.as_ref().and_then(|g| g.phase.as_deref()),
+                ) {
+                    (Some(stage), Some(phase)) => format!("{stage}: {phase}"),
+                    (stage, _) => na(stage),
+                },
                 progress(w),
                 na(w.indexed),
                 na(w.failed),

@@ -31,7 +31,10 @@
 //!    published and searchable throughout.
 //!
 //! Work and memory are bounded: files are parsed `workers` at a time in
-//! batches of [`GRAPH_BATCH`], each batch written before the next is read.
+//! batches of [`GRAPH_BATCH`], each batch written before the next is read,
+//! and every parse holds one `cpu` permit of the process-wide resource
+//! governor, so graph builds of several sources share the indexer's CPU
+//! budget instead of each adding its own parser threads.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -109,6 +112,9 @@ pub struct GraphOptions<'a> {
     /// Graph facts stored by the base index (`indexing.graph_fact_cache`):
     /// a file whose verified bytes match a stored key is not parsed again.
     pub facts: Option<&'a docmonk_storage::facts::FactCache>,
+    /// Files parsed per batch before their rows are written (0:
+    /// [`GRAPH_BATCH`]).
+    pub batch: usize,
 }
 
 /// Wall-clock seconds per phase of one graph build (monotonic timers).
@@ -581,7 +587,12 @@ fn build(
     let workers = opts.workers.max(1);
     let mut done = 0;
     let mut written = 0;
-    for batch in changed.chunks(GRAPH_BATCH) {
+    let batch_size = if opts.batch == 0 {
+        GRAPH_BATCH
+    } else {
+        opts.batch
+    };
+    for batch in changed.chunks(batch_size) {
         if opts.cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
             return Err(GraphError::Cancelled);
         }
@@ -795,6 +806,8 @@ fn derive_file(
             cached: Some(true),
         });
     }
+    let _cpu =
+        docmonk_indexing::governor::global().acquire(docmonk_indexing::governor::Class::Cpu, 1);
     let parsing = Instant::now();
     // The base index parsed these exact bytes; a parse failure here would
     // be a derivation bug, recorded as a failure rather than hidden.

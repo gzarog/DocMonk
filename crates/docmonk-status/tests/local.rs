@@ -435,3 +435,42 @@ fn bench_local_150_sources() {
         })
     );
 }
+
+#[test]
+fn a_graph_build_reports_its_phase_and_derivation_progress() {
+    let tmp = tempfile::tempdir().unwrap();
+    let home = common::home(tmp.path());
+    let mut cp = common::control(&home);
+    let root = tmp.path().join("s");
+    common::write(&root, "a.py", "1");
+    let id = common::add_source(&mut cp, &root).id;
+    let fresh = iso(Utc::now());
+    let p = IndexProgress {
+        running: true,
+        run_id: Some("run-g".into()),
+        pid: Some(i64::from(std::process::id())),
+        host: Some("me".into()),
+        operation: Some("relationships".into()),
+        updated_at: Some(fresh.clone()),
+        sources: vec![SourceProgress {
+            stage: Some("relationships".into()),
+            relationships: Some("building".into()),
+            relationships_planned: Some(40),
+            relationships_processed: 40,
+            relationships_phase: Some("resolving".into()),
+            ..SourceProgress::new(&id, &fresh)
+        }],
+        ..IndexProgress::default()
+    };
+    write_progress(&home.index_progress(), &p).unwrap();
+    let r = report(&home);
+    let live = r.source(&id).unwrap().live.as_ref().unwrap();
+    let g = live.relationships.as_ref().expect("graph progress");
+    assert_eq!(
+        (g.phase.as_deref(), g.processed, g.planned),
+        (Some("resolving"), Some(40), Some(40)),
+        "every file derived, the build still resolving"
+    );
+    let json = serde_json::to_value(live).unwrap();
+    assert_eq!(json["relationships"]["phase"], "resolving");
+}

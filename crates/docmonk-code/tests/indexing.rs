@@ -99,6 +99,7 @@ impl Fixture {
                 cancel: None,
                 phase: None,
                 facts: None,
+                batch: 0,
             },
             &mut |_, _| {},
         )
@@ -506,6 +507,7 @@ fn a_graph_build_reports_its_phases_timings_and_counters() {
             cancel: None,
             phase: Some(&phase),
             facts: None,
+            batch: 0,
         },
         &mut |_, _| {},
     )
@@ -549,6 +551,7 @@ fn a_graph_build_reports_its_phases_timings_and_counters() {
             cancel: None,
             phase: None,
             facts: None,
+            batch: 0,
         },
         &mut |_, _| {},
     )
@@ -603,6 +606,7 @@ fn a_cancelled_graph_build_publishes_nothing() {
             cancel: Some(&cancel),
             phase: None,
             facts: None,
+            batch: 0,
         },
         &mut |_, _| {},
     );
@@ -690,6 +694,7 @@ impl Fixture {
                 cancel: None,
                 phase: None,
                 facts: Some(cache),
+                batch: 0,
             },
             &mut |_, _| {},
         )
