@@ -338,30 +338,85 @@ pub fn file_relationships(
     file_id: &str,
     source: &[u8],
 ) -> Result<Vec<RelationshipRow>, ParseFailure> {
-    let PreparedCode::Parsed {
-        language,
-        extraction,
-    } = prepare_source(source, rel_path)?
-    else {
-        return Ok(Vec::new());
-    };
-    let ids = entity_ids(file_id, &extraction);
-    let entities = entity_rows(file_id, language, &extraction, &ids);
-    let same_file = candidates(&entities);
-    Ok(build_relationships(
+    Ok(prepared_relationships(
         rel_path,
         file_id,
-        language,
-        &extraction,
-        &ids,
-        &mut |t| resolve_locally(t, &same_file),
+        &prepare_source(source, rel_path)?,
     ))
 }
 
+/// [`file_relationships`] of an already prepared file (the parse the base
+/// index made).
+pub fn prepared_relationships(
+    rel_path: &str,
+    file_id: &str,
+    prepared: &PreparedCode,
+) -> Vec<RelationshipRow> {
+    let PreparedCode::Parsed {
+        language,
+        extraction,
+    } = prepared
+    else {
+        return Vec::new();
+    };
+    let ids = entity_ids(file_id, extraction);
+    let entities = entity_rows(file_id, language, extraction, &ids);
+    let same_file = candidates(&entities);
+    build_relationships(rel_path, file_id, language, extraction, &ids, &mut |t| {
+        resolve_locally(t, &same_file)
+    })
+}
+
+/// Format of a cached fact set; part of its cache key.
+pub const FACTS_FORMAT: &str = "facts-1";
+
+/// The fact-cache key of a file's [`file_relationships`] for `content_hash`.
+pub fn graph_fact_key(file_id: &str, rel_path: &str, content_hash: &str) -> String {
+    docmonk_storage::facts::fact_key(
+        file_id,
+        rel_path,
+        content_hash,
+        &format!("{}+{FACTS_FORMAT}", graph_derivation()),
+    )
+}
+
 /// The registered `FileKind::Code` processor (entities only, whatever the
-/// relationship setting).
-#[derive(Debug, Default)]
-pub struct CodeProcessor;
+/// relationship setting). With a fact cache (`indexing.graph_fact_cache`)
+/// it also stores each file's graph facts from the same parse, so the
+/// graph stage does not parse the file again; nothing it stores is part
+/// of the published index.
+#[derive(Default)]
+pub struct CodeProcessor {
+    pub facts: Option<std::sync::Arc<docmonk_storage::facts::FactCache>>,
+}
+
+impl std::fmt::Debug for CodeProcessor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CodeProcessor")
+            .field("facts", &self.facts.is_some())
+            .finish()
+    }
+}
+
+impl CodeProcessor {
+    /// Stores the facts of these exact bytes when they are the content the
+    /// scan hashed (a file rewritten in between is left to the graph
+    /// stage's own parse). Failures only cost a later parse.
+    fn store_facts(&self, input: &PrepareInput, source: &[u8], prepared: &PreparedCode) {
+        let Some(cache) = &self.facts else {
+            return;
+        };
+        let hash = docmonk_indexing::fingerprint::hash_bytes(source);
+        if input.content_hash.as_deref() != Some(hash.as_str()) {
+            return;
+        }
+        let rows = prepared_relationships(&input.rel_path, &input.file_id, prepared);
+        let key = graph_fact_key(&input.file_id, &input.rel_path, &hash);
+        if let Err(e) = cache.put(&input.source_id, &input.file_id, &key, &rows) {
+            tracing::debug!(component = "relationships", event = "graph_facts_not_stored", error = %e);
+        }
+    }
+}
 
 impl Processor for CodeProcessor {
     fn prepare(&self, input: &PrepareInput) -> Result<FileKnowledge, ProcessError> {
@@ -378,6 +433,7 @@ impl Processor for CodeProcessor {
             ),
             transient: false,
         })?;
+        self.store_facts(input, &source, &prepared);
         Ok(file_knowledge(&input.file_id, &prepared))
     }
 }

@@ -298,6 +298,11 @@ section! {
         // Call graphs and code<->document links. Off skips their extraction,
         // cross-file resolution and knowledge linking (faster indexing).
         relationships_enabled: bool = true;
+        // Experimental: indexing stores each code file's graph facts from
+        // its parse (a disposable cache under <home>/cache), so the
+        // relationship stage reuses them instead of parsing again. Off:
+        // the stage parses every file it derives.
+        graph_fact_cache: bool = false;
         // Explicit cross-source dependencies, "<consumer> -> <producer>"
         // (source ids or paths). Unresolved references of the consumer are
         // looked up by exact qualified name in its producers only; C#

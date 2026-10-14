@@ -741,6 +741,8 @@ fn graph_pass(
         Some(lost),
         progress,
         Some(phase),
+        docmonk_convert::open_graph_facts(cfg, Some(&docmonk_convert::graph_facts_path(home)))
+            .as_deref(),
     )
     .map_err(ServerGraphError::Graph)?;
     let staged = store.graph_state_with_files().map_err(|e| other(db(e)))?;

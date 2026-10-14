@@ -140,6 +140,8 @@ pub fn graph_one(
             t.source_relationships_phase(&source.id, name);
         }
     };
+    let facts =
+        docmonk_convert::open_graph_facts(cfg, Some(&docmonk_convert::graph_facts_path(home)));
     match backend {
         Backend::Local => {
             let active = match control_plane(home).and_then(|cp| cp.state(&source.id).map_err(db)) {
@@ -167,6 +169,7 @@ pub fn graph_one(
                     None,
                     &mut progress,
                     Some(&phase),
+                    facts.as_deref(),
                 )
                 .map(|graph| GraphRun {
                     graph,

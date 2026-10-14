@@ -33,6 +33,9 @@ pub struct RegistryOptions {
     /// Embedding models root. Default `<home>/models` (overridden by
     /// `DOCMONK_MODELS_DIR`).
     pub models_root: Option<std::path::PathBuf>,
+    /// The graph fact cache, used when `indexing.graph_fact_cache` is on.
+    /// Default: none.
+    pub graph_facts: Option<std::path::PathBuf>,
 }
 
 impl RegistryOptions {
@@ -42,6 +45,31 @@ impl RegistryOptions {
             ocr_models_dir: Some(home.models_dir().join("ocrs")),
             models_root: Some(home.models_dir()),
             cache_dir: Some(home.cache_dir().join("conversion")),
+            graph_facts: Some(graph_facts_path(home)),
+        }
+    }
+}
+
+/// `<home>/cache/graph-facts.db`.
+pub fn graph_facts_path(home: &docmonk_core::paths::Home) -> std::path::PathBuf {
+    home.cache_dir().join("graph-facts.db")
+}
+
+/// The graph fact cache when `indexing.graph_fact_cache` is on (`None`
+/// when off, without a path, or when it cannot be opened: the graph stage
+/// then parses as it always did).
+pub fn open_graph_facts(
+    config: &DocMonkConfig,
+    path: Option<&std::path::Path>,
+) -> Option<Arc<docmonk_storage::facts::FactCache>> {
+    if !config.indexing.graph_fact_cache {
+        return None;
+    }
+    match docmonk_storage::facts::FactCache::open(path?) {
+        Ok(c) => Some(Arc::new(c)),
+        Err(e) => {
+            tracing::warn!(component = "relationships", event = "graph_facts_unavailable", error = %e);
+            None
         }
     }
 }
@@ -63,7 +91,8 @@ pub fn registry_with(config: &DocMonkConfig, opts: &RegistryOptions) -> Registry
     // Relationships are not part of the primary index (see
     // `docmonk_code::graph_stage`), so `indexing.relationships_enabled`
     // never changes this registry or its identity.
-    let mut r = docmonk_code::registry();
+    let mut r =
+        docmonk_code::registry_with_facts(open_graph_facts(config, opts.graph_facts.as_deref()));
     // Toggling attachment extraction changes what an .eml yields, so it is
     // part of the identity (`+eml-attachments.1`).
     r.versions.converter_version = if d.email_attachments {

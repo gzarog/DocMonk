@@ -98,6 +98,7 @@ impl Fixture {
                 linker: None,
                 cancel: None,
                 phase: None,
+                facts: None,
             },
             &mut |_, _| {},
         )
@@ -504,6 +505,7 @@ fn a_graph_build_reports_its_phases_timings_and_counters() {
             linker: None,
             cancel: None,
             phase: Some(&phase),
+            facts: None,
         },
         &mut |_, _| {},
     )
@@ -546,6 +548,7 @@ fn a_graph_build_reports_its_phases_timings_and_counters() {
             linker: None,
             cancel: None,
             phase: None,
+            facts: None,
         },
         &mut |_, _| {},
     )
@@ -599,6 +602,7 @@ fn a_cancelled_graph_build_publishes_nothing() {
             linker: None,
             cancel: Some(&cancel),
             phase: None,
+            facts: None,
         },
         &mut |_, _| {},
     );
@@ -656,4 +660,135 @@ fn only_symbol_dependents_are_re_resolved_and_the_result_matches_a_full_build() 
     drop(store);
     assert!(f.graph().unwrap().full);
     assert_eq!(relationships_dump(&f), incremental);
+}
+
+impl Fixture {
+    fn index_base_with_facts(&mut self, cache: &std::sync::Arc<docmonk_storage::facts::FactCache>) {
+        run_source(
+            &self.layout,
+            &mut self.cp,
+            &self.src,
+            &docmonk_code::registry_with_facts(Some(cache.clone())),
+            &opts(),
+            &mut NoProgress,
+        )
+        .unwrap();
+    }
+
+    fn graph_with_facts(
+        &self,
+        cache: &docmonk_storage::facts::FactCache,
+    ) -> Result<GraphReport, GraphError> {
+        let (mut store, active) = self.store();
+        build_graph(
+            &mut store,
+            &self.root,
+            &active,
+            &GraphOptions {
+                workers: 3,
+                linker: None,
+                cancel: None,
+                phase: None,
+                facts: Some(cache),
+            },
+            &mut |_, _| {},
+        )
+    }
+}
+
+fn fact_cache(f: &Fixture) -> std::sync::Arc<docmonk_storage::facts::FactCache> {
+    let dir = f.root.parent().unwrap().join("cache");
+    std::sync::Arc::new(
+        docmonk_storage::facts::FactCache::open(&dir.join("graph-facts.db")).unwrap(),
+    )
+}
+
+/// The same snapshot's graph derived from scratch, without any cache.
+fn uncached_oracle(f: &Fixture) -> BTreeMap<String, String> {
+    let (mut store, _) = f.store();
+    store
+        .put_graph_state_with_files(&docmonk_storage::graph::GraphState::default())
+        .unwrap();
+    drop(store);
+    let g = f.graph().unwrap();
+    assert!(g.full && g.counters.facts_hits == 0);
+    relationships_dump(f)
+}
+
+fn append(f: &Fixture, rel: &str, text: &str) -> String {
+    let p = f.root.join(rel);
+    let before = std::fs::read_to_string(&p).unwrap();
+    std::fs::write(&p, format!("{before}{text}")).unwrap();
+    before
+}
+
+#[test]
+fn cached_graph_facts_replace_the_second_parse_and_yield_the_same_graph() {
+    let mut f = fixture();
+    let cache = fact_cache(&f);
+    f.index_base_with_facts(&cache);
+    let g = f.graph_with_facts(&cache).unwrap();
+    let c = &g.counters;
+    assert!(c.files_derived > 0, "{g:?}");
+    assert_eq!(
+        (c.facts_hits, c.facts_misses),
+        (c.files_derived, 0),
+        "{g:?}"
+    );
+    assert_eq!(g.timings.parse_seconds, 0.0, "nothing was parsed again");
+    let cached = relationships_dump(&f);
+    assert_eq!(cached, uncached_oracle(&f));
+
+    // An edit: indexing stores the new content's facts, the graph stage
+    // uses them and drops the superseded entry.
+    append(
+        &f,
+        "python/animals.py",
+        "\ndef added_after():\n    return speak()\n",
+    );
+    f.index_base_with_facts(&cache);
+    let g = f.graph_with_facts(&cache).unwrap();
+    assert!(!g.full, "{g:?}");
+    assert_eq!(
+        (g.counters.facts_hits, g.counters.facts_misses),
+        (1, 0),
+        "{g:?}"
+    );
+    assert_eq!(g.counters.facts_dropped, 1, "{g:?}");
+    let cached = relationships_dump(&f);
+    assert_eq!(cached, uncached_oracle(&f));
+}
+
+#[test]
+fn missing_or_unusable_facts_fall_back_to_parsing_and_never_hide_a_change() {
+    let mut f = fixture();
+    let cache = fact_cache(&f);
+    // An index made without the cache (an existing source after turning
+    // the cache on): every file falls back to parsing, nothing reindexes.
+    f.index_base();
+    let g = f.graph_with_facts(&cache).unwrap();
+    assert_eq!(g.counters.facts_hits, 0, "{g:?}");
+    assert_eq!(g.counters.facts_misses, g.counters.files_derived, "{g:?}");
+
+    // Facts stored for an edit, then the file changes again on disk
+    // before the graph stage: the bytes no longer match the published
+    // hash, so the graph is stale whatever the cache holds.
+    let original = append(&f, "python/animals.py", "\n# edited\n");
+    f.index_base_with_facts(&cache);
+    let indexed = std::fs::read_to_string(f.root.join("python/animals.py")).unwrap();
+    append(&f, "python/animals.py", "\n# again\n");
+    match f.graph_with_facts(&cache) {
+        Err(GraphError::Stale(reason)) => assert!(reason.contains("python/animals.py"), "{reason}"),
+        other => panic!("expected a stale graph, got {other:?}"),
+    }
+    assert_ne!(indexed, original);
+    std::fs::write(f.root.join("python/animals.py"), &indexed).unwrap();
+    let g = f.graph_with_facts(&cache).unwrap();
+    assert_eq!(
+        (g.counters.facts_hits, g.counters.facts_misses),
+        (1, 0),
+        "{g:?}"
+    );
+    let cached = relationships_dump(&f);
+    assert_eq!(cached, uncached_oracle(&f));
 }

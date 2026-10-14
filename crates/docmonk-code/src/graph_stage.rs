@@ -97,6 +97,9 @@ pub struct GraphOptions<'a> {
     pub cancel: Option<&'a AtomicBool>,
     /// Called when the build enters a phase.
     pub phase: Option<&'a GraphPhaseFn<'a>>,
+    /// Graph facts stored by the base index (`indexing.graph_fact_cache`):
+    /// a file whose verified bytes match a stored key is not parsed again.
+    pub facts: Option<&'a docmonk_storage::facts::FactCache>,
 }
 
 /// Wall-clock seconds per phase of one graph build (monotonic timers).
@@ -112,6 +115,8 @@ pub struct GraphTimings {
     pub derivation_seconds: f64,
     pub read_hash_seconds: f64,
     pub parse_seconds: f64,
+    /// Fact-cache lookups (summed over the parser threads).
+    pub cache_load_seconds: f64,
     /// Writing derived relationship rows.
     pub sqlite_write_seconds: f64,
     /// Reading per-file symbol dependencies.
@@ -127,8 +132,15 @@ pub struct GraphTimings {
 pub struct GraphCounters {
     /// File rows of the base build.
     pub files_total: usize,
-    /// Code files read, hashed and parsed.
+    /// Code files read and hashed (and parsed, unless their facts were
+    /// cached).
     pub files_derived: usize,
+    /// Of those, files whose graph facts came from the fact cache, and
+    /// files parsed because the cache had none (only with a cache).
+    pub facts_hits: usize,
+    pub facts_misses: usize,
+    /// Cache entries of superseded content dropped after the build.
+    pub facts_dropped: usize,
     pub bytes_read: u64,
     pub resolution: ResolveStats,
     /// SQL statements the build issued on its own thread.
@@ -570,13 +582,19 @@ fn build(
             .copied()
             .filter(|f| f.kind == "code" && f.status == "indexed")
             .collect();
-        let derived = derive_batch(root, &code, workers)?;
+        let derived = derive_batch(root, &code, workers, opts.facts)?;
         lap(&mut timings.derivation_seconds);
         for d in derived {
             counters.files_derived += 1;
             counters.bytes_read += d.bytes;
             timings.read_hash_seconds += d.read_hash_seconds;
             timings.parse_seconds += d.parse_seconds;
+            timings.cache_load_seconds += d.cache_load_seconds;
+            match d.cached {
+                Some(true) => counters.facts_hits += 1,
+                Some(false) => counters.facts_misses += 1,
+                None => {}
+            }
             written += d.rows.len();
             store.put_relationships(build_id, &d.rows).map_err(failed)?;
         }
@@ -654,6 +672,24 @@ fn build(
     store.put_graph_state_with_files(&state).map_err(failed)?;
     store.commit_session().map_err(failed)?;
     lap(&mut timings.commit_seconds);
+    if let Some(cache) = opts.facts {
+        // Only the current content's facts can be used again.
+        let keep: std::collections::HashSet<String> = files
+            .iter()
+            .filter(|f| f.kind == "code")
+            .filter_map(|f| {
+                f.content_hash
+                    .as_deref()
+                    .map(|h| crate::process::graph_fact_key(&f.id, &f.rel_path, h))
+            })
+            .collect();
+        match cache.retain(store.source_id(), &keep) {
+            Ok(n) => counters.facts_dropped = n,
+            Err(e) => {
+                tracing::debug!(component = "relationships", event = "graph_facts_not_collected", error = %e)
+            }
+        }
+    }
     counters.resolution = resolution;
     Ok(GraphReport {
         outcome: GraphOutcome::Built,
@@ -680,6 +716,9 @@ struct Derived {
     bytes: u64,
     read_hash_seconds: f64,
     parse_seconds: f64,
+    cache_load_seconds: f64,
+    /// `Some(hit)` when a fact cache was consulted.
+    cached: Option<bool>,
 }
 
 /// Reads, verifies and parses `files` on up to `workers` threads, in input
@@ -688,12 +727,13 @@ fn derive_batch(
     root: &Path,
     files: &[&GraphFile],
     workers: usize,
+    facts: Option<&docmonk_storage::facts::FactCache>,
 ) -> Result<Vec<Derived>, GraphError> {
     let per = files.len().div_ceil(workers.max(1)).max(1);
     let parts: Vec<Result<Vec<Derived>, GraphError>> = std::thread::scope(|s| {
         let handles: Vec<_> = files
             .chunks(per)
-            .map(|part| s.spawn(move || part.iter().map(|f| derive_file(root, f)).collect()))
+            .map(|part| s.spawn(move || part.iter().map(|f| derive_file(root, f, facts)).collect()))
             .collect();
         handles
             .into_iter()
@@ -710,7 +750,11 @@ fn derive_batch(
     Ok(out)
 }
 
-fn derive_file(root: &Path, f: &GraphFile) -> Result<Derived, GraphError> {
+fn derive_file(
+    root: &Path,
+    f: &GraphFile,
+    facts: Option<&docmonk_storage::facts::FactCache>,
+) -> Result<Derived, GraphError> {
     let started = Instant::now();
     let source = std::fs::read(root.join(&f.rel_path)).map_err(|e| {
         GraphError::Stale(format!(
@@ -726,6 +770,22 @@ fn derive_file(root: &Path, f: &GraphFile) -> Result<Derived, GraphError> {
         )));
     }
     let read_hash_seconds = started.elapsed().as_secs_f64();
+    // The bytes are verified against the published hash above, so facts
+    // stored for that hash are exactly what parsing them would produce.
+    let looking = Instant::now();
+    let cached = facts.map(|c| c.get(&crate::process::graph_fact_key(&f.id, &f.rel_path, &hash)));
+    let cache_load_seconds = looking.elapsed().as_secs_f64();
+    let consulted = cached.is_some();
+    if let Some(Some(rows)) = cached {
+        return Ok(Derived {
+            rows,
+            bytes: source.len() as u64,
+            read_hash_seconds,
+            parse_seconds: 0.0,
+            cache_load_seconds,
+            cached: Some(true),
+        });
+    }
     let parsing = Instant::now();
     // The base index parsed these exact bytes; a parse failure here would
     // be a derivation bug, recorded as a failure rather than hidden.
@@ -740,6 +800,8 @@ fn derive_file(root: &Path, f: &GraphFile) -> Result<Derived, GraphError> {
         bytes: source.len() as u64,
         read_hash_seconds,
         parse_seconds: parsing.elapsed().as_secs_f64(),
+        cache_load_seconds,
+        cached: consulted.then_some(false),
     })
 }
 

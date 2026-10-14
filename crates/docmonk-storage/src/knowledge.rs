@@ -51,7 +51,7 @@ pub struct EntityRow {
     pub end_col: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, serde::Deserialize)]
 pub struct RelationshipRow {
     pub id: String,
     pub file_id: String,

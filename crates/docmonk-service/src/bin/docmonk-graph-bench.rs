@@ -3,7 +3,7 @@
 //! ```text
 //! docmonk-graph-bench [--files N] [--docs M] [--runs R] [--warmup W]
 //!                     [--workers K] [--scenarios a,b,...] [--server all|none]
-//!                     [--work-dir DIR] [--label NAME] [--out report.json]
+//!                     [--fact-cache] [--work-dir DIR] [--label NAME] [--out report.json]
 //!                     [--emit-only DIR]
 //! ```
 //!
@@ -348,6 +348,7 @@ struct Bench {
     groups: usize,
     selected: Option<std::collections::BTreeSet<String>>,
     with_server: bool,
+    facts: Option<Arc<docmonk_storage::facts::FactCache>>,
 }
 
 impl Bench {
@@ -372,7 +373,16 @@ impl Bench {
                 exclude_patterns: vec![],
             })
             .expect("add source");
-        let cfg = docmonk_config::DocMonkConfig::default();
+        let mut cfg = docmonk_config::DocMonkConfig::default();
+        cfg.indexing.graph_fact_cache = sel.fact_cache;
+        let facts = docmonk_convert::open_graph_facts(&cfg, Some(&tmp.join("graph-facts.db")));
+        let registry = docmonk_convert::registry_with(
+            &cfg,
+            &docmonk_convert::RegistryOptions {
+                graph_facts: Some(tmp.join("graph-facts.db")),
+                ..Default::default()
+            },
+        );
         let mut opts = Options::from_config(&cfg);
         opts.workers = workers;
         let memory = Memory::default();
@@ -392,12 +402,13 @@ impl Bench {
             canonical,
             opts,
             workers,
-            registry: docmonk_convert::registry(&cfg),
+            registry,
             server,
             memory,
             groups,
             selected: sel.scenarios.clone(),
             with_server: sel.server,
+            facts,
         }
     }
 
@@ -568,6 +579,7 @@ impl Bench {
             None,
             &mut |_, _| {},
             Some(&phase),
+            self.facts.as_deref(),
         )
         .expect("graph");
         let end = Instant::now();
@@ -662,6 +674,7 @@ impl Bench {
 struct Selection {
     scenarios: Option<std::collections::BTreeSet<String>>,
     server: bool,
+    fact_cache: bool,
     work_dir: PathBuf,
 }
 
@@ -754,6 +767,7 @@ fn main() {
     let selection = Selection {
         scenarios: arg("--scenarios").map(|s| s.split(',').map(str::to_owned).collect()),
         server: arg("--server").as_deref() != Some("none"),
+        fact_cache: args.iter().any(|a| a == "--fact-cache"),
         work_dir: arg("--work-dir")
             .map(PathBuf::from)
             .unwrap_or_else(|| std::env::temp_dir().join("docmonk-graph-bench")),
@@ -792,6 +806,7 @@ fn main() {
             "warmup": warmup,
             "scenarios": selection.scenarios,
             "server": selection.server,
+            "fact_cache": selection.fact_cache,
         },
         "summary": summarize(&measured),
         "runs": measured,

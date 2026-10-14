@@ -59,10 +59,12 @@ pub fn build_graph(
     cancel: Option<&std::sync::atomic::AtomicBool>,
     progress: &mut docmonk_code::graph_stage::GraphProgressFn<'_>,
 ) -> Result<docmonk_code::graph_stage::GraphReport, docmonk_code::graph_stage::GraphError> {
-    build_graph_phased(store, root, build_id, workers, cancel, progress, None)
+    build_graph_phased(store, root, build_id, workers, cancel, progress, None, None)
 }
 
-/// [`build_graph`], also reporting each phase the build enters.
+/// [`build_graph`], also reporting each phase the build enters and
+/// reusing graph facts stored by the base index.
+#[allow(clippy::too_many_arguments)]
 pub fn build_graph_phased(
     store: &mut ProjectStore,
     root: &std::path::Path,
@@ -71,6 +73,7 @@ pub fn build_graph_phased(
     cancel: Option<&std::sync::atomic::AtomicBool>,
     progress: &mut docmonk_code::graph_stage::GraphProgressFn<'_>,
     phase: Option<&docmonk_code::graph_stage::GraphPhaseFn<'_>>,
+    facts: Option<&docmonk_storage::facts::FactCache>,
 ) -> Result<docmonk_code::graph_stage::GraphReport, docmonk_code::graph_stage::GraphError> {
     docmonk_code::graph_stage::build_graph(
         store,
@@ -81,6 +84,7 @@ pub fn build_graph_phased(
             linker: Some(&KnowledgeLinker),
             cancel,
             phase,
+            facts,
         },
         progress,
     )
