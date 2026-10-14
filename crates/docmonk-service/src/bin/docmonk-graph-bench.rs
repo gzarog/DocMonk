@@ -2,8 +2,8 @@
 //!
 //! ```text
 //! docmonk-graph-bench [--files N] [--docs M] [--runs R] [--warmup W]
-//!                     [--workers K] [--label NAME] [--out report.json]
-//!                     [--emit-only DIR]
+//!                     [--workers K] [--scenarios a,b,...] [--server all|none]
+//!                     [--label NAME] [--out report.json] [--emit-only DIR]
 //! ```
 //!
 //! Generates a synthetic ASP.NET-style C# repository (controllers with
@@ -23,6 +23,10 @@
 //! | `add_file` | one new service | incremental |
 //! | `remove_file` | one defining model deleted | incremental + dependents |
 //! | `doc_edit` | one note rewritten | incremental, relinked |
+//!
+//! `--scenarios` measures only the named scenarios (the others still apply
+//! their mutation, index and build the graph, unmeasured and without a
+//! server publication); `--server none` skips server publication.
 //!
 //! The server side runs against an in-process engine that implements only
 //! the requests graph publication sends: it yields request, record and
@@ -335,10 +339,12 @@ struct Bench {
     server: ServerBackend,
     memory: Memory,
     groups: usize,
+    selected: Option<std::collections::BTreeSet<String>>,
+    with_server: bool,
 }
 
 impl Bench {
-    fn new(files: usize, docs: usize, workers: usize, run: usize) -> Self {
+    fn new(files: usize, docs: usize, workers: usize, run: usize, sel: &Selection) -> Self {
         let tmp =
             std::env::temp_dir().join(format!("docmonk-graph-bench-{}-{run}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
@@ -384,6 +390,8 @@ impl Bench {
             server,
             memory,
             groups,
+            selected: sel.scenarios.clone(),
+            with_server: sel.server,
         }
     }
 
@@ -488,8 +496,26 @@ impl Bench {
     }
 
     /// One scenario: optional index pass, the graph stage, the server
-    /// publication; resources measured around the whole.
-    fn scenario(&mut self, name: &str, reindex: bool) -> Value {
+    /// publication; resources measured around the whole. An unselected
+    /// scenario only advances the source (`None`).
+    fn scenario(&mut self, name: &str, reindex: bool) -> Option<Value> {
+        if self.selected.as_ref().is_some_and(|s| !s.contains(name)) {
+            if reindex {
+                self.index();
+            }
+            let build = self.active();
+            let mut store = self.store();
+            docmonk_knowledge::build_graph(
+                &mut store,
+                &self.root,
+                &build,
+                self.workers,
+                None,
+                &mut |_, _| {},
+            )
+            .expect("graph");
+            return None;
+        }
         reset_peak_rss();
         let cpu0 = cpu_seconds();
         let started = Instant::now();
@@ -527,7 +553,11 @@ impl Bench {
             *phases.entry(name).or_default() += until.duration_since(*at).as_secs_f64();
         }
         let graph_seconds = t.elapsed().as_secs_f64();
-        let server = self.publish(&store, &build, &graph);
+        let server = if self.with_server {
+            self.publish(&store, &build, &graph)
+        } else {
+            Value::Null
+        };
         let wall = started.elapsed().as_secs_f64();
         let fp = docmonk_knowledge::canonical::fingerprint(&store, &build).expect("fingerprint");
         let entities = store.count("entities", &build).expect("count");
@@ -539,7 +569,7 @@ impl Bench {
             fp.edges,
             fp.links
         );
-        json!({
+        Some(json!({
             "scenario": name,
             "plan_action": graph.action.as_str(),
             "plan_reason": graph.reason,
@@ -555,7 +585,7 @@ impl Bench {
             "server": server,
             "index": index,
             "fingerprint": fp,
-        })
+        }))
     }
 
     fn run(&mut self) -> Vec<Value> {
@@ -599,8 +629,14 @@ impl Bench {
             ),
         );
         out.push(self.scenario("doc_edit", true));
-        out
+        out.into_iter().flatten().collect()
     }
+}
+
+/// Which scenarios to measure, and whether to publish to the server.
+struct Selection {
+    scenarios: Option<std::collections::BTreeSet<String>>,
+    server: bool,
 }
 
 impl Drop for Bench {
@@ -680,6 +716,10 @@ fn main() {
     let warmup = num("--warmup", 0);
     let cpus = std::thread::available_parallelism().map_or(1, |n| n.get());
     let workers = num("--workers", cpus).max(1);
+    let selection = Selection {
+        scenarios: arg("--scenarios").map(|s| s.split(',').map(str::to_owned).collect()),
+        server: arg("--server").as_deref() != Some("none"),
+    };
     let mut measured = Vec::new();
     for run in 0..warmup + runs {
         eprintln!(
@@ -692,7 +732,7 @@ fn main() {
             },
             if run < warmup { warmup } else { runs }
         );
-        let results = Bench::new(files, docs, workers, run).run();
+        let results = Bench::new(files, docs, workers, run, &selection).run();
         if run >= warmup {
             measured.push(results);
         }
@@ -712,6 +752,8 @@ fn main() {
             "documents": docs,
             "runs": runs,
             "warmup": warmup,
+            "scenarios": selection.scenarios,
+            "server": selection.server,
         },
         "summary": summarize(&measured),
         "runs": measured,
