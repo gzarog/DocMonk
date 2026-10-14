@@ -3,7 +3,8 @@
 //! ```text
 //! docmonk-graph-bench [--files N] [--docs M] [--runs R] [--warmup W]
 //!                     [--workers K] [--scenarios a,b,...] [--server all|none]
-//!                     [--label NAME] [--out report.json] [--emit-only DIR]
+//!                     [--work-dir DIR] [--label NAME] [--out report.json]
+//!                     [--emit-only DIR]
 //! ```
 //!
 //! Generates a synthetic ASP.NET-style C# repository (controllers with
@@ -23,6 +24,11 @@
 //! | `add_file` | one new service | incremental |
 //! | `remove_file` | one defining model deleted | incremental + dependents |
 //! | `doc_edit` | one note rewritten | incremental, relinked |
+//!
+//! Ids derive from the corpus path, so every run uses the same work
+//! directory (default `<temp>/docmonk-graph-bench`, emptied first): the
+//! fingerprints of two runs, or of two builds of this benchmark, are then
+//! directly comparable. Do not run two instances on one work directory.
 //!
 //! `--scenarios` measures only the named scenarios (the others still apply
 //! their mutation, index and build the graph, unmeasured and without a
@@ -53,6 +59,7 @@ use docmonk_storage::control::{ControlPlane, NewSource, SourceRecord};
 use docmonk_storage::knowledge::ProjectStore;
 use docmonk_storage::StorageLayout;
 use serde_json::{json, Value};
+use sha2::Digest;
 
 // ------------------------------------------------------------- corpus ---
 
@@ -344,9 +351,8 @@ struct Bench {
 }
 
 impl Bench {
-    fn new(files: usize, docs: usize, workers: usize, run: usize, sel: &Selection) -> Self {
-        let tmp =
-            std::env::temp_dir().join(format!("docmonk-graph-bench-{}-{run}", std::process::id()));
+    fn new(files: usize, docs: usize, workers: usize, sel: &Selection) -> Self {
+        let tmp = sel.work_dir.clone();
         let _ = std::fs::remove_dir_all(&tmp);
         let root = tmp.join("source");
         let groups = emit(&root, files, docs);
@@ -489,6 +495,25 @@ impl Bench {
             })
             .expect("publish");
         let mut v = serde_json::to_value(&r).expect("json");
+        // The promoted generation's per-file record digests (the overall
+        // digest also covers the base build id, which differs per run):
+        // equal hashes mean the server holds byte-identical graph records.
+        let promoted = self
+            .server
+            .graph(&self.src.id)
+            .expect("graph")
+            .map(|(g, _)| g)
+            .unwrap_or_default();
+        let mut h = sha2::Sha256::new();
+        for (file, digest) in &promoted.file_digests {
+            h.update(file.as_bytes());
+            h.update([0]);
+            h.update(digest.as_bytes());
+            h.update([b'\n']);
+        }
+        let hash: String = h.finalize().iter().map(|b| format!("{b:02x}")).collect();
+        v["graph_digest"] = json!(hash);
+        v["file_digests"] = json!(promoted.file_digests.len());
         v["action"] = json!(if r.published { "publish" } else { "unchanged" });
         v["http_requests"] = json!(self.server.stats().requests - before);
         v["records_live"] = json!(self.memory.0.lock().expect("engine").records.len());
@@ -637,6 +662,7 @@ impl Bench {
 struct Selection {
     scenarios: Option<std::collections::BTreeSet<String>>,
     server: bool,
+    work_dir: PathBuf,
 }
 
 impl Drop for Bench {
@@ -683,6 +709,15 @@ fn summarize(runs: &[Vec<Value>]) -> Value {
         for key in ["plan_action", "fingerprint"] {
             row.insert(key.into(), s[key].clone());
         }
+        let staged: std::collections::BTreeSet<String> = runs
+            .iter()
+            .map(|r| r[i]["server"]["graph_digest"].to_string())
+            .collect();
+        row.insert("server_deterministic".into(), json!(staged.len() == 1));
+        row.insert(
+            "server_graph_digest".into(),
+            s["server"]["graph_digest"].clone(),
+        );
         row.insert(
             "sql_statements".into(),
             s["graph"]["counters"]["sql_statements"].clone(),
@@ -719,6 +754,9 @@ fn main() {
     let selection = Selection {
         scenarios: arg("--scenarios").map(|s| s.split(',').map(str::to_owned).collect()),
         server: arg("--server").as_deref() != Some("none"),
+        work_dir: arg("--work-dir")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| std::env::temp_dir().join("docmonk-graph-bench")),
     };
     let mut measured = Vec::new();
     for run in 0..warmup + runs {
@@ -732,7 +770,7 @@ fn main() {
             },
             if run < warmup { warmup } else { runs }
         );
-        let results = Bench::new(files, docs, workers, run, &selection).run();
+        let results = Bench::new(files, docs, workers, &selection).run();
         if run >= warmup {
             measured.push(results);
         }
