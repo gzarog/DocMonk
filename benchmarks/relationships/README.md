@@ -1,6 +1,6 @@
-# Relationship-building performance (plan V2)
+# Relationship-building performance
 
-`PLAN.json` is the optimization plan this directory tracks. Work lands
+`PLAN.json` is the optimization plan this directory tracks (its version suffix is dropped: the clean-slate audit forbids version naming). Work lands
 phase by phase in one PR; each phase records its measurements here.
 
 Measurements in this directory are labelled by where they came from:

@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "plan_id": "docmonk-relationship-performance-v2",
-  "title": "DocMonk Relationship-Building Performance Optimization V2",
+  "plan_id": "docmonk-relationship-performance",
+  "title": "DocMonk Relationship-Building Performance Optimization",
   "created_on": "2026-10-14",
   "repository": {
     "url": "https://github.com/gzarog/DocMonk",
@@ -824,5 +824,5 @@
     "lint": "cargo clippy --workspace --all-targets -- -D warnings",
     "unit_tests": "cargo test --workspace"
   },
-  "claude_code_execution_prompt": "Implement DocMonk Relationship-Building Performance Optimization V2 in https://github.com/gzarog/DocMonk. Read this JSON plan and inspect the current main branch before changing code. Work in the specified phase order with one feature branch and PR per phase against main. P0 must establish repeatable baseline profiling first. Preserve all existing skip/rebind/incremental semantics, deterministic graph IDs and evidence, cross-source dependencies, writer leases and atomic graph publication. Do not delete indexes or force a full reindex. Implement P1's bulk graph staging, P2's safe versioned reference-fact reuse, P3's correct incremental document linker, P4's candidate lookup improvements, P5's measured server publication optimizations, and P6's resource controls. Where code differs from the reviewed tree, adapt the design rather than blindly applying instructions. Run Rust formatting, clippy, workspace tests, graph golden/regression tests, and realistic before/after benchmarks. For every PR report changed files, actual measured performance, peak memory, graph equivalence, tradeoffs, and rollback behavior. Do not claim a speedup until verified. Complete P7 with an implementation and benchmark report."
+  "claude_code_execution_prompt": "Implement DocMonk Relationship-Building Performance Optimization in https://github.com/gzarog/DocMonk. Read this JSON plan and inspect the current main branch before changing code. Work in the specified phase order with one feature branch and PR per phase against main. P0 must establish repeatable baseline profiling first. Preserve all existing skip/rebind/incremental semantics, deterministic graph IDs and evidence, cross-source dependencies, writer leases and atomic graph publication. Do not delete indexes or force a full reindex. Implement P1's bulk graph staging, P2's safe versioned reference-fact reuse, P3's correct incremental document linker, P4's candidate lookup improvements, P5's measured server publication optimizations, and P6's resource controls. Where code differs from the reviewed tree, adapt the design rather than blindly applying instructions. Run Rust formatting, clippy, workspace tests, graph golden/regression tests, and realistic before/after benchmarks. For every PR report changed files, actual measured performance, peak memory, graph equivalence, tradeoffs, and rollback behavior. Do not claim a speedup until verified. Complete P7 with an implementation and benchmark report."
 }
