@@ -308,3 +308,30 @@ fn links_appear_only_after_the_graph_stage_and_manual_intent_is_reapplied() {
         1
     );
 }
+
+#[test]
+fn loading_only_the_touched_code_files_links_exactly_like_loading_the_build() {
+    use docmonk_knowledge::linker::{link_touched_files_with, LinkLoad};
+    let mut f = fixture();
+    f.index();
+    let (store, active) = f.store();
+    let files: Vec<String> = store
+        .files(&active)
+        .unwrap()
+        .into_iter()
+        .map(|f| f.id)
+        .collect();
+    let mut narrow_passes = 0;
+    let mut sets: Vec<Vec<String>> = files.iter().map(|f| vec![f.clone()]).collect();
+    sets.push(files.clone());
+    sets.push(files.iter().step_by(2).cloned().collect());
+    for touched in sets {
+        let (auto, stats) =
+            link_touched_files_with(&store, &active, &touched, LinkLoad::Auto).unwrap();
+        let (build, _) =
+            link_touched_files_with(&store, &active, &touched, LinkLoad::Build).unwrap();
+        assert_eq!(auto, build, "{touched:?}");
+        narrow_passes += usize::from(stats.narrow);
+    }
+    assert!(narrow_passes > 0, "some single code files load narrowly");
+}

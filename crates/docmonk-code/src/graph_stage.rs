@@ -61,11 +61,20 @@ pub struct LinkStats {
     pub routes_loaded: usize,
     /// Candidates before deduplication.
     pub candidates: usize,
+    /// Only the touched files' entities and routes were loaded (a
+    /// code-only change).
+    pub narrow: bool,
     /// Loading entities, units, routes and paths.
     pub load_seconds: f64,
     /// Building the inverted unit indexes.
     pub index_seconds: f64,
+    /// All matching, and its share per resolver.
     pub match_seconds: f64,
+    pub exact_seconds: f64,
+    pub qualified_seconds: f64,
+    pub alias_seconds: f64,
+    pub filename_seconds: f64,
+    pub route_seconds: f64,
     pub write_seconds: f64,
     pub manual_seconds: f64,
 }

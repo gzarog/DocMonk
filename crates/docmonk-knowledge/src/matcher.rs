@@ -61,6 +61,10 @@ pub fn contains_identifier(text: &str, needle: &str) -> bool {
 pub struct UnitIndex<'a> {
     texts: Vec<&'a str>,
     postings: HashMap<&'a str, Vec<usize>>,
+    /// [`matching`](Self::matching) results by needle: entity names repeat
+    /// across files (`Get`, `Save`, ...), and the answer only depends on
+    /// the needle.
+    matched: std::cell::RefCell<HashMap<String, Vec<usize>>>,
 }
 
 impl<'a> UnitIndex<'a> {
@@ -72,7 +76,11 @@ impl<'a> UnitIndex<'a> {
                 postings.entry(w).or_default().push(pos);
             }
         }
-        Self { texts, postings }
+        Self {
+            texts,
+            postings,
+            matched: std::cell::RefCell::new(HashMap::new()),
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -108,10 +116,18 @@ impl<'a> UnitIndex<'a> {
 
     /// Positions whose text contains `needle` as a standalone identifier.
     pub fn matching(&self, needle: &str) -> Vec<usize> {
-        self.candidates(needle)
+        if let Some(hit) = self.matched.borrow().get(needle) {
+            return hit.clone();
+        }
+        let found: Vec<usize> = self
+            .candidates(needle)
             .into_iter()
             .filter(|p| contains_identifier(self.texts[*p], needle))
-            .collect()
+            .collect();
+        self.matched
+            .borrow_mut()
+            .insert(needle.to_owned(), found.clone());
+        found
     }
 }
 
@@ -145,6 +161,12 @@ mod tests {
         let idx = UnitIndex::new(vec!["alpha beta", "beta gamma", "alpha.beta"]);
         assert_eq!(idx.candidates("alpha.beta"), vec![0, 2]);
         assert_eq!(idx.matching("alpha.beta"), vec![2]);
+        assert_eq!(
+            idx.matching("alpha.beta"),
+            vec![2],
+            "remembered, same answer"
+        );
+        assert_eq!(idx.matching("beta"), vec![0, 1]);
         assert_eq!(idx.candidates("..."), vec![0, 1, 2]);
         assert!(idx.matching("delta").is_empty());
     }
