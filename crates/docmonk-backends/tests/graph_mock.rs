@@ -203,6 +203,7 @@ fn input<'a>(
         generation,
         input_digest: Some("digest-1"),
         manifest: None,
+        phase: None,
     }
 }
 

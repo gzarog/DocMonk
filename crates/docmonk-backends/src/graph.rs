@@ -170,6 +170,9 @@ pub struct GraphPublishInput<'a> {
     pub input_digest: Option<&'a str>,
     /// The staged graph's dependency manifest (see [`ServerGraph::file_keys`]).
     pub manifest: Option<GraphManifest<'a>>,
+    /// Called when publication enters a phase (`staging`, `copying`,
+    /// `writing`, `promoting`).
+    pub phase: Option<&'a (dyn Fn(&'static str) + 'a)>,
 }
 
 /// The persisted part of a graph's dependency manifest.
@@ -208,6 +211,39 @@ pub struct GraphPublishReport {
     /// Records copied forward (gained the new generation id in place).
     pub records_copied: u64,
     pub seconds: f64,
+    /// Per-phase wall-clock seconds and request counts.
+    pub timings: PublishTimings,
+    pub counters: PublishCounters,
+}
+
+/// Wall-clock seconds per phase of one graph publication.
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
+pub struct PublishTimings {
+    /// Reading the staged graph from the staging store and digesting it.
+    pub staging_seconds: f64,
+    /// Server-side copy-forward of unchanged files' records.
+    pub copy_seconds: f64,
+    /// Bulk-writing changed files' records.
+    pub bulk_seconds: f64,
+    pub refresh_seconds: f64,
+    /// The fenced compare-and-swap that makes the generation visible.
+    pub promotion_seconds: f64,
+}
+
+/// Work counted during one graph publication.
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
+pub struct PublishCounters {
+    /// SQL statements staging issued against the staging store.
+    pub staging_sql_statements: u64,
+    /// HTTP requests this publication sent (and their payload bytes).
+    pub http_requests: u64,
+    pub http_bytes_sent: u64,
+    /// `_update_by_query` requests of the copy-forward.
+    pub copy_requests: u64,
+    pub bulk_requests: u64,
+    pub staged_files: usize,
+    pub staged_edges: usize,
+    pub staged_links: usize,
 }
 
 fn storage(e: docmonk_storage::StorageError) -> BackendError {
@@ -508,7 +544,34 @@ impl ServerBackend {
     /// Publishes the staged graph as a new generation (see the module docs).
     pub fn publish_graph(&self, input: &GraphPublishInput<'_>) -> Result<GraphPublishReport> {
         let started = Instant::now();
+        let before = self.stats();
         let mut report = GraphPublishReport::default();
+        let result = self.publish_graph_inner(input, started, &mut report);
+        let after = self.stats();
+        report.counters.http_requests = after.requests - before.requests;
+        report.counters.http_bytes_sent = after.bytes_sent - before.bytes_sent;
+        report.counters.bulk_requests = after.bulk_requests - before.bulk_requests;
+        let ubq = |s: &crate::transport::RequestStats| {
+            s.by_endpoint
+                .get("POST _update_by_query")
+                .copied()
+                .unwrap_or(0)
+        };
+        report.counters.copy_requests = ubq(&after) - ubq(&before);
+        result.map(|()| report)
+    }
+
+    fn publish_graph_inner(
+        &self,
+        input: &GraphPublishInput<'_>,
+        started: Instant,
+        report: &mut GraphPublishReport,
+    ) -> Result<()> {
+        let phase = |name: &'static str| {
+            if let Some(f) = input.phase {
+                f(name);
+            }
+        };
         let prev = self.source_state(input.source_id)?.ok_or_else(|| {
             BackendError::NotFound(format!("no such source: {}", input.source_id))
         })?;
@@ -520,7 +583,16 @@ impl ServerBackend {
             )));
         }
         let current = ServerGraph::from_state(&prev);
+        phase("staging");
+        let staging = Instant::now();
+        let statements = docmonk_storage::stats::sql_statements();
         let staged = stage(input.store, input.local_build, input.base_build_id)?;
+        report.counters.staging_sql_statements =
+            docmonk_storage::stats::sql_statements() - statements;
+        report.timings.staging_seconds = staging.elapsed().as_secs_f64();
+        report.counters.staged_files = staged.files.len();
+        report.counters.staged_edges = staged.files.values().map(|g| g.edges.len()).sum();
+        report.counters.staged_links = staged.files.values().map(|g| g.links.len()).sum();
         let digest = staged.digest.clone();
         if current
             .visible_generation(Some(input.base_build_id))
@@ -529,7 +601,7 @@ impl ServerBackend {
         {
             report.generation = current.generation;
             report.seconds = started.elapsed().as_secs_f64();
-            return Ok(report);
+            return Ok(());
         }
         // Leftovers of an abandoned pending generation.
         if let Some(old) = current
@@ -547,8 +619,14 @@ impl ServerBackend {
             Ok(())
         })?;
         let outcome = self
-            .write_graph(input, &staged, &current, &mut report)
-            .and_then(|()| self.promote_graph(input, &staged));
+            .write_graph(input, &staged, &current, report)
+            .and_then(|()| {
+                phase("promoting");
+                let promoting = Instant::now();
+                let r = self.promote_graph(input, &staged);
+                report.timings.promotion_seconds = promoting.elapsed().as_secs_f64();
+                r
+            });
         match outcome {
             Ok(retired) => {
                 for old in retired {
@@ -559,7 +637,7 @@ impl ServerBackend {
                 report.generation = Some(input.generation.to_owned());
                 report.published = true;
                 report.seconds = started.elapsed().as_secs_f64();
-                Ok(report)
+                Ok(())
             }
             Err(e) => {
                 let _ = self.delete_build_docs(input.source_id, input.generation);
@@ -593,6 +671,10 @@ impl ServerBackend {
             current.generation.is_some() && current.file_digests.get(*id) == Some(&g.digest)
         });
         if let (Some(from), false) = (current.generation.as_deref(), copy.is_empty()) {
+            if let Some(f) = input.phase {
+                f("copying");
+            }
+            let copying = Instant::now();
             let ids: Vec<String> = copy.iter().map(|(id, _)| (*id).clone()).collect();
             // Generations a reader may still be pinned to keep their ids.
             let mut keep = vec![from.to_owned()];
@@ -605,9 +687,14 @@ impl ServerBackend {
                 &ids,
                 &keep,
             )?;
+            report.timings.copy_seconds = copying.elapsed().as_secs_f64();
         }
         report.files_copied = copy.len();
         report.files_written = write.len();
+        if let Some(f) = input.phase {
+            f("writing");
+        }
+        let writing = Instant::now();
         let mut w = self.build_writer(input.source_id, input.generation);
         for (_, g) in write {
             for e in &g.edges {
@@ -620,7 +707,11 @@ impl ServerBackend {
             }
         }
         w.finish()?;
-        self.refresh_build_indexes()
+        report.timings.bulk_seconds = writing.elapsed().as_secs_f64();
+        let refreshing = Instant::now();
+        let r = self.refresh_build_indexes();
+        report.timings.refresh_seconds = refreshing.elapsed().as_secs_f64();
+        r
     }
 
     /// The fenced compare-and-swap that makes the pending generation the

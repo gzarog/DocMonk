@@ -1,11 +1,12 @@
 //! Knowledge linker: cross-domain links between code entities and
 //! document chunks, and explicit (manual) links.
 
+pub mod canonical;
 pub mod linker;
 pub mod manual;
 pub mod matcher;
 
-use docmonk_code::graph_stage::GraphLinker;
+use docmonk_code::graph_stage::{GraphLinker, LinkStats};
 use docmonk_storage::knowledge::ProjectStore;
 use docmonk_storage::StorageError;
 
@@ -20,15 +21,22 @@ impl GraphLinker for KnowledgeLinker {
         build_id: &str,
         touched: &[String],
         _full: bool,
-    ) -> Result<usize, StorageError> {
+    ) -> Result<LinkStats, StorageError> {
         let started = std::time::Instant::now();
-        let candidates = linker::link_touched_files(store, build_id, touched)?;
+        let (candidates, mut stats) =
+            linker::link_touched_files_with_stats(store, build_id, touched)?;
+        let writing = std::time::Instant::now();
         let rows: Vec<_> = candidates.iter().map(linker::Candidate::row).collect();
         for batch in rows.chunks(linker::LINK_BATCH_SIZE) {
             docmonk_indexing::progress::heartbeat();
             store.put_links(build_id, batch)?;
         }
+        stats.write_seconds = writing.elapsed().as_secs_f64();
+        let applying = std::time::Instant::now();
         let manual = manual::apply(store, build_id)?;
+        stats.manual_seconds = applying.elapsed().as_secs_f64();
+        stats.links = rows.len();
+        stats.manual = manual;
         tracing::info!(
             component = "linker",
             event = "links_published",
@@ -36,7 +44,7 @@ impl GraphLinker for KnowledgeLinker {
             manual,
             seconds = started.elapsed().as_secs_f64()
         );
-        Ok(rows.len())
+        Ok(stats)
     }
 }
 
@@ -51,6 +59,19 @@ pub fn build_graph(
     cancel: Option<&std::sync::atomic::AtomicBool>,
     progress: &mut docmonk_code::graph_stage::GraphProgressFn<'_>,
 ) -> Result<docmonk_code::graph_stage::GraphReport, docmonk_code::graph_stage::GraphError> {
+    build_graph_phased(store, root, build_id, workers, cancel, progress, None)
+}
+
+/// [`build_graph`], also reporting each phase the build enters.
+pub fn build_graph_phased(
+    store: &mut ProjectStore,
+    root: &std::path::Path,
+    build_id: &str,
+    workers: usize,
+    cancel: Option<&std::sync::atomic::AtomicBool>,
+    progress: &mut docmonk_code::graph_stage::GraphProgressFn<'_>,
+    phase: Option<&docmonk_code::graph_stage::GraphPhaseFn<'_>>,
+) -> Result<docmonk_code::graph_stage::GraphReport, docmonk_code::graph_stage::GraphError> {
     docmonk_code::graph_stage::build_graph(
         store,
         root,
@@ -59,6 +80,7 @@ pub fn build_graph(
             workers,
             linker: Some(&KnowledgeLinker),
             cancel,
+            phase,
         },
         progress,
     )

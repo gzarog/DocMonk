@@ -135,6 +135,11 @@ pub fn graph_one(
             t.source_relationships(&source.id, "building", Some((done, total)), None);
         }
     };
+    let phase = |name: &'static str| {
+        if let Some(t) = tracker {
+            t.source_relationships_phase(&source.id, name);
+        }
+    };
     match backend {
         Backend::Local => {
             let active = match control_plane(home).and_then(|cp| cp.state(&source.id).map_err(db)) {
@@ -154,13 +159,14 @@ pub fn graph_one(
                 Err(e) => return RelationshipOutcome::Failed(db(e)),
             };
             from_graph(
-                docmonk_knowledge::build_graph(
+                docmonk_knowledge::build_graph_phased(
                     &mut store,
                     Path::new(&source.path),
                     &build,
                     opts.workers,
                     None,
                     &mut progress,
+                    Some(&phase),
                 )
                 .map(|graph| GraphRun {
                     graph,
@@ -176,6 +182,7 @@ pub fn graph_one(
                 source,
                 opts,
                 &mut progress,
+                &phase,
             ) {
                 Ok(ServerGraphRun { graph, publish }) => from_graph(Ok(GraphRun {
                     graph,
@@ -312,6 +319,18 @@ pub struct StageSummary {
     pub records_copied: u64,
     pub records_hydrated: usize,
     pub planning_seconds: f64,
+    /// Seconds per graph phase and request/statement counts, summed over
+    /// sources (where a long build spends its time).
+    pub derivation_seconds: f64,
+    pub resolution_seconds: f64,
+    pub linking_seconds: f64,
+    pub commit_seconds: f64,
+    pub server_staging_seconds: f64,
+    pub server_copy_seconds: f64,
+    pub server_bulk_seconds: f64,
+    pub server_promotion_seconds: f64,
+    pub sql_statements: u64,
+    pub server_http_requests: u64,
     /// Cross-source dependency stage (`relationships build` only; an index
     /// run reports it in its own summary).
     #[serde(skip_serializing_if = "is_default")]
@@ -349,7 +368,18 @@ impl StageSummary {
         self.resolutions_changed += g.resolutions_changed;
         self.relationships_written += g.relationships_written;
         self.planning_seconds += g.planning_seconds;
+        self.derivation_seconds += g.timings.derivation_seconds;
+        self.resolution_seconds += g.timings.resolution_seconds;
+        self.linking_seconds += g.timings.linking_seconds;
+        self.commit_seconds += g.timings.commit_seconds;
+        self.sql_statements += g.counters.sql_statements;
         if let Some(p) = &run.server_publish {
+            self.server_staging_seconds += p.timings.staging_seconds;
+            self.server_copy_seconds += p.timings.copy_seconds;
+            self.server_bulk_seconds += p.timings.bulk_seconds + p.timings.refresh_seconds;
+            self.server_promotion_seconds += p.timings.promotion_seconds;
+            self.sql_statements += p.counters.staging_sql_statements;
+            self.server_http_requests += p.counters.http_requests;
             self.files_copied += p.files_copied;
             self.files_written += p.files_written;
             self.records_copied += p.records_copied;

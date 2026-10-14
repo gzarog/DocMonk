@@ -92,6 +92,12 @@ pub struct SourceProgress {
     pub relationships_planned: Option<i64>,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub relationships_processed: i64,
+    /// Phase of a `building` graph: `deriving` (what
+    /// `relationships_processed` counts), then `resolving`, `linking`,
+    /// `committing` and, on a server, `staging`, `copying`, `writing` and
+    /// `promoting`. Cleared once the build ends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationships_phase: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relationships_error: Option<String>,
 }
@@ -470,6 +476,9 @@ impl ProgressTracker {
             let entry = i.progress.source_mut(source_id, &now);
             let structural = entry.relationships.as_deref() != Some(state);
             entry.relationships = Some(state.into());
+            if state != "building" {
+                entry.relationships_phase = None;
+            }
             entry.stage = Some(
                 match state {
                     "pending" => "indexed",
@@ -488,6 +497,23 @@ impl ProgressTracker {
             entry.last_progress_at = Some(now.clone());
             entry.heartbeat_at = Some(now);
             i.flush(structural);
+        });
+    }
+
+    /// Records the phase a `building` graph entered (always written: a
+    /// phase change is structural, and doubles as a heartbeat).
+    pub fn source_relationships_phase(&self, source_id: &str, phase: &str) {
+        self.with(|i| {
+            let now = i.now();
+            let entry = i.progress.source_mut(source_id, &now);
+            if entry.relationships_phase.as_deref() == Some(phase) {
+                entry.heartbeat_at = Some(now);
+                return;
+            }
+            entry.relationships_phase = Some(phase.into());
+            entry.last_progress_at = Some(now.clone());
+            entry.heartbeat_at = Some(now);
+            i.flush(true);
         });
     }
 
@@ -686,6 +712,28 @@ mod tests {
         assert!(read_progress(&path).is_none());
         let leftovers: Vec<_> = std::fs::read_dir(dir.path()).unwrap().collect();
         assert_eq!(leftovers.len(), 1, "no temp files left");
+    }
+
+    #[test]
+    fn a_graph_phase_is_reported_while_building_and_cleared_after() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("p.json");
+        let t = ProgressTracker::start(&path, "relationships", Some(1));
+        t.source_relationships("s", "building", Some((10, 10)), None);
+        t.source_relationships_phase("s", "resolving");
+        let s = t.source("s").unwrap();
+        assert_eq!(
+            (s.relationships_processed, s.relationships_phase.as_deref()),
+            (10, Some("resolving")),
+            "derivation is complete, the build is not"
+        );
+        let on_disk = read_progress(&path).unwrap();
+        assert_eq!(
+            on_disk.source("s").unwrap().relationships_phase.as_deref(),
+            Some("resolving")
+        );
+        t.source_relationships("s", "ready", None, None);
+        assert_eq!(t.source("s").unwrap().relationships_phase, None);
     }
 
     #[test]

@@ -382,12 +382,31 @@ impl Processor for CodeProcessor {
     }
 }
 
-/// Re-resolves cross-file references; returns the number of rows changed.
+/// What one cross-file resolution pass examined and changed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+pub struct ResolveStats {
+    /// Rows whose resolution changed (and were rewritten).
+    pub changed: usize,
+    /// Cross-file references examined.
+    pub references_examined: usize,
+    /// Entity rows loaded as candidates.
+    pub candidate_rows: usize,
+    /// Candidate lookups issued against storage (one per distinct
+    /// qualified or bare name; whole-build resolution loads all at once).
+    pub candidate_queries: usize,
+}
+
+/// Re-resolves cross-file references.
 pub fn resolve_build(
     store: &mut ProjectStore,
     build_id: &str,
-) -> Result<usize, docmonk_storage::StorageError> {
+) -> Result<ResolveStats, docmonk_storage::StorageError> {
     let entities = store.all_entities(build_id)?;
+    let mut stats = ResolveStats {
+        candidate_rows: entities.len(),
+        candidate_queries: 1,
+        ..ResolveStats::default()
+    };
     let all = candidates(&entities);
     let mut by_qn: HashMap<&str, Vec<Candidate<'_>>> = HashMap::new();
     let mut by_name: HashMap<&str, Vec<Candidate<'_>>> = HashMap::new();
@@ -424,6 +443,7 @@ pub fn resolve_build(
         let Some(text) = r.reference_text.as_deref() else {
             continue;
         };
+        stats.references_examined += 1;
         let t = resolve::resolve_cross_file(
             text,
             &lookup(&by_qn, text, &r.file_id, 2),
@@ -445,33 +465,39 @@ pub fn resolve_build(
             confidence: t.confidence.as_str().into(),
         });
     }
-    store.apply_resolutions(build_id, &outcomes)
+    stats.changed = store.apply_resolutions(build_id, &outcomes)?;
+    Ok(stats)
 }
 
 /// Re-resolves only the cross-file references recorded by `files`, looking
 /// candidates up by symbol (indexed queries) instead of loading the whole
 /// build. Produces exactly what [`resolve_build`] would for those rows.
-/// Returns the number of rows changed.
 pub fn resolve_files(
     store: &mut ProjectStore,
     build_id: &str,
     files: &std::collections::BTreeSet<String>,
-) -> Result<usize, docmonk_storage::StorageError> {
+) -> Result<ResolveStats, docmonk_storage::StorageError> {
     let mut by_qn: HashMap<String, Vec<EntityRow>> = HashMap::new();
     let mut by_name: HashMap<String, Vec<EntityRow>> = HashMap::new();
     let mut outcomes = Vec::new();
+    let mut stats = ResolveStats::default();
     for file in files {
         for r in store.file_cross_file_references(build_id, file)? {
             let Some(text) = r.reference_text.as_deref() else {
                 continue;
             };
+            stats.references_examined += 1;
             let bare = resolve::bare_name(text);
             if !by_qn.contains_key(text) {
                 let rows = store.entities_by_qualified_name(build_id, text)?;
+                stats.candidate_queries += 1;
+                stats.candidate_rows += rows.len();
                 by_qn.insert(text.to_owned(), rows);
             }
             if !by_name.contains_key(bare) {
                 let rows = store.entities_by_bare_name(build_id, bare)?;
+                stats.candidate_queries += 1;
+                stats.candidate_rows += rows.len();
                 by_name.insert(bare.to_owned(), rows);
             }
             let pick = |rows: &[EntityRow], take: usize| -> Vec<EntityRow> {
@@ -502,5 +528,6 @@ pub fn resolve_files(
             });
         }
     }
-    store.apply_resolutions(build_id, &outcomes)
+    stats.changed = store.apply_resolutions(build_id, &outcomes)?;
+    Ok(stats)
 }

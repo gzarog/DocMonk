@@ -97,6 +97,7 @@ impl Fixture {
                 workers: 3,
                 linker: None,
                 cancel: None,
+                phase: None,
             },
             &mut |_, _| {},
         )
@@ -488,6 +489,102 @@ fn a_file_edited_after_indexing_never_yields_a_mixed_graph() {
 }
 
 #[test]
+fn a_graph_build_reports_its_phases_timings_and_counters() {
+    let mut f = fixture();
+    f.index_base();
+    let (mut store, active) = f.store();
+    let phases = std::cell::RefCell::new(Vec::new());
+    let phase = |p: &'static str| phases.borrow_mut().push(p);
+    let r = build_graph(
+        &mut store,
+        &f.root,
+        &active,
+        &GraphOptions {
+            workers: 2,
+            linker: None,
+            cancel: None,
+            phase: Some(&phase),
+        },
+        &mut |_, _| {},
+    )
+    .unwrap();
+    assert_eq!(
+        phases.into_inner(),
+        ["deriving", "resolving", "linking", "committing"]
+    );
+    let code = f.count(
+        "SELECT COUNT(*) FROM files WHERE build_id = ?1 AND kind = 'code' AND status = 'indexed'",
+    ) as usize;
+    let c = &r.counters;
+    assert_eq!(c.files_derived, code, "{r:?}");
+    assert!(c.files_total >= code && c.bytes_read > 0, "{r:?}");
+    assert!(c.resolution.references_examined > 0, "{r:?}");
+    assert_eq!(c.resolution.changed, r.resolutions_changed);
+    assert!(c.sql_statements > 0, "{r:?}");
+    let t = &r.timings;
+    let phases = t.state_load_seconds
+        + t.clear_seconds
+        + t.derivation_seconds
+        + t.sqlite_write_seconds
+        + t.symbol_manifest_seconds
+        + t.resolution_seconds
+        + t.linking_seconds
+        + t.commit_seconds;
+    assert!(
+        phases > 0.0 && phases <= r.seconds,
+        "{t:?} vs {}",
+        r.seconds
+    );
+
+    // A skip reports its plan and does no work.
+    let r = build_graph(
+        &mut store,
+        &f.root,
+        &active,
+        &GraphOptions {
+            workers: 2,
+            linker: None,
+            cancel: None,
+            phase: None,
+        },
+        &mut |_, _| {},
+    )
+    .unwrap();
+    assert_eq!(r.action.as_str(), "skip");
+    assert_eq!(r.counters.files_derived, 0);
+}
+
+#[test]
+fn graph_report_json_keeps_its_fields_and_adds_optional_ones() {
+    let v = serde_json::to_value(GraphReport::default()).unwrap();
+    for key in [
+        "outcome",
+        "action",
+        "reason",
+        "full",
+        "generation",
+        "base_generation",
+        "files_processed",
+        "relationships_written",
+        "resolutions_changed",
+        "files_reresolved",
+        "links",
+        "files_added",
+        "files_modified",
+        "files_removed",
+        "planning_seconds",
+        "seconds",
+    ] {
+        assert!(v.get(key).is_some(), "{key} missing from {v}");
+    }
+    assert_eq!(v["action"], "skip");
+    assert_eq!(v["outcome"], "up_to_date");
+    assert!(v["timings"]["resolution_seconds"].is_number());
+    assert!(v["counters"]["sql_statements"].is_number());
+    assert!(v["linking"]["units_loaded"].is_number());
+}
+
+#[test]
 fn a_cancelled_graph_build_publishes_nothing() {
     let mut f = fixture();
     f.index_base();
@@ -501,6 +598,7 @@ fn a_cancelled_graph_build_publishes_nothing() {
             workers: 2,
             linker: None,
             cancel: Some(&cancel),
+            phase: None,
         },
         &mut |_, _| {},
     );

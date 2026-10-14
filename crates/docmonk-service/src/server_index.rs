@@ -524,6 +524,7 @@ pub fn build_relationships(
     source: &SourceRecord,
     opts: &Options,
     progress: &mut docmonk_code::graph_stage::GraphProgressFn<'_>,
+    phase: &docmonk_code::graph_stage::GraphPhaseFn<'_>,
 ) -> Result<ServerGraphRun, ServerGraphError> {
     use docmonk_code::graph_stage::GraphError;
     if let Some(run) = current_without_lease(home, cfg, server, source)? {
@@ -553,7 +554,9 @@ pub fn build_relationships(
             }
         });
         let _renewal = Renewal { stop: &stop };
-        graph_pass(home, cfg, server, source, opts, &lease, &lost, progress)
+        graph_pass(
+            home, cfg, server, source, opts, &lease, &lost, progress, phase,
+        )
     });
     match &result {
         Err(ServerGraphError::Graph(GraphError::Stale(reason))) => {
@@ -654,6 +657,7 @@ fn graph_pass(
     lease: &Lease,
     lost: &AtomicBool,
     progress: &mut docmonk_code::graph_stage::GraphProgressFn<'_>,
+    phase: &docmonk_code::graph_stage::GraphPhaseFn<'_>,
 ) -> Result<ServerGraphRun, ServerGraphError> {
     use docmonk_code::graph_stage::GraphError;
     let other = ServerGraphError::Other;
@@ -729,13 +733,14 @@ fn graph_pass(
                 .map_err(|e| other(db(e)))?;
         }
     }
-    let graph = docmonk_knowledge::build_graph(
+    let graph = docmonk_knowledge::build_graph_phased(
         &mut store,
         std::path::Path::new(&source.path),
         &local_build,
         opts.workers,
         Some(lost),
         progress,
+        Some(phase),
     )
     .map_err(ServerGraphError::Graph)?;
     let staged = store.graph_state_with_files().map_err(|e| other(db(e)))?;
@@ -788,6 +793,7 @@ fn graph_pass(
                 version: u64::from(docmonk_storage::graph::MANIFEST_VERSION),
                 file_keys: &staged.files,
             }),
+            phase: Some(phase),
         })
         .map_err(conflict)?;
     publish.records_hydrated = hydrated;

@@ -21,6 +21,7 @@ pub mod maintenance;
 pub mod read;
 pub mod schema;
 pub mod search;
+pub mod stats;
 pub mod status;
 pub mod vectors;
 

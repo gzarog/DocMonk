@@ -16,6 +16,9 @@
 
 use std::collections::{HashMap, HashSet};
 
+use std::time::Instant;
+
+use docmonk_code::graph_stage::LinkStats;
 use docmonk_core::ids::record;
 use docmonk_core::models::{Confidence, EntityType, RelationshipType};
 use docmonk_documents::table::render_table;
@@ -256,9 +259,26 @@ pub fn link_touched_files(
     build_id: &str,
     touched: &[String],
 ) -> Result<Vec<Candidate>, StorageError> {
+    link_touched_files_with_stats(store, build_id, touched).map(|(c, _)| c)
+}
+
+/// [`link_touched_files`], also reporting what was loaded and how long
+/// each step took (`links`, `manual` and `write_seconds` are left to the
+/// caller that writes them).
+pub fn link_touched_files_with_stats(
+    store: &ProjectStore,
+    build_id: &str,
+    touched: &[String],
+) -> Result<(Vec<Candidate>, LinkStats), StorageError> {
+    let mut stats = LinkStats::default();
     if touched.is_empty() {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), stats));
     }
+    let mut clock = Instant::now();
+    let mut lap = |slot: &mut f64| {
+        *slot += clock.elapsed().as_secs_f64();
+        clock = Instant::now();
+    };
     let entities = store.all_entities(build_id)?;
     let units: Vec<Unit> = store
         .link_units(build_id)?
@@ -271,6 +291,10 @@ pub fn link_touched_files(
         .into_iter()
         .map(|f| (f.id, f.rel_path))
         .collect();
+    stats.entities_loaded = entities.len();
+    stats.units_loaded = units.len();
+    stats.routes_loaded = routes.len();
+    lap(&mut stats.load_seconds);
 
     let mut entities_by_file: HashMap<&str, Vec<&EntityRow>> = HashMap::new();
     for e in &entities {
@@ -290,6 +314,7 @@ pub fn link_touched_files(
     }
     let all_units: Vec<&Unit> = units.iter().collect();
     let all_index = UnitIndex::new(all_units.iter().map(|u| u.text.as_str()).collect());
+    lap(&mut stats.index_seconds);
 
     let mut out = Vec::new();
     let mut covered: HashSet<&str> = HashSet::new();
@@ -354,7 +379,9 @@ pub fn link_touched_files(
         }
         for doc in touched_docs {
             let file_units = &units_by_file[doc];
+            lap(&mut stats.match_seconds);
             let idx = UnitIndex::new(file_units.iter().map(|u| u.text.as_str()).collect());
+            lap(&mut stats.index_seconds);
             out.extend(match_exact(&doc_side_entities, file_units, &idx));
             out.extend(match_qualified(&doc_side_entities, file_units, &idx));
             out.extend(match_alias(&doc_side_entities, file_units, &idx));
@@ -365,6 +392,7 @@ pub fn link_touched_files(
         }
     }
 
+    stats.candidates = out.len();
     let mut seen = HashSet::new();
     out.retain(|c| {
         seen.insert((
@@ -374,5 +402,6 @@ pub fn link_touched_files(
             c.resolver,
         ))
     });
-    Ok(out)
+    lap(&mut stats.match_seconds);
+    Ok((out, stats))
 }
