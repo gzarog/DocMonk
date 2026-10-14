@@ -1,0 +1,25 @@
+{
+ "benchmark": "relationships",
+ "label": "p0-baseline-8205-server",
+ "measurement": "measured (SQLite, synthetic; server: in-process engine). One run; recovered from the benchmark log (the run reached the session time limit before writing its JSON).",
+ "scenarios": {
+  "cold": {
+   "plan_action": "full",
+   "index_seconds": 5.311,
+   "graph_seconds": 25.786,
+   "server_seconds": 2287.947
+  },
+  "no_change": {
+   "plan_action": "skip",
+   "index_seconds": 0.0,
+   "graph_seconds": 0.212,
+   "server_seconds": 0.0
+  },
+  "body_edit": {
+   "plan_action": "incremental",
+   "index_seconds": 0.626,
+   "graph_seconds": 2.047,
+   "server_seconds": 2150.607
+  }
+ }
+}

@@ -1,0 +1,841 @@
+{
+ "benchmark": "relationships",
+ "label": "final-8205-nofacts",
+ "measurement": "measured (SQLite, synthetic); server figures are request counts against an in-process engine",
+ "metadata": {
+  "git_sha": null,
+  "host_os": "linux",
+  "arch": "x86_64",
+  "cpus": 4,
+  "worker_count": 4,
+  "graph_batch": 256,
+  "code_files": 8100,
+  "documents": 105,
+  "runs": 3,
+  "warmup": 1,
+  "scenarios": null,
+  "server": false,
+  "fact_cache": false
+ },
+ "summary": {
+  "cold": {
+   "index_seconds": {
+    "median": 4.146939142,
+    "p95": 4.210006712
+   },
+   "graph_seconds": {
+    "median": 14.582845139,
+    "p95": 14.925526341
+   },
+   "full_pipeline_seconds": {
+    "median": 18.731553238,
+    "p95": 18.97669662
+   },
+   "cpu_seconds": {
+    "median": 24.879999999999995,
+    "p95": 25.570000000000007
+   },
+   "peak_rss_mb": {
+    "median": 304.5,
+    "p95": 304.5234375
+   },
+   "deterministic": true,
+   "plan_action": "full",
+   "fingerprint": {
+    "edges": 148455,
+    "links": 14603,
+    "digest": "62d511bac42a7e4abc64c1fcdde6a19e3658faacea6ff640e71d734c172230ab"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": null,
+   "sql_statements": 225189,
+   "server_http_requests": null
+  },
+  "no_change": {
+   "index_seconds": {
+    "median": 0.0,
+    "p95": 0.0
+   },
+   "graph_seconds": {
+    "median": 0.198155319,
+    "p95": 0.280939072
+   },
+   "full_pipeline_seconds": {
+    "median": 0.199745153,
+    "p95": 0.28251374
+   },
+   "cpu_seconds": {
+    "median": 1.6700000000000017,
+    "p95": 1.759999999999991
+   },
+   "peak_rss_mb": {
+    "median": 304.3984375,
+    "p95": 304.4921875
+   },
+   "deterministic": true,
+   "plan_action": "skip",
+   "fingerprint": {
+    "edges": 148455,
+    "links": 14603,
+    "digest": "62d511bac42a7e4abc64c1fcdde6a19e3658faacea6ff640e71d734c172230ab"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": null,
+   "sql_statements": 9,
+   "server_http_requests": null
+  },
+  "equivalent_republish": {
+   "index_seconds": {
+    "median": 10.806779077,
+    "p95": 11.15840621
+   },
+   "graph_seconds": {
+    "median": 0.344494107,
+    "p95": 0.345417592
+   },
+   "full_pipeline_seconds": {
+    "median": 11.152863198,
+    "p95": 11.472938318
+   },
+   "cpu_seconds": {
+    "median": 15.150000000000006,
+    "p95": 15.319999999999993
+   },
+   "peak_rss_mb": {
+    "median": 304.3671875,
+    "p95": 304.42578125
+   },
+   "deterministic": true,
+   "plan_action": "rebind",
+   "fingerprint": {
+    "edges": 148455,
+    "links": 14603,
+    "digest": "62d511bac42a7e4abc64c1fcdde6a19e3658faacea6ff640e71d734c172230ab"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": null,
+   "sql_statements": 15,
+   "server_http_requests": null
+  },
+  "body_edit": {
+   "index_seconds": {
+    "median": 0.33401502,
+    "p95": 0.392690874
+   },
+   "graph_seconds": {
+    "median": 0.464182749,
+    "p95": 0.478362874
+   },
+   "full_pipeline_seconds": {
+    "median": 0.813998109,
+    "p95": 0.843913487
+   },
+   "cpu_seconds": {
+    "median": 2.0999999999999943,
+    "p95": 2.109999999999985
+   },
+   "peak_rss_mb": {
+    "median": 304.4375,
+    "p95": 304.48046875
+   },
+   "deterministic": true,
+   "plan_action": "incremental",
+   "fingerprint": {
+    "edges": 148455,
+    "links": 14603,
+    "digest": "62d511bac42a7e4abc64c1fcdde6a19e3658faacea6ff640e71d734c172230ab"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": null,
+   "sql_statements": 84,
+   "server_http_requests": null
+  },
+  "rename_definition": {
+   "index_seconds": {
+    "median": 0.344724717,
+    "p95": 0.381422695
+   },
+   "graph_seconds": {
+    "median": 1.012337079,
+    "p95": 1.042085954
+   },
+   "full_pipeline_seconds": {
+    "median": 1.375740776,
+    "p95": 1.395559904
+   },
+   "cpu_seconds": {
+    "median": 2.6299999999999955,
+    "p95": 2.6299999999999955
+   },
+   "peak_rss_mb": {
+    "median": 304.4375,
+    "p95": 304.48046875
+   },
+   "deterministic": true,
+   "plan_action": "incremental",
+   "fingerprint": {
+    "edges": 148455,
+    "links": 14603,
+    "digest": "4de84256b88dc8a3fc1b7d93406cc4bbc331364cac30aaedb42df28f7b8bdd71"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": null,
+   "sql_statements": 92,
+   "server_http_requests": null
+  },
+  "add_file": {
+   "index_seconds": {
+    "median": 0.342445263,
+    "p95": 0.345194178
+   },
+   "graph_seconds": {
+    "median": 0.643248914,
+    "p95": 0.718481371
+   },
+   "full_pipeline_seconds": {
+    "median": 0.987381343,
+    "p95": 1.065335777
+   },
+   "cpu_seconds": {
+    "median": 2.1000000000000227,
+    "p95": 2.269999999999996
+   },
+   "peak_rss_mb": {
+    "median": 304.4375,
+    "p95": 304.48046875
+   },
+   "deterministic": true,
+   "plan_action": "incremental",
+   "fingerprint": {
+    "edges": 148461,
+    "links": 14603,
+    "digest": "5ad4d31b15ff31086c738901cd230211ee09b9855c6a152c0a26c8f8b9f9444a"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": null,
+   "sql_statements": 58,
+   "server_http_requests": null
+  },
+  "remove_file": {
+   "index_seconds": {
+    "median": 0.330923867,
+    "p95": 0.376331035
+   },
+   "graph_seconds": {
+    "median": 0.871630699,
+    "p95": 0.895269854
+   },
+   "full_pipeline_seconds": {
+    "median": 1.21812786,
+    "p95": 1.249926988
+   },
+   "cpu_seconds": {
+    "median": 2.3700000000000045,
+    "p95": 2.4200000000000017
+   },
+   "peak_rss_mb": {
+    "median": 304.4375,
+    "p95": 304.48046875
+   },
+   "deterministic": true,
+   "plan_action": "incremental",
+   "fingerprint": {
+    "edges": 148454,
+    "links": 14603,
+    "digest": "ab76074074077f925953f0b76d27a5a4402ea7337888cc790f14ecdc1624a652"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": null,
+   "sql_statements": 42,
+   "server_http_requests": null
+  },
+  "doc_edit": {
+   "index_seconds": {
+    "median": 0.406028043,
+    "p95": 0.417125643
+   },
+   "graph_seconds": {
+    "median": 1.270233362,
+    "p95": 1.367449022
+   },
+   "full_pipeline_seconds": {
+    "median": 1.67817294,
+    "p95": 1.7863910920000001
+   },
+   "cpu_seconds": {
+    "median": 2.8800000000000097,
+    "p95": 2.9499999999999886
+   },
+   "peak_rss_mb": {
+    "median": 304.4375,
+    "p95": 304.48046875
+   },
+   "deterministic": true,
+   "plan_action": "incremental",
+   "fingerprint": {
+    "edges": 148454,
+    "links": 14606,
+    "digest": "7747a4295cd505768e670c11d7f4f50b8549b3feccc59744ec880c6aef89bbde"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": null,
+   "sql_statements": 181,
+   "server_http_requests": null
+  }
+ },
+ "runs_detailed": "first run only; the summary covers all runs",
+ "runs": [
+  [
+   {
+    "scenario": "cold",
+    "plan_action": "full",
+    "plan_reason": "first_build",
+    "files_total": 8203,
+    "entities_total": 53986,
+    "index_seconds": 4.146939142,
+    "graph_seconds": 14.582845139,
+    "full_pipeline_seconds": 18.731553238,
+    "cpu_seconds": 24.879999999999995,
+    "peak_rss_mb": 304.22265625,
+    "phase_seconds": {
+     "committing": 1.423122752,
+     "deriving": 8.006552593,
+     "linking": 1.9151010990000001,
+     "resolving": 3.185178419
+    },
+    "fingerprint": {
+     "edges": 148455,
+     "links": 14603,
+     "digest": "62d511bac42a7e4abc64c1fcdde6a19e3658faacea6ff640e71d734c172230ab"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.019764708000000002,
+     "clear_seconds": 0.000154707,
+     "derivation_seconds": 1.289544128,
+     "read_hash_seconds": 0.1798329289999996,
+     "parse_seconds": 3.639673320999998,
+     "cache_load_seconds": 0.00040664600000000025,
+     "sqlite_write_seconds": 6.716827086000001,
+     "symbol_manifest_seconds": 0.881967222,
+     "resolution_seconds": 2.3032097719999998,
+     "linking_seconds": 1.915100945,
+     "commit_seconds": 1.279481919
+    },
+    "graph_counters": {
+     "files_total": 8203,
+     "files_derived": 8098,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 4136092,
+     "resolution": {
+      "changed": 45883,
+      "references_examined": 45883,
+      "candidate_rows": 53986,
+      "candidate_queries": 1
+     },
+     "sql_statements": 225189
+    },
+    "linking": {
+     "links": 14603,
+     "manual": 0,
+     "entities_loaded": 53986,
+     "units_loaded": 2625,
+     "routes_loaded": 5398,
+     "candidates": 14603,
+     "narrow": false,
+     "load_seconds": 0.527707179,
+     "index_seconds": 0.07447916000000009,
+     "match_seconds": 0.7655319530000011,
+     "exact_seconds": 0.06769222200000002,
+     "qualified_seconds": 0.36261702800000073,
+     "alias_seconds": 0.1582639050000001,
+     "filename_seconds": 0.08193435600000025,
+     "route_seconds": 0.012602130000000069,
+     "write_seconds": 0.310809493,
+     "manual_seconds": 0.000524965
+    }
+   },
+   {
+    "scenario": "no_change",
+    "plan_action": "skip",
+    "plan_reason": "current",
+    "files_total": 8203,
+    "entities_total": 53986,
+    "index_seconds": 0.0,
+    "graph_seconds": 0.198155319,
+    "full_pipeline_seconds": 0.199745153,
+    "cpu_seconds": 1.6700000000000017,
+    "peak_rss_mb": 304.03515625,
+    "phase_seconds": {},
+    "fingerprint": {
+     "edges": 148455,
+     "links": 14603,
+     "digest": "62d511bac42a7e4abc64c1fcdde6a19e3658faacea6ff640e71d734c172230ab"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.0,
+     "clear_seconds": 0.0,
+     "derivation_seconds": 0.0,
+     "read_hash_seconds": 0.0,
+     "parse_seconds": 0.0,
+     "cache_load_seconds": 0.0,
+     "sqlite_write_seconds": 0.0,
+     "symbol_manifest_seconds": 0.0,
+     "resolution_seconds": 0.0,
+     "linking_seconds": 0.0,
+     "commit_seconds": 0.0
+    },
+    "graph_counters": {
+     "files_total": 0,
+     "files_derived": 0,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 0,
+     "resolution": {
+      "changed": 0,
+      "references_examined": 0,
+      "candidate_rows": 0,
+      "candidate_queries": 0
+     },
+     "sql_statements": 9
+    },
+    "linking": {
+     "links": 0,
+     "manual": 0,
+     "entities_loaded": 0,
+     "units_loaded": 0,
+     "routes_loaded": 0,
+     "candidates": 0,
+     "narrow": false,
+     "load_seconds": 0.0,
+     "index_seconds": 0.0,
+     "match_seconds": 0.0,
+     "exact_seconds": 0.0,
+     "qualified_seconds": 0.0,
+     "alias_seconds": 0.0,
+     "filename_seconds": 0.0,
+     "route_seconds": 0.0,
+     "write_seconds": 0.0,
+     "manual_seconds": 0.0
+    }
+   },
+   {
+    "scenario": "equivalent_republish",
+    "plan_action": "rebind",
+    "plan_reason": "equivalent_snapshot",
+    "files_total": 8203,
+    "entities_total": 53986,
+    "index_seconds": 10.806779077,
+    "graph_seconds": 0.344494107,
+    "full_pipeline_seconds": 11.152863198,
+    "cpu_seconds": 15.150000000000006,
+    "peak_rss_mb": 304.16015625,
+    "phase_seconds": {},
+    "fingerprint": {
+     "edges": 148455,
+     "links": 14603,
+     "digest": "62d511bac42a7e4abc64c1fcdde6a19e3658faacea6ff640e71d734c172230ab"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.0,
+     "clear_seconds": 0.0,
+     "derivation_seconds": 0.0,
+     "read_hash_seconds": 0.0,
+     "parse_seconds": 0.0,
+     "cache_load_seconds": 0.0,
+     "sqlite_write_seconds": 0.0,
+     "symbol_manifest_seconds": 0.0,
+     "resolution_seconds": 0.0,
+     "linking_seconds": 0.0,
+     "commit_seconds": 0.0
+    },
+    "graph_counters": {
+     "files_total": 0,
+     "files_derived": 0,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 0,
+     "resolution": {
+      "changed": 0,
+      "references_examined": 0,
+      "candidate_rows": 0,
+      "candidate_queries": 0
+     },
+     "sql_statements": 15
+    },
+    "linking": {
+     "links": 0,
+     "manual": 0,
+     "entities_loaded": 0,
+     "units_loaded": 0,
+     "routes_loaded": 0,
+     "candidates": 0,
+     "narrow": false,
+     "load_seconds": 0.0,
+     "index_seconds": 0.0,
+     "match_seconds": 0.0,
+     "exact_seconds": 0.0,
+     "qualified_seconds": 0.0,
+     "alias_seconds": 0.0,
+     "filename_seconds": 0.0,
+     "route_seconds": 0.0,
+     "write_seconds": 0.0,
+     "manual_seconds": 0.0
+    }
+   },
+   {
+    "scenario": "body_edit",
+    "plan_action": "incremental",
+    "plan_reason": "files_changed",
+    "files_total": 8203,
+    "entities_total": 53986,
+    "index_seconds": 0.33401502,
+    "graph_seconds": 0.478362874,
+    "full_pipeline_seconds": 0.813998109,
+    "cpu_seconds": 2.069999999999993,
+    "peak_rss_mb": 304.20703125,
+    "phase_seconds": {
+     "committing": 0.163516065,
+     "deriving": 0.00271171,
+     "linking": 0.042979091,
+     "resolving": 0.038644786
+    },
+    "fingerprint": {
+     "edges": 148455,
+     "links": 14603,
+     "digest": "62d511bac42a7e4abc64c1fcdde6a19e3658faacea6ff640e71d734c172230ab"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.106734462,
+     "clear_seconds": 0.000382782,
+     "derivation_seconds": 0.001061722,
+     "read_hash_seconds": 5.1534e-05,
+     "parse_seconds": 0.000652074,
+     "cache_load_seconds": 1.35e-07,
+     "sqlite_write_seconds": 0.001267716,
+     "symbol_manifest_seconds": 0.000185022,
+     "resolution_seconds": 0.013164309,
+     "linking_seconds": 0.068273522,
+     "commit_seconds": 0.101611711
+    },
+    "graph_counters": {
+     "files_total": 8203,
+     "files_derived": 1,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 605,
+     "resolution": {
+      "changed": 4,
+      "references_examined": 4,
+      "candidate_rows": 2700,
+      "candidate_queries": 2
+     },
+     "sql_statements": 84
+    },
+    "linking": {
+     "links": 4,
+     "manual": 0,
+     "entities_loaded": 10,
+     "units_loaded": 2625,
+     "routes_loaded": 0,
+     "candidates": 4,
+     "narrow": true,
+     "load_seconds": 0.031805527,
+     "index_seconds": 0.005624407,
+     "match_seconds": 0.001275549,
+     "exact_seconds": 0.00090373,
+     "qualified_seconds": 0.000251596,
+     "alias_seconds": 8.6103e-05,
+     "filename_seconds": 2.8728e-05,
+     "route_seconds": 7.9e-08,
+     "write_seconds": 0.000414204,
+     "manual_seconds": 0.000105942
+    }
+   },
+   {
+    "scenario": "rename_definition",
+    "plan_action": "incremental",
+    "plan_reason": "files_changed",
+    "files_total": 8203,
+    "entities_total": 53986,
+    "index_seconds": 0.332058929,
+    "graph_seconds": 1.042085954,
+    "full_pipeline_seconds": 1.375740776,
+    "cpu_seconds": 2.6299999999999955,
+    "peak_rss_mb": 304.20703125,
+    "phase_seconds": {
+     "committing": 0.292876699,
+     "deriving": 0.003002334,
+     "linking": 0.043703361,
+     "resolving": 0.505121715
+    },
+    "fingerprint": {
+     "edges": 148455,
+     "links": 14603,
+     "digest": "4de84256b88dc8a3fc1b7d93406cc4bbc331364cac30aaedb42df28f7b8bdd71"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.09885068799999999,
+     "clear_seconds": 0.000310877,
+     "derivation_seconds": 0.0011046,
+     "read_hash_seconds": 7.9478e-05,
+     "parse_seconds": 0.000631963,
+     "cache_load_seconds": 6.4e-08,
+     "sqlite_write_seconds": 0.001586925,
+     "symbol_manifest_seconds": 0.000208155,
+     "resolution_seconds": 0.474354536,
+     "linking_seconds": 0.074261687,
+     "commit_seconds": 0.228627916
+    },
+    "graph_counters": {
+     "files_total": 8203,
+     "files_derived": 1,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 598,
+     "resolution": {
+      "changed": 5,
+      "references_examined": 32393,
+      "candidate_rows": 18893,
+      "candidate_queries": 10
+     },
+     "sql_statements": 92
+    },
+    "linking": {
+     "links": 0,
+     "manual": 0,
+     "entities_loaded": 10,
+     "units_loaded": 2625,
+     "routes_loaded": 0,
+     "candidates": 0,
+     "narrow": true,
+     "load_seconds": 0.035325121,
+     "index_seconds": 0.005107257,
+     "match_seconds": 0.0006449009999999999,
+     "exact_seconds": 0.000625176,
+     "qualified_seconds": 1.0123e-05,
+     "alias_seconds": 6.993e-06,
+     "filename_seconds": 1.287e-06,
+     "route_seconds": 8.5e-08,
+     "write_seconds": 1.97e-07,
+     "manual_seconds": 0.00027272
+    }
+   },
+   {
+    "scenario": "add_file",
+    "plan_action": "incremental",
+    "plan_reason": "files_changed",
+    "files_total": 8204,
+    "entities_total": 53989,
+    "index_seconds": 0.345194178,
+    "graph_seconds": 0.718481371,
+    "full_pipeline_seconds": 1.065335777,
+    "cpu_seconds": 2.269999999999996,
+    "peak_rss_mb": 304.20703125,
+    "phase_seconds": {
+     "committing": 0.329649729,
+     "deriving": 0.001936498,
+     "linking": 0.07069874,
+     "resolving": 0.085445488
+    },
+    "fingerprint": {
+     "edges": 148461,
+     "links": 14603,
+     "digest": "5ad4d31b15ff31086c738901cd230211ee09b9855c6a152c0a26c8f8b9f9444a"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.110109975,
+     "clear_seconds": 0.000383249,
+     "derivation_seconds": 0.000770945,
+     "read_hash_seconds": 5.895e-05,
+     "parse_seconds": 0.000267021,
+     "cache_load_seconds": 1.19e-07,
+     "sqlite_write_seconds": 0.000781514,
+     "symbol_manifest_seconds": 0.000181768,
+     "resolution_seconds": 0.041358235,
+     "linking_seconds": 0.114603366,
+     "commit_seconds": 0.230081499
+    },
+    "graph_counters": {
+     "files_total": 8204,
+     "files_derived": 1,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 149,
+     "resolution": {
+      "changed": 2,
+      "references_examined": 2,
+      "candidate_rows": 2700,
+      "candidate_queries": 2
+     },
+     "sql_statements": 58
+    },
+    "linking": {
+     "links": 0,
+     "manual": 0,
+     "entities_loaded": 3,
+     "units_loaded": 2625,
+     "routes_loaded": 0,
+     "candidates": 0,
+     "narrow": true,
+     "load_seconds": 0.053040212,
+     "index_seconds": 0.009055844,
+     "match_seconds": 8.0403e-05,
+     "exact_seconds": 5.9657e-05,
+     "qualified_seconds": 7.469e-06,
+     "alias_seconds": 9.504e-06,
+     "filename_seconds": 2.273e-06,
+     "route_seconds": 1.12e-07,
+     "write_seconds": 6.46e-07,
+     "manual_seconds": 0.000371334
+    }
+   },
+   {
+    "scenario": "remove_file",
+    "plan_action": "incremental",
+    "plan_reason": "files_changed",
+    "files_total": 8203,
+    "entities_total": 53985,
+    "index_seconds": 0.376331035,
+    "graph_seconds": 0.871630699,
+    "full_pipeline_seconds": 1.249926988,
+    "cpu_seconds": 2.4200000000000017,
+    "peak_rss_mb": 304.20703125,
+    "phase_seconds": {
+     "committing": 0.322823406,
+     "deriving": 8.9432e-05,
+     "linking": 0.000226875,
+     "resolving": 0.336316865
+    },
+    "fingerprint": {
+     "edges": 148454,
+     "links": 14603,
+     "digest": "ab76074074077f925953f0b76d27a5a4402ea7337888cc790f14ecdc1624a652"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.100592977,
+     "clear_seconds": 9.1157e-05,
+     "derivation_seconds": 0.0,
+     "read_hash_seconds": 0.0,
+     "parse_seconds": 0.0,
+     "cache_load_seconds": 0.0,
+     "sqlite_write_seconds": 0.0,
+     "symbol_manifest_seconds": 1.598e-06,
+     "resolution_seconds": 0.307419941,
+     "linking_seconds": 0.02912173,
+     "commit_seconds": 0.231878005
+    },
+    "graph_counters": {
+     "files_total": 8203,
+     "files_derived": 0,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 0,
+     "resolution": {
+      "changed": 0,
+      "references_examined": 10797,
+      "candidate_rows": 8095,
+      "candidate_queries": 4
+     },
+     "sql_statements": 42
+    },
+    "linking": {
+     "links": 0,
+     "manual": 0,
+     "entities_loaded": 0,
+     "units_loaded": 0,
+     "routes_loaded": 0,
+     "candidates": 0,
+     "narrow": false,
+     "load_seconds": 0.0,
+     "index_seconds": 0.0,
+     "match_seconds": 0.0,
+     "exact_seconds": 0.0,
+     "qualified_seconds": 0.0,
+     "alias_seconds": 0.0,
+     "filename_seconds": 0.0,
+     "route_seconds": 0.0,
+     "write_seconds": 2.32e-07,
+     "manual_seconds": 0.000224559
+    }
+   },
+   {
+    "scenario": "doc_edit",
+    "plan_action": "incremental",
+    "plan_reason": "files_changed",
+    "files_total": 8203,
+    "entities_total": 53985,
+    "index_seconds": 0.406028043,
+    "graph_seconds": 1.270233362,
+    "full_pipeline_seconds": 1.67817294,
+    "cpu_seconds": 2.8800000000000097,
+    "peak_rss_mb": 304.20703125,
+    "phase_seconds": {
+     "committing": 0.28575169,
+     "deriving": 0.000299918,
+     "linking": 0.741826389,
+     "resolving": 0.032938925
+    },
+    "fingerprint": {
+     "edges": 148454,
+     "links": 14606,
+     "digest": "7747a4295cd505768e670c11d7f4f50b8549b3feccc59744ec880c6aef89bbde"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.10345236299999999,
+     "clear_seconds": 0.00029691,
+     "derivation_seconds": 3.622e-06,
+     "read_hash_seconds": 0.0,
+     "parse_seconds": 0.0,
+     "cache_load_seconds": 0.0,
+     "sqlite_write_seconds": 2.11e-07,
+     "symbol_manifest_seconds": 5.5379e-05,
+     "resolution_seconds": 0.003767161,
+     "linking_seconds": 0.770941006,
+     "commit_seconds": 0.221624459
+    },
+    "graph_counters": {
+     "files_total": 8203,
+     "files_derived": 0,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 0,
+     "resolution": {
+      "changed": 0,
+      "references_examined": 0,
+      "candidate_rows": 0,
+      "candidate_queries": 0
+     },
+     "sql_statements": 181
+    },
+    "linking": {
+     "links": 135,
+     "manual": 0,
+     "entities_loaded": 53985,
+     "units_loaded": 2626,
+     "routes_loaded": 5398,
+     "candidates": 135,
+     "narrow": false,
+     "load_seconds": 0.446052898,
+     "index_seconds": 0.044921579,
+     "match_seconds": 0.20336064600000003,
+     "exact_seconds": 0.021443772,
+     "qualified_seconds": 0.071742862,
+     "alias_seconds": 0.065727489,
+     "filename_seconds": 0.004754886,
+     "route_seconds": 0.001775538,
+     "write_seconds": 0.004686389,
+     "manual_seconds": 0.00015388
+    }
+   }
+  ]
+ ]
+}

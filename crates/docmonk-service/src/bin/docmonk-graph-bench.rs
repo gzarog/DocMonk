@@ -508,6 +508,8 @@ impl Bench {
             })
             .expect("publish");
         let mut v = serde_json::to_value(&r).expect("json");
+        // Counted before the benchmark's own state read below.
+        v["http_requests"] = json!(self.server.stats().requests - before);
         // The promoted generation's per-file record digests (the overall
         // digest also covers the base build id, which differs per run):
         // equal hashes mean the server holds byte-identical graph records.
@@ -532,7 +534,6 @@ impl Bench {
             (true, false) => "publish",
             _ => "unchanged",
         });
-        v["http_requests"] = json!(self.server.stats().requests - before);
         v["records_live"] = json!(self.memory.0.lock().expect("engine").records.len());
         v
     }
@@ -806,7 +807,9 @@ fn main() {
         "label": arg("--label"),
         "measurement": "measured (SQLite, synthetic); server figures are request counts against an in-process engine",
         "metadata": {
-            "git_sha": option_env!("DOCMONK_GIT_SHA"),
+            "git_sha": std::env::var("DOCMONK_GIT_SHA")
+                .ok()
+                .or(option_env!("DOCMONK_GIT_SHA").map(str::to_owned)),
             "host_os": std::env::consts::OS,
             "arch": std::env::consts::ARCH,
             "cpus": cpus,

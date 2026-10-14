@@ -1,0 +1,1035 @@
+{
+ "benchmark": "relationships",
+ "label": "final-1000",
+ "measurement": "measured (SQLite, synthetic); server figures are request counts against an in-process engine",
+ "metadata": {
+  "git_sha": null,
+  "host_os": "linux",
+  "arch": "x86_64",
+  "cpus": 4,
+  "worker_count": 4,
+  "graph_batch": 256,
+  "code_files": 1000,
+  "documents": 13,
+  "runs": 5,
+  "warmup": 1,
+  "scenarios": null,
+  "server": true,
+  "fact_cache": false
+ },
+ "summary": {
+  "cold": {
+   "index_seconds": {
+    "median": 0.443930282,
+    "p95": 0.49381748
+   },
+   "graph_seconds": {
+    "median": 1.155049312,
+    "p95": 1.197938773
+   },
+   "full_pipeline_seconds": {
+    "median": 1.98697431,
+    "p95": 2.079345757
+   },
+   "cpu_seconds": {
+    "median": 2.6899999999999977,
+    "p95": 2.91
+   },
+   "peak_rss_mb": {
+    "median": 95.19921875,
+    "p95": 96.125
+   },
+   "deterministic": true,
+   "plan_action": "full",
+   "fingerprint": {
+    "edges": 18325,
+    "links": 1662,
+    "digest": "7572a5a8c2e16c6c6593fff4b9e1a025b1f355825d2a1171c3d6f720b2ab2867"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": "2e1dfc92ccdf4799565c260434cc3d693e736e3489a9b91911e47757f789a097",
+   "sql_statements": 27696,
+   "server_http_requests": 48
+  },
+  "no_change": {
+   "index_seconds": {
+    "median": 0.0,
+    "p95": 0.0
+   },
+   "graph_seconds": {
+    "median": 0.026148858,
+    "p95": 0.047047474
+   },
+   "full_pipeline_seconds": {
+    "median": 0.045280227,
+    "p95": 0.07898456
+   },
+   "cpu_seconds": {
+    "median": 0.17999999999999972,
+    "p95": 0.23000000000000043
+   },
+   "peak_rss_mb": {
+    "median": 95.19921875,
+    "p95": 96.125
+   },
+   "deterministic": true,
+   "plan_action": "skip",
+   "fingerprint": {
+    "edges": 18325,
+    "links": 1662,
+    "digest": "7572a5a8c2e16c6c6593fff4b9e1a025b1f355825d2a1171c3d6f720b2ab2867"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": null,
+   "sql_statements": 9,
+   "server_http_requests": 0
+  },
+  "equivalent_republish": {
+   "index_seconds": {
+    "median": 1.1581725330000001,
+    "p95": 1.297964452
+   },
+   "graph_seconds": {
+    "median": 0.045315498,
+    "p95": 0.051547023
+   },
+   "full_pipeline_seconds": {
+    "median": 1.233824651,
+    "p95": 1.3764601029999999
+   },
+   "cpu_seconds": {
+    "median": 1.7000000000000028,
+    "p95": 1.8499999999999979
+   },
+   "peak_rss_mb": {
+    "median": 95.19921875,
+    "p95": 96.125
+   },
+   "deterministic": true,
+   "plan_action": "rebind",
+   "fingerprint": {
+    "edges": 18325,
+    "links": 1662,
+    "digest": "7572a5a8c2e16c6c6593fff4b9e1a025b1f355825d2a1171c3d6f720b2ab2867"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": null,
+   "sql_statements": 15,
+   "server_http_requests": 3
+  },
+  "body_edit": {
+   "index_seconds": {
+    "median": 0.059887605,
+    "p95": 0.063814368
+   },
+   "graph_seconds": {
+    "median": 0.064443517,
+    "p95": 0.099906566
+   },
+   "full_pipeline_seconds": {
+    "median": 0.310319206,
+    "p95": 0.342938754
+   },
+   "cpu_seconds": {
+    "median": 0.4399999999999995,
+    "p95": 0.4800000000000004
+   },
+   "peak_rss_mb": {
+    "median": 95.19921875,
+    "p95": 96.3046875
+   },
+   "deterministic": true,
+   "plan_action": "incremental",
+   "fingerprint": {
+    "edges": 18325,
+    "links": 1662,
+    "digest": "7572a5a8c2e16c6c6593fff4b9e1a025b1f355825d2a1171c3d6f720b2ab2867"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": "2e1dfc92ccdf4799565c260434cc3d693e736e3489a9b91911e47757f789a097",
+   "sql_statements": 88,
+   "server_http_requests": 5
+  },
+  "rename_definition": {
+   "index_seconds": {
+    "median": 0.063862218,
+    "p95": 0.066490537
+   },
+   "graph_seconds": {
+    "median": 0.121511643,
+    "p95": 0.179563639
+   },
+   "full_pipeline_seconds": {
+    "median": 0.36238083,
+    "p95": 0.419026226
+   },
+   "cpu_seconds": {
+    "median": 0.5199999999999996,
+    "p95": 0.5499999999999989
+   },
+   "peak_rss_mb": {
+    "median": 95.19921875,
+    "p95": 96.3046875
+   },
+   "deterministic": true,
+   "plan_action": "incremental",
+   "fingerprint": {
+    "edges": 18325,
+    "links": 1661,
+    "digest": "7bf70335e90a6325fad912695a27f1f79c5a5ea68546ae81b96e164e9181584d"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": "8d8466aad0256c04bc3103d251d80cf851a50e5c3668d1e498996ad0cb4bb004",
+   "sql_statements": 84,
+   "server_http_requests": 12
+  },
+  "add_file": {
+   "index_seconds": {
+    "median": 0.059123821,
+    "p95": 0.060536501
+   },
+   "graph_seconds": {
+    "median": 0.086295664,
+    "p95": 0.088475225
+   },
+   "full_pipeline_seconds": {
+    "median": 0.332960696,
+    "p95": 0.350185359
+   },
+   "cpu_seconds": {
+    "median": 0.46999999999999886,
+    "p95": 0.48999999999999844
+   },
+   "peak_rss_mb": {
+    "median": 95.203125,
+    "p95": 96.484375
+   },
+   "deterministic": true,
+   "plan_action": "incremental",
+   "fingerprint": {
+    "edges": 18331,
+    "links": 1661,
+    "digest": "6e39fa52233296526ac391f738538f9d2ae7fa0dcaceff50edc77b6a34689253"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": "8971cc398b9d0d0b637790270a31963e9b567ad329f4f2950fb0a964a8d8ecae",
+   "sql_statements": 58,
+   "server_http_requests": 12
+  },
+  "remove_file": {
+   "index_seconds": {
+    "median": 0.058036116,
+    "p95": 0.059390021
+   },
+   "graph_seconds": {
+    "median": 0.108617575,
+    "p95": 0.125495499
+   },
+   "full_pipeline_seconds": {
+    "median": 0.337010917,
+    "p95": 0.390611502
+   },
+   "cpu_seconds": {
+    "median": 0.48999999999999844,
+    "p95": 0.5300000000000011
+   },
+   "peak_rss_mb": {
+    "median": 95.203125,
+    "p95": 96.484375
+   },
+   "deterministic": true,
+   "plan_action": "incremental",
+   "fingerprint": {
+    "edges": 18324,
+    "links": 1661,
+    "digest": "b2a5393faf87bf99185fbb11c2f10ca42073b76314715f0efa1f10e02177952a"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": "aa73a022253c959494158228d83024bdb9fc67629217bfee2a6376c5e7160669",
+   "sql_statements": 35,
+   "server_http_requests": 11
+  },
+  "doc_edit": {
+   "index_seconds": {
+    "median": 0.06904331,
+    "p95": 0.081390087
+   },
+   "graph_seconds": {
+    "median": 0.132891785,
+    "p95": 0.140946624
+   },
+   "full_pipeline_seconds": {
+    "median": 0.387267436,
+    "p95": 0.438133995
+   },
+   "cpu_seconds": {
+    "median": 0.5300000000000011,
+    "p95": 0.5699999999999985
+   },
+   "peak_rss_mb": {
+    "median": 95.203125,
+    "p95": 96.484375
+   },
+   "deterministic": true,
+   "plan_action": "incremental",
+   "fingerprint": {
+    "edges": 18324,
+    "links": 1664,
+    "digest": "6df34d33cb5044ae8012ed49587b37784647a021951d4556337334fa1892673f"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": "19f2f2ca4471c9df5daa657b1b9718391ead189bf97f6d1362bad49c3335dac5",
+   "sql_statements": 176,
+   "server_http_requests": 12
+  }
+ },
+ "runs_detailed": "first run only; the summary covers all runs",
+ "runs": [
+  [
+   {
+    "scenario": "cold",
+    "plan_action": "full",
+    "plan_reason": "first_build",
+    "files_total": 1013,
+    "entities_total": 6666,
+    "index_seconds": 0.49381748,
+    "graph_seconds": 1.197938773,
+    "full_pipeline_seconds": 2.079345757,
+    "cpu_seconds": 2.91,
+    "peak_rss_mb": 93.71484375,
+    "phase_seconds": {
+     "committing": 0.166788092,
+     "deriving": 0.701943754,
+     "linking": 0.103942509,
+     "resolving": 0.218809312
+    },
+    "fingerprint": {
+     "edges": 18325,
+     "links": 1662,
+     "digest": "7572a5a8c2e16c6c6593fff4b9e1a025b1f355825d2a1171c3d6f720b2ab2867"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.001936642,
+     "clear_seconds": 8.1295e-05,
+     "derivation_seconds": 0.161831397,
+     "read_hash_seconds": 0.02623516000000002,
+     "parse_seconds": 0.4593060039999999,
+     "cache_load_seconds": 3.685300000000006e-05,
+     "sqlite_write_seconds": 0.540026742,
+     "symbol_manifest_seconds": 0.077097986,
+     "resolution_seconds": 0.141710651,
+     "linking_seconds": 0.103943095,
+     "commit_seconds": 0.154654708
+    },
+    "graph_counters": {
+     "files_total": 1013,
+     "files_derived": 1000,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 504368,
+     "resolution": {
+      "changed": 5661,
+      "references_examined": 5661,
+      "candidate_rows": 6666,
+      "candidate_queries": 1
+     },
+     "sql_statements": 27696
+    },
+    "linking": {
+     "links": 1662,
+     "manual": 0,
+     "entities_loaded": 6666,
+     "units_loaded": 325,
+     "routes_loaded": 666,
+     "candidates": 1662,
+     "narrow": false,
+     "load_seconds": 0.042076566,
+     "index_seconds": 0.006570263999999999,
+     "match_seconds": 0.028373923999999988,
+     "exact_seconds": 0.004585589000000005,
+     "qualified_seconds": 0.009677643999999987,
+     "alias_seconds": 0.006154529999999997,
+     "filename_seconds": 0.001784506000000001,
+     "route_seconds": 0.0007030289999999958,
+     "write_seconds": 0.015453009,
+     "manual_seconds": 0.000129636
+    },
+    "server": {
+     "action": "publish",
+     "seconds": 0.343710258,
+     "http_requests": 48,
+     "records_copied": 0,
+     "files_copied": 0,
+     "files_written": 1013,
+     "edges_written": 18325,
+     "links_written": 1662,
+     "graph_digest": "2e1dfc92ccdf4799565c260434cc3d693e736e3489a9b91911e47757f789a097",
+     "timings": {
+      "staging_seconds": 0.114827781,
+      "copy_seconds": 0.0,
+      "bulk_seconds": 0.225511285,
+      "refresh_seconds": 1.8879e-05,
+      "promotion_seconds": 0.003267331
+     },
+     "counters": {
+      "staging_sql_statements": 4,
+      "http_requests": 46,
+      "http_bytes_sent": 12112292,
+      "copy_requests": 0,
+      "bulk_requests": 40,
+      "staged_files": 1013,
+      "staged_edges": 18325,
+      "staged_links": 1662
+     }
+    }
+   },
+   {
+    "scenario": "no_change",
+    "plan_action": "skip",
+    "plan_reason": "current",
+    "files_total": 1013,
+    "entities_total": 6666,
+    "index_seconds": 0.0,
+    "graph_seconds": 0.023810905,
+    "full_pipeline_seconds": 0.040929684,
+    "cpu_seconds": 0.17999999999999972,
+    "peak_rss_mb": 93.71484375,
+    "phase_seconds": {},
+    "fingerprint": {
+     "edges": 18325,
+     "links": 1662,
+     "digest": "7572a5a8c2e16c6c6593fff4b9e1a025b1f355825d2a1171c3d6f720b2ab2867"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.0,
+     "clear_seconds": 0.0,
+     "derivation_seconds": 0.0,
+     "read_hash_seconds": 0.0,
+     "parse_seconds": 0.0,
+     "cache_load_seconds": 0.0,
+     "sqlite_write_seconds": 0.0,
+     "symbol_manifest_seconds": 0.0,
+     "resolution_seconds": 0.0,
+     "linking_seconds": 0.0,
+     "commit_seconds": 0.0
+    },
+    "graph_counters": {
+     "files_total": 0,
+     "files_derived": 0,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 0,
+     "resolution": {
+      "changed": 0,
+      "references_examined": 0,
+      "candidate_rows": 0,
+      "candidate_queries": 0
+     },
+     "sql_statements": 9
+    },
+    "linking": {
+     "links": 0,
+     "manual": 0,
+     "entities_loaded": 0,
+     "units_loaded": 0,
+     "routes_loaded": 0,
+     "candidates": 0,
+     "narrow": false,
+     "load_seconds": 0.0,
+     "index_seconds": 0.0,
+     "match_seconds": 0.0,
+     "exact_seconds": 0.0,
+     "qualified_seconds": 0.0,
+     "alias_seconds": 0.0,
+     "filename_seconds": 0.0,
+     "route_seconds": 0.0,
+     "write_seconds": 0.0,
+     "manual_seconds": 0.0
+    },
+    "server": {
+     "action": "skip",
+     "seconds": 0.0,
+     "http_requests": 0,
+     "records_copied": null,
+     "files_copied": null,
+     "files_written": null,
+     "edges_written": null,
+     "links_written": null,
+     "graph_digest": null,
+     "timings": null,
+     "counters": null
+    }
+   },
+   {
+    "scenario": "equivalent_republish",
+    "plan_action": "rebind",
+    "plan_reason": "equivalent_snapshot",
+    "files_total": 1013,
+    "entities_total": 6666,
+    "index_seconds": 1.155396717,
+    "graph_seconds": 0.047690922,
+    "full_pipeline_seconds": 1.233824651,
+    "cpu_seconds": 1.6000000000000014,
+    "peak_rss_mb": 93.9140625,
+    "phase_seconds": {},
+    "fingerprint": {
+     "edges": 18325,
+     "links": 1662,
+     "digest": "7572a5a8c2e16c6c6593fff4b9e1a025b1f355825d2a1171c3d6f720b2ab2867"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.0,
+     "clear_seconds": 0.0,
+     "derivation_seconds": 0.0,
+     "read_hash_seconds": 0.0,
+     "parse_seconds": 0.0,
+     "cache_load_seconds": 0.0,
+     "sqlite_write_seconds": 0.0,
+     "symbol_manifest_seconds": 0.0,
+     "resolution_seconds": 0.0,
+     "linking_seconds": 0.0,
+     "commit_seconds": 0.0
+    },
+    "graph_counters": {
+     "files_total": 0,
+     "files_derived": 0,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 0,
+     "resolution": {
+      "changed": 0,
+      "references_examined": 0,
+      "candidate_rows": 0,
+      "candidate_queries": 0
+     },
+     "sql_statements": 15
+    },
+    "linking": {
+     "links": 0,
+     "manual": 0,
+     "entities_loaded": 0,
+     "units_loaded": 0,
+     "routes_loaded": 0,
+     "candidates": 0,
+     "narrow": false,
+     "load_seconds": 0.0,
+     "index_seconds": 0.0,
+     "match_seconds": 0.0,
+     "exact_seconds": 0.0,
+     "qualified_seconds": 0.0,
+     "alias_seconds": 0.0,
+     "filename_seconds": 0.0,
+     "route_seconds": 0.0,
+     "write_seconds": 0.0,
+     "manual_seconds": 0.0
+    },
+    "server": {
+     "action": "rebind",
+     "seconds": 0.02209599,
+     "http_requests": 3,
+     "records_copied": null,
+     "files_copied": null,
+     "files_written": null,
+     "edges_written": null,
+     "links_written": null,
+     "graph_digest": null,
+     "timings": null,
+     "counters": null
+    }
+   },
+   {
+    "scenario": "body_edit",
+    "plan_action": "incremental",
+    "plan_reason": "files_changed",
+    "files_total": 1013,
+    "entities_total": 6666,
+    "index_seconds": 0.063814368,
+    "graph_seconds": 0.09216424,
+    "full_pipeline_seconds": 0.310319206,
+    "cpu_seconds": 0.4399999999999995,
+    "peak_rss_mb": 93.9140625,
+    "phase_seconds": {
+     "committing": 0.02144903,
+     "deriving": 0.003751315,
+     "linking": 0.009098485,
+     "resolving": 0.010620422
+    },
+    "fingerprint": {
+     "edges": 18325,
+     "links": 1662,
+     "digest": "7572a5a8c2e16c6c6593fff4b9e1a025b1f355825d2a1171c3d6f720b2ab2867"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.020977277000000003,
+     "clear_seconds": 0.000405054,
+     "derivation_seconds": 0.001279189,
+     "read_hash_seconds": 5.3956e-05,
+     "parse_seconds": 0.000827406,
+     "cache_load_seconds": 4.1e-08,
+     "sqlite_write_seconds": 0.002065526,
+     "symbol_manifest_seconds": 0.00034552,
+     "resolution_seconds": 0.003597201,
+     "linking_seconds": 0.015776789,
+     "commit_seconds": 0.015311973
+    },
+    "graph_counters": {
+     "files_total": 1013,
+     "files_derived": 1,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 605,
+     "resolution": {
+      "changed": 4,
+      "references_examined": 4,
+      "candidate_rows": 334,
+      "candidate_queries": 2
+     },
+     "sql_statements": 88
+    },
+    "linking": {
+     "links": 8,
+     "manual": 0,
+     "entities_loaded": 10,
+     "units_loaded": 325,
+     "routes_loaded": 0,
+     "candidates": 8,
+     "narrow": true,
+     "load_seconds": 0.0066164,
+     "index_seconds": 0.001102193,
+     "match_seconds": 0.000348184,
+     "exact_seconds": 0.000209705,
+     "qualified_seconds": 7.4966e-05,
+     "alias_seconds": 3.9788e-05,
+     "filename_seconds": 1.2381e-05,
+     "route_seconds": 2.47e-07,
+     "write_seconds": 0.000504247,
+     "manual_seconds": 0.000129984
+    },
+    "server": {
+     "action": "repoint",
+     "seconds": 0.125315058,
+     "http_requests": 5,
+     "records_copied": 0,
+     "files_copied": 0,
+     "files_written": 0,
+     "edges_written": 0,
+     "links_written": 0,
+     "graph_digest": "2e1dfc92ccdf4799565c260434cc3d693e736e3489a9b91911e47757f789a097",
+     "timings": {
+      "staging_seconds": 0.118254192,
+      "copy_seconds": 0.0,
+      "bulk_seconds": 0.0,
+      "refresh_seconds": 0.0,
+      "promotion_seconds": 0.004649119
+     },
+     "counters": {
+      "staging_sql_statements": 4,
+      "http_requests": 3,
+      "http_bytes_sent": 220452,
+      "copy_requests": 0,
+      "bulk_requests": 0,
+      "staged_files": 1013,
+      "staged_edges": 18325,
+      "staged_links": 1662
+     }
+    }
+   },
+   {
+    "scenario": "rename_definition",
+    "plan_action": "incremental",
+    "plan_reason": "files_changed",
+    "files_total": 1013,
+    "entities_total": 6666,
+    "index_seconds": 0.065007697,
+    "graph_seconds": 0.179563639,
+    "full_pipeline_seconds": 0.419026226,
+    "cpu_seconds": 0.5499999999999989,
+    "peak_rss_mb": 93.921875,
+    "phase_seconds": {
+     "committing": 0.032266568,
+     "deriving": 0.00259028,
+     "linking": 0.009949282,
+     "resolving": 0.103861848
+    },
+    "fingerprint": {
+     "edges": 18325,
+     "links": 1661,
+     "digest": "7bf70335e90a6325fad912695a27f1f79c5a5ea68546ae81b96e164e9181584d"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.013829932000000001,
+     "clear_seconds": 0.000265676,
+     "derivation_seconds": 0.00102286,
+     "read_hash_seconds": 4.2334e-05,
+     "parse_seconds": 0.000674207,
+     "cache_load_seconds": 4.3e-08,
+     "sqlite_write_seconds": 0.001301198,
+     "symbol_manifest_seconds": 0.000240154,
+     "resolution_seconds": 0.095355353,
+     "linking_seconds": 0.018215134,
+     "commit_seconds": 0.024475627
+    },
+    "graph_counters": {
+     "files_total": 1013,
+     "files_derived": 1,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 598,
+     "resolution": {
+      "changed": 5,
+      "references_examined": 4001,
+      "candidate_rows": 2331,
+      "candidate_queries": 2
+     },
+     "sql_statements": 84
+    },
+    "linking": {
+     "links": 3,
+     "manual": 0,
+     "entities_loaded": 10,
+     "units_loaded": 325,
+     "routes_loaded": 0,
+     "candidates": 3,
+     "narrow": true,
+     "load_seconds": 0.007493728,
+     "index_seconds": 0.001246538,
+     "match_seconds": 0.00033747700000000004,
+     "exact_seconds": 0.000225691,
+     "qualified_seconds": 6.113e-05,
+     "alias_seconds": 3.2337e-05,
+     "filename_seconds": 1.2022e-05,
+     "route_seconds": 2.85e-07,
+     "write_seconds": 0.000305319,
+     "manual_seconds": 0.000195519
+    },
+    "server": {
+     "action": "publish",
+     "seconds": 0.140032758,
+     "http_requests": 12,
+     "records_copied": 19836,
+     "files_copied": 1011,
+     "files_written": 2,
+     "edges_written": 24,
+     "links_written": 126,
+     "graph_digest": "8d8466aad0256c04bc3103d251d80cf851a50e5c3668d1e498996ad0cb4bb004",
+     "timings": {
+      "staging_seconds": 0.11679941,
+      "copy_seconds": 0.004411547,
+      "bulk_seconds": 0.002220993,
+      "refresh_seconds": 6.661e-06,
+      "promotion_seconds": 0.006025173
+     },
+     "counters": {
+      "staging_sql_statements": 4,
+      "http_requests": 10,
+      "http_bytes_sent": 560871,
+      "copy_requests": 2,
+      "bulk_requests": 1,
+      "staged_files": 1013,
+      "staged_edges": 18325,
+      "staged_links": 1661
+     }
+    }
+   },
+   {
+    "scenario": "add_file",
+    "plan_action": "incremental",
+    "plan_reason": "files_changed",
+    "files_total": 1014,
+    "entities_total": 6669,
+    "index_seconds": 0.053134729,
+    "graph_seconds": 0.074922587,
+    "full_pipeline_seconds": 0.313505676,
+    "cpu_seconds": 0.4399999999999995,
+    "peak_rss_mb": 93.92578125,
+    "phase_seconds": {
+     "committing": 0.02371507,
+     "deriving": 0.001234663,
+     "linking": 0.004767868,
+     "resolving": 0.012672667
+    },
+    "fingerprint": {
+     "edges": 18331,
+     "links": 1661,
+     "digest": "6e39fa52233296526ac391f738538f9d2ae7fa0dcaceff50edc77b6a34689253"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.014558428,
+     "clear_seconds": 0.000202226,
+     "derivation_seconds": 0.000618654,
+     "read_hash_seconds": 3.7411e-05,
+     "parse_seconds": 0.000292212,
+     "cache_load_seconds": 4.3e-08,
+     "sqlite_write_seconds": 0.000413596,
+     "symbol_manifest_seconds": 0.000166265,
+     "resolution_seconds": 0.003286804,
+     "linking_seconds": 0.01398678,
+     "commit_seconds": 0.01528698
+    },
+    "graph_counters": {
+     "files_total": 1014,
+     "files_derived": 1,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 149,
+     "resolution": {
+      "changed": 2,
+      "references_examined": 2,
+      "candidate_rows": 334,
+      "candidate_queries": 2
+     },
+     "sql_statements": 58
+    },
+    "linking": {
+     "links": 0,
+     "manual": 0,
+     "entities_loaded": 3,
+     "units_loaded": 325,
+     "routes_loaded": 0,
+     "candidates": 0,
+     "narrow": true,
+     "load_seconds": 0.003778407,
+     "index_seconds": 0.00059746,
+     "match_seconds": 1.7375999999999998e-05,
+     "exact_seconds": 6.418e-06,
+     "qualified_seconds": 3.125e-06,
+     "alias_seconds": 5.531e-06,
+     "filename_seconds": 1.332e-06,
+     "route_seconds": 1.3e-07,
+     "write_seconds": 1.06e-07,
+     "manual_seconds": 0.000154382
+    },
+    "server": {
+     "action": "publish",
+     "seconds": 0.1470904,
+     "http_requests": 12,
+     "records_copied": 19986,
+     "files_copied": 1013,
+     "files_written": 1,
+     "edges_written": 6,
+     "links_written": 0,
+     "graph_digest": "8971cc398b9d0d0b637790270a31963e9b567ad329f4f2950fb0a964a8d8ecae",
+     "timings": {
+      "staging_seconds": 0.129952254,
+      "copy_seconds": 0.003016186,
+      "bulk_seconds": 0.000110857,
+      "refresh_seconds": 4.436e-06,
+      "promotion_seconds": 0.005496381
+     },
+     "counters": {
+      "staging_sql_statements": 4,
+      "http_requests": 10,
+      "http_bytes_sent": 480997,
+      "copy_requests": 2,
+      "bulk_requests": 1,
+      "staged_files": 1014,
+      "staged_edges": 18331,
+      "staged_links": 1661
+     }
+    }
+   },
+   {
+    "scenario": "remove_file",
+    "plan_action": "incremental",
+    "plan_reason": "files_changed",
+    "files_total": 1013,
+    "entities_total": 6665,
+    "index_seconds": 0.056935399,
+    "graph_seconds": 0.108617575,
+    "full_pipeline_seconds": 0.330132579,
+    "cpu_seconds": 0.46999999999999886,
+    "peak_rss_mb": 93.92578125,
+    "phase_seconds": {
+     "committing": 0.024241781,
+     "deriving": 4.175e-05,
+     "linking": 0.000177836,
+     "resolving": 0.046008524
+    },
+    "fingerprint": {
+     "edges": 18324,
+     "links": 1661,
+     "digest": "b2a5393faf87bf99185fbb11c2f10ca42073b76314715f0efa1f10e02177952a"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.01686463,
+     "clear_seconds": 4.2856e-05,
+     "derivation_seconds": 0.0,
+     "read_hash_seconds": 0.0,
+     "parse_seconds": 0.0,
+     "cache_load_seconds": 0.0,
+     "sqlite_write_seconds": 0.0,
+     "symbol_manifest_seconds": 1.154e-06,
+     "resolution_seconds": 0.039523759,
+     "linking_seconds": 0.006661148,
+     "commit_seconds": 0.015108096
+    },
+    "graph_counters": {
+     "files_total": 1013,
+     "files_derived": 0,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 0,
+     "resolution": {
+      "changed": 0,
+      "references_examined": 1333,
+      "candidate_rows": 997,
+      "candidate_queries": 2
+     },
+     "sql_statements": 35
+    },
+    "linking": {
+     "links": 0,
+     "manual": 0,
+     "entities_loaded": 0,
+     "units_loaded": 0,
+     "routes_loaded": 0,
+     "candidates": 0,
+     "narrow": false,
+     "load_seconds": 0.0,
+     "index_seconds": 0.0,
+     "match_seconds": 0.0,
+     "exact_seconds": 0.0,
+     "qualified_seconds": 0.0,
+     "alias_seconds": 0.0,
+     "filename_seconds": 0.0,
+     "route_seconds": 0.0,
+     "write_seconds": 2.2e-07,
+     "manual_seconds": 0.00017552
+    },
+    "server": {
+     "action": "publish",
+     "seconds": 0.12863112,
+     "http_requests": 11,
+     "records_copied": 19985,
+     "files_copied": 1013,
+     "files_written": 0,
+     "edges_written": 0,
+     "links_written": 0,
+     "graph_digest": "aa73a022253c959494158228d83024bdb9fc67629217bfee2a6376c5e7160669",
+     "timings": {
+      "staging_seconds": 0.113420874,
+      "copy_seconds": 0.00309127,
+      "bulk_seconds": 1.323e-06,
+      "refresh_seconds": 5.549e-06,
+      "promotion_seconds": 0.004638838
+     },
+     "counters": {
+      "staging_sql_statements": 4,
+      "http_requests": 9,
+      "http_bytes_sent": 477421,
+      "copy_requests": 2,
+      "bulk_requests": 0,
+      "staged_files": 1013,
+      "staged_edges": 18324,
+      "staged_links": 1661
+     }
+    }
+   },
+   {
+    "scenario": "doc_edit",
+    "plan_action": "incremental",
+    "plan_reason": "files_changed",
+    "files_total": 1013,
+    "entities_total": 6665,
+    "index_seconds": 0.06904331,
+    "graph_seconds": 0.140347627,
+    "full_pipeline_seconds": 0.438133995,
+    "cpu_seconds": 0.5699999999999985,
+    "peak_rss_mb": 93.92578125,
+    "phase_seconds": {
+     "committing": 0.036101291,
+     "deriving": 0.00024901,
+     "linking": 0.062901339,
+     "resolving": 0.006468198
+    },
+    "fingerprint": {
+     "edges": 18324,
+     "links": 1664,
+     "digest": "6df34d33cb5044ae8012ed49587b37784647a021951d4556337334fa1892673f"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.014542413,
+     "clear_seconds": 0.00024624,
+     "derivation_seconds": 3.522e-06,
+     "read_hash_seconds": 0.0,
+     "parse_seconds": 0.0,
+     "cache_load_seconds": 0.0,
+     "sqlite_write_seconds": 1.56e-07,
+     "symbol_manifest_seconds": 5.7126e-05,
+     "resolution_seconds": 0.000355306,
+     "linking_seconds": 0.068955958,
+     "commit_seconds": 0.022963646
+    },
+    "graph_counters": {
+     "files_total": 1013,
+     "files_derived": 0,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 0,
+     "resolution": {
+      "changed": 0,
+      "references_examined": 0,
+      "candidate_rows": 0,
+      "candidate_queries": 0
+     },
+     "sql_statements": 176
+    },
+    "linking": {
+     "links": 130,
+     "manual": 0,
+     "entities_loaded": 6665,
+     "units_loaded": 326,
+     "routes_loaded": 666,
+     "candidates": 130,
+     "narrow": false,
+     "load_seconds": 0.038008153,
+     "index_seconds": 0.0034344650000000003,
+     "match_seconds": 0.016258138,
+     "exact_seconds": 0.002217848,
+     "qualified_seconds": 0.005359183,
+     "alias_seconds": 0.00506812,
+     "filename_seconds": 0.000640901,
+     "route_seconds": 0.000254534,
+     "write_seconds": 0.001765403,
+     "manual_seconds": 0.000108569
+    },
+    "server": {
+     "action": "publish",
+     "seconds": 0.178537163,
+     "http_requests": 12,
+     "records_copied": 19858,
+     "files_copied": 1012,
+     "files_written": 1,
+     "edges_written": 0,
+     "links_written": 130,
+     "graph_digest": "19f2f2ca4471c9df5daa657b1b9718391ead189bf97f6d1362bad49c3335dac5",
+     "timings": {
+      "staging_seconds": 0.158591729,
+      "copy_seconds": 0.00297139,
+      "bulk_seconds": 0.001139443,
+      "refresh_seconds": 5.295e-06,
+      "promotion_seconds": 0.006454202
+     },
+     "counters": {
+      "staging_sql_statements": 4,
+      "http_requests": 10,
+      "http_bytes_sent": 549133,
+      "copy_requests": 2,
+      "bulk_requests": 1,
+      "staged_files": 1013,
+      "staged_edges": 18324,
+      "staged_links": 1664
+     }
+    }
+   }
+  ]
+ ]
+}
