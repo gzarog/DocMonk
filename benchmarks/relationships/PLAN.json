@@ -1,0 +1,828 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "docmonk-relationship-performance-v2",
+  "title": "DocMonk Relationship-Building Performance Optimization V2",
+  "created_on": "2026-10-14",
+  "repository": {
+    "url": "https://github.com/gzarog/DocMonk",
+    "base_branch": "main",
+    "reviewed_main_tree_sha": "ba6048d1278f7b86e5fd3bbba5013db10801e321",
+    "language": "Rust",
+    "storage_backends": [
+      "SQLite",
+      "OpenSearch",
+      "Elasticsearch"
+    ],
+    "branch_strategy": {
+      "model": "small feature branches based on the latest main, one PR per phase",
+      "merge_target": "main",
+      "branches": [
+        "perf/relationships-p0-benchmark-and-tracing",
+        "perf/relationships-p1-bulk-staging",
+        "perf/relationships-p2-reuse-reference-facts",
+        "perf/relationships-p3-incremental-linking",
+        "perf/relationships-p4-symbol-resolution",
+        "perf/relationships-p5-server-publication",
+        "perf/relationships-p6-resource-scheduling",
+        "perf/relationships-p7-validation-and-rollout"
+      ],
+      "rules": [
+        "Rebase each phase onto main after its prerequisites are merged.",
+        "Keep performance-only PRs separate from semantic changes where possible.",
+        "Require baseline and post-change benchmark comparisons in each PR.",
+        "Do not perform a clean-slate reset or force a repository-wide reindex as part of the rollout."
+      ]
+    }
+  },
+  "problem_statement": {
+    "observed_workload": {
+      "indexed_files": 8205,
+      "failed_files": 3,
+      "code_entities": 57442,
+      "relationships_count": null,
+      "measured_relationship_wall_time_seconds": null,
+      "note": "File and entity counts are user-reported; relationship count, graph duration, and per-phase timings must be measured before attributing the slowdown."
+    },
+    "verified_code_findings": [
+      {
+        "id": "F01",
+        "description": "Phase 1 extracts entities, while the relationship stage reads, SHA-hashes and parses files again to derive edges.",
+        "locations": [
+          "crates/docmonk-code/src/process.rs",
+          "crates/docmonk-code/src/graph_stage.rs"
+        ]
+      },
+      {
+        "id": "F02",
+        "description": "The server graph staging function loads the file list and issues file_relationships() separately for each file; this creates an N+1 SQLite access pattern on large sources.",
+        "locations": [
+          "crates/docmonk-backends/src/graph.rs",
+          "crates/docmonk-storage/src/knowledge.rs"
+        ]
+      },
+      {
+        "id": "F03",
+        "description": "Code-document linking loads all entities, all link units and routes, then constructs a fresh UnitIndex for each nonempty linking pass.",
+        "locations": [
+          "crates/docmonk-knowledge/src/linker.rs",
+          "crates/docmonk-knowledge/src/matcher.rs"
+        ]
+      },
+      {
+        "id": "F04",
+        "description": "Full cross-file resolution materializes all code entities and cross-file references; selective resolution already exists and must be preserved.",
+        "locations": [
+          "crates/docmonk-code/src/process.rs",
+          "crates/docmonk-storage/src/graph.rs"
+        ]
+      },
+      {
+        "id": "F05",
+        "description": "Server copy-forward uses synchronous update-by-query per batch and generation, followed by refresh and fenced promotion.",
+        "locations": [
+          "crates/docmonk-backends/src/publish.rs",
+          "crates/docmonk-backends/src/graph.rs"
+        ]
+      }
+    ],
+    "already_implemented_do_not_duplicate": [
+      "Two-stage indexing/relationships barrier and separately published graph generations",
+      "skip and rebind plans for current or semantically identical graphs",
+      "incremental changed-file graph derivation and per-file symbol dependencies",
+      "selective cross-file resolution based on changed symbol definitions",
+      "parallel file derivation in batches of 256",
+      "server-side unchanged-graph copy-forward and fenced atomic publication",
+      "local and server relationship-disable configuration"
+    ]
+  },
+  "objectives": [
+    "Reduce time to a complete, searchable relationship graph for large code sources.",
+    "Make incremental graph updates proportional to changed files and affected symbol dependents rather than total corpus size.",
+    "Reduce unnecessary database queries, allocations, and OpenSearch/Elasticsearch update operations.",
+    "Maintain exact graph semantics, deterministic relationship IDs, stable evidence, and safe atomic visibility.",
+    "Show users precisely where a long-running relationship pass spends its time."
+  ],
+  "non_goals": [
+    "Changing the public meaning of callers, callees, references, impact, or document-code links.",
+    "Removing writer leases, publication barriers, generation fencing, or crash safety.",
+    "Dropping support for local SQLite, OpenSearch, or Elasticsearch.",
+    "Requiring users to delete indexes or run a complete file reindex to activate the improvements.",
+    "Blindly raising thread counts or bulk sizes without workload measurements.",
+    "Disabling correctness checks to make performance numbers look better."
+  ],
+  "success_criteria": {
+    "correctness": [
+      "Cold and incremental graph outputs match a deterministic canonical baseline for relationships, document links, confidence, resolver, evidence, and target IDs.",
+      "An unchanged source plans 'skip'; a semantically equivalent republished base plans 'rebind' when eligible.",
+      "A body-only edit does not re-resolve unrelated references, while added/removed/renamed/ambiguous symbols update every affected dependent.",
+      "A graph built from files that changed after indexing is never published as if it matched the base snapshot.",
+      "Failed, cancelled, superseded, or lease-lost builds never expose an incomplete graph.",
+      "All public retrieval and MCP graph outputs are equivalent to the pre-optimization behavior."
+    ],
+    "performance_goals_not_benchmarked_claims": {
+      "cold_full_graph_target": "Aim for at least 2x faster graph-stage wall-clock on the representative 8,205-file source; record actual result, and do not ship a slower end-to-end indexing plus relationship pipeline.",
+      "incremental_edit_target": "Aim for at least 5x faster than baseline on a one-file edit if baseline does material work; skip/rebind should perform no graph publication.",
+      "server_staging_query_target": "Replace approximately one file_relationships() query per source file with one streaming query or bounded paginated reads; count and report actual queries.",
+      "quality_regression_budget": "Zero graph-output differences for deterministic fixtures and validated sampled production cases.",
+      "resource_regression_budget": "No uncontrolled memory growth; record peak RSS, CPU time, SQLite query counts, network traffic and cluster workload."
+    },
+    "decision_rule": "Targets are engineering hypotheses, not existing measurements. Accept each optimization only when correctness passes and repeatable benchmark results justify its complexity."
+  },
+  "execution_principles": [
+    "Instrument first; optimize the measured critical path.",
+    "Track whole-run indexing+graph wall time as well as graph-only time, since caching extraction may shift work to indexing.",
+    "Prefer local, exact, indexed lookups and bounded streaming over loading entire tables repeatedly.",
+    "Maintain content-hash and derivation-version provenance for any reusable reference facts or linking indexes.",
+    "Be deterministic: stable ordering, IDs, tie-breaking, ambiguous resolution and output hashes.",
+    "Treat OpenSearch/Elasticsearch as authoritative for visible server generations, with local staging only as a verified cache.",
+    "Keep config defaults behavior-compatible; use experimental feature flags for changes that affect persistence or graph publication.",
+    "Support incremental adoption and safe cache regeneration without destructive reindexing."
+  ],
+  "phases": [
+    {
+      "id": "P0",
+      "name": "Profiling, baseline and reproducible benchmark harness",
+      "priority": "P0",
+      "branch": "perf/relationships-p0-benchmark-and-tracing",
+      "depends_on": [],
+      "purpose": "Identify whether derivation, linking, SQLite staging or server publish dominates this workload before tuning.",
+      "files_to_review_or_modify": [
+        "crates/docmonk-code/src/graph_stage.rs",
+        "crates/docmonk-code/src/process.rs",
+        "crates/docmonk-knowledge/src/linker.rs",
+        "crates/docmonk-backends/src/graph.rs",
+        "crates/docmonk-service/src/relationships.rs",
+        "crates/docmonk-service/src/server_index.rs",
+        "crates/docmonk-cli/src/workflow.rs",
+        "benchmarks/relationships/ (new benchmark fixtures and runner)"
+      ],
+      "tasks": [
+        {
+          "id": "P0-01",
+          "title": "Add phase-level timers",
+          "details": "Measure planning, cache access, file reads/hash, parsing+edge derivation, SQLite edge writes, symbol manifest load/build, cross-file resolution, document link generation, graph staging, copy-forward, server bulk write, refresh, and promotion. Use monotonic timers."
+        },
+        {
+          "id": "P0-02",
+          "title": "Add counters and structured diagnostics",
+          "details": "Track files scanned/derived/reused, references examined and updated, candidates looked up, links evaluated/written, per-file SQL queries, server HTTP requests/bytes, files copied/written, edges and links staged, and retries. Retain existing JSON fields and add optional fields."
+        },
+        {
+          "id": "P0-03",
+          "title": "Expose stage-specific progress",
+          "details": "Show phases such as deriving, resolving, linking, staging, copying and promoting; do not misleadingly report 100% when only file derivation completed. Add heartbeat during long phases."
+        },
+        {
+          "id": "P0-04",
+          "title": "Build benchmarks",
+          "details": "Implement synthetic reproducible fixtures near 8,205 files and 57,442 entities, plus optional privately run real-workload benchmarks. Cover cold, no-change, one body edit, one definition rename, file add/remove, doc edit, cross-source dependency, and staging-cache recovery."
+        },
+        {
+          "id": "P0-05",
+          "title": "Collect baseline",
+          "details": "Run repeated warmups and at least 5 measured runs per scenario on SQLite and the actual server backend. Report median/p95 wall time, CPU, peak RSS, SQL queries, server traffic and relationship/link counts. Record storage hardware, workers, batch sizes, and version SHA."
+        }
+      ],
+      "tests": [
+        "JSON backwards-compatibility and stable reason/action fields",
+        "Cancel/lease-loss reporting",
+        "No secret path or document content logged",
+        "Benchmark fixture determinism"
+      ],
+      "acceptance_criteria": [
+        "Baseline results are stored as machine-readable JSON with a readable comparison report.",
+        "All material phases are timed independently; sum of phases plausibly accounts for total duration.",
+        "The 8,205-file/57,442-entity class of workload can be run repeatedly without publishing proprietary source code.",
+        "No graph-semantic change occurs in this phase."
+      ]
+    },
+    {
+      "id": "P1",
+      "name": "Eliminate per-file graph staging queries",
+      "priority": "P0",
+      "branch": "perf/relationships-p1-bulk-staging",
+      "depends_on": [
+        "P0"
+      ],
+      "purpose": "Remove the N+1 SQLite read pattern in graph staging and reduce allocations without changing graph publication semantics.",
+      "files_to_review_or_modify": [
+        "crates/docmonk-backends/src/graph.rs",
+        "crates/docmonk-storage/src/knowledge.rs",
+        "crates/docmonk-storage/src/graph.rs",
+        "crates/docmonk-backends/tests/graph_mock.rs",
+        "crates/docmonk-backends/tests/live.rs"
+      ],
+      "tasks": [
+        {
+          "id": "P1-01",
+          "title": "Create ordered relationship row streaming API",
+          "details": "Add a build-scoped, ordered cursor/iterator (ORDER BY file_id, id) or bounded page API in ProjectStore; prefer prepared SQLite statements and projection of only required columns."
+        },
+        {
+          "id": "P1-02",
+          "title": "Group staged edges in one pass",
+          "details": "Replace stage()'s store.file_relationships(build, file_id) loop with a single ordered traversal. Group edges by file_id and preserve exact deterministic digest ordering and link grouping."
+        },
+        {
+          "id": "P1-03",
+          "title": "Bound memory",
+          "details": "Avoid constructing redundant full copies of graphs when streaming and computing per-file digests; preserve enough canonical manifest information to identify changed files. Measure peak memory before/after."
+        },
+        {
+          "id": "P1-04",
+          "title": "Use bounded server writer and equivalent digests",
+          "details": "Feed staged file groups into the existing bulk writer, preserving unchanged file digest comparisons, conflict checks, and generation promotion. Avoid altering edge IDs and canonical JSON hashing unexpectedly."
+        },
+        {
+          "id": "P1-05",
+          "title": "Benchmark",
+          "details": "Count SQLite statements and compare staging_seconds, allocations, RSS and total publish time on small and 8,205-file sources."
+        }
+      ],
+      "tests": [
+        "Empty graph and document-only sources",
+        "Relationships with multiple edges per file",
+        "No missing or duplicated edges on pagination boundaries",
+        "Byte-for-byte stable normalized edge/link digests",
+        "Server copy-forward equivalence"
+      ],
+      "acceptance_criteria": [
+        "No per-file SQLite relationship lookup on the full-graph server staging path.",
+        "Canonical staging digest and published graph rows match the baseline.",
+        "Staging runtime and/or query count materially improves without increasing peak RSS uncontrollably."
+      ]
+    },
+    {
+      "id": "P2",
+      "name": "Reuse parsed reference facts from indexing",
+      "priority": "P0",
+      "branch": "perf/relationships-p2-reuse-reference-facts",
+      "depends_on": [
+        "P0"
+      ],
+      "purpose": "Avoid parsing the same source a second time just to derive structural/reference graph facts; keep visible graph publication as phase 2.",
+      "files_to_review_or_modify": [
+        "crates/docmonk-code/src/process.rs",
+        "crates/docmonk-code/src/graph_stage.rs",
+        "crates/docmonk-code/src/extract.rs",
+        "crates/docmonk-storage/src/schema.rs",
+        "crates/docmonk-storage/src/knowledge.rs",
+        "crates/docmonk-indexing/src/coordinator.rs",
+        "crates/docmonk-indexing/src/executor.rs",
+        "crates/docmonk-code/tests/golden.rs",
+        "crates/docmonk-code/tests/indexing.rs"
+      ],
+      "tasks": [
+        {
+          "id": "P2-01",
+          "title": "Define stable reference-fact artifact",
+          "details": "Define a compact per-file representation of extracted structural edges, calls, imports, inheritance, decorators, framework edges, and unresolved reference text. Key it by file ID, content SHA-256, code extraction version and graph-fact format version. Preserve line locations and deterministic IDs."
+        },
+        {
+          "id": "P2-02",
+          "title": "Capture facts from the existing parse",
+          "details": "During CodeProcessor::prepare, derive reusable reference facts from the same tree-sitter parse as entity extraction. Keep graph resolution and public graph visibility out of stage 1. Measure added indexing time and artifact size."
+        },
+        {
+          "id": "P2-03",
+          "title": "Add bounded local persistence and lifecycle",
+          "details": "Persist facts with the file's indexing transaction or a safely committed content-addressed cache. Copy forward unchanged facts, invalidate changed/version-incompatible facts, and garbage-collect unreferenced artifacts. Avoid duplicate large JSON blobs in metadata."
+        },
+        {
+          "id": "P2-04",
+          "title": "Consume reusable facts during relationship build",
+          "details": "In derive_batch(), load facts when provenance matches the exact published file and derivation; otherwise fall back to the existing read-hash-parse path. Do not reindex existing sources merely to fill missing caches."
+        },
+        {
+          "id": "P2-05",
+          "title": "Preserve snapshot integrity",
+          "details": "Do not weaken stale-source detection. Either rehash current bytes against the published hash when using cached facts or consume a verified immutable source snapshot; if changed, mark stale rather than publishing a mismatched graph."
+        },
+        {
+          "id": "P2-06",
+          "title": "Feature-gated rollout",
+          "details": "Add an internal/configurable cache flag with a safe default and fallback, metrics for cache hit/miss/fallback, and clean cache invalidation when derivation changes."
+        }
+      ],
+      "tests": [
+        "Cold cache, warm cache and partially missing cache",
+        "Hash mismatch after index publication",
+        "Syntax-error and unsupported-language files",
+        "Stable IDs and ordinals for overloaded C# symbols",
+        "Version bump invalidation",
+        "Cache corruption and crash recovery",
+        "Incremental add/edit/remove with carried-forward cache"
+      ],
+      "acceptance_criteria": [
+        "A cache hit does not invoke the tree-sitter parse a second time during graph derivation.",
+        "Cached and uncached relationship graphs are identical for all golden fixtures.",
+        "An old existing index remains usable and graphs build via fallback when facts are absent.",
+        "End-to-end index plus relationship time is measured; optimization is not accepted solely because work shifted into indexing."
+      ]
+    },
+    {
+      "id": "P3",
+      "name": "Persistent incremental code-document linker",
+      "priority": "P0",
+      "branch": "perf/relationships-p3-incremental-linking",
+      "depends_on": [
+        "P0"
+      ],
+      "purpose": "Make document linking scale with changed code symbols, changed document chunks, and their reverse dependents, not the entire source.",
+      "files_to_review_or_modify": [
+        "crates/docmonk-knowledge/src/linker.rs",
+        "crates/docmonk-knowledge/src/matcher.rs",
+        "crates/docmonk-knowledge/src/manual.rs",
+        "crates/docmonk-knowledge/src/lib.rs",
+        "crates/docmonk-storage/src/schema.rs",
+        "crates/docmonk-storage/src/knowledge.rs",
+        "crates/docmonk-code/src/graph_stage.rs"
+      ],
+      "tasks": [
+        {
+          "id": "P3-01",
+          "title": "Measure linker fan-out",
+          "details": "Record entity rows loaded, document units loaded, UnitIndex construction time, matching time by resolver, emitted link count, and manual projection time."
+        },
+        {
+          "id": "P3-02",
+          "title": "Build versioned reverse lookup indexes",
+          "details": "Store a reusable build-scoped inverted map from normalized identifier tokens to document unit IDs and from document unit IDs to candidate symbol keys, with Unicode boundary semantics identical to matcher.rs. Use bounded per-source shards rather than one giant metadata JSON value."
+        },
+        {
+          "id": "P3-03",
+          "title": "Compute change impact",
+          "details": "On modified code, re-evaluate changed definitions and relevant units; on modified documents, re-evaluate changed units against relevant entities. Preserve filename, alias, qualified-name and route matching, not just exact symbols."
+        },
+        {
+          "id": "P3-04",
+          "title": "Handle removed/renamed/ambiguously matched inputs",
+          "details": "Delete obsolete automatic links that depend on removed entities/units, rebuild all affected dependent link candidates, and preserve manual links independently of automatic link caches."
+        },
+        {
+          "id": "P3-05",
+          "title": "Avoid rebuilding global indexes each pass",
+          "details": "Load reusable indexes or partial shards, update only changed postings, and cap memory during candidate generation. Maintain a conservative full fallback if index or manifest cannot be validated."
+        },
+        {
+          "id": "P3-06",
+          "title": "Regression and performance comparisons",
+          "details": "Compare outputs of old full linker, new full linker and incremental linker over code-only, docs-only, mixed and large-corpus fixtures; include common identifiers to reveal candidate explosion."
+        }
+      ],
+      "tests": [
+        "Qualified and bare symbols",
+        "Unicode word boundaries and dotted identifiers",
+        "Class alias and filename matching",
+        "HTTP route heuristic behavior",
+        "Document chunk replacement or deletion",
+        "Manual link retention",
+        "Duplicate-link deduplication and ID stability",
+        "Incremental-to-full equivalence"
+      ],
+      "acceptance_criteria": [
+        "A one-file code edit does not reload and rebuild every unrelated document matching unit.",
+        "A changed document chunk updates links for unchanged but affected code entities.",
+        "No missing, stale or duplicate links relative to full graph recomputation.",
+        "Fallback can rebuild a corrupt or absent linker cache safely without reindexing documents."
+      ]
+    },
+    {
+      "id": "P4",
+      "name": "Batch and cache symbol candidate resolution",
+      "priority": "P1",
+      "branch": "perf/relationships-p4-symbol-resolution",
+      "depends_on": [
+        "P0",
+        "P2"
+      ],
+      "purpose": "Reduce repeated symbol lookups on incremental builds and memory overhead on full builds while preserving deterministic ambiguity rules.",
+      "files_to_review_or_modify": [
+        "crates/docmonk-code/src/process.rs",
+        "crates/docmonk-code/src/resolve.rs",
+        "crates/docmonk-code/src/graph_stage.rs",
+        "crates/docmonk-storage/src/graph.rs",
+        "crates/docmonk-storage/src/schema.rs"
+      ],
+      "tasks": [
+        {
+          "id": "P4-01",
+          "title": "Instrument resolution cost",
+          "details": "Count distinct qualified/bare names, cached lookups, candidate rows, reference rows, affected files, SQL calls and changed outcomes for both resolve_build() and resolve_files()."
+        },
+        {
+          "id": "P4-02",
+          "title": "Batch candidate queries",
+          "details": "For selective resolution, gather distinct reference keys from affected files and retrieve candidates in bounded batches rather than issuing a separate statement per new name; reuse existing SQLite name and qualified-name indexes."
+        },
+        {
+          "id": "P4-03",
+          "title": "Make reverse dependencies explicit",
+          "details": "Use the existing FileSymbols manifest as source of truth and optionally materialize a bounded reverse postings index keyed by q: and n: symbol keys. Do not mark every file dirty for a body-only edit."
+        },
+        {
+          "id": "P4-04",
+          "title": "Optimize full resolution",
+          "details": "Build compact deterministic candidate tables once, process references in bounded ordered chunks, and batch only changed resolution updates. Compare memory versus the existing all_entities() approach."
+        },
+        {
+          "id": "P4-05",
+          "title": "Validate cross-source behavior",
+          "details": "Preserve explicit project reference and declared dependency scoping, candidate-fingerprint invalidation, ambiguous producer handling, and retry after unavailable dependencies."
+        }
+      ],
+      "tests": [
+        "Definition added, removed, moved or renamed",
+        "Bare-name collision across files",
+        "Multiple qualified-name candidates and stable tie-breaking",
+        "Implementation-only edit",
+        "Changed downstream consumer without producer change",
+        "Cross-repository dependency graph consistency"
+      ],
+      "acceptance_criteria": [
+        "Selective resolution touches only affected files and relevant candidate symbols.",
+        "Resolution outputs match old resolve_build() for all test cases and random generated fixtures.",
+        "No unbounded per-name query explosion on a source with many references."
+      ]
+    },
+    {
+      "id": "P5",
+      "name": "Optimize OpenSearch and Elasticsearch graph generations",
+      "priority": "P1",
+      "branch": "perf/relationships-p5-server-publication",
+      "depends_on": [
+        "P0",
+        "P1"
+      ],
+      "purpose": "Reduce server-side generation copy and bulk overhead, not just local graph derivation time.",
+      "files_to_review_or_modify": [
+        "crates/docmonk-backends/src/graph.rs",
+        "crates/docmonk-backends/src/publish.rs",
+        "crates/docmonk-backends/src/bulk.rs",
+        "crates/docmonk-backends/src/transport.rs",
+        "crates/docmonk-backends/src/reader.rs",
+        "crates/docmonk-service/src/server_index.rs"
+      ],
+      "tasks": [
+        {
+          "id": "P5-01",
+          "title": "Profile copy-forward and publish separately",
+          "details": "Count _update_by_query calls, updated docs, bulk records, copied files, bytes, refresh duration, cluster throttling/retries and promotion latency. Compare OpenSearch with Elasticsearch on identical fixtures."
+        },
+        {
+          "id": "P5-02",
+          "title": "Avoid avoidable server writes",
+          "details": "Honor skip/rebind and per-file digests first; use no mutation when graph is current or has semantically identical inputs. Verify skipped publication after staged cache recovery."
+        },
+        {
+          "id": "P5-03",
+          "title": "Tune bounded copy-forward",
+          "details": "Bench test configurable COPY_BATCH, bounded concurrency and the existing bulk settings. Only use asynchronous _update_by_query after adding task polling, cancellation and complete failure verification; never promote until all tasks finish."
+        },
+        {
+          "id": "P5-04",
+          "title": "Investigate immutable graph-fragment reuse",
+          "details": "If copy-forward remains dominant, design an optional manifest referencing immutable per-file graph fragments across generations. Prototype separately with read-path changes, safe garbage collection, pinning and lease fencing. Do not implement or enable unless the measured result justifies the added complexity."
+        },
+        {
+          "id": "P5-05",
+          "title": "Keep bounded generations and safe cleanup",
+          "details": "Enforce atomic pointer promotion, retained old-reader generations, retries, stale build handling, orphan cleanup and idempotent failed publishes."
+        }
+      ],
+      "tests": [
+        "Identical and changed generation",
+        "Partial bulk failure and 429 backpressure",
+        "Lease lost while copy is running",
+        "Process crash before promotion",
+        "Reader pinned to prior graph",
+        "Index refresh and read-after-promotion visibility",
+        "OpenSearch/Elasticsearch parity"
+      ],
+      "acceptance_criteria": [
+        "Every published graph remains visible only after all referenced records are complete.",
+        "Server-mode graph publication produces fewer requests or less elapsed time for large-source incremental updates.",
+        "The old graph remains queryable after failure, conflict or interrupted copy-forward."
+      ]
+    },
+    {
+      "id": "P6",
+      "name": "Worker scheduling and bounded memory",
+      "priority": "P1",
+      "branch": "perf/relationships-p6-resource-scheduling",
+      "depends_on": [
+        "P0",
+        "P2",
+        "P3"
+      ],
+      "purpose": "Use CPU, disk and server capacity effectively without fighting SQLite writer limitations or starving other repositories.",
+      "files_to_review_or_modify": [
+        "crates/docmonk-code/src/graph_stage.rs",
+        "crates/docmonk-indexing/src/executor.rs",
+        "crates/docmonk-service/src/relationships.rs",
+        "crates/docmonk-service/src/indexing.rs",
+        "crates/docmonk-config/src/model.rs"
+      ],
+      "tasks": [
+        {
+          "id": "P6-01",
+          "title": "Benchmark GRAPH_BATCH and parser workers",
+          "details": "Compare 64/128/256/512 files per batch and workers 1/2/4/8 or CPU-limited values; record parse throughput, RSS and time in SQLite writes. Avoid a global default based on one machine."
+        },
+        {
+          "id": "P6-02",
+          "title": "Limit concurrent sources and work queues",
+          "details": "Use global CPU/IO/semaphore budgets and bounded producer-consumer queues, while preserving one writer per source and lease ownership. Verify fairness across many sources."
+        },
+        {
+          "id": "P6-03",
+          "title": "Preserve two-stage barrier",
+          "details": "Index each selected source and publish all bases before cross-source dependency resolution, or explicitly prove a source-local optimization cannot observe unfinished producers."
+        },
+        {
+          "id": "P6-04",
+          "title": "Make progress responsive",
+          "details": "Heartbeat during long SQL reads, linking loops and server copy tasks so active passes are not mistaken for dead leases."
+        }
+      ],
+      "tests": [
+        "One large source",
+        "Several simultaneous large sources",
+        "150-source synthetic stress run",
+        "Lease contention and cancellation",
+        "Low-memory profile and server backpressure"
+      ],
+      "acceptance_criteria": [
+        "No unbounded queue or memory growth during graph construction.",
+        "Concurrent multi-source runs remain fair and do not corrupt or publish mixed snapshots.",
+        "Chosen defaults are supported by benchmark results rather than guessed thread counts."
+      ]
+    },
+    {
+      "id": "P7",
+      "name": "Correctness gates, end-to-end validation and rollout",
+      "priority": "P0",
+      "branch": "perf/relationships-p7-validation-and-rollout",
+      "depends_on": [
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+        "P5",
+        "P6"
+      ],
+      "purpose": "Prove speed improvements without semantic regression, and introduce cache or publication changes safely.",
+      "files_to_review_or_modify": [
+        "crates/docmonk-code/tests/golden.rs",
+        "crates/docmonk-code/tests/indexing.rs",
+        "crates/docmonk-service/tests/relationships.rs",
+        "crates/docmonk-backends/tests/graph_mock.rs",
+        "crates/docmonk-backends/tests/live.rs",
+        "crates/docmonk-retrieval/tests/graph.rs",
+        "docs/reference.md",
+        "README.md",
+        "benchmarks/relationships/"
+      ],
+      "tasks": [
+        {
+          "id": "P7-01",
+          "title": "Graph equivalence validator",
+          "details": "Build an automated comparator that normalizes and hashes all edges, links, resolvers, confidence, source location, evidence and graph query outputs for baseline versus optimized runs."
+        },
+        {
+          "id": "P7-02",
+          "title": "Create workload matrix",
+          "details": "Benchmark cold, warm, incremental, code-only, mixed docs+code, dependency chain, staging cache loss, interrupted writes and 150-repository load using both SQLite and server storage."
+        },
+        {
+          "id": "P7-03",
+          "title": "CI smoke performance guards",
+          "details": "Run fast deterministic correctness/perf smoke checks per PR. Run time-consuming large workload benchmarks manually or in nightly jobs; fail CI only on stable thresholds to avoid timing noise."
+        },
+        {
+          "id": "P7-04",
+          "title": "Rollout flags and fallbacks",
+          "details": "Ship optional new fact-cache/linker-index paths with metrics and ability to fall back to old algorithms. Use lazy regeneration for stale artifacts; no mandatory destructive reindex."
+        },
+        {
+          "id": "P7-05",
+          "title": "Document operations",
+          "details": "Explain graph phase reporting, skip/rebind/full/retry, caching, cache invalidation, storage footprint and backend parity. Add troubleshooting for long 'building' or 'publishing' statuses."
+        },
+        {
+          "id": "P7-06",
+          "title": "Benchmark report and final review",
+          "details": "Attach before/after tables with stage timings, whole-run timings, throughput, p95, memory, query/HTTP counts and output-equivalence results. Label measured vs target clearly."
+        }
+      ],
+      "tests": [
+        "cargo fmt --all -- --check",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "cargo test --workspace",
+        "Golden fixtures and randomized change sequences",
+        "Real-backend OpenSearch and Elasticsearch tests where environments are available"
+      ],
+      "acceptance_criteria": [
+        "All required correctness gates pass on local and server backends.",
+        "Benchmark artifact includes measured results for a workload comparable to 8,205 files and 57,442 entities.",
+        "No mandatory reindex and a tested rollback path for new caches and graph generation changes.",
+        "The final report identifies the largest measured improvement and remaining bottleneck."
+      ]
+    }
+  ],
+  "benchmark_matrix": [
+    {
+      "id": "B01",
+      "case": "Cold graph",
+      "mutation": "Base index published; no usable graph/cache yet",
+      "expectation": "Full graph equivalent to baseline; report derivation/linking/publish separately"
+    },
+    {
+      "id": "B02",
+      "case": "No change",
+      "mutation": "Run relationships build again without any new publication",
+      "expectation": "Skip; zero edges rewritten and zero graph publication"
+    },
+    {
+      "id": "B03",
+      "case": "Equivalent base republish",
+      "mutation": "New base generation, identical semantic file keys",
+      "expectation": "Rebind if eligible; no expensive graph rebuild"
+    },
+    {
+      "id": "B04",
+      "case": "One method-body edit",
+      "mutation": "Edit an implementation without changing symbol definitions",
+      "expectation": "Only necessary file facts; avoid unrelated re-resolution"
+    },
+    {
+      "id": "B05",
+      "case": "Rename public C# method",
+      "mutation": "Change a symbol referenced by other files",
+      "expectation": "Re-resolve changed file and referencing dependents; no stale targets"
+    },
+    {
+      "id": "B06",
+      "case": "Add/remove overloaded method",
+      "mutation": "Add or remove ambiguous candidate",
+      "expectation": "Match full resolver output and tie-breaking"
+    },
+    {
+      "id": "B07",
+      "case": "Document-only edit",
+      "mutation": "Change a chunk mentioning a code entity",
+      "expectation": "Update link edges even if code files are unchanged"
+    },
+    {
+      "id": "B08",
+      "case": "File removal",
+      "mutation": "Delete a defining source file",
+      "expectation": "Delete invalid edges and relink affected dependents"
+    },
+    {
+      "id": "B09",
+      "case": "Staging cache missing",
+      "mutation": "Remove only local server staging cache; keep server graph",
+      "expectation": "Safe server rehydration/fallback without silent semantic drift"
+    },
+    {
+      "id": "B10",
+      "case": "Race/lease failure",
+      "mutation": "Change source after indexing or interrupt server publication",
+      "expectation": "Stale/failed result, no partial graph exposed"
+    },
+    {
+      "id": "B11",
+      "case": "Multi-source scale",
+      "mutation": "150 sources with mixed sizes and explicit dependencies",
+      "expectation": "Bounded resource use, fair scheduling, correct cross-source graph"
+    }
+  ],
+  "measurement_schema": {
+    "required_per_source": [
+      "source_id",
+      "backend",
+      "base_generation",
+      "graph_generation",
+      "plan_action",
+      "plan_reason",
+      "files_total",
+      "files_processed",
+      "files_reresolved",
+      "files_cached",
+      "files_reparsed",
+      "entities_total",
+      "references_examined",
+      "resolutions_changed",
+      "relationships_written",
+      "documents_and_units_examined",
+      "links_written",
+      "sql_query_count",
+      "sqlite_write_count",
+      "server_http_requests",
+      "server_bytes_sent",
+      "server_records_copied",
+      "server_records_written",
+      "wall_seconds",
+      "cpu_seconds",
+      "peak_rss_mb"
+    ],
+    "required_phase_timings": [
+      "planning_seconds",
+      "file_hash_validation_seconds",
+      "cache_load_seconds",
+      "derivation_seconds",
+      "sqlite_write_seconds",
+      "symbol_manifest_seconds",
+      "resolution_seconds",
+      "linking_seconds",
+      "server_staging_seconds",
+      "server_copy_seconds",
+      "server_bulk_seconds",
+      "server_refresh_seconds",
+      "server_promotion_seconds",
+      "full_pipeline_seconds"
+    ],
+    "benchmark_metadata": [
+      "git_sha",
+      "rust_version",
+      "host_os",
+      "cpu",
+      "ram_gb",
+      "disk_type",
+      "backend_version",
+      "worker_count",
+      "bulk_config",
+      "relationship_count",
+      "source_size_bytes"
+    ],
+    "reporting_rules": [
+      "Emit optional additional keys, do not rename/remove existing JSON fields.",
+      "Do not expose file contents, source paths, tokens or credentials in metrics.",
+      "Separate index-stage and relationship-stage time; compute end-to-end time as well.",
+      "Represent no-op skips explicitly rather than assigning a misleading zero-duration full build."
+    ]
+  },
+  "technical_invariants": [
+    "Graph relationships are not visible until the exact base generation is validated and graph generation is atomically promoted.",
+    "Keep the existing writer lease, fencing checks and publication CAS semantics.",
+    "Cross-file candidates and ambiguity are deterministic and scoped exactly as before.",
+    "Only changed resolution outcomes cause row updates; unchanged edges retain stable IDs.",
+    "Schema additions and caches cannot force destructive resets or invalidate already published searchable content.",
+    "Any optimization cache is disposable: incorrect, absent or old artifacts cause safe recomputation.",
+    "Doc-to-code linking includes unchanged code affected by document changes and unchanged docs affected by code changes.",
+    "Manual link intent is preserved across automatic relinking and failed publishes.",
+    "Server graph copy-forward keeps old-reader generation pins valid until readers release them or retention policy expires.",
+    "Optional optimizations must preserve mixed Windows/Linux path handling and current C# parsing behavior."
+  ],
+  "risks_and_mitigations": [
+    {
+      "risk": "Persisting reference facts moves cost from graph stage into indexing",
+      "mitigation": "Benchmark whole-run time, keep facts compact, use fallback, and only enable by default after a verified net win."
+    },
+    {
+      "risk": "Incorrect reverse index misses links or dependent references",
+      "mitigation": "Canonical baseline comparisons, property-based change-sequence tests, derivation version checks, conservative full rebuild fallback."
+    },
+    {
+      "risk": "Caching stale facts after a file changes during indexing",
+      "mitigation": "Key by published content SHA-256 and verify current source hash or immutable snapshot before graph promotion."
+    },
+    {
+      "risk": "Over-optimistic OpenSearch async copy publishes incomplete generations",
+      "mitigation": "Fence tasks by lease and expected base, await verified completion and failures, then promote with CAS."
+    },
+    {
+      "risk": "Large caches or inverted indexes consume excessive RAM/disk",
+      "mitigation": "Bounded shards/pages, TTL/garbage collection, RSS and artifact-size budgets, lazy regeneration."
+    },
+    {
+      "risk": "Concurrency tuning contends on SQLite single-writer or OpenSearch backpressure",
+      "mitigation": "Single writer per source, bounded queues, quotas, retry/backoff and measured resource limits."
+    },
+    {
+      "risk": "150-source loads overwhelm background worker scheduling",
+      "mitigation": "Multi-source benchmarks, global concurrency governor and fairness checks."
+    }
+  ],
+  "recommended_implementation_order": [
+    "P0",
+    "P1",
+    "P2",
+    "P3",
+    "P4",
+    "P5",
+    "P6",
+    "P7"
+  ],
+  "quick_win_note": "P1 is the smallest high-confidence performance change and can be implemented immediately after instrumentation. P2 and P3 are the most promising but higher-risk architectural changes. Prioritize the actual measured slowest phase after P0.",
+  "commands": {
+    "inspect_status": "docmonk status",
+    "measure_existing_graph": "docmonk relationships build --source <SOURCE_ID> --json",
+    "run_all_graphs": "docmonk relationships build --json",
+    "format": "cargo fmt --all -- --check",
+    "lint": "cargo clippy --workspace --all-targets -- -D warnings",
+    "unit_tests": "cargo test --workspace"
+  },
+  "claude_code_execution_prompt": "Implement DocMonk Relationship-Building Performance Optimization V2 in https://github.com/gzarog/DocMonk. Read this JSON plan and inspect the current main branch before changing code. Work in the specified phase order with one feature branch and PR per phase against main. P0 must establish repeatable baseline profiling first. Preserve all existing skip/rebind/incremental semantics, deterministic graph IDs and evidence, cross-source dependencies, writer leases and atomic graph publication. Do not delete indexes or force a full reindex. Implement P1's bulk graph staging, P2's safe versioned reference-fact reuse, P3's correct incremental document linker, P4's candidate lookup improvements, P5's measured server publication optimizations, and P6's resource controls. Where code differs from the reviewed tree, adapt the design rather than blindly applying instructions. Run Rust formatting, clippy, workspace tests, graph golden/regression tests, and realistic before/after benchmarks. For every PR report changed files, actual measured performance, peak memory, graph equivalence, tradeoffs, and rollback behavior. Do not claim a speedup until verified. Complete P7 with an implementation and benchmark report."
+}
