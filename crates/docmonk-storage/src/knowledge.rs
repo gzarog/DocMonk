@@ -1323,15 +1323,51 @@ impl ProjectStore {
         build_id: &str,
         file_id: &str,
     ) -> Result<Vec<RelationshipRow>> {
+        // `INDEXED BY`: with `ORDER BY id` the planner otherwise prefers
+        // the primary key (build_id, id) to skip a sort and scans every
+        // row of the build for each file.
         self.query_rows(
             "file relationships",
             &format!(
-                "SELECT {RELATIONSHIP_COLUMNS} FROM relationships
+                "SELECT {RELATIONSHIP_COLUMNS} FROM relationships INDEXED BY idx_rel_file
                  WHERE build_id = ?1 AND file_id = ?2 ORDER BY id"
             ),
             &[&build_id, &file_id],
             relationship_from_row,
         )
+    }
+
+    /// Every relationship of the build in one ordered pass (file, then
+    /// id), handed to `each` one file at a time: one statement however
+    /// many files, and memory bounded by the largest file.
+    pub fn for_each_file_relationships<E: From<StorageError>>(
+        &self,
+        build_id: &str,
+        mut each: impl FnMut(String, Vec<RelationshipRow>) -> std::result::Result<(), E>,
+    ) -> std::result::Result<(), E> {
+        let what = "relationships by file";
+        let mut stmt = self
+            .conn
+            .prepare(&format!(
+                "SELECT {RELATIONSHIP_COLUMNS} FROM relationships INDEXED BY idx_rel_file
+                 WHERE build_id = ?1 ORDER BY file_id, id"
+            ))
+            .map_err(StorageError::sqlite(what))?;
+        let mut rows = stmt.query([build_id]).map_err(StorageError::sqlite(what))?;
+        let mut group: Vec<RelationshipRow> = Vec::new();
+        while let Some(row) = rows.next().map_err(StorageError::sqlite(what))? {
+            let r = relationship_from_row(row).map_err(StorageError::sqlite(what))?;
+            if group.first().is_some_and(|g| g.file_id != r.file_id) {
+                let file = group[0].file_id.clone();
+                each(file, std::mem::take(&mut group))?;
+            }
+            group.push(r);
+        }
+        if let Some(first) = group.first() {
+            let file = first.file_id.clone();
+            each(file, group)?;
+        }
+        Ok(())
     }
 
     /// Relationships whose target depends on other files.

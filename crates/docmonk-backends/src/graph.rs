@@ -246,8 +246,10 @@ pub struct PublishCounters {
     pub staged_links: usize,
 }
 
-fn storage(e: docmonk_storage::StorageError) -> BackendError {
-    BackendError::Invalid(format!("staging store: {e}"))
+impl From<docmonk_storage::StorageError> for BackendError {
+    fn from(e: docmonk_storage::StorageError) -> Self {
+        BackendError::Invalid(format!("staging store: {e}"))
+    }
 }
 
 /// One file's graph records (edges recorded by the file, links into its
@@ -259,84 +261,202 @@ struct FileGraph {
     digest: String,
 }
 
-/// The staged graph grouped by file, plus the overall digest (which also
-/// covers the base build, so a new base always gets its own generation).
-struct StagedGraph {
-    files: BTreeMap<String, FileGraph>,
-    digest: String,
+impl FileGraph {
+    /// Orders the records by id and digests them (the digest the previous
+    /// generation's `file_digests` are compared with).
+    fn seal(&mut self) {
+        self.edges
+            .sort_by(|a, b| a.relationship_id.cmp(&b.relationship_id));
+        self.links
+            .sort_by(|a, b| a.relationship_id.cmp(&b.relationship_id));
+        let mut h = Sha256::new();
+        h.update(serde_json::to_vec(&self.edges).unwrap_or_default());
+        h.update([0]);
+        h.update(serde_json::to_vec(&self.links).unwrap_or_default());
+        self.digest = hex(h);
+    }
 }
 
-fn stage(store: &ProjectStore, build: &str, base: &str) -> Result<StagedGraph> {
-    let files = store.files(build).map_err(storage)?;
-    let paths: HashMap<&str, &str> = files
-        .iter()
-        .map(|f| (f.id.as_str(), f.rel_path.as_str()))
-        .collect();
-    let docs = store.documents(build).map_err(storage)?;
-    let doc_file: HashMap<&str, &str> = docs
-        .iter()
-        .map(|d| (d.id.as_str(), d.file_id.as_str()))
-        .collect();
-    let mut out: BTreeMap<String, FileGraph> = BTreeMap::new();
-    for f in &files {
-        for r in store.file_relationships(build, &f.id).map_err(storage)? {
-            out.entry(f.id.clone()).or_default().edges.push(EdgeDoc {
-                relationship_id: r.id,
-                file_id: f.id.clone(),
-                rel_path: f.rel_path.clone(),
-                relationship_type: r.relationship_type,
-                source_entity_id: r.source_entity_id,
-                target_entity_id: r.target_entity_id,
-                target_symbol: r.target_symbol,
-                resolver: r.resolver,
-                confidence: r.confidence,
-                source_location: r.source_location,
-                evidence: r.evidence,
-                reference_text: r.reference_text,
-            });
-        }
-    }
-    for l in store.links(build).map_err(storage)? {
-        let file_id = doc_file
-            .get(l.document_id.as_str())
-            .copied()
-            .unwrap_or_default();
-        out.entry(file_id.to_owned())
-            .or_default()
-            .links
-            .push(LinkDoc {
+/// One staged file: its record digest and counts.
+struct StagedFile {
+    digest: String,
+    edges: usize,
+    links: usize,
+}
+
+/// The staged graph by file, plus the overall digest (which also covers
+/// the base build, so a new base always gets its own generation).
+struct StagedGraph {
+    files: BTreeMap<String, StagedFile>,
+    digest: String,
+    /// Records of the files to write, kept from the digest pass while they
+    /// fit in [`STAGE_RETAIN_RECORDS`]; `None` means they are read from the
+    /// staging store again when written.
+    retained: Option<BTreeMap<String, FileGraph>>,
+}
+
+/// Most records kept in memory between digesting the staged graph and
+/// writing its changed files. A larger write set (a first publication of a
+/// large source) is streamed from the staging store a second time, so
+/// memory stays bounded by this budget plus the largest file.
+const STAGE_RETAIN_RECORDS: usize = 50_000;
+
+/// What both passes over the staging store share: file paths and the
+/// links grouped by the file of their document (links are few next to
+/// edges; edges are streamed).
+struct StageSource<'a> {
+    store: &'a ProjectStore,
+    build: &'a str,
+    paths: HashMap<String, String>,
+    links: BTreeMap<String, Vec<LinkDoc>>,
+}
+
+impl<'a> StageSource<'a> {
+    fn load(store: &'a ProjectStore, build: &'a str) -> Result<Self> {
+        let paths: HashMap<String, String> = store
+            .files(build)?
+            .into_iter()
+            .map(|f| (f.id, f.rel_path))
+            .collect();
+        let doc_file: HashMap<String, String> = store
+            .documents(build)?
+            .into_iter()
+            .map(|d| (d.id, d.file_id))
+            .collect();
+        let mut links: BTreeMap<String, Vec<LinkDoc>> = BTreeMap::new();
+        for l in store.links(build)? {
+            let file_id = doc_file.get(&l.document_id).cloned().unwrap_or_default();
+            let rel_path = paths.get(&file_id).cloned().unwrap_or_default();
+            links.entry(file_id.clone()).or_default().push(LinkDoc {
                 relationship_id: l.id,
                 relationship_type: l.link_type,
                 entity_id: l.entity_id,
                 document_id: l.document_id,
                 chunk_id: l.chunk_id,
-                file_id: file_id.to_owned(),
-                rel_path: paths.get(file_id).copied().unwrap_or_default().to_owned(),
+                file_id,
+                rel_path,
                 resolver: l.resolver,
                 confidence: l.confidence,
                 evidence: l.evidence,
             });
+        }
+        Ok(Self {
+            store,
+            build,
+            paths,
+            links,
+        })
     }
+
+    /// Every staged file's sealed records, in one ordered pass over the
+    /// build's relationships (one statement, never one per file). Edges
+    /// recorded under a file the build does not list are not published.
+    fn each_file(&self, mut each: impl FnMut(String, FileGraph) -> Result<()>) -> Result<()> {
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        self.store
+            .for_each_file_relationships(self.build, |file_id, rows| {
+                let Some(rel_path) = self.paths.get(&file_id) else {
+                    return Ok(());
+                };
+                let mut g = FileGraph {
+                    edges: rows
+                        .into_iter()
+                        .map(|r| EdgeDoc {
+                            relationship_id: r.id,
+                            file_id: file_id.clone(),
+                            rel_path: rel_path.clone(),
+                            relationship_type: r.relationship_type,
+                            source_entity_id: r.source_entity_id,
+                            target_entity_id: r.target_entity_id,
+                            target_symbol: r.target_symbol,
+                            resolver: r.resolver,
+                            confidence: r.confidence,
+                            source_location: r.source_location,
+                            evidence: r.evidence,
+                            reference_text: r.reference_text,
+                        })
+                        .collect(),
+                    links: self.links.get(&file_id).cloned().unwrap_or_default(),
+                    digest: String::new(),
+                };
+                g.seal();
+                seen.insert(file_id.clone());
+                each(file_id, g)
+            })?;
+        for (file_id, links) in &self.links {
+            if seen.contains(file_id) {
+                continue;
+            }
+            let mut g = FileGraph {
+                links: links.clone(),
+                ..FileGraph::default()
+            };
+            g.seal();
+            each(file_id.clone(), g)?;
+        }
+        Ok(())
+    }
+}
+
+/// Digests the staged graph. `writes` says which files will be written
+/// (their digest differs from the visible generation's); their records are
+/// retained while they fit the budget.
+fn stage(
+    src: &StageSource<'_>,
+    base: &str,
+    writes: impl Fn(&str, &str) -> bool,
+) -> Result<StagedGraph> {
+    stage_within(src, base, writes, STAGE_RETAIN_RECORDS)
+}
+
+fn stage_within(
+    src: &StageSource<'_>,
+    base: &str,
+    writes: impl Fn(&str, &str) -> bool,
+    budget: usize,
+) -> Result<StagedGraph> {
+    let mut files: BTreeMap<String, StagedFile> = BTreeMap::new();
+    let mut retained = Some(BTreeMap::new());
+    let mut kept = 0;
+    src.each_file(|file_id, g| {
+        files.insert(
+            file_id.clone(),
+            StagedFile {
+                digest: g.digest.clone(),
+                edges: g.edges.len(),
+                links: g.links.len(),
+            },
+        );
+        if writes(&file_id, &g.digest) {
+            kept += g.edges.len() + g.links.len();
+            if kept > budget {
+                retained = None;
+            }
+            if let Some(r) = retained.as_mut() {
+                r.insert(file_id, g);
+            }
+        }
+        Ok(())
+    })?;
     let mut overall = Sha256::new();
     overall.update(base.as_bytes());
-    for (id, g) in &mut out {
-        g.edges
-            .sort_by(|a, b| a.relationship_id.cmp(&b.relationship_id));
-        g.links
-            .sort_by(|a, b| a.relationship_id.cmp(&b.relationship_id));
-        let mut h = Sha256::new();
-        h.update(serde_json::to_vec(&g.edges).unwrap_or_default());
-        h.update([0]);
-        h.update(serde_json::to_vec(&g.links).unwrap_or_default());
-        g.digest = hex(h);
+    for (id, f) in &files {
         overall.update(id.as_bytes());
         overall.update([0]);
-        overall.update(g.digest.as_bytes());
+        overall.update(f.digest.as_bytes());
     }
     Ok(StagedGraph {
-        files: out,
+        files,
         digest: hex(overall),
+        retained,
     })
+}
+
+/// Whether a staged file's records equal the visible generation's, so they
+/// are copied forward server-side instead of written.
+fn copies_forward(current: &ServerGraph, file_id: &str, digest: &str) -> bool {
+    current.generation.is_some()
+        && current.file_digests.get(file_id).map(String::as_str) == Some(digest)
 }
 
 fn hex(h: Sha256) -> String {
@@ -586,13 +706,16 @@ impl ServerBackend {
         phase("staging");
         let staging = Instant::now();
         let statements = docmonk_storage::stats::sql_statements();
-        let staged = stage(input.store, input.local_build, input.base_build_id)?;
+        let src = StageSource::load(input.store, input.local_build)?;
+        let staged = stage(&src, input.base_build_id, |id, digest| {
+            !copies_forward(&current, id, digest)
+        })?;
         report.counters.staging_sql_statements =
             docmonk_storage::stats::sql_statements() - statements;
         report.timings.staging_seconds = staging.elapsed().as_secs_f64();
         report.counters.staged_files = staged.files.len();
-        report.counters.staged_edges = staged.files.values().map(|g| g.edges.len()).sum();
-        report.counters.staged_links = staged.files.values().map(|g| g.links.len()).sum();
+        report.counters.staged_edges = staged.files.values().map(|f| f.edges).sum();
+        report.counters.staged_links = staged.files.values().map(|f| f.links).sum();
         let digest = staged.digest.clone();
         if current
             .visible_generation(Some(input.base_build_id))
@@ -619,7 +742,7 @@ impl ServerBackend {
             Ok(())
         })?;
         let outcome = self
-            .write_graph(input, &staged, &current, report)
+            .write_graph(input, &src, &staged, &current, report)
             .and_then(|()| {
                 phase("promoting");
                 let promoting = Instant::now();
@@ -663,13 +786,15 @@ impl ServerBackend {
     fn write_graph(
         &self,
         input: &GraphPublishInput<'_>,
+        src: &StageSource<'_>,
         staged: &StagedGraph,
         current: &ServerGraph,
         report: &mut GraphPublishReport,
     ) -> Result<()> {
-        let (copy, write): (Vec<_>, Vec<_>) = staged.files.iter().partition(|(id, g)| {
-            current.generation.is_some() && current.file_digests.get(*id) == Some(&g.digest)
-        });
+        let (copy, write): (Vec<_>, Vec<_>) = staged
+            .files
+            .iter()
+            .partition(|(id, f)| copies_forward(current, id, &f.digest));
         if let (Some(from), false) = (current.generation.as_deref(), copy.is_empty()) {
             if let Some(f) = input.phase {
                 f("copying");
@@ -696,7 +821,7 @@ impl ServerBackend {
         }
         let writing = Instant::now();
         let mut w = self.build_writer(input.source_id, input.generation);
-        for (_, g) in write {
+        let mut put = |g: &FileGraph, report: &mut GraphPublishReport| -> Result<()> {
             for e in &g.edges {
                 w.edge(e)?;
                 report.edges_written += 1;
@@ -704,6 +829,37 @@ impl ServerBackend {
             for l in &g.links {
                 w.link(l)?;
                 report.links_written += 1;
+            }
+            Ok(())
+        };
+        match &staged.retained {
+            Some(retained) => {
+                for (id, _) in &write {
+                    if let Some(g) = retained.get(*id) {
+                        put(g, report)?;
+                    }
+                }
+            }
+            None => {
+                // Too many changed records to keep: stream them again. The
+                // staging store is this writer's own (held under the
+                // source lock), but a changed digest is still refused
+                // rather than published under the old one.
+                let wanted: BTreeMap<&str, &str> = write
+                    .iter()
+                    .map(|(id, f)| (id.as_str(), f.digest.as_str()))
+                    .collect();
+                src.each_file(|file_id, g| {
+                    let Some(digest) = wanted.get(file_id.as_str()) else {
+                        return Ok(());
+                    };
+                    if *digest != g.digest {
+                        return Err(BackendError::Invalid(format!(
+                            "the staged graph of {file_id} changed during publication"
+                        )));
+                    }
+                    put(&g, report)
+                })?;
             }
         }
         w.finish()?;
@@ -835,6 +991,215 @@ mod tests {
         let missing = ServerGraph::from_state(&state(Value::Null, Some("b1")));
         assert_eq!(missing.state, "pending");
         assert_eq!(missing.visible_generation(Some("b1")), None);
+    }
+
+    /// A staging store: three files (one without edges), edges recorded
+    /// under an unlisted file, a link into a document and a link whose
+    /// document is gone.
+    fn store(dir: &std::path::Path) -> ProjectStore {
+        use docmonk_storage::knowledge::{
+            DocumentRow, FileKnowledge, FileRow, LinkRow, RelationshipRow,
+        };
+        let mut s =
+            ProjectStore::open(&docmonk_storage::StorageLayout::at(dir), "p", "s", 8).unwrap();
+        let v = docmonk_storage::control::IndexVersions {
+            parser_version: "p".into(),
+            chunker_version: "c".into(),
+            converter_version: "v".into(),
+            embedding_model_id: None,
+            embedding_text_version: None,
+        };
+        s.create_build("b", true, &v).unwrap();
+        let file = |id: &str, rel: &str| FileRow {
+            id: id.into(),
+            rel_path: rel.into(),
+            kind: "code".into(),
+            status: "indexed".into(),
+            ..FileRow::default()
+        };
+        let (a, b, d) = (file("fa", "a.py"), file("fb", "b.py"), file("fd", "d.md"));
+        let doc = FileKnowledge {
+            documents: vec![DocumentRow {
+                id: "doc1".into(),
+                file_id: "fd".into(),
+                format: "markdown".into(),
+                title: None,
+                author: None,
+                page_count: None,
+                is_scanned: false,
+                content_hash: None,
+                attachment: None,
+            }],
+            ..FileKnowledge::default()
+        };
+        let none = FileKnowledge::default();
+        s.put_files("b", &[(&a, &none), (&b, &none), (&d, &doc)])
+            .unwrap();
+        let rows: Vec<RelationshipRow> = (0..40)
+            .map(|i| RelationshipRow {
+                id: format!("r{:03}", (i * 13) % 40),
+                file_id: ["fa", "fb", "zz-unlisted"][i % 3].into(),
+                relationship_type: "calls".into(),
+                source_entity_id: format!("e{i}"),
+                target_symbol: Some(format!("t{i}")),
+                resolver: "pending".into(),
+                confidence: "medium".into(),
+                reference_text: (i % 2 == 0).then(|| format!("t{i}")),
+                ..RelationshipRow::default()
+            })
+            .collect();
+        s.put_relationships("b", &rows).unwrap();
+        let link = |id: &str, document: &str| LinkRow {
+            id: id.into(),
+            link_type: "mentioned_in".into(),
+            entity_id: "e1".into(),
+            document_id: document.into(),
+            chunk_id: None,
+            resolver: "linker:exact_identifier".into(),
+            confidence: "high".into(),
+            evidence: Some("x".into()),
+        };
+        s.put_links("b", &[link("l2", "doc1"), link("l1", "gone")])
+            .unwrap();
+        s
+    }
+
+    /// The staging algorithm before the single pass (one relationship
+    /// query per file): the digests every published generation recorded.
+    fn per_file_reference(
+        s: &ProjectStore,
+        build: &str,
+        base: &str,
+    ) -> (BTreeMap<String, String>, String) {
+        let files = s.files(build).unwrap();
+        let paths: HashMap<&str, &str> = files
+            .iter()
+            .map(|f| (f.id.as_str(), f.rel_path.as_str()))
+            .collect();
+        let docs = s.documents(build).unwrap();
+        let doc_file: HashMap<&str, &str> = docs
+            .iter()
+            .map(|d| (d.id.as_str(), d.file_id.as_str()))
+            .collect();
+        let mut out: BTreeMap<String, FileGraph> = BTreeMap::new();
+        for f in &files {
+            for r in s.file_relationships(build, &f.id).unwrap() {
+                out.entry(f.id.clone()).or_default().edges.push(EdgeDoc {
+                    relationship_id: r.id,
+                    file_id: f.id.clone(),
+                    rel_path: f.rel_path.clone(),
+                    relationship_type: r.relationship_type,
+                    source_entity_id: r.source_entity_id,
+                    target_entity_id: r.target_entity_id,
+                    target_symbol: r.target_symbol,
+                    resolver: r.resolver,
+                    confidence: r.confidence,
+                    source_location: r.source_location,
+                    evidence: r.evidence,
+                    reference_text: r.reference_text,
+                });
+            }
+        }
+        for l in s.links(build).unwrap() {
+            let file_id = doc_file
+                .get(l.document_id.as_str())
+                .copied()
+                .unwrap_or_default();
+            out.entry(file_id.to_owned())
+                .or_default()
+                .links
+                .push(LinkDoc {
+                    relationship_id: l.id,
+                    relationship_type: l.link_type,
+                    entity_id: l.entity_id,
+                    document_id: l.document_id,
+                    chunk_id: l.chunk_id,
+                    file_id: file_id.to_owned(),
+                    rel_path: paths.get(file_id).copied().unwrap_or_default().to_owned(),
+                    resolver: l.resolver,
+                    confidence: l.confidence,
+                    evidence: l.evidence,
+                });
+        }
+        let mut overall = Sha256::new();
+        overall.update(base.as_bytes());
+        let mut digests = BTreeMap::new();
+        for (id, g) in &mut out {
+            g.seal();
+            overall.update(id.as_bytes());
+            overall.update([0]);
+            overall.update(g.digest.as_bytes());
+            digests.insert(id.clone(), g.digest.clone());
+        }
+        (digests, hex(overall))
+    }
+
+    fn records(g: &BTreeMap<String, FileGraph>) -> Vec<String> {
+        g.values()
+            .flat_map(|f| {
+                f.edges
+                    .iter()
+                    .map(|e| serde_json::to_string(e).unwrap())
+                    .chain(f.links.iter().map(|l| serde_json::to_string(l).unwrap()))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn single_pass_staging_matches_the_per_file_digests_in_four_statements() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = store(dir.path());
+        let (want, want_overall) = per_file_reference(&s, "b", "base-1");
+        let before = docmonk_storage::stats::sql_statements();
+        let src = StageSource::load(&s, "b").unwrap();
+        let staged = stage(&src, "base-1", |_, _| true).unwrap();
+        assert_eq!(
+            docmonk_storage::stats::sql_statements() - before,
+            4,
+            "files, documents, links and one relationship pass, however many files"
+        );
+        let got: BTreeMap<String, String> = staged
+            .files
+            .iter()
+            .map(|(id, f)| (id.clone(), f.digest.clone()))
+            .collect();
+        assert_eq!(got, want);
+        assert_eq!(staged.digest, want_overall);
+        assert!(
+            !got.contains_key("zz-unlisted"),
+            "unlisted files are not published"
+        );
+        assert!(
+            got.contains_key("fd") && got.contains_key(""),
+            "links-only files are staged"
+        );
+        let edges: usize = staged.files.values().map(|f| f.edges).sum();
+        assert_eq!(edges, 27, "{:?}", staged.files.keys());
+    }
+
+    #[test]
+    fn a_write_set_over_the_budget_is_streamed_again_with_the_same_records() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = store(dir.path());
+        let src = StageSource::load(&s, "b").unwrap();
+        let kept = stage_within(&src, "base", |_, _| true, usize::MAX).unwrap();
+        let retained = kept.retained.expect("fits the budget");
+        let only_fb = stage_within(&src, "base", |id, _| id == "fb", usize::MAX).unwrap();
+        assert_eq!(
+            only_fb.retained.unwrap().keys().collect::<Vec<_>>(),
+            ["fb"],
+            "only files to write are kept"
+        );
+        let over = stage_within(&src, "base", |_, _| true, 5).unwrap();
+        assert!(over.retained.is_none());
+        assert_eq!(over.digest, kept.digest);
+        let mut streamed = BTreeMap::new();
+        src.each_file(|id, g| {
+            streamed.insert(id, g);
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(records(&streamed), records(&retained));
     }
 
     #[test]
