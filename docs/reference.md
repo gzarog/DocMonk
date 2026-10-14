@@ -119,6 +119,21 @@ Cross-domain linking (code identifiers mentioned in documents) uses a word index
 - **Last Scan** is the last completed filesystem scan; a later failure shows up as **Last Error**.
 - An unreachable source is marked **OFFLINE** and its knowledge is never deleted.
 
+### Where a relationship build spends its time
+
+`docmonk relationships build --json` (and the `relationships` object of `docmonk index --json`) reports per source what the graph stage did and how long each phase took, alongside the existing fields:
+
+- `timings`: `state_load`, `clear`, `derivation` (wall clock), `read_hash` and `parse` (summed over parser threads), `cache_load`, `sqlite_write`, `symbol_manifest`, `resolution`, `linking` and `commit` seconds. A skip or rebind leaves them at zero.
+- `counters`: files of the build and files derived, bytes read, fact-cache hits/misses, resolution work (`references_examined`, `candidate_queries` statements, `candidate_rows`, `changed`) and the SQL statements the build issued.
+- `linking`: entities, units and routes loaded (`narrow` when only the touched files' were), candidates, and load/index/match/write/manual seconds with the match time per resolver.
+- Server mode, `server_publish`: `timings` (`staging`, `copy`, `bulk`, `refresh`, `promotion` seconds) and `counters` (staging SQL statements, HTTP requests and bytes, copy-forward and bulk requests, staged files/edges/links). `rebound: true` with no records written means the visible generation was pointed at the new base: either its inputs were identical, or the change altered no graph record.
+
+The run summary adds the same phase totals over all sources. While a graph is building, `docmonk status` shows the pass as `relationships: <phase>` (`deriving`, `resolving`, `linking`, `committing`; server: `staging`, `copying`, `writing`, `promoting`) with the files derived so far: a pass at `40/40 files` that is `resolving` has not finished.
+
+**Troubleshooting a long `building` or `publishing` graph.** Look at the phase first. `deriving` scales with the changed code files (each is read, hashed and parsed; `indexing.graph_fact_cache` removes the parse). `resolving` scales with the files that reference a changed symbol: renaming a method called by bare name from thousands of files re-resolves all of them (in bounded batches, so it stays a few seconds). `linking` after a document edit matches that document against every entity. On a server, `copying` asks the cluster to add the new generation to every unchanged record (`_update_by_query`), so its cost grows with the graph's size, not the change; `writing` grows with the changed files. A pass whose heartbeat stays fresh is working, whatever the phase; `stalled` means it stopped heartbeating.
+
+`docmonk-graph-bench` (in `docmonk-service`) reproduces these measurements on a generated C# and Markdown corpus of any size, with no proprietary source: see `benchmarks/relationships/README.md`.
+
 ## Status and observability
 
 `docmonk status` answers: is indexing running, progressing, stalled or failing, where, and what failed. It is built by one crate (`docmonk-status`, ADR 0034); the CLI, the MCP `docmonk_status` tool and the Admin UI (`/`, `/api/status`, `/ready`) all show the same report.
