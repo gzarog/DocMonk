@@ -77,6 +77,8 @@ fn hnsw_and_exact_rankings_are_as_expected() {
         assert_matches(g, &hits, q);
     }
     std::fs::remove_file(ann::index_path(&dir)).unwrap();
+    // A fresh process (nothing cached) without the file searches exactly.
+    ann::clear_cache();
     for g in golden["results"].as_array().unwrap() {
         let q = g["query"].as_str().unwrap();
         let (engine, hits) = run(&fx, &emb, q, 10);
@@ -96,9 +98,11 @@ fn corrupt_or_stale_indexes_fall_back_and_are_rebuilt() {
     drop(s);
     let (_, baseline) = run(&fx, &emb, "cancel an order", 5);
 
-    // Crash mid-write leaves a truncated file: never trusted.
+    // Crash mid-write leaves a truncated file: never trusted (by a process
+    // that has not cached a valid copy yet).
     let bytes = std::fs::read(&path).unwrap();
     std::fs::write(&path, &bytes[..bytes.len() / 2]).unwrap();
+    ann::clear_cache();
     let (engine, hits) = run(&fx, &emb, "cancel an order", 5);
     assert_eq!(engine, Engine::Exact);
     assert_eq!(hits, baseline);
@@ -108,15 +112,20 @@ fn corrupt_or_stale_indexes_fall_back_and_are_rebuilt() {
     assert_eq!(engine, Engine::Hnsw);
     assert_eq!(hits, baseline);
 
-    // Vectors changed behind the index (crash between write and sync):
-    // the content digest no longer matches, so search is exact.
-    let (s, b) = fx.store();
-    s.connection()
-        .execute(
-            "DELETE FROM embeddings WHERE build_id = ?1 AND subject_type = 'chunk'",
-            [&b],
-        )
-        .unwrap();
+    // Vectors changed behind the index (crash between a vector write and
+    // the sync): the write replaced the build's revision token, so the
+    // cached and the persisted index are both stale and search is exact.
+    let (mut s, b) = fx.store();
+    let docs: Vec<String> = s
+        .files(&b)
+        .unwrap()
+        .into_iter()
+        .filter(|f| f.kind == "document")
+        .map(|f| f.id)
+        .collect();
+    for f in &docs {
+        s.remove_file(&b, f).unwrap();
+    }
     let (engine, hits) = run(&fx, &emb, "cancel an order", 5);
     assert_eq!(engine, Engine::Exact);
     assert!(hits.iter().all(|h| h.kind == "entity"));
@@ -155,6 +164,59 @@ fn deleted_files_leave_the_index_and_model_changes_rebuild_it() {
     assert_eq!(stats.live, s.embeddings(&b).unwrap().len());
     let again = ann::sync(&s, &dir, &b, &spec.fingerprint(), spec.dims).unwrap();
     assert!(!again.rebuilt && again.added == 0 && again.removed == 0);
+}
+
+#[test]
+fn warm_queries_reuse_the_cached_index_until_vectors_change() {
+    let Some(models) = models_root() else { return };
+    let mut fx = fixture();
+    fx.index(&models);
+    let emb = embedder(&models);
+    let (_, first) = run(&fx, &emb, "cancel an order", 5);
+    let before = docmonk_ml::counters::snapshot();
+    for _ in 0..3 {
+        let (engine, hits) = run(&fx, &emb, "cancel an order", 5);
+        assert_eq!(engine, Engine::Hnsw);
+        assert_eq!(hits, first);
+    }
+    let after = docmonk_ml::counters::snapshot().since(&before);
+    assert!(after.ann_cache_hits >= 3, "{after:?}");
+
+    // Any vector write replaces the token: the cached copy is not used.
+    let (mut s, b) = fx.store();
+    let rows: Vec<docmonk_storage::vectors::EmbeddingRow> = s
+        .embeddings(&b)
+        .unwrap()
+        .into_iter()
+        .take(1)
+        .map(|e| docmonk_storage::vectors::EmbeddingRow {
+            subject_type: if e.subject_type == "entity" {
+                "entity"
+            } else {
+                "chunk"
+            },
+            subject_id: e.subject_id,
+            file_id: e.file_id,
+            text_hash: "changed".into(),
+            text_version: "x".into(),
+            vector: e.vector,
+        })
+        .collect();
+    let fp = emb.fingerprint().to_owned();
+    s.put_embeddings(&b, &fp, &rows).unwrap();
+    drop(s);
+    let (engine, _) = run(&fx, &emb, "cancel an order", 5);
+    assert_eq!(engine, Engine::Exact, "stale until the next sync");
+    let (s, b) = fx.store();
+    let st = ann::sync(&s, &s.project_dir().unwrap(), &b, &fp, emb.spec().dims).unwrap();
+    assert!(
+        st.appended && st.written_bytes < 1 << 20,
+        "an incremental sync appends to the delta log: {st:?}"
+    );
+    drop(s);
+    let (engine, hits) = run(&fx, &emb, "cancel an order", 5);
+    assert_eq!(engine, Engine::Hnsw);
+    assert_eq!(hits, first);
 }
 
 #[test]

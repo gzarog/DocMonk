@@ -116,7 +116,7 @@ Every `docmonk index` (and every background daemon pass) runs in **two stages**:
 |---|---|
 | ⚡ **Search first** | A source is searchable as soon as stage 1 publishes it. Relationship work never delays or rolls back the index. |
 | 🧱 **A barrier** | Stage 2 starts only after every selected source finished stage 1. |
-| 🎯 **Exact snapshots** | Each relationship graph belongs to one published index. A graph built from an older index is never shown as current. A file edited mid-run marks the graph `stale` instead of mixing versions. |
+| 🎯 **Exact snapshots** | Each relationship graph belongs to one published index. While a newer graph is being built, the last committed graph is still served and flagged `stale` (set `graph.require_current: true` to hide it instead). A file edited mid-run marks the graph `stale` instead of mixing versions. |
 | ♻️ **Incremental** | Only changed files are re-parsed, and only files that reference a changed symbol are re-resolved. In server mode unchanged edges and links are copied forward on the cluster, not rewritten. |
 | 🩹 **Retry cheaply** | `docmonk relationships build [--source ID]` rebuilds graphs without re-reading or re-converting any content. |
 | 🔌 **Optional** | `indexing.relationships_enabled: false` skips stage 2 and hides graphs (callers, callees, impact, doc↔code links); search still works, nothing is deleted, and toggling it never forces a reindex. |
@@ -317,6 +317,9 @@ Settings live in `~/.docmonk/config.yaml` (Windows: `%LOCALAPPDATA%\DocMonk`); u
 | `indexing.relationships_enabled` | `true` | Build relationship graphs (code edges, doc↔code links) after indexing |
 | `indexing.relationship_dependencies` | `[]` | Explicit cross-source dependencies, `"<consumer> -> <producer>"` (C# project references are discovered) |
 | `indexing.lock_timeout_seconds` | `30` | Max wait when another process is indexing |
+| `graph.require_current` | `false` | `true`: graph queries return nothing until the graph matches the published index (instead of serving the last graph, flagged `stale`) |
+| `search.ann.ef_search` | `400` | Local vector-search beam width (higher = better recall, slightly slower) |
+| `search.ann.num_candidates` | `0` | Server kNN candidates per query (`0` = automatic) |
 | `indexing.status_stall_threshold_seconds` | `120` | When `status` reports "stalled" |
 | `ai.provider` / `ai.model` | *(none)* | Optional AI answers for `docmonk ask` |
 | `privacy.external_ai_allowed` | `false` | Required for cloud AI providers |
@@ -332,6 +335,28 @@ Settings live in `~/.docmonk/config.yaml` (Windows: `%LOCALAPPDATA%\DocMonk`); u
 Changing `pdf_mode` reprocesses PDFs on the next `docmonk index`.
 
 </details>
+
+---
+
+## 🆕 Upgrading to this release
+
+This release changes the index layout (better identifier and phrase
+search, faster graph writes), so **existing indexes must be rebuilt once**:
+
+- **Local mode:** DocMonk refuses a project store with the old schema and
+  says which file it is. Remove it (or reset the DocMonk home) and run
+  `docmonk index`.
+- **Server mode:** `docmonk init` refuses indexes with the old mappings.
+  Initialize a new `storage.server.index_prefix` (or delete the old
+  indexes and run `init` again), then run `docmonk index`.
+
+New in this release: warm queries reuse the embedder, the reranker and the
+vector index, instead of reloading them for every query. Identifier,
+phrase and path search ranks better. The last relationship graph stays
+available while a new one builds. A full index that was interrupted
+resumes where it stopped. Moved or renamed folders are picked up by the
+watcher. Long server operations are polled instead of waiting on one
+request. See [docs/reference.md](docs/reference.md) for details.
 
 ---
 

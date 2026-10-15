@@ -1,6 +1,6 @@
 //! Connection factory and transactions. Pragmas:
 //! WAL, foreign keys on, `synchronous=NORMAL`, 5 s busy timeout, in-memory
-//! temp store and a configurable page cache (MB).
+//! temp store, a 64 MB `journal_size_limit` and a configurable page cache (MB).
 
 use std::path::Path;
 use std::time::Duration;
@@ -11,6 +11,8 @@ use crate::error::{Result, StorageError};
 
 pub const DEFAULT_CACHE_SIZE_MB: i64 = 64;
 pub const BUSY_TIMEOUT: Duration = Duration::from_millis(5000);
+/// Bytes a checkpointed WAL is truncated back to (`journal_size_limit`).
+pub const JOURNAL_SIZE_LIMIT: i64 = 64 * 1024 * 1024;
 
 /// Opens (creating if needed) a read-write database.
 pub fn open(path: &Path, cache_size_mb: i64) -> Result<Connection> {
@@ -28,7 +30,9 @@ pub fn open(path: &Path, cache_size_mb: i64) -> Result<Connection> {
          PRAGMA foreign_keys = ON;
          PRAGMA synchronous = NORMAL;
          PRAGMA temp_store = MEMORY;
+         PRAGMA journal_size_limit = {};
          PRAGMA cache_size = -{};",
+        JOURNAL_SIZE_LIMIT,
         cache_size_mb.max(1) * 1024
     ))
     .map_err(StorageError::sqlite(ctx))?;

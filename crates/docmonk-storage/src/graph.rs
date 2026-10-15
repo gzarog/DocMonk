@@ -37,21 +37,21 @@ use crate::knowledge::{
     CROSS_FILE_RESOLVERS, ENTITY_COLUMNS, RELATIONSHIP_COLUMNS,
 };
 
+/// Columns of the TEMP staging table of derived relationship rows.
+const STAGE_COLUMNS: &str = "id TEXT PRIMARY KEY, file_id TEXT NOT NULL,
+    relationship_type TEXT NOT NULL, source_entity_id TEXT NOT NULL, target_entity_id TEXT,
+    target_symbol TEXT, resolver TEXT NOT NULL, confidence TEXT NOT NULL, source_location TEXT,
+    evidence TEXT, reference_text TEXT";
+
 /// Names or files per batched lookup statement.
 pub const LOOKUP_BATCH: usize = 500;
 
 /// `metadata` key holding the JSON [`GraphState`] (small: status reads it).
 pub const GRAPH_STATE_KEY: &str = "graph_state";
-/// `metadata` key holding the graph's per-file dependency keys (JSON
-/// `file_id -> key`), read only by the graph stage.
-pub const GRAPH_FILES_KEY: &str = "graph_files";
-/// `metadata` key holding the graph's per-file symbol dependencies (JSON
-/// `file_id -> FileSymbols`), read only by the graph stage.
-pub const GRAPH_SYMBOLS_KEY: &str = "graph_symbols";
 
 /// Version of the dependency manifest layout ([`GraphState::files`],
 /// [`GraphState::symbols`]). A manifest of another version is not reused.
-pub const MANIFEST_VERSION: u32 = 2;
+pub const MANIFEST_VERSION: u32 = 3;
 
 /// A candidate's position in cross-file resolution order within its file:
 /// `(qualified name or "", start line, entity id)`.
@@ -247,13 +247,15 @@ pub struct GraphState {
     #[serde(skip)]
     pub manifest_error: Option<&'static str>,
     /// Dependency metadata: `file_id -> semantic file key` ([`GraphFile::key`])
-    /// each file's graph rows were derived from. Stored under [`GRAPH_FILES_KEY`], loaded only by
+    /// each file's graph rows were derived from. Stored in the
+    /// `graph_file_keys` table, loaded only by
     /// [`ProjectStore::graph_state_with_files`]. Empty means "recompute
     /// everything".
     #[serde(skip)]
     pub files: BTreeMap<String, String>,
     /// Dependency metadata: per-file symbol definitions and references
-    /// (stored under [`GRAPH_SYMBOLS_KEY`], loaded with `files`). Empty
+    /// (stored in the `graph_symbols` and `graph_symbol_refs` tables,
+    /// loaded with `files`). Empty
     /// means "re-resolve every reference".
     #[serde(skip)]
     pub symbols: BTreeMap<String, FileSymbols>,
@@ -353,6 +355,21 @@ pub fn graph_input_digest<'a>(
     h.finalize().iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// Whether a reader that accepts the last committed graph sees one for
+/// `build_id`: a graph was committed (generation > 0) for that base build
+/// and the graph is not disabled.
+fn serves_last_graph(state: &GraphState, build_id: &str) -> bool {
+    // Rows adopted from the server are unvalidated until the graph stage
+    // re-resolves them (`resolve_all`): never served before that.
+    state.generation > 0
+        && !state.resolve_all
+        && state.base_build_id.as_deref() == Some(build_id)
+        && !matches!(
+            state.state,
+            GraphLifecycle::Disabled | GraphLifecycle::Pending
+        )
+}
+
 fn invalid(e: impl std::fmt::Display) -> StorageError {
     StorageError::Invalid(e.to_string())
 }
@@ -375,41 +392,65 @@ impl ProjectStore {
             .unwrap_or_default())
     }
 
-    /// [`Self::graph_state`] with its per-file dependency keys.
+    /// [`Self::graph_state`] with its per-file dependency keys
+    /// ([`GraphState::files`]). Symbols are not loaded: read the ones a
+    /// build needs with [`Self::graph_symbols`] and
+    /// [`Self::graph_dependents`].
     pub fn graph_state_with_files(&self) -> Result<GraphState> {
         let mut state = self.graph_state()?;
-        let raw: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT value FROM metadata WHERE key = ?1",
-                [GRAPH_FILES_KEY],
-                |r| r.get(0),
-            )
-            .optional()
-            .map_err(StorageError::sqlite("read graph files"))?;
-        match raw.map(|r| serde_json::from_str(&r)) {
-            Some(Ok(files)) => state.files = files,
-            Some(Err(_)) => state.manifest_error = Some("manifest_corrupt"),
-            None => {}
-        }
-        let raw: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT value FROM metadata WHERE key = ?1",
-                [GRAPH_SYMBOLS_KEY],
-                |r| r.get(0),
-            )
-            .optional()
-            .map_err(StorageError::sqlite("read graph symbols"))?;
-        match raw.map(|r| serde_json::from_str(&r)) {
-            Some(Ok(symbols)) => state.symbols = symbols,
-            Some(Err(_)) => state.manifest_error = Some("manifest_corrupt"),
-            None => {}
-        }
-        if state.manifest_error.is_some() {
-            state.metadata_complete = false;
-        }
+        state.files = self
+            .query_rows(
+                "read graph files",
+                "SELECT file_id, key FROM graph_file_keys ORDER BY file_id",
+                &[],
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+            )?
+            .into_iter()
+            .collect();
         Ok(state)
+    }
+
+    /// The recorded [`FileSymbols`] of `file_ids` (files without a record
+    /// are absent; a corrupt record is an error).
+    pub fn graph_symbols(&self, file_ids: &[String]) -> Result<BTreeMap<String, FileSymbols>> {
+        let mut out = BTreeMap::new();
+        for batch in file_ids.chunks(LOOKUP_BATCH) {
+            let marks = (1..=batch.len())
+                .map(|i| format!("?{i}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            let args: Vec<&dyn rusqlite::ToSql> =
+                batch.iter().map(|f| f as &dyn rusqlite::ToSql).collect();
+            for (f, json) in self.query_rows(
+                "read graph symbols",
+                &format!("SELECT file_id, symbols FROM graph_symbols WHERE file_id IN ({marks})"),
+                &args,
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+            )? {
+                out.insert(f, serde_json::from_str(&json).map_err(invalid)?);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Every recorded file with a reference through one of `keys`.
+    pub fn graph_dependents(&self, keys: &[&str]) -> Result<std::collections::BTreeSet<String>> {
+        let mut out = std::collections::BTreeSet::new();
+        for batch in keys.chunks(LOOKUP_BATCH) {
+            let marks = (1..=batch.len())
+                .map(|i| format!("?{i}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            let args: Vec<&dyn rusqlite::ToSql> =
+                batch.iter().map(|k| k as &dyn rusqlite::ToSql).collect();
+            out.extend(self.query_rows(
+                "graph dependents",
+                &format!("SELECT DISTINCT file_id FROM graph_symbol_refs WHERE key IN ({marks})"),
+                &args,
+                |r| r.get::<_, String>(0),
+            )?);
+        }
+        Ok(out)
     }
 
     fn put_metadata(&mut self, key: &str, value: &str) -> Result<()> {
@@ -434,13 +475,77 @@ impl ProjectStore {
         self.put_metadata(GRAPH_STATE_KEY, &value)
     }
 
-    /// Stores the state together with its per-file dependency keys (a
-    /// promotion; inside the graph transaction).
+    /// Stores the state and replaces the whole dependency manifest with its
+    /// `files` and `symbols` (a full promotion; inside the graph
+    /// transaction).
     pub fn put_graph_state_with_files(&mut self, state: &GraphState) -> Result<()> {
-        let files = serde_json::to_string(&state.files).map_err(invalid)?;
-        self.put_metadata(GRAPH_FILES_KEY, &files)?;
-        let symbols = serde_json::to_string(&state.symbols).map_err(invalid)?;
-        self.put_metadata(GRAPH_SYMBOLS_KEY, &symbols)?;
+        write_tx(&mut self.conn, |tx| {
+            for sql in [
+                "DELETE FROM graph_file_keys",
+                "DELETE FROM graph_symbols",
+                "DELETE FROM graph_symbol_refs",
+            ] {
+                tx.execute(sql, [])
+                    .map_err(StorageError::sqlite("write graph manifest"))?;
+            }
+            Ok(())
+        })?;
+        let removed: Vec<String> = Vec::new();
+        self.put_graph_state_delta(state, &state.files, &state.symbols, &removed)
+    }
+
+    /// Stores the state and updates the dependency manifest for the given
+    /// files only (an incremental promotion): `keys` and `symbols` are
+    /// upserted (a file's references replaced), `removed` files dropped.
+    /// The cost is proportional to the change, not to the source.
+    pub fn put_graph_state_delta(
+        &mut self,
+        state: &GraphState,
+        keys: &BTreeMap<String, String>,
+        symbols: &BTreeMap<String, FileSymbols>,
+        removed: &[String],
+    ) -> Result<()> {
+        write_tx(&mut self.conn, |tx| {
+            for f in removed {
+                for sql in [
+                    "DELETE FROM graph_file_keys WHERE file_id = ?1",
+                    "DELETE FROM graph_symbols WHERE file_id = ?1",
+                    "DELETE FROM graph_symbol_refs WHERE file_id = ?1",
+                ] {
+                    cached(tx, sql, [f]).map_err(StorageError::sqlite("write graph manifest"))?;
+                }
+            }
+            for (f, k) in keys {
+                cached(
+                    tx,
+                    "INSERT INTO graph_file_keys (file_id, key) VALUES (?1, ?2)
+                     ON CONFLICT(file_id) DO UPDATE SET key = excluded.key",
+                    params![f, k],
+                )
+                .map_err(StorageError::sqlite("write graph manifest"))?;
+            }
+            for (f, s) in symbols {
+                let json = serde_json::to_string(s).map_err(invalid)?;
+                cached(
+                    tx,
+                    "INSERT INTO graph_symbols (file_id, symbols) VALUES (?1, ?2)
+                     ON CONFLICT(file_id) DO UPDATE SET symbols = excluded.symbols",
+                    params![f, json],
+                )
+                .map_err(StorageError::sqlite("write graph manifest"))?;
+                cached(tx, "DELETE FROM graph_symbol_refs WHERE file_id = ?1", [f])
+                    .map_err(StorageError::sqlite("write graph manifest"))?;
+                for k in &s.refs {
+                    cached(
+                        tx,
+                        "INSERT OR IGNORE INTO graph_symbol_refs (key, file_id) VALUES (?1, ?2)",
+                        params![k, f],
+                    )
+                    .map_err(StorageError::sqlite("write graph manifest"))?;
+                }
+            }
+            Ok(())
+        })?;
         self.put_graph_state(state)
     }
 
@@ -477,16 +582,128 @@ impl ProjectStore {
         Ok(finished.map(|f| format!("{build_id}@{}", f.unwrap_or_default())))
     }
 
-    /// Whether graph rows of `build_id` may be returned to readers: the
-    /// graph is `ready` and was derived from the build's current
-    /// generation.
+    /// Whether graph rows of `build_id` may be returned to readers.
+    ///
+    /// Strict ([`ProjectStore::require_current_graph`]): the graph is
+    /// `ready` and was derived from the build's current generation.
+    /// Otherwise (the default) the last committed graph of the same base
+    /// build is served while the next one is derived, after an in-place
+    /// update of the base or a failed or stale graph build: its rows are
+    /// those of the previous generation and readers report them as stale
+    /// ([`ProjectStore::graph_freshness`]). A disabled or never-built graph
+    /// is never visible.
     pub fn graph_visible(&self, build_id: &str) -> Result<bool> {
         let state = self.graph_state()?;
-        if state.state != GraphLifecycle::Ready {
-            return Ok(false);
+        let current = state.state == GraphLifecycle::Ready
+            && state.base_generation.is_some()
+            && state.base_generation == self.base_generation(build_id)?;
+        Ok(current || (!self.graph_require_current && serves_last_graph(&state, build_id)))
+    }
+
+    /// What graph readers of `build_id` get, and how current it is.
+    pub fn graph_freshness(&self, build_id: &str) -> Result<crate::read::GraphFreshness> {
+        let status = self.graph_status(Some(build_id))?;
+        let visible = self.graph_visible(build_id)?;
+        Ok(crate::read::GraphFreshness {
+            state: status.state.as_str().to_owned(),
+            generation: (status.generation > 0).then(|| status.generation.to_string()),
+            visible,
+            stale: visible && status.state != GraphLifecycle::Ready,
+        })
+    }
+
+    /// Creates (empties) the connection-local staging table for derived
+    /// relationship rows. Writing it never takes the knowledge database's
+    /// write lock (TEMP tables live in the connection's own database).
+    pub fn stage_graph_rows_begin(&mut self) -> Result<()> {
+        self.conn
+            .execute_batch(&format!(
+                "CREATE TEMP TABLE IF NOT EXISTS graph_stage_rows ({STAGE_COLUMNS});
+                 DELETE FROM temp.graph_stage_rows;"
+            ))
+            .map_err(StorageError::sqlite("stage graph rows"))
+    }
+
+    /// Appends derived rows to the staging table in a deferred
+    /// transaction (only the TEMP database is written).
+    pub fn stage_graph_rows(&mut self, rows: &[RelationshipRow]) -> Result<()> {
+        let tx = self
+            .conn
+            .transaction()
+            .map_err(StorageError::sqlite("stage graph rows"))?;
+        {
+            let mut stmt = tx
+                .prepare_cached(
+                    "INSERT OR REPLACE INTO temp.graph_stage_rows (id, file_id, relationship_type,
+                        source_entity_id, target_entity_id, target_symbol, resolver, confidence,
+                        source_location, evidence, reference_text)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                )
+                .map_err(StorageError::sqlite("stage graph rows"))?;
+            for r in rows {
+                stmt.execute(params![
+                    r.id,
+                    r.file_id,
+                    r.relationship_type,
+                    r.source_entity_id,
+                    r.target_entity_id,
+                    r.target_symbol,
+                    r.resolver,
+                    r.confidence,
+                    r.source_location,
+                    r.evidence,
+                    r.reference_text
+                ])
+                .map_err(StorageError::sqlite("stage graph rows"))?;
+            }
         }
-        Ok(state.base_generation.is_some()
-            && state.base_generation == self.base_generation(build_id)?)
+        tx.commit()
+            .map_err(StorageError::sqlite("stage graph rows"))
+    }
+
+    /// Copies every staged row into `build_id`'s relationships (inside the
+    /// caller's session).
+    pub fn publish_staged_graph_rows(&mut self, build_id: &str) -> Result<usize> {
+        write_tx(&mut self.conn, |tx| {
+            cached(
+                tx,
+                "INSERT OR REPLACE INTO relationships (id, build_id, file_id, relationship_type,
+                    source_entity_id, target_entity_id, target_symbol, resolver, confidence,
+                    source_location, evidence, reference_text)
+                 SELECT id, ?1, file_id, relationship_type, source_entity_id, target_entity_id,
+                    target_symbol, resolver, confidence, source_location, evidence, reference_text
+                 FROM temp.graph_stage_rows ORDER BY id",
+                [build_id],
+            )
+            .map_err(StorageError::sqlite("publish staged graph rows"))
+        })
+    }
+
+    /// Drops the staging table.
+    pub fn stage_graph_rows_end(&mut self) -> Result<()> {
+        self.conn
+            .execute_batch("DROP TABLE IF EXISTS temp.graph_stage_rows")
+            .map_err(StorageError::sqlite("stage graph rows"))
+    }
+
+    /// Deletes graph rows left without their base rows by in-place
+    /// updates (phase 1 keeps a changed file's graph rows so the last
+    /// graph stays readable): relationships of files no longer in the
+    /// build, and links whose entity or document is gone.
+    pub fn clear_orphaned_graph(&mut self, build_id: &str) -> Result<()> {
+        write_tx(&mut self.conn, |tx| {
+            for sql in [
+                "DELETE FROM relationships WHERE build_id = ?1
+                   AND file_id NOT IN (SELECT id FROM files WHERE build_id = ?1)",
+                "DELETE FROM cross_links WHERE build_id = ?1
+                   AND (entity_id NOT IN (SELECT id FROM entities WHERE build_id = ?1)
+                     OR document_id NOT IN (SELECT id FROM documents WHERE build_id = ?1))",
+            ] {
+                cached(tx, sql, [build_id])
+                    .map_err(StorageError::sqlite("clear orphaned graph"))?;
+            }
+            Ok(())
+        })
     }
 
     /// The effective graph status against `build_id` (the active base).
@@ -1011,21 +1228,47 @@ mod tests {
     }
 
     #[test]
-    fn a_corrupt_manifest_is_reported_not_mistaken_for_an_empty_one() {
+    fn the_manifest_is_updated_per_file() {
         let d = tempfile::tempdir().unwrap();
         let mut s = ProjectStore::open(&crate::StorageLayout::at(d.path()), "p", "s", 8).unwrap();
-        let ok = GraphState {
+        let sym = |r: &str| FileSymbols {
+            refs: vec![r.to_owned()],
+            ..FileSymbols::default()
+        };
+        let full = GraphState {
             manifest_version: MANIFEST_VERSION,
             metadata_complete: true,
+            files: [("a".into(), "ka".into()), ("b".into(), "kb".into())].into(),
+            symbols: [("a".into(), sym("n:x")), ("b".into(), sym("n:y"))].into(),
             ..GraphState::default()
         };
-        s.put_graph_state_with_files(&ok).unwrap();
+        s.put_graph_state_with_files(&full).unwrap();
         let read = s.graph_state_with_files().unwrap();
-        assert!(read.manifest_usable(), "a valid empty manifest is usable");
-        s.put_metadata(GRAPH_SYMBOLS_KEY, "{not json").unwrap();
+        assert!(read.manifest_usable());
+        assert_eq!(read.files, full.files);
+        assert_eq!(
+            s.graph_dependents(&["n:x"]).unwrap(),
+            ["a".to_owned()].into()
+        );
+        // b now references x too, a is removed, c is added.
+        s.put_graph_state_delta(
+            &full,
+            &[("b".into(), "kb2".into()), ("c".into(), "kc".into())].into(),
+            &[("b".into(), sym("n:x"))].into(),
+            &["a".into()],
+        )
+        .unwrap();
         let read = s.graph_state_with_files().unwrap();
-        assert_eq!(read.manifest_error, Some("manifest_corrupt"));
-        assert!(!read.manifest_usable());
+        assert_eq!(
+            read.files,
+            [("b".into(), "kb2".into()), ("c".into(), "kc".into())].into()
+        );
+        assert_eq!(
+            s.graph_dependents(&["n:x"]).unwrap(),
+            ["b".to_owned()].into()
+        );
+        assert!(s.graph_dependents(&["n:y"]).unwrap().is_empty());
+        assert_eq!(s.graph_symbols(&["b".into(), "a".into()]).unwrap().len(), 1);
     }
 
     #[test]

@@ -11,6 +11,14 @@
 //! applies them to SQLite in one short transaction per file. Processors
 //! never run inside a transaction. A panicking processor fails only its
 //! file. A failing source never stops later sources ([`index_all`]).
+//!
+//! A full build commits in segments ([`Options::segment_files`] files or
+//! [`SEGMENT_BYTES`]) while it stays invisible, releasing the write lock
+//! and checkpointing the WAL between segments. A run that dies part-way
+//! resumes it: files already committed to the pending build with an
+//! unchanged stat are not processed again. Full-build finalizers (model
+//! inference) run after the last segment, with no transaction open.
+//! Incremental passes keep a single transaction, so they stay atomic.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
@@ -29,7 +37,7 @@ use docmonk_storage::knowledge::{FileKnowledge, FileRow, ProjectStore};
 use docmonk_storage::StorageLayout;
 use serde::Serialize;
 
-use crate::diff::{diff, Change, Decision, DiffCounts};
+use crate::diff::{diff, hash_candidates, Change, Decision, DiffCounts};
 use crate::fingerprint::hash_file;
 use crate::ignore::IgnoreMatcher;
 use crate::lock::RunLock;
@@ -98,9 +106,14 @@ pub trait BuildFinalizer: Send + Sync {
     /// Runs on a warm pass (nothing to rebuild) against the active build,
     /// so derived state that is missing without a file change (for
     /// example vectors lost in a crash, or a model installed later) can
-    /// be repaired. Default: nothing.
-    fn on_warm_pass(&self, _store: &mut ProjectStore, _build_id: &str) -> Result<(), ProcessError> {
-        Ok(())
+    /// be repaired. Its report is summed into the pass result like
+    /// [`finalize`](Self::finalize)'s. Default: nothing.
+    fn on_warm_pass(
+        &self,
+        _store: &mut ProjectStore,
+        _build_id: &str,
+    ) -> Result<FinalizeReport, ProcessError> {
+        Ok(FinalizeReport::default())
     }
 }
 
@@ -252,6 +265,10 @@ pub struct SourceResult {
     pub pipeline: PipelineStats,
     /// A build an earlier run left unpublished, discarded by this pass.
     pub recovered_build: Option<String>,
+    /// An interrupted full build this pass resumed instead of restarting.
+    pub resumed_build: Option<String>,
+    /// Segments a full build committed before its last one.
+    pub segments: usize,
     /// Server mode: what the publication to the server did (copy-forward
     /// and written record counts, timings).
     pub server_publish: Option<serde_json::Value>,
@@ -266,7 +283,23 @@ pub struct Options {
     pub lock_timeout: Duration,
     /// Fault injection forwarded to the scanner (tests/drills only).
     pub inject_unreadable: Vec<PathBuf>,
+    /// Files a full build commits per segment.
+    pub segment_files: usize,
+    /// Fault injection (tests/drills only): after this many files are
+    /// written the pass stops as if the process were killed: no cleanup,
+    /// the open segment is lost and the pending build claim stays.
+    pub inject_crash_after_files: Option<usize>,
 }
+
+/// Default files per full-build segment.
+/// Small enough that a crash loses little work (a resumed 8k-file build
+/// redoes at most one segment plus what was never reached), large enough
+/// that commits and checkpoints stay a negligible cost.
+pub const SEGMENT_FILES: usize = 250;
+/// Input bytes after which a full build commits a segment early.
+pub const SEGMENT_BYTES: i64 = 64 * 1024 * 1024;
+/// Error message of an injected crash ([`Options::inject_crash_after_files`]).
+pub const INJECTED_CRASH: &str = "injected crash";
 
 impl Options {
     pub fn from_config(cfg: &DocMonkConfig) -> Self {
@@ -287,6 +320,8 @@ impl Options {
             cache_size_mb: cfg.runtime.sqlite_cache_size_mb,
             lock_timeout: Duration::from_secs_f64(cfg.indexing.lock_timeout_seconds),
             inject_unreadable: Vec::new(),
+            segment_files: SEGMENT_FILES,
+            inject_crash_after_files: None,
         }
     }
 }
@@ -339,7 +374,41 @@ fn file_row(
         last_error: err,
         attempt_count: attempts,
         next_attempt_at: next,
+        last_indexed_at: None,
     }
+}
+
+/// Hashes `files` on up to `workers` threads: `path -> hash` (`None` when
+/// unreadable).
+fn hash_parallel(
+    files: &[&crate::scan::ScannedFile],
+    workers: usize,
+) -> std::collections::HashMap<PathBuf, Option<String>> {
+    use std::sync::atomic::AtomicUsize;
+    if files.is_empty() {
+        return Default::default();
+    }
+    let next = AtomicUsize::new(0);
+    let threads = workers.clamp(1, files.len());
+    std::thread::scope(|s| {
+        let handles: Vec<_> = (0..threads)
+            .map(|_| {
+                s.spawn(|| {
+                    let mut out = Vec::new();
+                    loop {
+                        let i = next.fetch_add(1, Ordering::Relaxed);
+                        let Some(f) = files.get(i) else { break };
+                        out.push((f.path.clone(), hash_file(&f.path).ok()));
+                    }
+                    out
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|h| h.join().unwrap_or_default())
+            .collect()
+    })
 }
 
 /// Most files the writer commits in one transaction.
@@ -371,7 +440,7 @@ fn run_workers(
             let (active, active_high) = (&active, &active_high);
             s.spawn(move || loop {
                 let next = rx.lock().ok().and_then(|r| r.recv().ok());
-                let Some(work) = next else { break };
+                let Some(mut work) = next else { break };
                 if cancel.load(Ordering::Relaxed) {
                     continue;
                 }
@@ -386,6 +455,12 @@ fn run_workers(
                     let _cpu = gov.acquire(crate::governor::Class::Cpu, 1);
                     let now = active.fetch_add(1, Ordering::Relaxed) + 1;
                     active_high.fetch_max(now, Ordering::Relaxed);
+                    // New files are hashed here, in parallel, not by the
+                    // diff (an unreadable file is left to the processor,
+                    // which reports the I/O error).
+                    if work.input.content_hash.is_none() {
+                        work.input.content_hash = hash_file(&work.input.path).ok();
+                    }
                     let processor = registry.for_kind(work.input.kind);
                     let r = catch_unwind(AssertUnwindSafe(|| processor.prepare(&work.input)))
                         .unwrap_or_else(|_| {
@@ -511,7 +586,23 @@ pub fn run_source_with(
     let mut store =
         ProjectStore::open(layout, &project_id, &source.id, opts.cache_size_mb).map_err(db_err)?;
     let mut state = control.state(&source.id).map_err(db_err)?;
-    if let Some(pending) = state.pending_build_id.clone() {
+    let mut resume: Option<String> = None;
+    if let Some(pending) = state.pending_build_id.clone().filter(|p| {
+        state.active_build_id.as_deref() != Some(p.as_str())
+            && store
+                .resumable_build(p, &registry.versions)
+                .unwrap_or(false)
+    }) {
+        // A full build of these exact versions died part-way. Callers hold
+        // the `index` lock, so nothing is in flight: keep its committed
+        // segments (still invisible) and finish it.
+        store
+            .gc_builds_keeping(state.active_build_id.as_deref(), Some(&pending))
+            .map_err(db_err)?;
+        tracing::info!(component = "indexing", event = "build_resumed", source_id = %source.id, build_id = %pending);
+        result.resumed_build = Some(pending.clone());
+        resume = Some(pending);
+    } else if let Some(pending) = state.pending_build_id.clone() {
         // A previous run died mid-build. Callers hold the `index` lock, so
         // nothing is in flight: drop its invisible rows and its claim, then
         // plan from the last published build.
@@ -535,7 +626,12 @@ pub fn run_source_with(
         }
         state = control.state(&source.id).map_err(db_err)?;
     }
-    let plan = plan_for(&state, &registry.versions);
+    let plan = match &resume {
+        Some(_) => RebuildPlan::Full {
+            reason: "resuming an interrupted full build".into(),
+        },
+        None => plan_for(&state, &registry.versions),
+    };
     result.plan = match &plan {
         RebuildPlan::Full { reason } => format!("full ({reason})"),
         RebuildPlan::Incremental { .. } => "incremental".into(),
@@ -552,13 +648,21 @@ pub fn run_source_with(
         &source.include_patterns,
     );
     let targets = targets.filter(|_| matches!(plan, RebuildPlan::Incremental { .. }));
-    let (scanned, missing) = match targets {
+    let targeted = match targets {
         Some(t) => {
             let ts = scan_targets(root, &ignore, t, opts.follow_symlinks).map_err(|e| {
                 DocMonkError::new(ErrorKind::SourceUnavailable, format!("scan failed: {e}"))
             })?;
+            // A named directory can expand to many files: past the targeted
+            // limit a full pass is as cheap and simpler to reason about.
+            (ts.present.files.len() <= crate::daemon::MAX_TARGETED_PATHS).then_some(ts)
+        }
+        None => None,
+    };
+    let (scanned, missing, dirs) = match targeted {
+        Some(ts) => {
             result.targeted = true;
-            (ts.present, Some(ts.missing))
+            (ts.present, Some(ts.missing), ts.dirs)
         }
         None => (
             scan(
@@ -573,6 +677,7 @@ pub fn run_source_with(
                 DocMonkError::new(ErrorKind::SourceUnavailable, format!("scan failed: {e}"))
             })?,
             None,
+            Vec::new(),
         ),
     };
     result.timings.scan_seconds = started.elapsed().as_secs_f64();
@@ -586,20 +691,47 @@ pub fn run_source_with(
     }
 
     let started = Instant::now();
-    let mut baseline = store.reusable_files(&plan).map_err(db_err)?;
+    // A resumed build diffs against its own committed files: those whose
+    // stat still matches are already done.
+    let mut baseline = match &resume {
+        Some(pending) => store.files(pending),
+        None => store.reusable_files(&plan),
+    }
+    .map_err(db_err)?;
     if let Some(missing) = &missing {
         // Only the named paths take part: rows for every other file are
-        // neither diffed nor touched.
+        // neither diffed nor touched. A named path that vanished may have
+        // been a directory, and a walked directory was seen whole, so rows
+        // under either are in scope too (and deleted when gone).
         let named: std::collections::HashSet<&str> = scanned
             .files
             .iter()
             .map(|f| f.rel_path.as_str())
             .chain(missing.iter().map(String::as_str))
             .collect();
-        baseline.retain(|r| named.contains(r.rel_path.as_str()));
+        let prefixes: Vec<String> = missing
+            .iter()
+            .chain(&dirs)
+            .map(|d| {
+                if d.is_empty() {
+                    String::new()
+                } else {
+                    format!("{d}/")
+                }
+            })
+            .collect();
+        baseline.retain(|r| {
+            named.contains(r.rel_path.as_str())
+                || prefixes.iter().any(|p| r.rel_path.starts_with(p.as_str()))
+        });
     }
     let now = now_iso();
-    let mut d = diff(&scanned, &baseline, &now, &mut |p| hash_file(p));
+    let prehashed = hash_parallel(&hash_candidates(&scanned, &baseline, &now), opts.workers);
+    let mut d = diff(&scanned, &baseline, &now, &mut |p| match prehashed.get(p) {
+        Some(Some(h)) => Ok(h.clone()),
+        Some(None) => Err(std::io::Error::other("unreadable")),
+        None => hash_file(p),
+    });
     if let Some(missing) = &missing {
         d.counts.scanned += missing.len();
     }
@@ -629,7 +761,7 @@ pub fn run_source_with(
                 }
             }
             for finalizer in &registry.finalizers {
-                finalizer
+                let report = finalizer
                     .on_warm_pass(&mut store, active_build_id)
                     .map_err(|e| {
                         DocMonkError::new(
@@ -637,19 +769,22 @@ pub fn run_source_with(
                             format!("warm pass repair failed ({}): {}", e.code, e.message),
                         )
                     })?;
+                result.linked += report.linked;
+                result.embedded += report.embedded;
             }
             result.build_id = Some(active_build_id.clone());
             return Ok(result);
         }
     }
 
-    // Every build runs inside one SQLite transaction (a session), so each
-    // B-tree page is written about once and a failure or crash rolls the
-    // whole build back. A full rebuild writes a new build next to the
-    // visible one and switches over at publish; an incremental pass updates
-    // the active build in place, and readers keep the committed state until
-    // COMMIT. Incomplete work is never visible either way.
+    // Every build runs inside SQLite sessions, so each B-tree page is
+    // written about once. A full rebuild writes a new build next to the
+    // visible one, committing it in segments, and switches over at
+    // publish; an incremental pass updates the active build in place in
+    // one session, and readers keep the committed state until COMMIT.
+    // Incomplete work is never visible either way.
     let (build_id, full) = match &plan {
+        RebuildPlan::Full { .. } if resume.is_some() => (resume.clone().unwrap_or_default(), true),
         RebuildPlan::Full { .. } => (
             record::build_id(&source.id, &format!("{}-{}", now, std::process::id())),
             true,
@@ -666,6 +801,7 @@ pub fn run_source_with(
         &mut store,
         &build_id,
         full,
+        resume.is_some(),
         &plan,
         &d.decisions,
         &to_process,
@@ -682,9 +818,12 @@ pub fn run_source_with(
         });
         let started = Instant::now();
         if full {
-            // Committed but still invisible: the control plane points at the
-            // previous build until publish_build switches it.
-            store.commit_session().map_err(db_err)?;
+            // Committed (its last segment before the finalizers) but still
+            // invisible: the control plane points at the previous build
+            // until publish_build switches it.
+            if store.in_session() {
+                store.commit_session().map_err(db_err)?;
+            }
             control
                 .publish_build(&source.id, &build_id, &registry.versions, full)
                 .map_err(db_err)?;
@@ -716,12 +855,20 @@ pub fn run_source_with(
             result.published = true;
             Ok(result)
         }
+        Err(e) if e.message() == INJECTED_CRASH => {
+            // As if killed: the open segment is lost with the connection,
+            // committed segments and the pending claim stay.
+            drop(store);
+            Err(e)
+        }
         Err(e) => {
             let _ = control.abort_build(&source.id, &build_id, e.message());
             if store.in_session() {
                 let _ = store.rollback_session();
-            } else if full {
-                // Failed after the build was committed (publish step).
+            }
+            if full {
+                // Committed segments (or a committed build that failed to
+                // publish) are discarded; the previous build stays.
                 let _ = store.mark_aborted(&build_id);
                 let _ = store.gc_builds(state.active_build_id.as_deref());
             }
@@ -735,6 +882,7 @@ fn build(
     store: &mut ProjectStore,
     build_id: &str,
     full: bool,
+    resume: bool,
     plan: &RebuildPlan,
     decisions: &[Decision],
     to_process: &[&Decision],
@@ -744,18 +892,34 @@ fn build(
     progress: &mut dyn Progress,
     result: &mut SourceResult,
 ) -> Result<(), DocMonkError> {
-    if full {
+    if full && !resume {
         store
             .create_build(build_id, full, &registry.versions)
             .map_err(db_err)?;
     }
-    if let RebuildPlan::Incremental { active_build_id } = plan {
-        debug_assert_eq!(active_build_id, build_id);
-        // In place: drop deleted and moved-away files, refresh restat-only
-        // stats; reprocessed files replace their own rows when written.
+    let mut touched: Vec<String> = Vec::new();
+    if !full || resume {
+        if let RebuildPlan::Incremental { active_build_id } = plan {
+            debug_assert_eq!(active_build_id, build_id);
+        }
+        // In place (an incremental pass, or a resumed full build): drop
+        // deleted and moved-away files, refresh restat-only stats;
+        // reprocessed files replace their own rows when written.
         let mut exclude = Vec::new();
         let mut restat = Vec::new();
         for dec in decisions {
+            if resume
+                && matches!(
+                    dec.change,
+                    Change::Unchanged | Change::Unseen | Change::UnchangedRestat
+                )
+            {
+                // Already written by the interrupted run: still part of
+                // what the full build's finalizers must cover.
+                if let Some(prev) = &dec.prev {
+                    touched.push(prev.id.clone());
+                }
+            }
             match dec.change {
                 Change::Unchanged | Change::Unseen => result.carried_forward += 1,
                 Change::UnchangedRestat => {
@@ -815,8 +979,10 @@ fn build(
         })
         .collect();
     let mut done = 0usize;
-    let mut touched: Vec<String> = Vec::new();
+    let (mut segment_files, mut segment_bytes) = (0usize, 0i64);
     let pipeline = run_workers(items, opts.workers, registry, |batch| {
+        segment_files += batch.len();
+        segment_bytes += batch.iter().map(|d| d.work.size.max(0)).sum::<i64>();
         let mut rows = Vec::with_capacity(batch.len());
         let mut outcomes = Vec::with_capacity(batch.len());
         for d in batch {
@@ -892,9 +1058,23 @@ fn build(
                 outcome,
             });
         }
+        if full && (segment_files >= opts.segment_files.max(1) || segment_bytes >= SEGMENT_BYTES) {
+            store.commit_segment().map_err(db_err)?;
+            result.segments += 1;
+            (segment_files, segment_bytes) = (0, 0);
+        }
+        if opts.inject_crash_after_files.is_some_and(|n| done >= n) {
+            return Err(DocMonkError::new(ErrorKind::Generic, INJECTED_CRASH));
+        }
         Ok(())
     })?;
     result.pipeline = pipeline;
+    if full {
+        // The build is still invisible: commit its last segment so the
+        // finalizers' model inference runs with no transaction open (each
+        // window of vectors is written in its own short transaction).
+        store.commit_session().map_err(db_err)?;
+    }
     if !registry.finalizers.is_empty() {
         progress.event(&ProgressEvent::Stage {
             source_id: source_id.into(),

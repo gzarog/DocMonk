@@ -1269,6 +1269,7 @@ dependencies = [
  "docmonk-status",
  "docmonk-storage",
  "docmonk-telemetry",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

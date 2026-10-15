@@ -130,6 +130,23 @@ impl SearchFilters {
                 .any(|pre| p.starts_with(pre.trim_start_matches("./")))
     }
 
+    /// The lexical options these filters push down into every read (the
+    /// post-filter still applies [`Self::allows`] to every hit).
+    pub fn lexical_options(&self) -> crate::lexical::LexicalOptions {
+        crate::lexical::LexicalOptions {
+            plan: Default::default(),
+            filter: docmonk_storage::read::ReadFilter {
+                path_prefixes: self
+                    .path_prefixes
+                    .iter()
+                    .map(|p| p.replace('\\', "/").trim_start_matches("./").to_owned())
+                    .collect(),
+                document_ids: self.document_ids.clone(),
+            },
+            kinds: self.kinds.clone(),
+        }
+    }
+
     pub fn allows_kind(&self, kind: &str) -> bool {
         self.kinds.is_empty() || self.kinds.iter().any(|k| k == kind)
     }

@@ -1,0 +1,1357 @@
+{
+ "description": "Author-reviewed retrieval eval over DocMonk's own repository (sources: crates/ and docs/). Expected values are repository-relative paths; a hit matches when its absolute path ends with '/<expected>'. Labels were written and checked by hand against the tree (definition sites for symbol, camelCase, snake_case and plural phrasings; ADRs and implementation files for conceptual questions); they are not independently reviewed. Negative queries expect abstention.",
+ "queries": [
+  {
+   "id": "r001",
+   "intent": "exact_symbol",
+   "query": "ProjectStore",
+   "expected": [
+    "crates/docmonk-storage/src/knowledge.rs"
+   ]
+  },
+  {
+   "id": "r002",
+   "intent": "exact_symbol",
+   "query": "CrossEncoder",
+   "expected": [
+    "crates/docmonk-ml/src/reranker.rs"
+   ]
+  },
+  {
+   "id": "r003",
+   "intent": "exact_symbol",
+   "query": "ControlPlane",
+   "expected": [
+    "crates/docmonk-storage/src/control.rs"
+   ]
+  },
+  {
+   "id": "r004",
+   "intent": "exact_symbol",
+   "query": "KnowledgeLinker",
+   "expected": [
+    "crates/docmonk-knowledge/src/lib.rs"
+   ]
+  },
+  {
+   "id": "r005",
+   "intent": "exact_symbol",
+   "query": "BuildFinalizer",
+   "expected": [
+    "crates/docmonk-indexing/src/coordinator.rs"
+   ]
+  },
+  {
+   "id": "r006",
+   "intent": "exact_symbol",
+   "query": "ScanOutcome",
+   "expected": [
+    "crates/docmonk-indexing/src/scan.rs"
+   ]
+  },
+  {
+   "id": "r007",
+   "intent": "exact_symbol",
+   "query": "PathGuard",
+   "expected": [
+    "crates/docmonk-core/src/security.rs"
+   ]
+  },
+  {
+   "id": "r008",
+   "intent": "exact_symbol",
+   "query": "BulkWriter",
+   "expected": [
+    "crates/docmonk-backends/src/bulk.rs"
+   ]
+  },
+  {
+   "id": "r009",
+   "intent": "exact_symbol",
+   "query": "ServerReader",
+   "expected": [
+    "crates/docmonk-backends/src/reader.rs"
+   ]
+  },
+  {
+   "id": "r010",
+   "intent": "exact_symbol",
+   "query": "EntitySearchRow",
+   "expected": [
+    "crates/docmonk-storage/src/search.rs"
+   ]
+  },
+  {
+   "id": "r011",
+   "intent": "exact_symbol",
+   "query": "GraphLifecycle",
+   "expected": [
+    "crates/docmonk-storage/src/graph.rs"
+   ]
+  },
+  {
+   "id": "r012",
+   "intent": "exact_symbol",
+   "query": "RouteMatcher",
+   "expected": [
+    "crates/docmonk-knowledge/src/linker.rs"
+   ]
+  },
+  {
+   "id": "r013",
+   "intent": "exact_symbol",
+   "query": "UnitIndex",
+   "expected": [
+    "crates/docmonk-knowledge/src/matcher.rs"
+   ]
+  },
+  {
+   "id": "r014",
+   "intent": "exact_symbol",
+   "query": "EmbeddingSubject",
+   "expected": [
+    "crates/docmonk-storage/src/vectors.rs"
+   ]
+  },
+  {
+   "id": "r015",
+   "intent": "exact_symbol",
+   "query": "ConversionCache",
+   "expected": [
+    "crates/docmonk-convert/src/cache.rs"
+   ]
+  },
+  {
+   "id": "r016",
+   "intent": "exact_symbol",
+   "query": "DocumentProcessor",
+   "expected": [
+    "crates/docmonk-convert/src/process.rs"
+   ]
+  },
+  {
+   "id": "r017",
+   "intent": "exact_symbol",
+   "query": "QueryIntent",
+   "expected": [
+    "crates/docmonk-retrieval/src/route.rs"
+   ]
+  },
+  {
+   "id": "r018",
+   "intent": "exact_symbol",
+   "query": "AnswerGrounding",
+   "expected": [
+    "crates/docmonk-retrieval/src/grounding.rs"
+   ]
+  },
+  {
+   "id": "r019",
+   "intent": "exact_symbol",
+   "query": "RebuildPlan",
+   "expected": [
+    "crates/docmonk-storage/src/control.rs"
+   ]
+  },
+  {
+   "id": "r020",
+   "intent": "exact_symbol",
+   "query": "OllamaProvider",
+   "expected": [
+    "crates/docmonk-ai/src/http.rs"
+   ]
+  },
+  {
+   "id": "r021",
+   "intent": "exact_symbol",
+   "query": "LazyEmbedder",
+   "expected": [
+    "crates/docmonk-ml/src/lib.rs"
+   ]
+  },
+  {
+   "id": "r022",
+   "intent": "exact_symbol",
+   "query": "HnswParams",
+   "expected": [
+    "crates/docmonk-ml/src/hnsw.rs"
+   ]
+  },
+  {
+   "id": "r023",
+   "intent": "camel_nl",
+   "query": "project store",
+   "expected": [
+    "crates/docmonk-storage/src/knowledge.rs"
+   ]
+  },
+  {
+   "id": "r024",
+   "intent": "camel_nl",
+   "query": "cross encoder",
+   "expected": [
+    "crates/docmonk-ml/src/reranker.rs"
+   ]
+  },
+  {
+   "id": "r025",
+   "intent": "camel_nl",
+   "query": "control plane",
+   "expected": [
+    "crates/docmonk-storage/src/control.rs"
+   ]
+  },
+  {
+   "id": "r026",
+   "intent": "camel_nl",
+   "query": "knowledge linker",
+   "expected": [
+    "crates/docmonk-knowledge/src/lib.rs"
+   ]
+  },
+  {
+   "id": "r027",
+   "intent": "camel_nl",
+   "query": "build finalizer",
+   "expected": [
+    "crates/docmonk-indexing/src/coordinator.rs"
+   ]
+  },
+  {
+   "id": "r028",
+   "intent": "camel_nl",
+   "query": "scan outcome",
+   "expected": [
+    "crates/docmonk-indexing/src/scan.rs"
+   ]
+  },
+  {
+   "id": "r029",
+   "intent": "camel_nl",
+   "query": "path guard",
+   "expected": [
+    "crates/docmonk-core/src/security.rs"
+   ]
+  },
+  {
+   "id": "r030",
+   "intent": "camel_nl",
+   "query": "bulk writer",
+   "expected": [
+    "crates/docmonk-backends/src/bulk.rs"
+   ]
+  },
+  {
+   "id": "r031",
+   "intent": "camel_nl",
+   "query": "server reader",
+   "expected": [
+    "crates/docmonk-backends/src/reader.rs"
+   ]
+  },
+  {
+   "id": "r032",
+   "intent": "camel_nl",
+   "query": "graph lifecycle",
+   "expected": [
+    "crates/docmonk-storage/src/graph.rs"
+   ]
+  },
+  {
+   "id": "r033",
+   "intent": "camel_nl",
+   "query": "route matcher",
+   "expected": [
+    "crates/docmonk-knowledge/src/linker.rs"
+   ]
+  },
+  {
+   "id": "r034",
+   "intent": "camel_nl",
+   "query": "unit index",
+   "expected": [
+    "crates/docmonk-knowledge/src/matcher.rs"
+   ]
+  },
+  {
+   "id": "r035",
+   "intent": "camel_nl",
+   "query": "conversion cache",
+   "expected": [
+    "crates/docmonk-convert/src/cache.rs"
+   ]
+  },
+  {
+   "id": "r036",
+   "intent": "camel_nl",
+   "query": "document processor",
+   "expected": [
+    "crates/docmonk-convert/src/process.rs"
+   ]
+  },
+  {
+   "id": "r037",
+   "intent": "camel_nl",
+   "query": "query intent",
+   "expected": [
+    "crates/docmonk-retrieval/src/route.rs"
+   ]
+  },
+  {
+   "id": "r038",
+   "intent": "camel_nl",
+   "query": "answer grounding",
+   "expected": [
+    "crates/docmonk-retrieval/src/grounding.rs"
+   ]
+  },
+  {
+   "id": "r039",
+   "intent": "camel_nl",
+   "query": "rebuild plan",
+   "expected": [
+    "crates/docmonk-storage/src/control.rs"
+   ]
+  },
+  {
+   "id": "r040",
+   "intent": "camel_nl",
+   "query": "ollama provider",
+   "expected": [
+    "crates/docmonk-ai/src/http.rs"
+   ]
+  },
+  {
+   "id": "r041",
+   "intent": "camel_nl",
+   "query": "lazy embedder",
+   "expected": [
+    "crates/docmonk-ml/src/lib.rs"
+   ]
+  },
+  {
+   "id": "r042",
+   "intent": "camel_nl",
+   "query": "hnsw params",
+   "expected": [
+    "crates/docmonk-ml/src/hnsw.rs"
+   ]
+  },
+  {
+   "id": "r043",
+   "intent": "camel_nl",
+   "query": "source record",
+   "expected": [
+    "crates/docmonk-storage/src/control.rs"
+   ]
+  },
+  {
+   "id": "r044",
+   "intent": "camel_nl",
+   "query": "stored embedding",
+   "expected": [
+    "crates/docmonk-storage/src/vectors.rs"
+   ]
+  },
+  {
+   "id": "r045",
+   "intent": "camel_nl",
+   "query": "relationship row",
+   "expected": [
+    "crates/docmonk-storage/src/knowledge.rs"
+   ]
+  },
+  {
+   "id": "r046",
+   "intent": "camel_nl",
+   "query": "publish timings",
+   "expected": [
+    "crates/docmonk-backends/src/graph.rs"
+   ]
+  },
+  {
+   "id": "r047",
+   "intent": "camel_nl",
+   "query": "graph options",
+   "expected": [
+    "crates/docmonk-code/src/graph_stage.rs"
+   ]
+  },
+  {
+   "id": "r048",
+   "intent": "snake_nl",
+   "query": "embedding digest",
+   "expected": [
+    "crates/docmonk-storage/src/vectors.rs"
+   ]
+  },
+  {
+   "id": "r049",
+   "intent": "snake_nl",
+   "query": "carry graph forward",
+   "expected": [
+    "crates/docmonk-storage/src/graph.rs"
+   ]
+  },
+  {
+   "id": "r050",
+   "intent": "snake_nl",
+   "query": "word tokens",
+   "expected": [
+    "crates/docmonk-storage/src/search.rs"
+   ]
+  },
+  {
+   "id": "r051",
+   "intent": "snake_nl",
+   "query": "knowledge fingerprint",
+   "expected": [
+    "crates/docmonk-storage/src/schema.rs"
+   ]
+  },
+  {
+   "id": "r052",
+   "intent": "snake_nl",
+   "query": "read verified",
+   "expected": [
+    "crates/docmonk-ml/src/embedder.rs"
+   ]
+  },
+  {
+   "id": "r053",
+   "intent": "snake_nl",
+   "query": "blast radius",
+   "expected": [
+    "crates/docmonk-retrieval/src/explore.rs"
+   ]
+  },
+  {
+   "id": "r054",
+   "intent": "snake_nl",
+   "query": "encode vector",
+   "expected": [
+    "crates/docmonk-storage/src/vectors.rs"
+   ]
+  },
+  {
+   "id": "r055",
+   "intent": "snake_nl",
+   "query": "entities by bare name",
+   "expected": [
+    "crates/docmonk-storage/src/graph.rs"
+   ]
+  },
+  {
+   "id": "r056",
+   "intent": "snake_nl",
+   "query": "backoff seconds",
+   "expected": [
+    "crates/docmonk-indexing/src/retry.rs"
+   ]
+  },
+  {
+   "id": "r057",
+   "intent": "snake_nl",
+   "query": "inspect lock",
+   "expected": [
+    "crates/docmonk-indexing/src/lock.rs"
+   ]
+  },
+  {
+   "id": "r058",
+   "intent": "snake_nl",
+   "query": "candidates fingerprint",
+   "expected": [
+    "crates/docmonk-storage/src/graph.rs"
+   ]
+  },
+  {
+   "id": "r059",
+   "intent": "snake_nl",
+   "query": "reset index state",
+   "expected": [
+    "crates/docmonk-storage/src/control.rs"
+   ]
+  },
+  {
+   "id": "r060",
+   "intent": "snake_nl",
+   "query": "run source with",
+   "expected": [
+    "crates/docmonk-indexing/src/coordinator.rs"
+   ]
+  },
+  {
+   "id": "r061",
+   "intent": "snake_nl",
+   "query": "unresolved symbol edges",
+   "expected": [
+    "crates/docmonk-retrieval/src/graph.rs"
+   ]
+  },
+  {
+   "id": "r062",
+   "intent": "snake_nl",
+   "query": "active builds",
+   "expected": [
+    "crates/docmonk-backends/src/backend.rs"
+   ]
+  },
+  {
+   "id": "r063",
+   "intent": "snake_nl",
+   "query": "delete build docs",
+   "expected": [
+    "crates/docmonk-backends/src/backend.rs"
+   ]
+  },
+  {
+   "id": "r064",
+   "intent": "snake_nl",
+   "query": "content terms",
+   "expected": [
+    "crates/docmonk-retrieval/src/grounding.rs"
+   ]
+  },
+  {
+   "id": "r065",
+   "intent": "snake_nl",
+   "query": "semantic hit json",
+   "expected": [
+    "crates/docmonk-retrieval/src/explore.rs"
+   ]
+  },
+  {
+   "id": "r066",
+   "intent": "snake_nl",
+   "query": "producers of",
+   "expected": [
+    "crates/docmonk-service/src/dependencies.rs"
+   ]
+  },
+  {
+   "id": "r067",
+   "intent": "snake_nl",
+   "query": "restore archive",
+   "expected": [
+    "crates/docmonk-ops/src/backup.rs"
+   ]
+  },
+  {
+   "id": "r068",
+   "intent": "plural",
+   "query": "embeddings digest",
+   "expected": [
+    "crates/docmonk-storage/src/vectors.rs"
+   ]
+  },
+  {
+   "id": "r069",
+   "intent": "plural",
+   "query": "build finalizers",
+   "expected": [
+    "crates/docmonk-indexing/src/coordinator.rs"
+   ]
+  },
+  {
+   "id": "r070",
+   "intent": "plural",
+   "query": "scan outcomes",
+   "expected": [
+    "crates/docmonk-indexing/src/scan.rs"
+   ]
+  },
+  {
+   "id": "r071",
+   "intent": "plural",
+   "query": "cross encoders",
+   "expected": [
+    "crates/docmonk-ml/src/reranker.rs"
+   ]
+  },
+  {
+   "id": "r072",
+   "intent": "plural",
+   "query": "project stores",
+   "expected": [
+    "crates/docmonk-storage/src/knowledge.rs"
+   ]
+  },
+  {
+   "id": "r073",
+   "intent": "plural",
+   "query": "server readers",
+   "expected": [
+    "crates/docmonk-backends/src/reader.rs"
+   ]
+  },
+  {
+   "id": "r074",
+   "intent": "plural",
+   "query": "knowledge linkers",
+   "expected": [
+    "crates/docmonk-knowledge/src/lib.rs"
+   ]
+  },
+  {
+   "id": "r075",
+   "intent": "plural",
+   "query": "conversion caches",
+   "expected": [
+    "crates/docmonk-convert/src/cache.rs"
+   ]
+  },
+  {
+   "id": "r076",
+   "intent": "plural",
+   "query": "relationship rows",
+   "expected": [
+    "crates/docmonk-storage/src/knowledge.rs"
+   ]
+  },
+  {
+   "id": "r077",
+   "intent": "plural",
+   "query": "stored embeddings",
+   "expected": [
+    "crates/docmonk-storage/src/vectors.rs"
+   ]
+  },
+  {
+   "id": "r078",
+   "intent": "plural",
+   "query": "bulk writers",
+   "expected": [
+    "crates/docmonk-backends/src/bulk.rs"
+   ]
+  },
+  {
+   "id": "r079",
+   "intent": "plural",
+   "query": "path guards",
+   "expected": [
+    "crates/docmonk-core/src/security.rs"
+   ]
+  },
+  {
+   "id": "r080",
+   "intent": "plural",
+   "query": "ollama providers",
+   "expected": [
+    "crates/docmonk-ai/src/http.rs"
+   ]
+  },
+  {
+   "id": "r081",
+   "intent": "plural",
+   "query": "graph statuses",
+   "expected": [
+    "crates/docmonk-storage/src/graph.rs"
+   ]
+  },
+  {
+   "id": "r082",
+   "intent": "plural",
+   "query": "encode vectors",
+   "expected": [
+    "crates/docmonk-storage/src/vectors.rs"
+   ]
+  },
+  {
+   "id": "r083",
+   "intent": "path",
+   "query": "ann.rs",
+   "expected": [
+    "crates/docmonk-ml/src/ann.rs"
+   ]
+  },
+  {
+   "id": "r084",
+   "intent": "path",
+   "query": "graph_stage.rs",
+   "expected": [
+    "crates/docmonk-code/src/graph_stage.rs"
+   ]
+  },
+  {
+   "id": "r085",
+   "intent": "path",
+   "query": "hnsw.rs",
+   "expected": [
+    "crates/docmonk-ml/src/hnsw.rs"
+   ]
+  },
+  {
+   "id": "r086",
+   "intent": "path",
+   "query": "coordinator.rs",
+   "expected": [
+    "crates/docmonk-indexing/src/coordinator.rs"
+   ]
+  },
+  {
+   "id": "r087",
+   "intent": "path",
+   "query": "docmonk-ml/src/reranker.rs",
+   "expected": [
+    "crates/docmonk-ml/src/reranker.rs"
+   ]
+  },
+  {
+   "id": "r088",
+   "intent": "path",
+   "query": "watcher/local.rs",
+   "expected": [
+    "crates/docmonk-indexing/src/watcher/local.rs"
+   ]
+  },
+  {
+   "id": "r089",
+   "intent": "path",
+   "query": "linker.rs",
+   "expected": [
+    "crates/docmonk-knowledge/src/linker.rs"
+   ]
+  },
+  {
+   "id": "r090",
+   "intent": "path",
+   "query": "0014-ann-index.md",
+   "expected": [
+    "docs/adr/0014-ann-index.md"
+   ]
+  },
+  {
+   "id": "r091",
+   "intent": "path",
+   "query": "debounce.rs",
+   "expected": [
+    "crates/docmonk-indexing/src/watcher/debounce.rs"
+   ]
+  },
+  {
+   "id": "r092",
+   "intent": "path",
+   "query": "diversify.rs",
+   "expected": [
+    "crates/docmonk-retrieval/src/diversify.rs"
+   ]
+  },
+  {
+   "id": "r093",
+   "intent": "path",
+   "query": "governor.rs",
+   "expected": [
+    "crates/docmonk-indexing/src/governor.rs"
+   ]
+  },
+  {
+   "id": "r094",
+   "intent": "path",
+   "query": "0021-watcher-and-targeted-passes",
+   "expected": [
+    "docs/adr/0021-watcher-and-targeted-passes.md"
+   ]
+  },
+  {
+   "id": "r095",
+   "intent": "path",
+   "query": "server_index.rs",
+   "expected": [
+    "crates/docmonk-service/src/server_index.rs"
+   ]
+  },
+  {
+   "id": "r096",
+   "intent": "path",
+   "query": "fingerprint.rs",
+   "expected": [
+    "crates/docmonk-indexing/src/fingerprint.rs"
+   ]
+  },
+  {
+   "id": "r097",
+   "intent": "path",
+   "query": "publish.rs",
+   "expected": [
+    "crates/docmonk-backends/src/publish.rs"
+   ]
+  },
+  {
+   "id": "r098",
+   "intent": "conceptual",
+   "query": "how is the hnsw index persisted to disk",
+   "expected": [
+    "docs/adr/0014-ann-index.md",
+    "crates/docmonk-ml/src/ann.rs"
+   ]
+  },
+  {
+   "id": "r099",
+   "intent": "conceptual",
+   "query": "reciprocal rank fusion of lexical and semantic results",
+   "expected": [
+    "docs/adr/0016-lexical-and-hybrid-search.md",
+    "crates/docmonk-retrieval/src/hybrid.rs",
+    "crates/docmonk-ml/src/fusion.rs"
+   ]
+  },
+  {
+   "id": "r100",
+   "intent": "conceptual",
+   "query": "cross-encoder reranking of the top results",
+   "expected": [
+    "docs/adr/0015-reranker-and-model-baseline.md",
+    "crates/docmonk-ml/src/reranker.rs",
+    "crates/docmonk-retrieval/src/hybrid.rs"
+   ]
+  },
+  {
+   "id": "r101",
+   "intent": "conceptual",
+   "query": "how does the daemon own its pid file",
+   "expected": [
+    "docs/adr/0020-daemon-lifecycle.md",
+    "crates/docmonk-indexing/src/daemon/pid.rs"
+   ]
+  },
+  {
+   "id": "r102",
+   "intent": "conceptual",
+   "query": "filesystem watcher debounce and targeted passes",
+   "expected": [
+    "docs/adr/0021-watcher-and-targeted-passes.md",
+    "crates/docmonk-indexing/src/watcher/debounce.rs",
+    "crates/docmonk-indexing/src/watcher/local.rs"
+   ]
+  },
+  {
+   "id": "r103",
+   "intent": "conceptual",
+   "query": "network share polling for changes",
+   "expected": [
+    "docs/adr/0021-watcher-and-targeted-passes.md",
+    "crates/docmonk-indexing/src/watcher/network.rs"
+   ]
+  },
+  {
+   "id": "r104",
+   "intent": "conceptual",
+   "query": "why is unsafe code forbidden",
+   "expected": [
+    "docs/adr/0002-unsafe-policy.md"
+   ]
+  },
+  {
+   "id": "r105",
+   "intent": "conceptual",
+   "query": "which dependencies are allowed",
+   "expected": [
+    "docs/adr/0003-dependency-policy.md"
+   ]
+  },
+  {
+   "id": "r106",
+   "intent": "conceptual",
+   "query": "schema fingerprint mismatch requires a reindex",
+   "expected": [
+    "crates/docmonk-storage/src/schema.rs",
+    "docs/adr/0006-local-storage.md"
+   ]
+  },
+  {
+   "id": "r107",
+   "intent": "conceptual",
+   "query": "opensearch index mappings and analyzers",
+   "expected": [
+    "crates/docmonk-backends/src/schema.rs",
+    "docs/adr/0007-server-schema.md"
+   ]
+  },
+  {
+   "id": "r108",
+   "intent": "conceptual",
+   "query": "link code entities to documents that mention them",
+   "expected": [
+    "docs/adr/0012-knowledge-linker.md",
+    "crates/docmonk-knowledge/src/linker.rs"
+   ]
+  },
+  {
+   "id": "r109",
+   "intent": "conceptual",
+   "query": "manual links survive rebuilds",
+   "expected": [
+    "docs/adr/0012-knowledge-linker.md",
+    "crates/docmonk-knowledge/src/manual.rs"
+   ]
+  },
+  {
+   "id": "r110",
+   "intent": "conceptual",
+   "query": "embedding cache keyed by text hash and model fingerprint",
+   "expected": [
+    "docs/adr/0013-embeddings.md",
+    "crates/docmonk-storage/src/vectors.rs",
+    "crates/docmonk-ml/src/lib.rs"
+   ]
+  },
+  {
+   "id": "r111",
+   "intent": "conceptual",
+   "query": "pdf text extraction and ocr of scanned pages",
+   "expected": [
+    "docs/adr/0011-document-conversion.md",
+    "crates/docmonk-convert/src/pdf.rs",
+    "crates/docmonk-convert/src/ocr.rs"
+   ]
+  },
+  {
+   "id": "r112",
+   "intent": "conceptual",
+   "query": "email attachments become child documents",
+   "expected": [
+    "crates/docmonk-convert/src/email.rs",
+    "docs/adr/0018-explore-impact-and-provenance.md"
+   ]
+  },
+  {
+   "id": "r113",
+   "intent": "conceptual",
+   "query": "split markdown into heading and paragraph chunks",
+   "expected": [
+    "crates/docmonk-documents/src/chunker.rs",
+    "docs/adr/0010-document-core.md"
+   ]
+  },
+  {
+   "id": "r114",
+   "intent": "conceptual",
+   "query": "blast radius of changing a function",
+   "expected": [
+    "docs/adr/0018-explore-impact-and-provenance.md",
+    "crates/docmonk-retrieval/src/explore.rs"
+   ]
+  },
+  {
+   "id": "r115",
+   "intent": "conceptual",
+   "query": "callers and callees graph traversal",
+   "expected": [
+    "docs/adr/0017-symbol-and-graph-queries.md",
+    "crates/docmonk-retrieval/src/graph.rs"
+   ]
+  },
+  {
+   "id": "r116",
+   "intent": "conceptual",
+   "query": "mcp stdio server tools",
+   "expected": [
+    "docs/adr/0025-mcp-stdio-server.md",
+    "crates/docmonk-mcp/src/lib.rs"
+   ]
+  },
+  {
+   "id": "r117",
+   "intent": "conceptual",
+   "query": "ai provider configuration for ask",
+   "expected": [
+    "docs/adr/0026-ai-providers-and-ask.md",
+    "crates/docmonk-ai/src/registry.rs",
+    "crates/docmonk-ai/src/factory.rs"
+   ]
+  },
+  {
+   "id": "r118",
+   "intent": "conceptual",
+   "query": "verify the downloaded release checksum before installing",
+   "expected": [
+    "docs/adr/0029-native-update.md",
+    "crates/docmonk-update/src/verify.rs"
+   ]
+  },
+  {
+   "id": "r119",
+   "intent": "conceptual",
+   "query": "redact credentials from urls in logs",
+   "expected": [
+    "crates/docmonk-telemetry/src/redact.rs"
+   ]
+  },
+  {
+   "id": "r120",
+   "intent": "conceptual",
+   "query": "cpu budget shared by concurrent indexing sources",
+   "expected": [
+    "crates/docmonk-indexing/src/governor.rs"
+   ]
+  },
+  {
+   "id": "r121",
+   "intent": "conceptual",
+   "query": "retry transient file failures with backoff",
+   "expected": [
+    "crates/docmonk-indexing/src/retry.rs"
+   ]
+  },
+  {
+   "id": "r122",
+   "intent": "conceptual",
+   "query": "hash files to detect content changes",
+   "expected": [
+    "crates/docmonk-indexing/src/fingerprint.rs",
+    "crates/docmonk-indexing/src/diff.rs"
+   ]
+  },
+  {
+   "id": "r123",
+   "intent": "conceptual",
+   "query": "route a query to an intent and retrieval strategies",
+   "expected": [
+    "crates/docmonk-retrieval/src/route.rs",
+    "docs/adr/0033-p0-storage-and-execution-contracts.md"
+   ]
+  },
+  {
+   "id": "r124",
+   "intent": "conceptual",
+   "query": "decompose comparison questions into subqueries",
+   "expected": [
+    "crates/docmonk-retrieval/src/decompose.rs"
+   ]
+  },
+  {
+   "id": "r125",
+   "intent": "conceptual",
+   "query": "collapse sibling chunks of the same document",
+   "expected": [
+    "crates/docmonk-retrieval/src/diversify.rs"
+   ]
+  },
+  {
+   "id": "r126",
+   "intent": "conceptual",
+   "query": "grounded citations and insufficient evidence verdict",
+   "expected": [
+    "crates/docmonk-retrieval/src/grounding.rs",
+    "crates/docmonk-service/src/evidence.rs"
+   ]
+  },
+  {
+   "id": "r127",
+   "intent": "conceptual",
+   "query": "publish a build atomically on the server",
+   "expected": [
+    "crates/docmonk-backends/src/publish.rs",
+    "docs/adr/0007-server-schema.md",
+    "docs/adr/0033-p0-storage-and-execution-contracts.md"
+   ]
+  },
+  {
+   "id": "r128",
+   "intent": "conceptual",
+   "query": "bulk requests with retries for rejected items",
+   "expected": [
+    "crates/docmonk-backends/src/bulk.rs"
+   ]
+  },
+  {
+   "id": "r129",
+   "intent": "conceptual",
+   "query": "canonical status report for every source",
+   "expected": [
+    "docs/adr/0034-status-contract.md",
+    "crates/docmonk-status/src/lib.rs",
+    "crates/docmonk-status/src/snapshot.rs"
+   ]
+  },
+  {
+   "id": "r130",
+   "intent": "conceptual",
+   "query": "backup and restore the docmonk home",
+   "expected": [
+    "crates/docmonk-ops/src/backup.rs",
+    "docs/adr/0024-cli-ops-commands.md"
+   ]
+  },
+  {
+   "id": "r131",
+   "intent": "conceptual",
+   "query": "tree-sitter extraction of code entities",
+   "expected": [
+    "crates/docmonk-code/src/extract.rs",
+    "docs/adr/0009-code-intelligence.md"
+   ]
+  },
+  {
+   "id": "r132",
+   "intent": "conceptual",
+   "query": "resolve call targets across files",
+   "expected": [
+    "crates/docmonk-code/src/resolve.rs",
+    "crates/docmonk-code/src/graph_stage.rs"
+   ]
+  },
+  {
+   "id": "r133",
+   "intent": "filtered",
+   "query": "graph",
+   "expected": [
+    "crates/docmonk-storage/src/graph.rs"
+   ],
+   "filters": {
+    "path_prefixes": [
+     "docmonk-storage/"
+    ]
+   }
+  },
+  {
+   "id": "r134",
+   "intent": "filtered",
+   "query": "graph",
+   "expected": [
+    "crates/docmonk-backends/src/graph.rs"
+   ],
+   "filters": {
+    "path_prefixes": [
+     "docmonk-backends/"
+    ]
+   }
+  },
+  {
+   "id": "r135",
+   "intent": "filtered",
+   "query": "schema",
+   "expected": [
+    "crates/docmonk-backends/src/schema.rs"
+   ],
+   "filters": {
+    "path_prefixes": [
+     "docmonk-backends/"
+    ]
+   }
+  },
+  {
+   "id": "r136",
+   "intent": "filtered",
+   "query": "schema",
+   "expected": [
+    "crates/docmonk-storage/src/schema.rs"
+   ],
+   "filters": {
+    "path_prefixes": [
+     "docmonk-storage/"
+    ]
+   }
+  },
+  {
+   "id": "r137",
+   "intent": "filtered",
+   "query": "status",
+   "expected": [
+    "crates/docmonk-status/src/lib.rs",
+    "crates/docmonk-status/src/model.rs",
+    "crates/docmonk-status/src/snapshot.rs",
+    "crates/docmonk-status/src/local.rs",
+    "crates/docmonk-status/src/server.rs",
+    "crates/docmonk-status/src/health.rs"
+   ],
+   "filters": {
+    "path_prefixes": [
+     "docmonk-status/"
+    ]
+   }
+  },
+  {
+   "id": "r138",
+   "intent": "filtered",
+   "query": "search",
+   "expected": [
+    "crates/docmonk-storage/src/search.rs"
+   ],
+   "filters": {
+    "path_prefixes": [
+     "docmonk-storage/"
+    ]
+   }
+  },
+  {
+   "id": "r139",
+   "intent": "filtered",
+   "query": "embedding",
+   "expected": [
+    "crates/docmonk-ml/src/embedder.rs",
+    "crates/docmonk-ml/src/lib.rs"
+   ],
+   "filters": {
+    "path_prefixes": [
+     "docmonk-ml/"
+    ]
+   }
+  },
+  {
+   "id": "r140",
+   "intent": "filtered",
+   "query": "lock",
+   "expected": [
+    "crates/docmonk-indexing/src/lock.rs"
+   ],
+   "filters": {
+    "path_prefixes": [
+     "docmonk-indexing/"
+    ]
+   }
+  },
+  {
+   "id": "r141",
+   "intent": "filtered",
+   "query": "watcher",
+   "expected": [
+    "docs/adr/0021-watcher-and-targeted-passes.md"
+   ],
+   "filters": {
+    "kinds": [
+     "document"
+    ]
+   }
+  },
+  {
+   "id": "r142",
+   "intent": "filtered",
+   "query": "hybrid search",
+   "expected": [
+    "docs/adr/0016-lexical-and-hybrid-search.md"
+   ],
+   "filters": {
+    "kinds": [
+     "document"
+    ]
+   }
+  },
+  {
+   "id": "r143",
+   "intent": "filtered",
+   "query": "ann index",
+   "expected": [
+    "docs/adr/0014-ann-index.md"
+   ],
+   "filters": {
+    "kinds": [
+     "document"
+    ]
+   }
+  },
+  {
+   "id": "r144",
+   "intent": "filtered",
+   "query": "reranker",
+   "expected": [
+    "crates/docmonk-ml/src/reranker.rs"
+   ],
+   "filters": {
+    "kinds": [
+     "entity"
+    ]
+   }
+  },
+  {
+   "id": "r145",
+   "intent": "filtered",
+   "query": "publish",
+   "expected": [
+    "crates/docmonk-backends/src/publish.rs"
+   ],
+   "filters": {
+    "path_prefixes": [
+     "docmonk-backends/src/publish"
+    ]
+   }
+  },
+  {
+   "id": "r146",
+   "intent": "filtered",
+   "query": "transport",
+   "expected": [
+    "crates/docmonk-backends/src/transport.rs"
+   ],
+   "filters": {
+    "path_prefixes": [
+     "docmonk-backends/"
+    ]
+   }
+  },
+  {
+   "id": "r147",
+   "intent": "filtered",
+   "query": "transport",
+   "expected": [
+    "crates/docmonk-ai/src/transport.rs"
+   ],
+   "filters": {
+    "path_prefixes": [
+     "docmonk-ai/"
+    ]
+   }
+  },
+  {
+   "id": "r148",
+   "intent": "negative",
+   "query": "kubernetes helm chart deployment",
+   "expected": []
+  },
+  {
+   "id": "r149",
+   "intent": "negative",
+   "query": "stripe payment webhook signature",
+   "expected": []
+  },
+  {
+   "id": "r150",
+   "intent": "negative",
+   "query": "react component lifecycle hooks",
+   "expected": []
+  },
+  {
+   "id": "r151",
+   "intent": "negative",
+   "query": "graphql schema federation gateway",
+   "expected": []
+  },
+  {
+   "id": "r152",
+   "intent": "negative",
+   "query": "terraform state locking in s3",
+   "expected": []
+  },
+  {
+   "id": "r153",
+   "intent": "negative",
+   "query": "jwt refresh token rotation",
+   "expected": []
+  },
+  {
+   "id": "r154",
+   "intent": "negative",
+   "query": "oauth2 pkce authorization flow",
+   "expected": []
+  },
+  {
+   "id": "r155",
+   "intent": "negative",
+   "query": "redis cluster failover sentinel",
+   "expected": []
+  },
+  {
+   "id": "r156",
+   "intent": "negative",
+   "query": "android activity lifecycle",
+   "expected": []
+  },
+  {
+   "id": "r157",
+   "intent": "negative",
+   "query": "kafka consumer group rebalancing",
+   "expected": []
+  }
+ ]
+}

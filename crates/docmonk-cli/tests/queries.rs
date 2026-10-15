@@ -80,6 +80,14 @@ fn queries_end_to_end() {
     assert!(r["explain"]["stages"]
         .as_array()
         .is_some_and(|s| !s.is_empty()));
+    assert!(r["explain"]["counters"]["embedder_loads"].is_u64());
+    // Graph freshness per source.
+    let g = &r["graph"][0];
+    assert_eq!(g["visible"], true, "{r}");
+    assert_eq!(g["stale"], false, "{r}");
+    assert_eq!(g["state"], "ready", "{r}");
+    let i = json(&home, &["impact", "audit", "--json"]);
+    assert_eq!(i["graph"][0]["visible"], true, "{i}");
     let t = out(&docmonk(&home, &["search", "charge function"]));
     assert!(
         t.contains("MD: ") && t.contains("Match:") && t.contains("[heading] Charging"),

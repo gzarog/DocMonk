@@ -67,6 +67,8 @@ pub fn serve(mcp: bool) -> Result<(), DocMonkError> {
         ));
     }
     let home = prepared_home()?;
+    // A long-lived process: reuse read connections between tool calls.
+    docmonk_service::query::enable_store_pool();
     if !load(&home)?.mcp.enabled {
         return Err(DocMonkError::new(
             ErrorKind::Config,

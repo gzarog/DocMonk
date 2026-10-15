@@ -215,6 +215,18 @@ const STOPWORDS: &[&str] = &[
     "me",
     "explain",
     "describe",
+    // Impact-question framing ("what breaks if X changes"): the evidence
+    // is the graph around X, not text containing these words.
+    "break",
+    "breaks",
+    "change",
+    "changes",
+    "changed",
+    "affect",
+    "affects",
+    "affected",
+    "impact",
+    "happens",
     "του",
     "της",
     "και",

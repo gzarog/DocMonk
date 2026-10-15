@@ -1,0 +1,266 @@
+{
+  "description": "Measured repo-eval metrics (fixtures/search_quality/repo_queries.json). A metric more than `tolerance` below its recorded value fails crates/docmonk-service/tests/repo_eval.rs. Rewrite with DOCMONK_BLESS=1 when a change is meant to move them, and say why in the PR.",
+  "tolerance": 0.02,
+  "arms": {
+    "lexical": {
+      "all": {
+        "ndcg@10": 0.8411,
+        "mrr": 0.8611,
+        "recall@1": 0.8095,
+        "recall@5": 0.8712,
+        "recall@10": 0.8878
+      },
+      "camel_nl": {
+        "ndcg@10": 0.8302,
+        "mrr": 0.8,
+        "recall@1": 0.72,
+        "recall@5": 0.92,
+        "recall@10": 0.92
+      },
+      "conceptual": {
+        "ndcg@10": 0.5758,
+        "mrr": 0.6929,
+        "recall@1": 0.6,
+        "recall@5": 0.5762,
+        "recall@10": 0.619
+      },
+      "exact_symbol": {
+        "ndcg@10": 1.0,
+        "mrr": 1.0,
+        "recall@1": 1.0,
+        "recall@5": 1.0,
+        "recall@10": 1.0
+      },
+      "filtered": {
+        "ndcg@10": 0.9174,
+        "mrr": 0.9556,
+        "recall@1": 0.9333,
+        "recall@5": 0.9267,
+        "recall@10": 0.9222
+      },
+      "negative": {
+        "ndcg@10": 0.0,
+        "mrr": 0.0,
+        "recall@1": 0.0,
+        "recall@5": 0.0,
+        "recall@10": 0.0
+      },
+      "path": {
+        "ndcg@10": 1.0,
+        "mrr": 1.0,
+        "recall@1": 1.0,
+        "recall@5": 1.0,
+        "recall@10": 1.0
+      },
+      "plural": {
+        "ndcg@10": 0.8566,
+        "mrr": 0.8111,
+        "recall@1": 0.7333,
+        "recall@5": 0.9333,
+        "recall@10": 1.0
+      },
+      "snake_nl": {
+        "ndcg@10": 0.9565,
+        "mrr": 0.9417,
+        "recall@1": 0.9,
+        "recall@5": 1.0,
+        "recall@10": 1.0
+      }
+    },
+    "routed": {
+      "all": {
+        "ndcg@10": 0.7626,
+        "mrr": 0.7471,
+        "recall@1": 0.6463,
+        "recall@5": 0.8349,
+        "recall@10": 0.8844
+      },
+      "camel_nl": {
+        "ndcg@10": 0.6104,
+        "mrr": 0.548,
+        "recall@1": 0.4,
+        "recall@5": 0.76,
+        "recall@10": 0.8
+      },
+      "conceptual": {
+        "ndcg@10": 0.623,
+        "mrr": 0.6427,
+        "recall@1": 0.4571,
+        "recall@5": 0.7524,
+        "recall@10": 0.819
+      },
+      "exact_symbol": {
+        "ndcg@10": 1.0,
+        "mrr": 1.0,
+        "recall@1": 1.0,
+        "recall@5": 1.0,
+        "recall@10": 1.0
+      },
+      "filtered": {
+        "ndcg@10": 0.9249,
+        "mrr": 0.9556,
+        "recall@1": 0.9333,
+        "recall@5": 0.96,
+        "recall@10": 0.9556
+      },
+      "negative": {
+        "ndcg@10": 0.0,
+        "mrr": 0.0,
+        "recall@1": 0.0,
+        "recall@5": 0.0,
+        "recall@10": 0.0
+      },
+      "path": {
+        "ndcg@10": 0.8349,
+        "mrr": 0.7778,
+        "recall@1": 0.6,
+        "recall@5": 1.0,
+        "recall@10": 1.0
+      },
+      "plural": {
+        "ndcg@10": 0.4677,
+        "mrr": 0.4083,
+        "recall@1": 0.3333,
+        "recall@5": 0.4,
+        "recall@10": 0.6667
+      },
+      "snake_nl": {
+        "ndcg@10": 0.9815,
+        "mrr": 0.975,
+        "recall@1": 0.95,
+        "recall@5": 1.0,
+        "recall@10": 1.0
+      }
+    },
+    "hybrid": {
+      "all": {
+        "ndcg@10": 0.7639,
+        "mrr": 0.7587,
+        "recall@1": 0.6599,
+        "recall@5": 0.8392,
+        "recall@10": 0.8673
+      },
+      "camel_nl": {
+        "ndcg@10": 0.5709,
+        "mrr": 0.5213,
+        "recall@1": 0.4,
+        "recall@5": 0.72,
+        "recall@10": 0.72
+      },
+      "conceptual": {
+        "ndcg@10": 0.5677,
+        "mrr": 0.6053,
+        "recall@1": 0.3714,
+        "recall@5": 0.6619,
+        "recall@10": 0.7524
+      },
+      "exact_symbol": {
+        "ndcg@10": 1.0,
+        "mrr": 1.0,
+        "recall@1": 1.0,
+        "recall@5": 1.0,
+        "recall@10": 1.0
+      },
+      "filtered": {
+        "ndcg@10": 0.9482,
+        "mrr": 1.0,
+        "recall@1": 1.0,
+        "recall@5": 0.9467,
+        "recall@10": 0.9444
+      },
+      "negative": {
+        "ndcg@10": 0.0,
+        "mrr": 0.0,
+        "recall@1": 0.0,
+        "recall@5": 0.0,
+        "recall@10": 0.0
+      },
+      "path": {
+        "ndcg@10": 0.872,
+        "mrr": 0.83,
+        "recall@1": 0.7333,
+        "recall@5": 1.0,
+        "recall@10": 1.0
+      },
+      "plural": {
+        "ndcg@10": 0.6147,
+        "mrr": 0.5572,
+        "recall@1": 0.4667,
+        "recall@5": 0.7333,
+        "recall@10": 0.8
+      },
+      "snake_nl": {
+        "ndcg@10": 0.9815,
+        "mrr": 0.975,
+        "recall@1": 0.95,
+        "recall@5": 1.0,
+        "recall@10": 1.0
+      }
+    },
+    "hybrid_rerank": {
+      "all": {
+        "ndcg@10": 0.7077,
+        "mrr": 0.6914,
+        "recall@1": 0.5578,
+        "recall@5": 0.8098,
+        "recall@10": 0.8639
+      },
+      "camel_nl": {
+        "ndcg@10": 0.4879,
+        "mrr": 0.4247,
+        "recall@1": 0.28,
+        "recall@5": 0.64,
+        "recall@10": 0.68
+      },
+      "conceptual": {
+        "ndcg@10": 0.5941,
+        "mrr": 0.6648,
+        "recall@1": 0.5143,
+        "recall@5": 0.6238,
+        "recall@10": 0.7667
+      },
+      "exact_symbol": {
+        "ndcg@10": 0.8616,
+        "mrr": 0.8182,
+        "recall@1": 0.7273,
+        "recall@5": 0.9091,
+        "recall@10": 1.0
+      },
+      "filtered": {
+        "ndcg@10": 0.9236,
+        "mrr": 0.9667,
+        "recall@1": 0.9333,
+        "recall@5": 0.9467,
+        "recall@10": 0.9444
+      },
+      "negative": {
+        "ndcg@10": 0.0,
+        "mrr": 0.0,
+        "recall@1": 0.0,
+        "recall@5": 0.0,
+        "recall@10": 0.0
+      },
+      "path": {
+        "ndcg@10": 0.7524,
+        "mrr": 0.6667,
+        "recall@1": 0.4,
+        "recall@5": 1.0,
+        "recall@10": 1.0
+      },
+      "plural": {
+        "ndcg@10": 0.5457,
+        "mrr": 0.4611,
+        "recall@1": 0.2667,
+        "recall@5": 0.8,
+        "recall@10": 0.8
+      },
+      "snake_nl": {
+        "ndcg@10": 0.9381,
+        "mrr": 0.9167,
+        "recall@1": 0.85,
+        "recall@5": 1.0,
+        "recall@10": 1.0
+      }
+    }
+  }
+}

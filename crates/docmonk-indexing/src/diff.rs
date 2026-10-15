@@ -8,6 +8,11 @@
 //!   candidates, or a kind change, fall back to delete + new).
 //! * Deletes are inferred only from a complete scan. An incomplete scan
 //!   keeps every unseen baseline file.
+//! * Racy clean: a matching stat is not trusted when the mtime falls
+//!   within [`RACY_WINDOW_SECS`](crate::fingerprint::RACY_WINDOW_SECS) of
+//!   the row's `last_indexed_at`; such a file is hashed.
+//! * New files are not hashed here (unless a rename needs it): the worker
+//!   that processes them hashes them in parallel.
 //! * A baseline file in `retry` whose `next_attempt_at` is due is
 //!   reprocessed; one not yet due is kept as is.
 //!
@@ -21,7 +26,7 @@ use docmonk_storage::knowledge::FileRow;
 use serde::Serialize;
 
 use crate::classify::classify;
-use crate::fingerprint::stat_unchanged;
+use crate::fingerprint::{racy, stat_unchanged};
 use crate::scan::{ScanOutcome, ScannedFile};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -82,6 +87,35 @@ fn due(next_attempt_at: Option<&str>, now: &str) -> bool {
     next_attempt_at.is_none_or(|t| t <= now)
 }
 
+/// Scanned files [`diff`] will hash against `baseline`: stat mismatches,
+/// racy rows, due retries, and every unknown path when a vanished
+/// baseline row makes a rename possible. Hashing them up front on a
+/// bounded pool keeps the classify step off a single thread.
+pub fn hash_candidates<'a>(
+    scan: &'a ScanOutcome,
+    baseline: &[FileRow],
+    now_iso: &str,
+) -> Vec<&'a ScannedFile> {
+    let by_path: HashMap<&str, &FileRow> =
+        baseline.iter().map(|r| (r.rel_path.as_str(), r)).collect();
+    let scanned: std::collections::HashSet<&str> =
+        scan.files.iter().map(|f| f.rel_path.as_str()).collect();
+    let renames_possible = baseline
+        .iter()
+        .any(|r| r.content_hash.is_some() && !scanned.contains(r.rel_path.as_str()));
+    scan.files
+        .iter()
+        .filter(|f| match by_path.get(f.rel_path.as_str()) {
+            None => renames_possible,
+            Some(p) => {
+                (p.status == "retry" && due(p.next_attempt_at.as_deref(), now_iso))
+                    || !stat_unchanged(p.size, p.mtime, f.size, f.mtime)
+                    || racy(f.mtime, p.last_indexed_at.as_deref())
+            }
+        })
+        .collect()
+}
+
 /// `hash` hashes one scanned file; errors are reported as `Changed` with
 /// no hash (the processor will then surface the I/O error per file).
 pub fn diff(
@@ -118,6 +152,7 @@ pub fn diff(
             }
         }
     }
+    let renames_possible = !missing_by_hash.is_empty();
     let mut decisions = Vec::new();
     let mut consumed: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut moved_targets: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -193,11 +228,17 @@ pub fn diff(
         let kind = classify(&f.path);
         let prev = by_path.get(f.rel_path.as_str()).copied();
         let (change, content_hash) = match prev {
-            None => (Change::New, hash_of(f, &mut counts)),
+            // Hashed by the processing worker unless a rename check
+            // already did.
+            None if renames_possible => (Change::New, hash_of(f, &mut counts)),
+            None => (Change::New, None),
             Some(p) if p.status == "retry" && due(p.next_attempt_at.as_deref(), now_iso) => {
                 (Change::Changed, hash_of(f, &mut counts))
             }
-            Some(p) if stat_unchanged(p.size, p.mtime, f.size, f.mtime) => {
+            Some(p)
+                if stat_unchanged(p.size, p.mtime, f.size, f.mtime)
+                    && !racy(f.mtime, p.last_indexed_at.as_deref()) =>
+            {
                 (Change::Unchanged, p.content_hash.clone())
             }
             Some(p) => {

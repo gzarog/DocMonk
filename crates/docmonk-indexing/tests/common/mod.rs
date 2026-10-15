@@ -36,10 +36,19 @@ pub fn add_source(
     .0
 }
 
+/// Writes a file that looks settled: its mtime is 10 s in the past, so
+/// the racy-clean rule does not re-hash it on the next pass.
 pub fn write(root: &Path, rel: &str, content: &str) {
     let p = root.join(rel);
     std::fs::create_dir_all(p.parent().unwrap()).unwrap();
-    std::fs::write(p, content).unwrap();
+    std::fs::write(&p, content).unwrap();
+    let t = std::time::SystemTime::now() - std::time::Duration::from_secs(10);
+    std::fs::File::options()
+        .write(true)
+        .open(&p)
+        .unwrap()
+        .set_modified(t)
+        .unwrap();
 }
 
 pub fn bump_mtime(path: &Path, secs: u64) {

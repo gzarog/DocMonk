@@ -1,0 +1,500 @@
+{
+  "dataset": {
+    "queries": 157,
+    "labels": "author-reviewed (not independently reviewed)",
+    "sources": [
+      "crates",
+      "docs"
+    ]
+  },
+  "index_seconds": 12.362579983,
+  "models": false,
+  "arms": {
+    "lexical": {
+      "metrics": {
+        "all": {
+          "queries": 147,
+          "ndcg@10": 0.8411,
+          "mrr": 0.8611,
+          "recall@1": 0.8095,
+          "recall@5": 0.8712,
+          "recall@10": 0.8878,
+          "abstention": 0.7
+        },
+        "camel_nl": {
+          "queries": 25,
+          "ndcg@10": 0.8302,
+          "mrr": 0.8,
+          "recall@1": 0.72,
+          "recall@5": 0.92,
+          "recall@10": 0.92
+        },
+        "conceptual": {
+          "queries": 35,
+          "ndcg@10": 0.5758,
+          "mrr": 0.6929,
+          "recall@1": 0.6,
+          "recall@5": 0.5762,
+          "recall@10": 0.619
+        },
+        "exact_symbol": {
+          "queries": 22,
+          "ndcg@10": 1.0,
+          "mrr": 1.0,
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0
+        },
+        "filtered": {
+          "queries": 15,
+          "ndcg@10": 0.9174,
+          "mrr": 0.9556,
+          "recall@1": 0.9333,
+          "recall@5": 0.9267,
+          "recall@10": 0.9222
+        },
+        "negative": {
+          "queries": 0,
+          "ndcg@10": 0.0,
+          "mrr": 0.0,
+          "recall@1": 0.0,
+          "recall@5": 0.0,
+          "recall@10": 0.0,
+          "abstention": 0.7
+        },
+        "path": {
+          "queries": 15,
+          "ndcg@10": 1.0,
+          "mrr": 1.0,
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0
+        },
+        "plural": {
+          "queries": 15,
+          "ndcg@10": 0.8566,
+          "mrr": 0.8111,
+          "recall@1": 0.7333,
+          "recall@5": 0.9333,
+          "recall@10": 1.0
+        },
+        "snake_nl": {
+          "queries": 20,
+          "ndcg@10": 0.9565,
+          "mrr": 0.9417,
+          "recall@1": 0.9,
+          "recall@5": 1.0,
+          "recall@10": 1.0
+        }
+      },
+      "latency_ms": {
+        "p50": 30.831414000000002,
+        "p95": 41.416543
+      }
+    },
+    "routed": {
+      "metrics": {
+        "all": {
+          "queries": 147,
+          "ndcg@10": 0.8216,
+          "mrr": 0.837,
+          "recall@1": 0.7687,
+          "recall@5": 0.861,
+          "recall@10": 0.8821,
+          "abstention": 0.9
+        },
+        "camel_nl": {
+          "queries": 25,
+          "ndcg@10": 0.8302,
+          "mrr": 0.8,
+          "recall@1": 0.72,
+          "recall@5": 0.92,
+          "recall@10": 0.92
+        },
+        "conceptual": {
+          "queries": 35,
+          "ndcg@10": 0.5222,
+          "mrr": 0.631,
+          "recall@1": 0.4857,
+          "recall@5": 0.5619,
+          "recall@10": 0.5905
+        },
+        "exact_symbol": {
+          "queries": 22,
+          "ndcg@10": 1.0,
+          "mrr": 1.0,
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0
+        },
+        "filtered": {
+          "queries": 15,
+          "ndcg@10": 0.8966,
+          "mrr": 0.9222,
+          "recall@1": 0.8667,
+          "recall@5": 0.9267,
+          "recall@10": 0.9333
+        },
+        "negative": {
+          "queries": 0,
+          "ndcg@10": 0.0,
+          "mrr": 0.0,
+          "recall@1": 0.0,
+          "recall@5": 0.0,
+          "recall@10": 0.0,
+          "abstention": 0.9
+        },
+        "path": {
+          "queries": 15,
+          "ndcg@10": 1.0,
+          "mrr": 1.0,
+          "recall@1": 1.0,
+          "recall@5": 1.0,
+          "recall@10": 1.0
+        },
+        "plural": {
+          "queries": 15,
+          "ndcg@10": 0.7774,
+          "mrr": 0.7078,
+          "recall@1": 0.6,
+          "recall@5": 0.8667,
+          "recall@10": 1.0
+        },
+        "snake_nl": {
+          "queries": 20,
+          "ndcg@10": 0.9815,
+          "mrr": 0.975,
+          "recall@1": 0.95,
+          "recall@5": 1.0,
+          "recall@10": 1.0
+        }
+      },
+      "latency_ms": {
+        "p50": 36.184915999999994,
+        "p95": 192.351262
+      }
+    }
+  },
+  "failures_top5": {
+    "lexical": [
+      {
+        "id": "r024",
+        "intent": "camel_nl",
+        "query": "cross encoder",
+        "expected": [
+          "crates/docmonk-ml/src/reranker.rs"
+        ],
+        "top5": [
+          "/docs/adr/0015-reranker-and-model-baseline.md"
+        ]
+      },
+      {
+        "id": "r026",
+        "intent": "camel_nl",
+        "query": "knowledge linker",
+        "expected": [
+          "crates/docmonk-knowledge/src/lib.rs"
+        ],
+        "top5": [
+          "/docs/adr/0012-knowledge-linker.md"
+        ]
+      },
+      {
+        "id": "r081",
+        "intent": "plural",
+        "query": "graph statuses",
+        "expected": [
+          "crates/docmonk-storage/src/graph.rs"
+        ],
+        "top5": [
+          "/crates/docmonk-backends/src/graph.rs",
+          "/docs/adr/0017-symbol-and-graph-queries.md",
+          "/crates/docmonk-code/src/graph.rs",
+          "/crates/docmonk-retrieval/src/graph.rs",
+          "/crates/docmonk-retrieval/tests/graph.rs"
+        ]
+      },
+      {
+        "id": "r112",
+        "intent": "conceptual",
+        "query": "email attachments become child documents",
+        "expected": [
+          "crates/docmonk-convert/src/email.rs",
+          "docs/adr/0018-explore-impact-and-provenance.md"
+        ],
+        "top5": [
+          "/docs/adr/0011-document-conversion.md",
+          "/crates/docmonk-ui/assets/templates/documents/detail.html",
+          "/docs/reference.md",
+          "/docs/architecture.md",
+          "/docs/ui.md"
+        ]
+      },
+      {
+        "id": "r120",
+        "intent": "conceptual",
+        "query": "cpu budget shared by concurrent indexing sources",
+        "expected": [
+          "crates/docmonk-indexing/src/governor.rs"
+        ],
+        "top5": [
+          "/crates/docmonk-indexing/src/daemon/mod.rs",
+          "/docs/reference.md",
+          "/docs/adr/0008-indexing-core.md",
+          "/docs/adr/0007-server-schema.md"
+        ]
+      },
+      {
+        "id": "r121",
+        "intent": "conceptual",
+        "query": "retry transient file failures with backoff",
+        "expected": [
+          "crates/docmonk-indexing/src/retry.rs"
+        ],
+        "top5": [
+          "/crates/docmonk-indexing/tests/scenarios.rs",
+          "/docs/adr/0008-indexing-core.md",
+          "/docs/docmonk-overview.html",
+          "/docs/reference.md",
+          "/docs/adr/0020-daemon-lifecycle.md"
+        ]
+      },
+      {
+        "id": "r122",
+        "intent": "conceptual",
+        "query": "hash files to detect content changes",
+        "expected": [
+          "crates/docmonk-indexing/src/fingerprint.rs",
+          "crates/docmonk-indexing/src/diff.rs"
+        ],
+        "top5": [
+          "/crates/docmonk-storage/src/graph.rs",
+          "/docs/reference.md",
+          "/crates/docmonk-storage/src/facts.rs",
+          "/crates/docmonk-code/src/process.rs",
+          "/docs/docmonk-overview.html"
+        ]
+      },
+      {
+        "id": "r124",
+        "intent": "conceptual",
+        "query": "decompose comparison questions into subqueries",
+        "expected": [
+          "crates/docmonk-retrieval/src/decompose.rs"
+        ],
+        "top5": [
+          "/docs/reference.md"
+        ]
+      },
+      {
+        "id": "r126",
+        "intent": "conceptual",
+        "query": "grounded citations and insufficient evidence verdict",
+        "expected": [
+          "crates/docmonk-retrieval/src/grounding.rs",
+          "crates/docmonk-service/src/evidence.rs"
+        ],
+        "top5": [
+          "/docs/reference.md",
+          "/docs/adr/0033-p0-storage-and-execution-contracts.md"
+        ]
+      },
+      {
+        "id": "r132",
+        "intent": "conceptual",
+        "query": "resolve call targets across files",
+        "expected": [
+          "crates/docmonk-code/src/resolve.rs",
+          "crates/docmonk-code/src/graph_stage.rs"
+        ],
+        "top5": [
+          "/docs/adr/0009-code-intelligence.md",
+          "/docs/adr/0017-symbol-and-graph-queries.md",
+          "/docs/reference.md"
+        ]
+      },
+      {
+        "id": "r150",
+        "intent": "negative",
+        "query": "react component lifecycle hooks",
+        "expected": [],
+        "top5": [
+          "/docs/adr/0020-daemon-lifecycle.md"
+        ]
+      },
+      {
+        "id": "r152",
+        "intent": "negative",
+        "query": "terraform state locking in s3",
+        "expected": [],
+        "top5": [
+          "/crates/docmonk-indexing/src/lock.rs",
+          "/docs/reference.md",
+          "/crates/docmonk-indexing/src/watcher/debounce.rs",
+          "/docs/adr/0034-status-contract.md",
+          "/crates/docmonk-ui/src/indexer.rs"
+        ]
+      },
+      {
+        "id": "r157",
+        "intent": "negative",
+        "query": "kafka consumer group rebalancing",
+        "expected": [],
+        "top5": [
+          "/docs/adr/0011-document-conversion.md"
+        ]
+      }
+    ],
+    "routed": [
+      {
+        "id": "r024",
+        "intent": "camel_nl",
+        "query": "cross encoder",
+        "expected": [
+          "crates/docmonk-ml/src/reranker.rs"
+        ],
+        "top5": [
+          "/docs/adr/0015-reranker-and-model-baseline.md"
+        ]
+      },
+      {
+        "id": "r026",
+        "intent": "camel_nl",
+        "query": "knowledge linker",
+        "expected": [
+          "crates/docmonk-knowledge/src/lib.rs"
+        ],
+        "top5": [
+          "/docs/adr/0012-knowledge-linker.md"
+        ]
+      },
+      {
+        "id": "r072",
+        "intent": "plural",
+        "query": "project stores",
+        "expected": [
+          "crates/docmonk-storage/src/knowledge.rs"
+        ],
+        "top5": [
+          "/docs/adr/0034-status-contract.md",
+          "/docs/reference.md",
+          "/docs/architecture.md",
+          "/docs/providers/subscription-providers.md",
+          "/crates/docmonk-storage/src/read.rs"
+        ]
+      },
+      {
+        "id": "r081",
+        "intent": "plural",
+        "query": "graph statuses",
+        "expected": [
+          "crates/docmonk-storage/src/graph.rs"
+        ],
+        "top5": [
+          "/crates/docmonk-backends/src/graph.rs",
+          "/docs/adr/0017-symbol-and-graph-queries.md",
+          "/crates/docmonk-code/src/graph.rs",
+          "/crates/docmonk-retrieval/src/graph.rs",
+          "/crates/docmonk-retrieval/tests/graph.rs"
+        ]
+      },
+      {
+        "id": "r120",
+        "intent": "conceptual",
+        "query": "cpu budget shared by concurrent indexing sources",
+        "expected": [
+          "crates/docmonk-indexing/src/governor.rs"
+        ],
+        "top5": [
+          "/docs/reference.md",
+          "/docs/adr/0033-p0-storage-and-execution-contracts.md",
+          "/crates/docmonk-indexing/src/daemon/mod.rs",
+          "/docs/docmonk-overview.html",
+          "/docs/adr/0008-indexing-core.md"
+        ]
+      },
+      {
+        "id": "r121",
+        "intent": "conceptual",
+        "query": "retry transient file failures with backoff",
+        "expected": [
+          "crates/docmonk-indexing/src/retry.rs"
+        ],
+        "top5": [
+          "/crates/docmonk-indexing/tests/scenarios.rs",
+          "/docs/adr/0008-indexing-core.md",
+          "/docs/docmonk-overview.html",
+          "/docs/adr/0020-daemon-lifecycle.md",
+          "/docs/reference.md"
+        ]
+      },
+      {
+        "id": "r122",
+        "intent": "conceptual",
+        "query": "hash files to detect content changes",
+        "expected": [
+          "crates/docmonk-indexing/src/fingerprint.rs",
+          "crates/docmonk-indexing/src/diff.rs"
+        ],
+        "top5": [
+          "/docs/reference.md",
+          "/docs/docmonk-overview.html",
+          "/crates/docmonk-storage/src/graph.rs",
+          "/crates/docmonk-storage/src/facts.rs",
+          "/crates/docmonk-code/src/process.rs"
+        ]
+      },
+      {
+        "id": "r124",
+        "intent": "conceptual",
+        "query": "decompose comparison questions into subqueries",
+        "expected": [
+          "crates/docmonk-retrieval/src/decompose.rs"
+        ],
+        "top5": [
+          "/docs/reference.md"
+        ]
+      },
+      {
+        "id": "r126",
+        "intent": "conceptual",
+        "query": "grounded citations and insufficient evidence verdict",
+        "expected": [
+          "crates/docmonk-retrieval/src/grounding.rs",
+          "crates/docmonk-service/src/evidence.rs"
+        ],
+        "top5": [
+          "/docs/adr/0033-p0-storage-and-execution-contracts.md",
+          "/docs/reference.md"
+        ]
+      },
+      {
+        "id": "r132",
+        "intent": "conceptual",
+        "query": "resolve call targets across files",
+        "expected": [
+          "crates/docmonk-code/src/resolve.rs",
+          "crates/docmonk-code/src/graph_stage.rs"
+        ],
+        "top5": [
+          "/docs/reference.md",
+          "/docs/adr/0017-symbol-and-graph-queries.md",
+          "/docs/adr/0009-code-intelligence.md"
+        ]
+      },
+      {
+        "id": "r152",
+        "intent": "negative",
+        "query": "terraform state locking in s3",
+        "expected": [],
+        "top5": [
+          "/docs/adr/0024-cli-ops-commands.md",
+          "/crates/docmonk-indexing/src/lock.rs",
+          "/docs/reference.md",
+          "/crates/docmonk-indexing/src/watcher/debounce.rs",
+          "/docs/adr/0034-status-contract.md"
+        ]
+      }
+    ]
+  }
+}

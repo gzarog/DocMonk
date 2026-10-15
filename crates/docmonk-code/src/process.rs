@@ -33,7 +33,7 @@ pub const CODE_DERIVATION_VERSION: &str = "rust-code-2";
 /// Derivation identity of the relationship graph (per-file edges, cross-file
 /// resolution and linking). Independent of the base index identity: a
 /// change recomputes graphs only, never reindexes content.
-pub const GRAPH_DERIVATION_VERSION: &str = "graph-1";
+pub const GRAPH_DERIVATION_VERSION: &str = "graph-2";
 
 /// The full graph identity recorded with every graph generation (it
 /// includes the code derivation, whose entity ids the graph points at).

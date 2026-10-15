@@ -147,10 +147,12 @@ fn diff(got: &Value, want: &Value) -> Vec<String> {
 
 #[test]
 fn impact_and_explore_are_as_expected() {
-    let golden: Value = serde_json::from_str(
+    let mut golden: Value = serde_json::from_str(
         &std::fs::read_to_string(repo_root().join("fixtures/expected/explore.json")).unwrap(),
     )
     .unwrap();
+    // `DOCMONK_BLESS=1` re-records every payload (a deliberate change).
+    let bless = std::env::var("DOCMONK_BLESS").as_deref() == Ok("1");
     let mut failures = Vec::new();
     let mut checked = 0;
     for name in ["linking", "graph"] {
@@ -159,26 +161,46 @@ fn impact_and_explore_are_as_expected() {
             store: &ix.store,
             build_id: &ix.build,
         }];
-        for want in golden[name]["impact"].as_array().unwrap() {
+        for want in golden[name]["impact"].as_array_mut().unwrap() {
             checked += 1;
             let q = want["query"].as_str().unwrap();
             let depth = want["max_depth"].as_u64().unwrap() as usize;
             let mut got = strip(&explore::impact(&corpora, q, depth, 100).unwrap());
             got["max_depth"] = want["max_depth"].clone();
+            if bless {
+                *want = got;
+                continue;
+            }
             for d in diff(&canonical(got), &canonical(want.clone())) {
                 failures.push(format!("[{name}] impact {q:?}@{depth} {d}"));
             }
         }
-        for want in golden[name]["explore"].as_array().unwrap() {
+        for want in golden[name]["explore"].as_array_mut().unwrap() {
             checked += 1;
             let q = want["query"].as_str().unwrap();
             let plan = explore::plan(q, false);
             let got =
                 strip(&explore::explore(&corpora, &plan, None, ExploreOptions::default()).unwrap());
+            if bless {
+                *want = got;
+                continue;
+            }
             for d in diff(&canonical(got), &canonical(want.clone())) {
                 failures.push(format!("[{name}] explore {q:?} {d}"));
             }
         }
+    }
+    if bless {
+        let mut out = Vec::new();
+        let fmt = serde_json::ser::PrettyFormatter::with_indent(b" ");
+        serde::Serialize::serialize(
+            &golden,
+            &mut serde_json::Serializer::with_formatter(&mut out, fmt),
+        )
+        .unwrap();
+        out.push(b'\n');
+        std::fs::write(repo_root().join("fixtures/expected/explore.json"), out).unwrap();
+        return;
     }
     for f in failures.iter().take(30) {
         eprintln!("{}", f.chars().take(900).collect::<String>());

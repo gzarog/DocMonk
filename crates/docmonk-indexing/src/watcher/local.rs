@@ -1,8 +1,11 @@
 //! Native filesystem events for one local root
-//! through `notify`. Every
-//! file-level create, modify, remove or rename (both halves) is debounced
-//! per path, then reported. Directory events are dropped, since a
-//! targeted pass skips directories anyway. When native watching cannot
+//! through `notify`. Every create, modify, remove or rename (both halves)
+//! is debounced per path, then reported. Directory paths are reported too:
+//! a directory created or renamed in (or out) produces no events for the
+//! files inside it, so the targeted pass walks it (or drops the rows
+//! under it). A watcher error or an event flagged for rescan (the kernel
+//! queue overflowed, events were lost) is reported through `on_rescan`,
+//! which the daemon turns into a full pass. When native watching cannot
 //! start (no inotify instances left, an unsupported filesystem), the
 //! watcher falls back to `notify`'s polling watcher.
 
@@ -10,11 +13,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use notify::{Event, EventKind, RecursiveMode, Watcher};
+use notify::{Event, EventHandler, EventKind, RecursiveMode, Watcher};
 
 use super::debounce::Debouncer;
 
 pub type OnPath = Arc<dyn Fn(PathBuf) + Send + Sync>;
+/// Called (with a short reason) when touched paths can no longer be
+/// trusted to cover every change.
+pub type OnRescan = Arc<dyn Fn(String) + Send + Sync>;
+type Handler = Box<dyn EventHandler>;
 
 /// Which backend a [`LocalWatcher`] ended up with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +35,8 @@ pub struct LocalWatcher {
     _watcher: Box<dyn Watcher + Send>,
     debouncer: Arc<Debouncer>,
     backend: Backend,
+    /// A copy of the event handler, for fault injection.
+    injector: std::sync::Mutex<Handler>,
 }
 
 impl std::fmt::Debug for LocalWatcher {
@@ -55,6 +64,7 @@ impl LocalWatcher {
         poll_interval: Duration,
         force_polling: bool,
         on_path: OnPath,
+        on_rescan: OnRescan,
     ) -> notify::Result<Self> {
         if !root.is_dir() {
             return Err(notify::Error::path_not_found().add_path(root.to_path_buf()));
@@ -62,15 +72,16 @@ impl LocalWatcher {
         let debouncer = Arc::new(Debouncer::new(debounce_ms, move |key| {
             on_path(PathBuf::from(key));
         }));
-        let handler = handler_for(Arc::clone(&debouncer));
+        let handler = handler_for(Arc::clone(&debouncer), on_rescan);
+        let injector = std::sync::Mutex::new(Box::new(handler.clone()) as Handler);
         let (mut watcher, backend): (Box<dyn Watcher + Send>, Backend) = if force_polling {
-            (polling(handler, poll_interval)?, Backend::Polling)
+            (polling(handler.clone(), poll_interval)?, Backend::Polling)
         } else {
             match notify::recommended_watcher(handler.clone()) {
                 Ok(w) => (Box::new(w), Backend::Native),
                 Err(e) => {
                     tracing::warn!(component = "watcher", event = "native_watch_unavailable", root = %root.display(), error = %e);
-                    (polling(handler, poll_interval)?, Backend::Polling)
+                    (polling(handler.clone(), poll_interval)?, Backend::Polling)
                 }
             }
         };
@@ -80,23 +91,34 @@ impl LocalWatcher {
             }
             // The native backend can fail per root (inotify watch limit).
             tracing::warn!(component = "watcher", event = "native_watch_failed", root = %root.display(), error = %e);
-            let mut w = polling(handler_for(Arc::clone(&debouncer)), poll_interval)?;
+            let mut w = polling(handler, poll_interval)?;
             w.watch(root, RecursiveMode::Recursive)?;
             return Ok(Self {
                 _watcher: w,
                 debouncer,
                 backend: Backend::Polling,
+                injector,
             });
         }
         Ok(Self {
             _watcher: watcher,
             debouncer,
             backend,
+            injector,
         })
     }
 
     pub fn backend(&self) -> Backend {
         self.backend
+    }
+
+    /// Fault injection (tests/drills only): handles `event` as if the
+    /// backend had delivered it.
+    pub fn inject(&self, event: notify::Result<Event>) {
+        self.injector
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .handle_event(event);
     }
 
     /// Drops debounced paths not yet due (shutdown).
@@ -105,18 +127,25 @@ impl LocalWatcher {
     }
 }
 
-/// Forwards file-level events to the debouncer. A path that is a
-/// directory right now carries nothing a contained file event would not.
-/// A removed path cannot be checked, so it is forwarded.
-fn handler_for(d: Arc<Debouncer>) -> impl notify::EventHandler + Clone {
+/// Forwards events to the debouncer, and errors and rescan requests to
+/// `on_rescan`.
+fn handler_for(d: Arc<Debouncer>, on_rescan: OnRescan) -> impl EventHandler + Clone {
     move |res: notify::Result<Event>| {
-        let Ok(event) = res else {
-            return;
+        let event = match res {
+            Ok(e) => e,
+            Err(e) => {
+                on_rescan(format!("watcher error: {e}"));
+                return;
+            }
         };
+        if event.need_rescan() {
+            on_rescan("events were lost".into());
+            return;
+        }
         if !relevant(&event.kind) {
             return;
         }
-        for p in event.paths.into_iter().filter(|p| !p.is_dir()) {
+        for p in event.paths {
             d.notify(p.to_string_lossy().into_owned());
         }
     }
@@ -164,6 +193,7 @@ mod tests {
             Duration::from_millis(100),
             force_polling,
             Arc::new(move |p| s.lock().unwrap().push(p)),
+            Arc::new(|_| {}),
         )
         .unwrap();
         assert_eq!(
@@ -178,8 +208,36 @@ mod tests {
         std::thread::sleep(Duration::from_millis(250));
         std::fs::write(root.join("sub/new.py"), "x = 1\n").unwrap();
         assert!(wait_for(&seen, "new.py"), "{force_polling}: {seen:?}");
-        // Directories themselves are never reported.
-        assert!(!seen.lock().unwrap().iter().any(|p| p.ends_with("sub")));
+        // A directory renamed in is reported itself (its files raise no
+        // events of their own).
+        let outside = dir.path().join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("inner.py"), "y = 2\n").unwrap();
+        std::fs::rename(&outside, root.join("moved")).unwrap();
+        assert!(wait_for(&seen, "moved"), "{force_polling}: {seen:?}");
+    }
+
+    #[test]
+    fn errors_and_rescan_flags_request_a_full_pass() {
+        let dir = tempfile::tempdir().unwrap();
+        let reasons: Arc<Mutex<Vec<String>>> = Arc::default();
+        let r = Arc::clone(&reasons);
+        let w = LocalWatcher::start(
+            dir.path(),
+            10,
+            Duration::from_millis(100),
+            false,
+            Arc::new(|_| {}),
+            Arc::new(move |why| r.lock().unwrap().push(why)),
+        )
+        .unwrap();
+        w.inject(Err(notify::Error::generic("boom")));
+        w.inject(Ok(
+            Event::new(EventKind::Other).set_flag(notify::event::Flag::Rescan)
+        ));
+        let got = reasons.lock().unwrap().clone();
+        assert_eq!(got.len(), 2, "{got:?}");
+        assert!(got[0].contains("boom"));
     }
 
     #[test]
@@ -200,6 +258,7 @@ mod tests {
             10,
             Duration::from_millis(100),
             false,
+            Arc::new(|_| {}),
             Arc::new(|_| {}),
         );
         assert!(r.is_err());

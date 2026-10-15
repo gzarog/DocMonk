@@ -97,17 +97,32 @@ fn store(env: &Env, i: usize) -> (ProjectStore, String) {
     (store, active)
 }
 
+/// Each source's graph follows its own base publication (pipelined): no
+/// graph is built before its source is indexed, and none waits for the
+/// other sources.
+fn assert_pipelined(events: &[(String, &'static str)], states: &[&str]) {
+    let graphs: Vec<&(String, &str)> = events.iter().filter(|(_, p)| *p != "indexed").collect();
+    assert_eq!(graphs.len(), 3, "{events:?}");
+    assert!(graphs.iter().all(|(_, p)| states.contains(p)), "{events:?}");
+    for (src, _) in graphs {
+        let indexed = events
+            .iter()
+            .position(|(s, p)| s == src && *p == "indexed")
+            .expect("indexed");
+        let ready = events
+            .iter()
+            .position(|(s, p)| s == src && *p != "indexed")
+            .expect("graph");
+        assert!(indexed < ready, "graph before its index: {events:?}");
+    }
+}
+
 #[test]
-fn every_source_is_indexed_before_any_relationship_graph_is_built() {
+fn each_source_graph_is_built_right_after_its_own_index() {
     let env = setup(true);
     let (events, r) = run(&env);
     assert_eq!(r, Ok(()));
-    let first_graph = events
-        .iter()
-        .position(|(_, p)| *p != "indexed")
-        .expect("graph stage ran");
-    assert_eq!(first_graph, 3, "barrier violated: {events:?}");
-    assert!(events[3..].iter().all(|(_, p)| *p == "ready"), "{events:?}");
+    assert_pipelined(&events, &["ready"]);
     for i in 0..3 {
         let (s, b) = store(&env, i);
         assert!(s.graph_visible(&b).unwrap());
@@ -117,10 +132,7 @@ fn every_source_is_indexed_before_any_relationship_graph_is_built() {
     // A warm pass reindexes nothing and finds every graph current.
     let (events, r) = run(&env);
     assert_eq!(r, Ok(()));
-    assert!(
-        events[3..].iter().all(|(_, p)| *p == "up_to_date"),
-        "{events:?}"
-    );
+    assert_pipelined(&events, &["up_to_date"]);
 }
 
 #[test]
@@ -227,7 +239,7 @@ fn disabled_relationships_skip_the_stage_and_hide_graphs_without_reindexing() {
     set_relationships(&env, true);
     let (events, r) = run(&env);
     assert_eq!(r, Ok(()));
-    assert!(events[3..].iter().all(|(_, p)| *p == "ready"), "{events:?}");
+    assert_pipelined(&events, &["ready", "up_to_date"]);
     let (s, b3) = store(&env, 1);
     assert_eq!(b3, b);
     assert!(s.graph_visible(&b3).unwrap());
@@ -559,7 +571,13 @@ fn a_cancelled_graph_build_publishes_nothing_and_the_retry_matches_a_clean_build
         docmonk_knowledge::build_graph(&mut s, &env.roots[0], &b, 1, Some(&cancel), &mut |_, _| {})
             .unwrap_err();
     assert_eq!(e, docmonk_code::graph_stage::GraphError::Cancelled);
+    // Readers keep the last committed graph (flagged stale) or none; a
+    // strict reader sees nothing.
+    let fresh = s.graph_freshness(&b).unwrap();
+    assert!(!fresh.visible || fresh.stale, "{fresh:?}");
+    s.require_current_graph(true);
     assert!(!s.graph_visible(&b).unwrap());
+    s.require_current_graph(false);
     assert_eq!(s.graph_state().unwrap().state, GraphLifecycle::Failed);
     assert_eq!(s.count("relationships", &b).unwrap(), before, "rolled back");
     drop(s);

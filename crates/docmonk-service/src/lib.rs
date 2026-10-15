@@ -8,6 +8,8 @@
 
 pub mod ask;
 pub mod backend;
+#[doc(hidden)]
+pub mod bench;
 pub mod daemon;
 pub mod dependencies;
 pub mod evidence;

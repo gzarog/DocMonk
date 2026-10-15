@@ -32,12 +32,35 @@ pub struct SemanticHit {
     pub document_id: Option<String>,
 }
 
+/// Where one semantic query spent its time (milliseconds). Model loading
+/// happens before [`search`] and is timed by the caller.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct SemanticStages {
+    pub query_embed_ms: f64,
+    pub ann_load_ms: f64,
+    pub ann_freshness_ms: f64,
+    pub ann_search_ms: f64,
+    pub meta_join_ms: f64,
+}
+
+impl SemanticStages {
+    /// Adds `other` stage by stage (several corpora).
+    pub fn add(&mut self, other: &SemanticStages) {
+        self.query_embed_ms += other.query_embed_ms;
+        self.ann_load_ms += other.ann_load_ms;
+        self.ann_freshness_ms += other.ann_freshness_ms;
+        self.ann_search_ms += other.ann_search_ms;
+        self.meta_join_ms += other.meta_join_ms;
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SemanticResult {
     pub available: bool,
     pub reason: String,
     pub engine: Option<Engine>,
     pub hits: Vec<SemanticHit>,
+    pub stages: SemanticStages,
 }
 
 impl SemanticResult {
@@ -47,8 +70,61 @@ impl SemanticResult {
             reason: reason.into(),
             engine: None,
             hits: Vec::new(),
+            stages: SemanticStages::default(),
         }
     }
+}
+
+fn ms(t: std::time::Instant) -> f64 {
+    t.elapsed().as_secs_f64() * 1000.0
+}
+
+/// Query-time ANN parameters (`search.ann`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AnnParams {
+    /// HNSW beam width (local index).
+    pub ef_search: usize,
+    /// Elasticsearch kNN `num_candidates`; 0 = `max(10 * k, 100)`.
+    pub num_candidates: usize,
+}
+
+impl Default for AnnParams {
+    fn default() -> Self {
+        Self {
+            ef_search: ann::DEFAULT_EF_SEARCH,
+            num_candidates: 0,
+        }
+    }
+}
+
+/// A query embedded once, reused for every corpus of a request.
+#[derive(Debug, Clone, PartialEq)]
+pub struct QueryVector {
+    pub vector: Vec<f32>,
+    /// Fingerprint of the model that produced it.
+    pub fingerprint: String,
+    /// Time spent embedding (milliseconds).
+    pub embed_ms: f64,
+}
+
+/// Embeds `query` (trimmed); `None` for an empty query.
+pub fn embed_query(embedder: &Embedder, query: &str) -> Result<Option<QueryVector>, String> {
+    let query = query.trim();
+    if query.is_empty() {
+        return Ok(None);
+    }
+    let t = std::time::Instant::now();
+    crate::counters::query_embedded();
+    let vector = embedder
+        .embed(&[query])
+        .map_err(|e| e.to_string())?
+        .pop()
+        .unwrap_or_default();
+    Ok(Some(QueryVector {
+        vector,
+        fingerprint: embedder.fingerprint().to_owned(),
+        embed_ms: ms(t),
+    }))
 }
 
 /// Searches `build_id` for `query`. This never fails
@@ -63,33 +139,76 @@ pub fn search(
     limit: usize,
     candidate_k: Option<usize>,
 ) -> Result<SemanticResult, String> {
-    let query = query.trim();
     let Some(embedder) = embedder else {
         return Ok(SemanticResult::unavailable("embedding model unavailable"));
     };
-    if query.is_empty() {
+    let Some(qv) = embed_query(embedder, query)? else {
         return Ok(SemanticResult {
             available: true,
             reason: "empty query".into(),
             engine: None,
             hits: Vec::new(),
+            stages: SemanticStages::default(),
         });
-    }
-    let qv = embedder
-        .embed(&[query])
-        .map_err(|e| e.to_string())?
-        .pop()
-        .unwrap_or_default();
+    };
+    let mut r = search_vector(
+        store,
+        project_dir,
+        build_id,
+        &qv,
+        limit,
+        candidate_k,
+        AnnParams::default(),
+    )?;
+    r.stages.query_embed_ms = qv.embed_ms;
+    Ok(r)
+}
+
+/// Semantic search of one build for an already embedded query.
+pub fn search_vector(
+    store: &dyn KnowledgeRead,
+    project_dir: &Path,
+    build_id: &str,
+    qv: &QueryVector,
+    limit: usize,
+    candidate_k: Option<usize>,
+    params: AnnParams,
+) -> Result<SemanticResult, String> {
+    let mut stages = SemanticStages::default();
     let k = candidate_k.unwrap_or(limit).max(limit);
     let (engine, raw) = match store.as_project_store() {
-        Some(local) => ann::search(local, project_dir, build_id, embedder.fingerprint(), &qv, k)?,
-        None => match store
-            .vector_search(build_id, embedder.fingerprint(), &qv, k)
-            .map_err(|e| e.to_string())?
-        {
-            Some(hits) => (Engine::Server, hits),
-            None => return Ok(SemanticResult::unavailable("vector search unavailable")),
-        },
+        Some(local) => {
+            let (engine, hits, t) = ann::search_timed(
+                local,
+                project_dir,
+                build_id,
+                &qv.fingerprint,
+                &qv.vector,
+                k,
+                params.ef_search,
+            )?;
+            stages.ann_load_ms = t.load_ms;
+            stages.ann_freshness_ms = t.freshness_ms;
+            stages.ann_search_ms = t.search_ms;
+            (engine, hits)
+        }
+        None => {
+            let t = std::time::Instant::now();
+            let found = store
+                .vector_search(
+                    build_id,
+                    &qv.fingerprint,
+                    &qv.vector,
+                    k,
+                    params.num_candidates,
+                )
+                .map_err(|e| e.to_string())?;
+            stages.ann_search_ms = ms(t);
+            match found {
+                Some(hits) => (Engine::Server, hits),
+                None => return Ok(SemanticResult::unavailable("vector search unavailable")),
+            }
+        }
     };
     if raw.is_empty() {
         return Ok(SemanticResult {
@@ -97,8 +216,10 @@ pub fn search(
             reason: "no embeddings computed for this project yet".into(),
             engine: Some(engine),
             hits: Vec::new(),
+            stages,
         });
     }
+    let t = std::time::Instant::now();
     let keys: Vec<(String, String)> = raw
         .iter()
         .map(|(t, id, _)| (t.clone(), id.clone()))
@@ -106,13 +227,14 @@ pub fn search(
     let meta = store
         .subject_meta(build_id, &keys)
         .map_err(|e| e.to_string())?;
+    let scores: std::collections::HashMap<(&str, &str), f32> = raw
+        .iter()
+        .map(|(t, id, s)| ((t.as_str(), id.as_str()), *s))
+        .collect();
     let mut hits: Vec<SemanticHit> = meta
         .into_iter()
         .filter_map(|m| {
-            let score = raw
-                .iter()
-                .find(|(t, id, _)| *t == m.subject_type && *id == m.subject_id)?
-                .2;
+            let score = *scores.get(&(m.subject_type.as_str(), m.subject_id.as_str()))?;
             Some(SemanticHit {
                 kind: m.kind,
                 subject_type: m.subject_type,
@@ -136,10 +258,12 @@ pub fn search(
             .then_with(|| a.id.cmp(&b.id))
     });
     hits.truncate(limit);
+    stages.meta_join_ms = ms(t);
     Ok(SemanticResult {
         available: true,
         reason: "ok".into(),
         engine: Some(engine),
         hits,
+        stages,
     })
 }

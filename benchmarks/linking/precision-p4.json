@@ -1,0 +1,97 @@
+{
+  "corpus": {
+    "code_files": 90,
+    "notes": 24,
+    "howto_notes": 6,
+    "groups": 29,
+    "labels": "generator-planted (exact, every link and edge)"
+  },
+  "links": {
+    "total": {
+      "n": 2592,
+      "correct": 2592,
+      "precision": 1.0
+    },
+    "by_resolver": {
+      "linker:alias": {
+        "n": 288,
+        "correct": 288,
+        "precision": 1.0
+      },
+      "linker:exact_identifier": {
+        "n": 864,
+        "correct": 864,
+        "precision": 1.0
+      },
+      "linker:filename": {
+        "n": 576,
+        "correct": 576,
+        "precision": 1.0
+      },
+      "linker:qualified_identifier": {
+        "n": 288,
+        "correct": 288,
+        "precision": 1.0
+      },
+      "linker:route_heuristic": {
+        "n": 576,
+        "correct": 576,
+        "precision": 1.0
+      }
+    },
+    "by_confidence": {
+      "heuristic": {
+        "n": 576,
+        "correct": 576,
+        "precision": 1.0
+      },
+      "high": {
+        "n": 1152,
+        "correct": 1152,
+        "precision": 1.0
+      },
+      "medium": {
+        "n": 864,
+        "correct": 864,
+        "precision": 1.0
+      }
+    },
+    "recall": {
+      "planted": 1728,
+      "found": 1728,
+      "recall": 1.0
+    }
+  },
+  "call_edges": {
+    "total": {
+      "n": 174,
+      "correct": 61,
+      "precision": 0.3506
+    },
+    "by_resolver": {
+      "name_only": {
+        "n": 145,
+        "correct": 61,
+        "precision": 0.4207
+      },
+      "same_file_name_ambiguous": {
+        "n": 29,
+        "correct": 0,
+        "precision": 0.0
+      }
+    },
+    "by_confidence": {
+      "high": {
+        "n": 29,
+        "correct": 0,
+        "precision": 0.0
+      },
+      "medium": {
+        "n": 145,
+        "correct": 61,
+        "precision": 0.4207
+      }
+    },
+    "unlabelled": 0
+  }
+}

@@ -497,6 +497,21 @@ section! {
 }
 
 section! {
+    /// Approximate nearest-neighbour search.
+    SearchAnnConfig {
+        // HNSW beam width per query (local index). Higher raises recall
+        // at a small latency cost.
+        ef_search: i64 = 400, check = |v| if (10..=10_000).contains(v) { Ok(()) } else {
+            Err("must be between 10 and 10000".into())
+        };
+        // Elasticsearch kNN `num_candidates`; 0 = `max(10 * k, 100)`.
+        num_candidates: i64 = 0, check = |v| if (0..=10_000).contains(v) { Ok(()) } else {
+            Err("must be between 0 and 10000 (0 = automatic)".into())
+        };
+    }
+}
+
+section! {
     SearchRoutingConfig {
         enabled: bool = true;
     }
@@ -542,6 +557,7 @@ section! {
         output: SearchOutputConfig = SearchOutputConfig::default();
         context: SearchContextConfig = SearchContextConfig::default();
         reranker: SearchRerankerConfig = SearchRerankerConfig::default();
+        ann: SearchAnnConfig = SearchAnnConfig::default();
         routing: SearchRoutingConfig = SearchRoutingConfig::default();
         decomposition: SearchDecompositionConfig = SearchDecompositionConfig::default();
         diversity: SearchDiversityConfig = SearchDiversityConfig::default();
@@ -549,6 +565,17 @@ section! {
         max_query_budget_ms: i64 = 5000, check = |v| if (100..=600_000).contains(v) { Ok(()) } else {
             Err("must be between 100 and 600000".into())
         };
+    }
+}
+
+section! {
+    /// Relationship-graph reads.
+    GraphConfig {
+        // false: while a new graph is being built after a base update, the
+        // last committed graph of the same base build is served, flagged
+        // stale. true: graph queries return nothing until the graph
+        // matches the published base exactly.
+        require_current: bool = false;
     }
 }
 
@@ -627,6 +654,12 @@ section! {
         request_timeout_seconds: f64 = 30.0, check = |v| {
             if *v <= 0.0 { Err("must be > 0".into()) } else { Ok(()) }
         };
+        // Budget for one server-side by-query task (copy-forward, build
+        // detach, GC). The task runs detached and is polled, so no single
+        // request waits longer than the request timeout.
+        task_timeout_seconds: f64 = 3600.0, check = |v| {
+            if *v <= 0.0 { Err("must be > 0".into()) } else { Ok(()) }
+        };
         bulk: BulkConfig = BulkConfig::default();
         gc_grace_seconds: f64 = 60.0, check = |v| {
             if (0.0..=86_400.0).contains(v) { Ok(()) } else { Err("must be between 0 and 86400".into()) }
@@ -652,6 +685,7 @@ section! {
         documents: DocumentsConfig = DocumentsConfig::default();
         search: SearchConfig = SearchConfig::default();
         context: ContextConfig = ContextConfig::default();
+        graph: GraphConfig = GraphConfig::default();
         mcp: McpConfig = McpConfig::default();
         privacy: PrivacyConfig = PrivacyConfig::default();
         ai: AiConfig = AiConfig::default();

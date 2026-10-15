@@ -619,7 +619,7 @@ fn vectors(base: &str, engine: Engine) {
     b.publish_build(src, "vecb1", &json!({}), true).unwrap();
     let r = ServerReader::new(b.clone(), src);
     let hits = r
-        .vector_search("vecb1", "fp", &[1.0, 0.1, 0.0, 0.0], 2)
+        .vector_search("vecb1", "fp", &[1.0, 0.1, 0.0, 0.0], 2, 0)
         .unwrap()
         .unwrap();
     assert_eq!(hits.len(), 2);
@@ -627,16 +627,16 @@ fn vectors(base: &str, engine: Engine) {
     assert!(hits[0].2 > 0.9);
     // Another model's vectors are never mixed in.
     assert!(r
-        .vector_search("vecb1", "other-model", &[1.0, 0.0, 0.0, 0.0], 2)
+        .vector_search("vecb1", "other-model", &[1.0, 0.0, 0.0, 0.0], 2, 0)
         .unwrap()
         .unwrap()
         .is_empty());
     // Wrong dimension: explicit error, no silent result.
-    assert!(r.vector_search("vecb1", "fp", &[1.0, 0.0], 2).is_err());
+    assert!(r.vector_search("vecb1", "fp", &[1.0, 0.0], 2, 0).is_err());
     // Another source's reader sees nothing of this build.
     let other = ServerReader::new(b.clone(), "src_other");
     assert!(other
-        .vector_search("vecb1", "fp", &[1.0, 0.0, 0.0, 0.0], 2)
+        .vector_search("vecb1", "fp", &[1.0, 0.0, 0.0, 0.0], 2, 0)
         .unwrap()
         .unwrap()
         .is_empty());

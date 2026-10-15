@@ -1,0 +1,713 @@
+{
+  "label": "p0-baseline-repo",
+  "corpus": [
+    {
+      "source_id": "src_575dde1f65",
+      "files": 297,
+      "entities": 5671,
+      "chunks": 169,
+      "edges": 46943,
+      "links": 1465,
+      "vectors": 5840
+    },
+    {
+      "source_id": "src_5ee64264b7",
+      "files": 35,
+      "entities": 0,
+      "chunks": 699,
+      "edges": 0,
+      "links": 0,
+      "vectors": 699
+    }
+  ],
+  "index_seconds": 105.68867531,
+  "queries": [
+    {
+      "query": "ProjectStore",
+      "symbol": true
+    },
+    {
+      "query": "project store",
+      "symbol": false
+    },
+    {
+      "query": "CrossEncoder",
+      "symbol": true
+    },
+    {
+      "query": "cross encoder",
+      "symbol": false
+    },
+    {
+      "query": "embedding_digest",
+      "symbol": true
+    },
+    {
+      "query": "embeddings digest",
+      "symbol": false
+    },
+    {
+      "query": "how is the hnsw index persisted to disk",
+      "symbol": false
+    },
+    {
+      "query": "graph_visible",
+      "symbol": true
+    },
+    {
+      "query": "reciprocal rank fusion",
+      "symbol": false
+    },
+    {
+      "query": "ann.rs",
+      "symbol": false
+    },
+    {
+      "query": "run_source",
+      "symbol": true
+    },
+    {
+      "query": "watcher debounce",
+      "symbol": false
+    }
+  ],
+  "models_dir": "set",
+  "conditions": {
+    "warm": {
+      "lexical": {
+        "stages": {
+          "context": {
+            "p50": 3.321,
+            "p95": 9.897,
+            "n": 36
+          },
+          "documents": {
+            "p50": 0.578,
+            "p95": 2.674,
+            "n": 72
+          },
+          "entities": {
+            "p50": 0.635,
+            "p95": 6.982,
+            "n": 72
+          },
+          "merge": {
+            "p50": 0.026,
+            "p95": 0.126,
+            "n": 36
+          },
+          "open_sources": {
+            "p50": 4.562,
+            "p95": 6.696,
+            "n": 36
+          },
+          "paths": {
+            "p50": 0.241,
+            "p95": 0.424,
+            "n": 72
+          },
+          "total": {
+            "p50": 16.299,
+            "p95": 28.108,
+            "n": 36
+          }
+        },
+        "counters_measured": {
+          "embedder_loads": 0,
+          "reranker_loads": 0,
+          "ann_loads": 0,
+          "ann_cache_hits": 0,
+          "query_embeds": 0
+        },
+        "counters_warmup": {
+          "embedder_loads": 0,
+          "reranker_loads": 0,
+          "ann_loads": 0,
+          "ann_cache_hits": 0,
+          "query_embeds": 0
+        }
+      },
+      "hybrid": {
+        "stages": {
+          "context": {
+            "p50": 4.219,
+            "p95": 10.614,
+            "n": 36
+          },
+          "documents": {
+            "p50": 0.657,
+            "p95": 3.03,
+            "n": 72
+          },
+          "entities": {
+            "p50": 0.814,
+            "p95": 8.084,
+            "n": 72
+          },
+          "merge": {
+            "p50": 0.034,
+            "p95": 0.119,
+            "n": 36
+          },
+          "open_sources": {
+            "p50": 5.116,
+            "p95": 8.42,
+            "n": 36
+          },
+          "paths": {
+            "p50": 0.262,
+            "p95": 0.507,
+            "n": 72
+          },
+          "semantic": {
+            "p50": 892.903,
+            "p95": 1097.975,
+            "n": 36
+          },
+          "semantic.ann_freshness": {
+            "p50": 25.669,
+            "p95": 34.346,
+            "n": 36
+          },
+          "semantic.ann_load": {
+            "p50": 77.889,
+            "p95": 120.243,
+            "n": 36
+          },
+          "semantic.ann_search": {
+            "p50": 1.222,
+            "p95": 1.782,
+            "n": 36
+          },
+          "semantic.attachments": {
+            "p50": 0.001,
+            "p95": 0.003,
+            "n": 36
+          },
+          "semantic.meta_join": {
+            "p50": 1.384,
+            "p95": 2.503,
+            "n": 36
+          },
+          "semantic.model_load": {
+            "p50": 729.854,
+            "p95": 911.27,
+            "n": 36
+          },
+          "semantic.query_embed": {
+            "p50": 42.914,
+            "p95": 72.486,
+            "n": 36
+          },
+          "total": {
+            "p50": 922.681,
+            "p95": 1127.633,
+            "n": 36
+          }
+        },
+        "counters_measured": {
+          "embedder_loads": 36,
+          "reranker_loads": 0,
+          "ann_loads": 72,
+          "ann_cache_hits": 0,
+          "query_embeds": 72
+        },
+        "counters_warmup": {
+          "embedder_loads": 12,
+          "reranker_loads": 0,
+          "ann_loads": 24,
+          "ann_cache_hits": 0,
+          "query_embeds": 24
+        }
+      },
+      "hybrid_rerank": {
+        "stages": {
+          "context": {
+            "p50": 4.231,
+            "p95": 12.32,
+            "n": 36
+          },
+          "documents": {
+            "p50": 0.664,
+            "p95": 3.02,
+            "n": 72
+          },
+          "entities": {
+            "p50": 0.963,
+            "p95": 7.5,
+            "n": 72
+          },
+          "merge": {
+            "p50": 0.04,
+            "p95": 0.111,
+            "n": 36
+          },
+          "neural_rerank": {
+            "p50": 1130.791,
+            "p95": 1522.128,
+            "n": 36
+          },
+          "open_sources": {
+            "p50": 5.243,
+            "p95": 8.348,
+            "n": 36
+          },
+          "paths": {
+            "p50": 0.245,
+            "p95": 0.462,
+            "n": 72
+          },
+          "semantic": {
+            "p50": 864.52,
+            "p95": 1019.751,
+            "n": 36
+          },
+          "semantic.ann_freshness": {
+            "p50": 23.844,
+            "p95": 33.061,
+            "n": 36
+          },
+          "semantic.ann_load": {
+            "p50": 75.031,
+            "p95": 120.345,
+            "n": 36
+          },
+          "semantic.ann_search": {
+            "p50": 1.095,
+            "p95": 1.566,
+            "n": 36
+          },
+          "semantic.attachments": {
+            "p50": 0.001,
+            "p95": 0.003,
+            "n": 36
+          },
+          "semantic.meta_join": {
+            "p50": 1.357,
+            "p95": 2.067,
+            "n": 36
+          },
+          "semantic.model_load": {
+            "p50": 720.404,
+            "p95": 846.976,
+            "n": 36
+          },
+          "semantic.query_embed": {
+            "p50": 47.098,
+            "p95": 62.27,
+            "n": 36
+          },
+          "total": {
+            "p50": 2036.214,
+            "p95": 2592.462,
+            "n": 36
+          }
+        },
+        "counters_measured": {
+          "embedder_loads": 36,
+          "reranker_loads": 36,
+          "ann_loads": 72,
+          "ann_cache_hits": 0,
+          "query_embeds": 72
+        },
+        "counters_warmup": {
+          "embedder_loads": 12,
+          "reranker_loads": 12,
+          "ann_loads": 24,
+          "ann_cache_hits": 0,
+          "query_embeds": 24
+        }
+      },
+      "evidence": {
+        "stages": {
+          "open_sources": {
+            "p50": 5.098,
+            "p95": 8.387,
+            "n": 36
+          },
+          "retrieve": {
+            "p50": 11.0,
+            "p95": 1040.0,
+            "n": 36
+          },
+          "total": {
+            "p50": 825.077,
+            "p95": 1052.571,
+            "n": 36
+          }
+        },
+        "counters_measured": {
+          "embedder_loads": 18,
+          "reranker_loads": 0,
+          "ann_loads": 36,
+          "ann_cache_hits": 0,
+          "query_embeds": 36
+        },
+        "counters_warmup": {
+          "embedder_loads": 6,
+          "reranker_loads": 0,
+          "ann_loads": 12,
+          "ann_cache_hits": 0,
+          "query_embeds": 12
+        }
+      },
+      "explore": {
+        "stages": {
+          "explore": {
+            "p50": 12.839,
+            "p95": 983.225,
+            "n": 36
+          },
+          "open_sources": {
+            "p50": 5.252,
+            "p95": 7.522,
+            "n": 36
+          },
+          "total": {
+            "p50": 20.155,
+            "p95": 989.926,
+            "n": 36
+          }
+        },
+        "counters_measured": {
+          "embedder_loads": 18,
+          "reranker_loads": 0,
+          "ann_loads": 36,
+          "ann_cache_hits": 0,
+          "query_embeds": 36
+        },
+        "counters_warmup": {
+          "embedder_loads": 6,
+          "reranker_loads": 0,
+          "ann_loads": 12,
+          "ann_cache_hits": 0,
+          "query_embeds": 12
+        }
+      },
+      "impact": {
+        "stages": {
+          "impact": {
+            "p50": 537.038,
+            "p95": 870.671,
+            "n": 15
+          },
+          "open_sources": {
+            "p50": 5.112,
+            "p95": 9.137,
+            "n": 15
+          },
+          "total": {
+            "p50": 544.701,
+            "p95": 875.517,
+            "n": 15
+          }
+        },
+        "counters_measured": {
+          "embedder_loads": 0,
+          "reranker_loads": 0,
+          "ann_loads": 0,
+          "ann_cache_hits": 0,
+          "query_embeds": 0
+        },
+        "counters_warmup": {
+          "embedder_loads": 0,
+          "reranker_loads": 0,
+          "ann_loads": 0,
+          "ann_cache_hits": 0,
+          "query_embeds": 0
+        }
+      }
+    },
+    "cold": {
+      "lexical": {
+        "stages": {
+          "context": {
+            "p50": 33.178,
+            "p95": 57.67,
+            "n": 6
+          },
+          "documents": {
+            "p50": 0.605,
+            "p95": 3.214,
+            "n": 12
+          },
+          "entities": {
+            "p50": 0.613,
+            "p95": 9.485,
+            "n": 12
+          },
+          "merge": {
+            "p50": 0.023,
+            "p95": 0.161,
+            "n": 6
+          },
+          "open_sources": {
+            "p50": 4.836,
+            "p95": 7.861,
+            "n": 6
+          },
+          "paths": {
+            "p50": 0.244,
+            "p95": 0.506,
+            "n": 12
+          },
+          "process_wall": {
+            "p50": 53.199,
+            "p95": 87.306,
+            "n": 6
+          },
+          "total": {
+            "p50": 46.806,
+            "p95": 78.205,
+            "n": 6
+          }
+        }
+      },
+      "hybrid": {
+        "stages": {
+          "context": {
+            "p50": 32.913,
+            "p95": 36.851,
+            "n": 6
+          },
+          "documents": {
+            "p50": 0.468,
+            "p95": 1.946,
+            "n": 12
+          },
+          "entities": {
+            "p50": 0.648,
+            "p95": 6.842,
+            "n": 12
+          },
+          "merge": {
+            "p50": 0.024,
+            "p95": 0.076,
+            "n": 6
+          },
+          "open_sources": {
+            "p50": 5.211,
+            "p95": 9.616,
+            "n": 6
+          },
+          "paths": {
+            "p50": 0.174,
+            "p95": 0.308,
+            "n": 12
+          },
+          "process_wall": {
+            "p50": 990.791,
+            "p95": 1046.901,
+            "n": 6
+          },
+          "semantic": {
+            "p50": 901.291,
+            "p95": 1003.628,
+            "n": 6
+          },
+          "semantic.ann_freshness": {
+            "p50": 28.049,
+            "p95": 39.095,
+            "n": 6
+          },
+          "semantic.ann_load": {
+            "p50": 81.205,
+            "p95": 129.701,
+            "n": 6
+          },
+          "semantic.ann_search": {
+            "p50": 1.001,
+            "p95": 1.238,
+            "n": 6
+          },
+          "semantic.attachments": {
+            "p50": 0.001,
+            "p95": 0.002,
+            "n": 6
+          },
+          "semantic.meta_join": {
+            "p50": 1.147,
+            "p95": 1.503,
+            "n": 6
+          },
+          "semantic.model_load": {
+            "p50": 749.458,
+            "p95": 800.476,
+            "n": 6
+          },
+          "semantic.query_embed": {
+            "p50": 44.708,
+            "p95": 59.525,
+            "n": 6
+          },
+          "total": {
+            "p50": 959.583,
+            "p95": 1033.111,
+            "n": 6
+          }
+        }
+      },
+      "hybrid_rerank": {
+        "stages": {
+          "context": {
+            "p50": 28.784,
+            "p95": 39.886,
+            "n": 6
+          },
+          "documents": {
+            "p50": 0.495,
+            "p95": 2.036,
+            "n": 12
+          },
+          "entities": {
+            "p50": 0.434,
+            "p95": 8.736,
+            "n": 12
+          },
+          "merge": {
+            "p50": 0.024,
+            "p95": 0.094,
+            "n": 6
+          },
+          "neural_rerank": {
+            "p50": 1079.403,
+            "p95": 1546.346,
+            "n": 6
+          },
+          "open_sources": {
+            "p50": 4.74,
+            "p95": 10.092,
+            "n": 6
+          },
+          "paths": {
+            "p50": 0.185,
+            "p95": 0.36,
+            "n": 12
+          },
+          "process_wall": {
+            "p50": 2052.847,
+            "p95": 2521.571,
+            "n": 6
+          },
+          "semantic": {
+            "p50": 890.502,
+            "p95": 968.35,
+            "n": 6
+          },
+          "semantic.ann_freshness": {
+            "p50": 27.074,
+            "p95": 33.576,
+            "n": 6
+          },
+          "semantic.ann_load": {
+            "p50": 81.228,
+            "p95": 137.785,
+            "n": 6
+          },
+          "semantic.ann_search": {
+            "p50": 1.044,
+            "p95": 1.169,
+            "n": 6
+          },
+          "semantic.attachments": {
+            "p50": 0.001,
+            "p95": 0.003,
+            "n": 6
+          },
+          "semantic.meta_join": {
+            "p50": 1.22,
+            "p95": 1.444,
+            "n": 6
+          },
+          "semantic.model_load": {
+            "p50": 736.842,
+            "p95": 746.909,
+            "n": 6
+          },
+          "semantic.query_embed": {
+            "p50": 38.506,
+            "p95": 59.496,
+            "n": 6
+          },
+          "total": {
+            "p50": 2038.337,
+            "p95": 2505.371,
+            "n": 6
+          }
+        }
+      },
+      "evidence": {
+        "stages": {
+          "open_sources": {
+            "p50": 4.919,
+            "p95": 9.539,
+            "n": 6
+          },
+          "process_wall": {
+            "p50": 467.607,
+            "p95": 1070.428,
+            "n": 6
+          },
+          "retrieve": {
+            "p50": 13.0,
+            "p95": 1029.0,
+            "n": 6
+          },
+          "total": {
+            "p50": 458.458,
+            "p95": 1050.733,
+            "n": 6
+          }
+        }
+      },
+      "explore": {
+        "stages": {
+          "explore": {
+            "p50": 30.98,
+            "p95": 980.945,
+            "n": 6
+          },
+          "open_sources": {
+            "p50": 4.737,
+            "p95": 7.898,
+            "n": 6
+          },
+          "process_wall": {
+            "p50": 45.311,
+            "p95": 997.421,
+            "n": 6
+          },
+          "total": {
+            "p50": 38.17,
+            "p95": 985.67,
+            "n": 6
+          }
+        }
+      },
+      "impact": {
+        "stages": {
+          "impact": {
+            "p50": 447.795,
+            "p95": 731.891,
+            "n": 5
+          },
+          "open_sources": {
+            "p50": 5.116,
+            "p95": 6.714,
+            "n": 5
+          },
+          "process_wall": {
+            "p50": 460.309,
+            "p95": 747.333,
+            "n": 5
+          },
+          "total": {
+            "p50": 452.442,
+            "p95": 738.616,
+            "n": 5
+          }
+        }
+      }
+    }
+  }
+}

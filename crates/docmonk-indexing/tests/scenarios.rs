@@ -665,12 +665,15 @@ fn a_build_left_unpublished_by_a_crash_is_discarded_on_restart() {
     let published = first.build_id.unwrap();
 
     // Simulate a process that committed a full build's rows and died before
-    // publishing it: the control plane still names it as pending.
+    // publishing it: the control plane still names it as pending. It was
+    // made by other versions, so it cannot be resumed.
     let orphan = "orphan-build";
     {
         let mut store =
             ProjectStore::open(&layout, &project_id_for_canonical(&src.path), &src.id, 8).unwrap();
-        store.create_build(orphan, true, &reg.versions).unwrap();
+        let mut older = reg.versions.clone();
+        older.parser_version = "raw-0".into();
+        store.create_build(orphan, true, &older).unwrap();
     }
     cp.require_full_rebuild(&src.id, "test").unwrap();
     cp.begin_build(&src.id, orphan).unwrap();
@@ -734,4 +737,171 @@ fn pipeline_concurrency_stays_within_its_bounds() {
         p.queue_capacity,
         p.workers
     );
+}
+
+#[test]
+fn a_full_build_killed_at_90_percent_resumes_instead_of_restarting() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().join("r");
+    for i in 0..200 {
+        common::write(&root, &format!("pkg/m{i:03}.py"), &format!("x = {i}\n"));
+    }
+    let home = common::home(tmp.path());
+    let layout = StorageLayout::new(&home);
+    let mut cp = common::control(&home);
+    let src = common::add_source(&mut cp, &root, &[], &[]);
+    let (reg, seen) = counting_registry();
+    let mut o = opts();
+    o.segment_files = 10;
+    o.inject_crash_after_files = Some(180);
+    let err = run_source(&layout, &mut cp, &src, &reg, &o, &mut NoProgress).unwrap_err();
+    assert_eq!(err.message(), docmonk_indexing::coordinator::INJECTED_CRASH);
+    let state = cp.state(&src.id).unwrap();
+    let pending = state.pending_build_id.clone().expect("claim survives");
+    assert_eq!(state.active_build_id, None, "nothing published");
+
+    seen.0.lock().unwrap().clear();
+    o.inject_crash_after_files = None;
+    let r = run_source(&layout, &mut cp, &src, &reg, &o, &mut NoProgress).unwrap();
+    let redone = seen.0.lock().unwrap().len();
+    assert!(r.published);
+    assert_eq!(r.resumed_build.as_deref(), Some(pending.as_str()));
+    assert_eq!(r.build_id.as_deref(), Some(pending.as_str()));
+    assert!(
+        redone <= 30,
+        "at most 15% of the files are processed again, got {redone}"
+    );
+    assert_eq!(visible_files(&layout, &cp, &src).len(), 200);
+}
+
+#[test]
+fn a_crashed_build_of_other_versions_is_discarded_not_resumed() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().join("r");
+    for i in 0..40 {
+        common::write(&root, &format!("m{i}.py"), &format!("x = {i}\n"));
+    }
+    let home = common::home(tmp.path());
+    let layout = StorageLayout::new(&home);
+    let mut cp = common::control(&home);
+    let src = common::add_source(&mut cp, &root, &[], &[]);
+    let mut o = opts();
+    o.segment_files = 10;
+    o.inject_crash_after_files = Some(30);
+    run_source(
+        &layout,
+        &mut cp,
+        &src,
+        &Registry::raw(),
+        &o,
+        &mut NoProgress,
+    )
+    .unwrap_err();
+
+    o.inject_crash_after_files = None;
+    let mut other = Registry::raw();
+    other.versions.parser_version = "raw-2".into();
+    let r = run_source(&layout, &mut cp, &src, &other, &o, &mut NoProgress).unwrap();
+    assert!(r.published);
+    assert!(r.resumed_build.is_none());
+    assert!(r.recovered_build.is_some());
+    assert_eq!(r.indexed, 40, "everything is rebuilt");
+}
+
+#[test]
+fn a_same_size_edit_right_after_indexing_is_detected() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().join("r");
+    std::fs::create_dir_all(&root).unwrap();
+    let file = root.join("a.py");
+    // Not backdated: written within the timestamp window of indexing.
+    std::fs::write(&file, "x = 1\n").unwrap();
+    let mtime = std::fs::metadata(&file).unwrap().modified().unwrap();
+    let home = common::home(tmp.path());
+    let layout = StorageLayout::new(&home);
+    let mut cp = common::control(&home);
+    let src = common::add_source(&mut cp, &root, &[], &[]);
+    run_source(
+        &layout,
+        &mut cp,
+        &src,
+        &Registry::raw(),
+        &opts(),
+        &mut NoProgress,
+    )
+    .unwrap();
+    // Same size, same mtime (a coarse-granularity filesystem).
+    std::fs::write(&file, "x = 2\n").unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&file)
+        .unwrap()
+        .set_modified(mtime)
+        .unwrap();
+    let r = run_source(
+        &layout,
+        &mut cp,
+        &src,
+        &Registry::raw(),
+        &opts(),
+        &mut NoProgress,
+    )
+    .unwrap();
+    assert_eq!(r.counts.changed, 1, "the racy file is hashed");
+    assert!(r.published);
+}
+
+/// Records whether a transaction was open when it ran, and reports a
+/// fixed number of vectors on warm passes.
+#[derive(Default)]
+struct TxProbe(std::sync::Mutex<Vec<bool>>);
+
+impl docmonk_indexing::coordinator::BuildFinalizer for TxProbe {
+    fn finalize(
+        &self,
+        store: &mut ProjectStore,
+        _build_id: &str,
+        _touched: &[String],
+    ) -> Result<docmonk_indexing::coordinator::FinalizeReport, ProcessError> {
+        self.0.lock().unwrap().push(store.in_session());
+        Ok(Default::default())
+    }
+
+    fn on_warm_pass(
+        &self,
+        _store: &mut ProjectStore,
+        _build_id: &str,
+    ) -> Result<docmonk_indexing::coordinator::FinalizeReport, ProcessError> {
+        Ok(docmonk_indexing::coordinator::FinalizeReport {
+            linked: 0,
+            embedded: 7,
+        })
+    }
+}
+
+#[test]
+fn full_build_finalizers_run_without_a_transaction_and_warm_passes_report_work() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().join("r");
+    for i in 0..5 {
+        common::write(&root, &format!("m{i}.py"), &format!("x = {i}\n"));
+    }
+    let home = common::home(tmp.path());
+    let layout = StorageLayout::new(&home);
+    let mut cp = common::control(&home);
+    let src = common::add_source(&mut cp, &root, &[], &[]);
+    let probe = Arc::new(TxProbe::default());
+    let mut reg = Registry::raw();
+    reg.finalizers.push(probe.clone());
+    run_source(&layout, &mut cp, &src, &reg, &opts(), &mut NoProgress).unwrap();
+    common::write(&root, "m1.py", "x = 'edited'\n");
+    run_source(&layout, &mut cp, &src, &reg, &opts(), &mut NoProgress).unwrap();
+    assert_eq!(
+        *probe.0.lock().unwrap(),
+        [false, true],
+        "full: no transaction open during inference; incremental: one atomic session"
+    );
+    let warm = run_source(&layout, &mut cp, &src, &reg, &opts(), &mut NoProgress).unwrap();
+    assert!(!warm.published);
+    assert_eq!(warm.embedded, 7);
 }

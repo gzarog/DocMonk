@@ -135,7 +135,7 @@ fn email_knowledge(f: &FileRow) -> FileKnowledge {
 }
 
 #[test]
-fn builds_are_invisible_until_published_and_incremental_carry_forward_works() {
+fn builds_are_invisible_until_published_and_a_second_build_replaces_the_first() {
     let tmp = tempfile::tempdir().unwrap();
     let home = Home::new(tmp.path());
     let layout = StorageLayout::new(&home);
@@ -230,7 +230,9 @@ fn builds_are_invisible_until_published_and_incremental_carry_forward_works() {
     assert_eq!(reusable.len(), 2);
     cp.begin_build(&src.id, "b2").unwrap();
     store.create_build("b2", false, &versions()).unwrap();
-    store.carry_forward("b1", "b2", &mail.id).unwrap();
+    store
+        .put_file("b2", &mail, &email_knowledge(&mail))
+        .unwrap();
     let a2 = file(&src.id, "a.py", "h3");
     store
         .put_file("b2", &a2, &code_knowledge(&a2, "beta"))
@@ -246,7 +248,7 @@ fn builds_are_invisible_until_published_and_incremental_carry_forward_works() {
     assert_eq!(
         store.search_chunks("b2", "zebra", 10).unwrap().len(),
         1,
-        "carried forward with FTS"
+        "rewritten with FTS"
     );
     assert_eq!(store.documents("b2").unwrap().len(), 2);
 
@@ -334,44 +336,6 @@ fn fresh_home_creates_current_schema_and_refuses_anything_else() {
         )
         .unwrap();
     assert_eq!(tables, 1, "nothing was created or altered");
-}
-
-#[test]
-fn set_based_carry_forward_copies_everything_but_excluded_files() {
-    let tmp = tempfile::tempdir().unwrap();
-    let layout = StorageLayout::new(&Home::new(tmp.path()));
-    let mut store = ProjectStore::open(&layout, "p", "s", 8).unwrap();
-    store.create_build("b1", true, &versions()).unwrap();
-    let a = file("s", "a.py", "1");
-    let b = file("s", "b.py", "2");
-    let mail = file("s", "m.eml", "3");
-    store
-        .put_file("b1", &a, &code_knowledge(&a, "alpha"))
-        .unwrap();
-    store
-        .put_file("b1", &b, &code_knowledge(&b, "bravo"))
-        .unwrap();
-    store
-        .put_file("b1", &mail, &email_knowledge(&mail))
-        .unwrap();
-    store.create_build("b2", false, &versions()).unwrap();
-    let n = store
-        .carry_forward_except(
-            "b1",
-            "b2",
-            std::slice::from_ref(&b.id),
-            &[(a.id.clone(), 99, 9.5)],
-        )
-        .unwrap();
-    assert_eq!(n, 2);
-    assert_eq!(store.count("entities", "b2").unwrap(), 2);
-    assert_eq!(store.count("documents", "b2").unwrap(), 2);
-    assert_eq!(store.search_code("b2", "alpha", 5).unwrap().len(), 1);
-    assert!(store.search_code("b2", "bravo", 5).unwrap().is_empty());
-    assert_eq!(store.search_chunks("b2", "zebra", 5).unwrap().len(), 1);
-    let files = store.files("b2").unwrap();
-    let ra = files.iter().find(|f| f.id == a.id).unwrap();
-    assert_eq!((ra.size, ra.mtime), (99, 9.5));
 }
 
 #[test]
@@ -500,4 +464,94 @@ fn batched_candidate_lookups_equal_the_single_name_lookups() {
         );
     }
     assert!(by_name["absent"].is_empty() && by_qn["absent"].is_empty());
+}
+
+#[test]
+fn identifiers_are_found_by_their_words_and_filters_apply_in_sql() {
+    use docmonk_storage::read::ReadFilter;
+    let tmp = tempfile::tempdir().unwrap();
+    let home = Home::new(tmp.path());
+    let layout = StorageLayout::new(&home);
+    let mut store = ProjectStore::open(&layout, "proj", "s", 8).unwrap();
+    store.create_build("b1", true, &versions()).unwrap();
+    let put = |store: &mut ProjectStore, rel: &str, names: &[&str]| {
+        let f = file("s", rel, rel);
+        let entities = names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| EntityRow {
+                id: record::entity_id(&f.id, "struct", n, i as u64),
+                file_id: f.id.clone(),
+                kind: "struct".into(),
+                name: (*n).into(),
+                qualified_name: format!("store::{n}"),
+                language: "python".into(),
+                signature: Some(format!("pub struct {n}")),
+                start_line: i as i64,
+                end_line: i as i64 + 1,
+                ..EntityRow::default()
+            })
+            .collect();
+        store
+            .put_file(
+                "b1",
+                &f,
+                &FileKnowledge {
+                    entities,
+                    ..FileKnowledge::default()
+                },
+            )
+            .unwrap();
+    };
+    put(
+        &mut store,
+        "src/knowledge.py",
+        &["ProjectStore", "embedding_digest"],
+    );
+    put(&mut store, "other/as_store.py", &["as_project_store"]);
+    store.mark_published("b1").unwrap();
+
+    let names = |expr: &str, filter: &ReadFilter| -> Vec<String> {
+        store
+            .search_entities_fts_in("b1", expr, 10, filter)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.name)
+            .collect()
+    };
+    let all = ReadFilter::default();
+    // A camelCase identifier by its words (in the top 3, next to names
+    // that contain the same words).
+    let hits = names("\"project\" AND \"store\"", &all);
+    assert!(hits.iter().take(3).any(|n| n == "ProjectStore"), "{hits:?}");
+    // A plural finds the singular (porter stemming) of a snake_case name.
+    assert_eq!(
+        names("\"embeddings\" AND \"digest\"", &all),
+        ["embedding_digest"]
+    );
+    // The identifier as written still matches, and ranks first.
+    assert_eq!(names("\"ProjectStore\"", &all)[0], "ProjectStore");
+    // Path filters are applied in SQL.
+    let scoped = ReadFilter {
+        path_prefixes: vec!["other/".into()],
+        document_ids: vec![],
+    };
+    assert_eq!(
+        names("\"project\" AND \"store\"", &scoped),
+        ["as_project_store"]
+    );
+    // A document filter admits no entity.
+    let docs = ReadFilter {
+        path_prefixes: vec![],
+        document_ids: vec!["d".into()],
+    };
+    assert!(names("\"store\"", &docs).is_empty());
+    // File names split too.
+    assert_eq!(
+        store
+            .search_paths_projection("b1", "as store", 10)
+            .unwrap()
+            .len(),
+        1
+    );
 }

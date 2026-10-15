@@ -5047,7 +5047,7 @@
          "documents": 9,
          "chunks": 19,
          "relationships": 151,
-         "links": 4,
+         "links": 0,
          "max_attempt_count": 0,
          "next_retry_at": null
         },

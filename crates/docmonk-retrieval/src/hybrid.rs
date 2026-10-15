@@ -9,8 +9,8 @@
 //! * **Hybrid tier.** Everything else is ordered by
 //!   `rrf_score(lexical_rank, semantic_rank)`, then the same tie-breaks.
 //! * **Neural pass (optional).** A cross-encoder rescores the top `top_n`
-//!   hits by snippet (else title). If the model is unavailable, the RRF
-//!   order is kept.
+//!   hits of the hybrid tier by snippet (else title); pinned hits keep
+//!   their place. If the model is unavailable, the RRF order is kept.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -21,7 +21,7 @@ use docmonk_ml::fusion::{
     rrf_score, MAX_FUSION_CANDIDATES, MAX_LEXICAL_CANDIDATES, MAX_SEMANTIC_CANDIDATES, RRF_K,
 };
 use docmonk_ml::reranker::CrossEncoder;
-use docmonk_ml::semantic::{self, SemanticHit};
+use docmonk_ml::semantic::{self, AnnParams, SemanticHit, SemanticStages};
 
 use crate::lexical::{LexicalTier, Location, RankTier, SearchResult};
 use crate::{Corpus, SearchError};
@@ -42,6 +42,41 @@ pub struct SemanticOutcome {
     pub available: bool,
     pub reason: String,
     pub hits: Vec<SourcedHit>,
+    /// `"<source_id>: <reason>"` for every corpus semantic search could not
+    /// read; the other corpora's hits are still returned.
+    pub degraded: Vec<String>,
+    /// Sub-stage timings summed over corpora (`--explain`).
+    pub stages: SemanticStages,
+    /// Attachment provenance lookups for chunk hits (milliseconds).
+    pub attachments_ms: f64,
+}
+
+impl SemanticOutcome {
+    fn unavailable(reason: impl Into<String>) -> Self {
+        Self {
+            available: false,
+            reason: reason.into(),
+            hits: Vec::new(),
+            degraded: Vec::new(),
+            stages: SemanticStages::default(),
+            attachments_ms: 0.0,
+        }
+    }
+
+    /// `[{stage, duration_ms}]` of every sub-stage, for `--explain`.
+    pub fn substages_json(&self, model_load_ms: f64) -> serde_json::Value {
+        let s = &self.stages;
+        let row = |stage: &str, ms: f64| serde_json::json!({"stage": stage, "duration_ms": ms});
+        serde_json::json!([
+            row("model_load", model_load_ms),
+            row("query_embed", s.query_embed_ms),
+            row("ann_load", s.ann_load_ms),
+            row("ann_freshness", s.ann_freshness_ms),
+            row("ann_search", s.ann_search_ms),
+            row("meta_join", s.meta_join_ms),
+            row("attachments", self.attachments_ms),
+        ])
+    }
 }
 
 /// Semantic search over every corpus, merged best first
@@ -54,33 +89,74 @@ pub fn semantic_search(
     limit: usize,
     candidate_k: Option<usize>,
 ) -> Result<SemanticOutcome, SearchError> {
+    semantic_search_with(
+        corpora,
+        embedder,
+        query,
+        limit,
+        candidate_k,
+        AnnParams::default(),
+    )
+}
+
+/// [`semantic_search`] with explicit ANN parameters. The query is embedded
+/// once and searched in every corpus. A corpus that cannot answer (no
+/// vectors, no server kNN) is listed in `degraded` while the others'
+/// hits are kept; the outcome is unavailable only when no corpus answered.
+pub fn semantic_search_with(
+    corpora: &[Corpus<'_>],
+    embedder: Option<&Embedder>,
+    query: &str,
+    limit: usize,
+    candidate_k: Option<usize>,
+    ann: AnnParams,
+) -> Result<SemanticOutcome, SearchError> {
+    let Some(embedder) = embedder else {
+        return Ok(SemanticOutcome::unavailable("embedding model unavailable"));
+    };
+    let Some(qv) = semantic::embed_query(embedder, query).map_err(SearchError)? else {
+        return Ok(SemanticOutcome {
+            available: true,
+            reason: "empty query".into(),
+            ..SemanticOutcome::unavailable("")
+        });
+    };
     let mut hits = Vec::new();
+    let mut stages = SemanticStages {
+        query_embed_ms: qv.embed_ms,
+        ..Default::default()
+    };
+    let mut attachments_ms = 0.0;
+    let mut degraded = Vec::new();
+    let mut first_reason = None;
+    let mut answered = 0;
     for c in corpora {
         let dir = c
             .store
             .as_project_store()
             .and_then(|s| s.project_dir())
             .unwrap_or_else(|| Path::new(".").to_path_buf());
-        let r = semantic::search(
-            c.store,
-            &dir,
-            c.build_id,
-            embedder,
-            query,
-            limit,
-            candidate_k,
-        )
-        .map_err(SearchError)?;
-        if !r.available || r.reason == "empty query" {
-            return Ok(SemanticOutcome {
-                available: r.available,
-                reason: r.reason,
-                hits: Vec::new(),
-            });
+        let r = semantic::search_vector(c.store, &dir, c.build_id, &qv, limit, candidate_k, ann)
+            .map_err(SearchError)?;
+        stages.add(&r.stages);
+        if !r.available {
+            degraded.push(format!("{}: {}", c.store.source_id(), r.reason));
+            first_reason.get_or_insert(r.reason);
+            continue;
         }
+        answered += 1;
+        let t = std::time::Instant::now();
+        let docs: Vec<String> = r
+            .hits
+            .iter()
+            .filter(|h| h.attachment_index.is_some())
+            .filter_map(|h| h.document_id.clone())
+            .collect();
+        let attachments = c.store.document_attachments(c.build_id, &docs)?;
+        attachments_ms += t.elapsed().as_secs_f64() * 1000.0;
         for hit in r.hits {
             let attachment = match (&hit.document_id, hit.attachment_index) {
-                (Some(doc), Some(_)) => c.store.document_attachment(c.build_id, doc)?,
+                (Some(doc), Some(_)) => attachments.get(doc).cloned().flatten(),
                 _ => None,
             };
             hits.push(SourcedHit {
@@ -89,6 +165,13 @@ pub fn semantic_search(
                 attachment,
             });
         }
+    }
+    if answered == 0 && !corpora.is_empty() {
+        return Ok(SemanticOutcome {
+            degraded,
+            stages,
+            ..SemanticOutcome::unavailable(first_reason.unwrap_or_default())
+        });
     }
     hits.sort_by(|a, b| semantic_order(&a.hit, &b.hit));
     hits.truncate(limit);
@@ -102,6 +185,9 @@ pub fn semantic_search(
         available: true,
         reason,
         hits,
+        degraded,
+        stages,
+        attachments_ms,
     })
 }
 
@@ -307,9 +393,11 @@ pub fn rerank(candidates: Vec<Candidate>, limit: usize) -> Vec<RankedHit> {
         .collect()
 }
 
-/// Rescores `hits[..top_n]` with `encoder` (snippet, else title); the rest
-/// keep their order. Without an encoder, or if scoring fails, `hits` is
-/// returned unchanged.
+/// Rescores the first `top_n` hits of the hybrid tier with `encoder`
+/// (snippet, else title). Pinned hits (exact symbol, title, heading) keep
+/// their place at the head of the list: the cross-encoder never moves an
+/// exact match below a fused one. Without an encoder, or if scoring fails,
+/// `hits` is returned unchanged.
 pub fn neural_rerank(
     query: &str,
     hits: Vec<RankedHit>,
@@ -324,32 +412,68 @@ pub fn neural_rerank(
         );
         return hits;
     };
-    let text = |h: &RankedHit| -> String {
-        match &h.candidate.snippet {
-            Some(s) if !s.is_empty() => s.clone(),
-            _ => h.candidate.title.clone(),
-        }
-    };
-    let items: Vec<(RankedHit, String)> = hits
+    neural_rerank_with(hits, top_n, snippet_passage, |texts| {
+        encoder.score(query, texts)
+    })
+}
+
+/// The passage a hit is rescored by without stored text: its snippet,
+/// else its title.
+pub fn snippet_passage(h: &RankedHit) -> String {
+    match &h.candidate.snippet {
+        Some(s) if !s.is_empty() => s.clone(),
+        _ => h.candidate.title.clone(),
+    }
+}
+
+/// Words of chunk text a reranker passage keeps (the cross-encoder
+/// truncates to its own token budget anyway).
+pub const PASSAGE_WORDS: usize = 256;
+
+/// A reranker passage: title, heading path and the first
+/// [`PASSAGE_WORDS`] words of the text (for an entity: qualified name and
+/// signature), so the cross-encoder sees what the hit is about rather than
+/// a short match-centred snippet.
+pub fn passage(title: &str, headings: &[String], text: &str) -> String {
+    let mut out = title.to_owned();
+    if !headings.is_empty() {
+        out.push_str(" — ");
+        out.push_str(&headings.join(" > "));
+    }
+    let body: Vec<&str> = text.split_whitespace().take(PASSAGE_WORDS).collect();
+    if !body.is_empty() {
+        out.push_str(". ");
+        out.push_str(&body.join(" "));
+    }
+    out
+}
+
+/// [`neural_rerank`] with any passage builder and scorer.
+pub fn neural_rerank_with(
+    hits: Vec<RankedHit>,
+    top_n: usize,
+    text: impl Fn(&RankedHit) -> String,
+    score: impl FnOnce(&[&str]) -> Result<Vec<f32>, docmonk_ml::embedder::MlError>,
+) -> Vec<RankedHit> {
+    let pinned = hits.iter().take_while(|h| h.candidate.exact_match).count();
+    let mut hits = hits;
+    let tail = hits.split_off(pinned);
+    let items: Vec<(RankedHit, String)> = tail
         .into_iter()
         .map(|h| {
             let t = text(&h);
             (h, t)
         })
         .collect();
-    let (items, scores) = docmonk_ml::reranker::rerank(
-        items,
-        top_n,
-        |(_, t)| t.as_str(),
-        |t| encoder.score(query, t),
-    );
+    let (items, scores) = docmonk_ml::reranker::rerank(items, top_n, |(_, t)| t.as_str(), score);
     let mut out: Vec<RankedHit> = items.into_iter().map(|(h, _)| h).collect();
     if let Some(scores) = scores {
         for (h, s) in out.iter_mut().zip(scores) {
             h.neural_score = Some(s);
         }
     }
-    out
+    hits.extend(out);
+    hits
 }
 
 /// Options for [`hybrid_search`].
@@ -415,4 +539,69 @@ pub fn hybrid_search(
         semantic,
         hits,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hit(id: &str, exact: bool) -> RankedHit {
+        RankedHit {
+            candidate: Candidate {
+                kind: "entity".into(),
+                id: id.into(),
+                title: id.into(),
+                path: format!("{id}.rs"),
+                source_id: "s".into(),
+                snippet: Some(format!("text of {id}")),
+                location: None,
+                lexical_tier: Some(if exact {
+                    RankTier::ExactSymbol
+                } else {
+                    RankTier::Fts
+                }),
+                lexical_fts_rank: 0,
+                lexical_query_tier: LexicalTier::Phrase,
+                entity_kind_rank: 99,
+                mtime: 0.0,
+                lexical_rank: Some(1),
+                bm25: None,
+                semantic_score: None,
+                semantic_rank: None,
+                exact_match: exact,
+                rrf_score: None,
+            },
+            tier_label: if exact { "exact_symbol" } else { "hybrid" },
+            neural_score: None,
+        }
+    }
+
+    #[test]
+    fn pinned_hits_keep_their_place_through_the_neural_pass() {
+        let hits = vec![
+            hit("exact", true),
+            hit("a", false),
+            hit("b", false),
+            hit("c", false),
+        ];
+        // The cross-encoder scores only the hybrid tier: the exact match
+        // would be scored lowest, but it is never rescored.
+        let out = neural_rerank_with(hits, 3, snippet_passage, |texts| {
+            assert_eq!(texts.len(), 3, "only the hybrid tier is rescored");
+            Ok(vec![0.1, 0.5, 0.9])
+        });
+        let ids: Vec<&str> = out.iter().map(|h| h.candidate.id.as_str()).collect();
+        assert_eq!(ids, ["exact", "c", "b", "a"]);
+        assert_eq!(out[0].neural_score, None);
+        assert_eq!(out[1].neural_score, Some(0.9));
+    }
+
+    #[test]
+    fn a_failed_neural_pass_keeps_the_order() {
+        let hits = vec![hit("exact", true), hit("a", false), hit("b", false)];
+        let out = neural_rerank_with(hits.clone(), 5, snippet_passage, |_| {
+            Err(docmonk_ml::embedder::MlError::Load("no model".into()))
+        });
+        assert_eq!(out, hits);
+    }
 }

@@ -1,0 +1,12 @@
+{
+  "description": "Generator-labelled link and call-edge precision (crates/docmonk-service/tests/link_precision.rs). A value more than `tolerance` below its recorded value fails; rewrite with DOCMONK_BLESS=1 when a change is meant to move it.",
+  "tolerance": 0.01,
+  "floors": {
+    "call_edges.total": 0.3506,
+    "links.confidence.heuristic": 1.0,
+    "links.confidence.high": 1.0,
+    "links.confidence.medium": 1.0,
+    "links.recall": 1.0,
+    "links.total": 1.0
+  }
+}

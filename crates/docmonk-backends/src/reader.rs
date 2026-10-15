@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 
 use docmonk_storage::error::{Result, StorageError};
 use docmonk_storage::knowledge::{ChunkRow, EntityRow, RelationshipRow};
-use docmonk_storage::read::{parse_expression, FtsTerm, KnowledgeRead, VectorHit};
+use docmonk_storage::read::{parse_expression, FtsTerm, KnowledgeRead, ReadFilter, VectorHit};
 use docmonk_storage::search::{
     AttachmentProvenance, DocumentSearchRow, EntityLinkRow, EntitySearchRow, PathSearchRow,
 };
@@ -35,9 +35,17 @@ pub const MAX_READ: usize = 10_000;
 pub struct ServerReader {
     backend: Arc<ServerBackend>,
     source_id: String,
-    /// `base build -> visible graph generation`, resolved once per reader
-    /// (one request's snapshot).
-    graph: std::sync::Mutex<std::collections::HashMap<String, Option<String>>>,
+    /// `base build -> (served graph generation, stale)`, resolved once per
+    /// reader (one request's snapshot).
+    graph: std::sync::Mutex<std::collections::HashMap<String, Option<(String, bool)>>>,
+    /// `graph.require_current`.
+    require_current: bool,
+    /// While recording ([`ServerReader::prefetch`]), searches are collected
+    /// here instead of sent.
+    recording: std::sync::Mutex<Option<Vec<(IndexKind, Value)>>>,
+    /// Hits of searches answered by a prefetching `_msearch`, keyed by
+    /// index and exact request body; each is served once.
+    prefetched: std::sync::Mutex<std::collections::HashMap<(String, String), Vec<Value>>>,
 }
 
 impl ServerReader {
@@ -46,20 +54,35 @@ impl ServerReader {
             backend,
             source_id: source_id.to_owned(),
             graph: Default::default(),
+            require_current: false,
+            recording: Default::default(),
+            prefetched: Default::default(),
         }
     }
 
-    /// The graph generation derived from base build `b`, when it is the
-    /// source's ready graph; `None` (graph queries come back empty) for a
-    /// missing, building, failed, disabled or stale graph.
+    /// `graph.require_current`: serve only a graph derived from the
+    /// current base (never the last one, flagged stale).
+    pub fn require_current_graph(mut self, strict: bool) -> Self {
+        self.require_current = strict;
+        self
+    }
+
+    /// The graph generation graph queries of base build `b` read (see
+    /// [`ServerGraph::served_generation`](crate::graph::ServerGraph::served_generation));
+    /// `None` (graph queries come back empty) for a missing or disabled
+    /// graph, and in strict mode for anything but the current one.
     pub fn graph_generation(&self, b: &str) -> Result<Option<String>> {
+        Ok(self.served_graph(b)?.map(|(g, _)| g))
+    }
+
+    fn served_graph(&self, b: &str) -> Result<Option<(String, bool)>> {
         let mut cache = self.graph.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(g) = cache.get(b) {
             return Ok(g.clone());
         }
         let g = self
             .backend
-            .visible_graph(&self.source_id, b)
+            .served_graph(&self.source_id, b, self.require_current)
             .map_err(Self::err)?;
         cache.insert(b.to_owned(), g.clone());
         Ok(g)
@@ -82,8 +105,69 @@ impl ServerReader {
         ]
     }
 
+    /// Runs `calls` against this reader in recording mode, then answers
+    /// every search they would have sent with one `_msearch`; the calls
+    /// made afterwards with the same arguments are served from it. Results
+    /// are identical to sending each search alone (same bodies), so this
+    /// only changes the number of round-trips.
+    pub fn prefetch(&self, calls: impl FnOnce(&Self)) -> Result<()> {
+        *self.recording.lock().unwrap_or_else(|p| p.into_inner()) = Some(Vec::new());
+        calls(self);
+        let recorded = self
+            .recording
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+            .unwrap_or_default();
+        let mut uniq: Vec<(String, Value)> = Vec::new();
+        let mut keys = std::collections::HashSet::new();
+        for (kind, body) in recorded {
+            let index = self.backend.index(kind);
+            if keys.insert((index.clone(), body.to_string())) {
+                uniq.push((index, body));
+            }
+        }
+        if uniq.is_empty() {
+            return Ok(());
+        }
+        let responses = self.backend.msearch(&uniq).map_err(Self::err)?;
+        let mut cache = self.prefetched.lock().unwrap_or_else(|p| p.into_inner());
+        for ((index, body), r) in uniq.into_iter().zip(responses) {
+            // A failed search is not cached: sent alone later, it reports
+            // its own error.
+            if r.get("error").is_some() {
+                continue;
+            }
+            let hits = r
+                .pointer("/hits/hits")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            cache.insert((index, body.to_string()), hits);
+        }
+        Ok(())
+    }
+
     /// Raw hits of a `_search` against one index.
     fn hits(&self, kind: IndexKind, body: Value) -> Result<Vec<Value>> {
+        if let Some(rec) = self
+            .recording
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_mut()
+        {
+            rec.push((kind, body));
+            return Ok(Vec::new());
+        }
+        let key = (self.backend.index(kind), body.to_string());
+        if let Some(hits) = self
+            .prefetched
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(&key)
+        {
+            return Ok(hits);
+        }
         let path = format!("/{}/_search", self.backend.index(kind));
         let v = self
             .backend
@@ -192,7 +276,7 @@ impl ServerReader {
         Some(if parsed.all {
             json!({ "bool": { "must": clauses } })
         } else {
-            json!({ "bool": { "should": clauses, "minimum_should_match": 1 } })
+            json!({ "bool": { "should": clauses, "minimum_should_match": parsed.min_should } })
         })
     }
 
@@ -230,6 +314,83 @@ impl ServerReader {
             .collect())
     }
 
+    /// Edges whose `field` is one of `keys`, in one search (falling back
+    /// to one search per key when the result window would be exceeded),
+    /// capped per key and type exactly like [`Self::edges`].
+    #[allow(clippy::too_many_arguments)]
+    fn edges_many(
+        &self,
+        build_id: &str,
+        field: &str,
+        keys: &[String],
+        types: &[&str],
+        extra: Vec<Value>,
+        limit: i64,
+        key_of: impl Fn(&RelationshipRow) -> String,
+    ) -> Result<std::collections::HashMap<String, Vec<RelationshipRow>>> {
+        let mut out: std::collections::HashMap<String, Vec<RelationshipRow>> = Default::default();
+        let mut uniq: Vec<&str> = keys.iter().map(String::as_str).collect();
+        uniq.sort_unstable();
+        uniq.dedup();
+        if uniq.is_empty() {
+            return Ok(out);
+        }
+        let Some(graph) = self.graph_generation(build_id)? else {
+            return Ok(out);
+        };
+        let mut filter = extra.clone();
+        filter.push(json!({ "terms": { field: uniq } }));
+        filter.push(json!({ "term": { "record_kind": "edge" } }));
+        if !types.is_empty() {
+            filter.push(json!({ "terms": { "relationship_type": types } }));
+        }
+        let hits = self.find(
+            IndexKind::Relationships,
+            &graph,
+            filter,
+            None,
+            json!([{ "relationship_type": "asc" }, { "relationship_id": "asc" }]),
+            MAX_READ,
+        )?;
+        if hits.len() >= MAX_READ {
+            // Too many to cap reliably in one window: per key and type.
+            for k in uniq {
+                let mut f = extra.clone();
+                f.push(json!({ "term": { field: k } }));
+                let mut rows = Vec::new();
+                if types.is_empty() {
+                    rows = self.edges(build_id, f, None, limit)?;
+                } else {
+                    for t in types {
+                        rows.extend(self.edges(build_id, f.clone(), Some(t), limit)?);
+                    }
+                }
+                if !rows.is_empty() {
+                    out.insert(k.to_owned(), rows);
+                }
+            }
+            return Ok(out);
+        }
+        let cap = limit.max(0) as usize;
+        let mut taken: std::collections::HashMap<(String, String), usize> = Default::default();
+        for h in &hits {
+            let r = relationship_row(&h["_source"]);
+            let key = key_of(&r);
+            // Per key and type with types; per key overall without.
+            let bucket = if types.is_empty() {
+                String::new()
+            } else {
+                r.relationship_type.clone()
+            };
+            let n = taken.entry((key.clone(), bucket)).or_default();
+            if *n < cap {
+                *n += 1;
+                out.entry(key).or_default().push(r);
+            }
+        }
+        Ok(out)
+    }
+
     fn chunks_where(
         &self,
         build_id: &str,
@@ -259,7 +420,20 @@ impl ServerReader {
             .map(|h| h["_source"].clone()))
     }
 
-    fn knn_body(&self, field_filter: Vec<Value>, query: &[f32], k: usize) -> Value {
+    /// `num_candidates` 0 means `max(10 * k, 100)` (Elasticsearch only;
+    /// OpenSearch's HNSW search is exhaustive over `k` per segment).
+    fn knn_body(
+        &self,
+        field_filter: Vec<Value>,
+        query: &[f32],
+        k: usize,
+        num_candidates: usize,
+    ) -> Value {
+        let candidates = if num_candidates == 0 {
+            (k * 10).max(100)
+        } else {
+            num_candidates.max(k)
+        };
         match self.backend.engine() {
             Engine::OpenSearch => json!({
                 "size": k,
@@ -274,12 +448,25 @@ impl ServerReader {
                 "_source": ["chunk_id", "entity_id"],
                 "knn": {
                     "field": "embedding", "query_vector": query, "k": k,
-                    "num_candidates": (k * 4).max(50),
+                    "num_candidates": candidates.min(MAX_READ),
                     "filter": { "bool": { "filter": field_filter } },
                 },
             }),
         }
     }
+}
+
+/// `rel_path` prefix clauses of `filter` (any of them), as a filter list.
+fn path_filter(filter: &ReadFilter) -> Vec<Value> {
+    if filter.path_prefixes.is_empty() {
+        return Vec::new();
+    }
+    let should: Vec<Value> = filter
+        .path_prefixes
+        .iter()
+        .map(|p| json!({ "prefix": { "rel_path": p } }))
+        .collect();
+    vec![json!({ "bool": { "should": should, "minimum_should_match": 1 } })]
 }
 
 /// A knowledge link as listed by `link list`.
@@ -486,6 +673,7 @@ impl ServerReader {
                 last_error: opt_str(f, "last_error"),
                 attempt_count: f["attempt_count"].as_i64().unwrap_or(0),
                 next_attempt_at: opt_str(f, "next_attempt_at"),
+                last_indexed_at: opt_str(f, "indexed_at"),
             })
             .collect())
     }
@@ -744,6 +932,133 @@ fn wildcard_literal(s: &str) -> String {
 }
 
 impl KnowledgeRead for ServerReader {
+    fn prefetch_lexical(
+        &self,
+        b: &str,
+        q: &str,
+        expressions: &[String],
+        limit: i64,
+        snippet_tokens: i64,
+        filter: &ReadFilter,
+    ) -> Result<()> {
+        // Exactly the calls (and arguments) lexical retrieval makes.
+        self.prefetch(|r| {
+            let _ = r.search_entities_exact(b, q);
+            if q.contains('.') {
+                let _ = r.search_entities_alias(b, q, limit);
+            }
+            for e in expressions {
+                let _ = r.search_entities_fts_in(b, e, limit, filter);
+            }
+            let _ = r.search_document_titles(b, q, limit);
+            for e in expressions {
+                let _ = r.search_chunks_fts_in(b, e, limit, snippet_tokens, filter);
+            }
+            let _ = r.search_paths_projection_in(b, q, limit, filter);
+        })
+    }
+
+    fn as_sync(&self) -> Option<&(dyn KnowledgeRead + Sync)> {
+        Some(self)
+    }
+
+    fn entity_edges_many(
+        &self,
+        b: &str,
+        ids: &[String],
+        types: &[&str],
+        outgoing: bool,
+        limit: i64,
+    ) -> Result<std::collections::HashMap<String, Vec<RelationshipRow>>> {
+        let field = if outgoing {
+            "source_entity_id"
+        } else {
+            "target_entity_id"
+        };
+        self.edges_many(b, field, ids, types, vec![], limit, |r| {
+            if outgoing {
+                r.source_entity_id.clone()
+            } else {
+                r.target_entity_id.clone().unwrap_or_default()
+            }
+        })
+    }
+
+    fn unresolved_edges_many(
+        &self,
+        b: &str,
+        symbols: &[String],
+        types: &[&str],
+        limit: i64,
+    ) -> Result<std::collections::HashMap<String, Vec<RelationshipRow>>> {
+        self.edges_many(
+            b,
+            "target_symbol",
+            symbols,
+            types,
+            vec![json!({ "bool": { "must_not": [ { "exists": { "field": "target_entity_id" } } ] } })],
+            limit,
+            |r| r.target_symbol.clone().unwrap_or_default(),
+        )
+    }
+
+    fn entities_by_ids(
+        &self,
+        b: &str,
+        ids: &[String],
+    ) -> Result<std::collections::HashMap<String, EntityRow>> {
+        let mut out = std::collections::HashMap::new();
+        let mut uniq: Vec<&str> = ids.iter().map(String::as_str).collect();
+        uniq.sort_unstable();
+        uniq.dedup();
+        for batch in uniq.chunks(MAX_READ) {
+            for h in self.find(
+                IndexKind::Code,
+                b,
+                vec![json!({ "terms": { "entity_id": batch } })],
+                None,
+                json!([{ "entity_id": "asc" }]),
+                batch.len(),
+            )? {
+                let e = entity_row(&h["_source"]);
+                out.entry(e.id.clone()).or_insert(e);
+            }
+        }
+        Ok(out)
+    }
+
+    fn file_rel_paths(
+        &self,
+        b: &str,
+        ids: &[String],
+    ) -> Result<std::collections::HashMap<String, String>> {
+        let mut out = std::collections::HashMap::new();
+        let mut uniq: Vec<&str> = ids.iter().map(String::as_str).collect();
+        uniq.sort_unstable();
+        uniq.dedup();
+        for batch in uniq.chunks(MAX_READ) {
+            for (id, path, _) in self.file_mtimes(b, batch)? {
+                out.insert(id, path);
+            }
+        }
+        Ok(out)
+    }
+
+    fn graph_freshness(&self, b: &str) -> Result<docmonk_storage::read::GraphFreshness> {
+        let g = self.served_graph(b)?;
+        let stale = g.as_ref().is_some_and(|(_, s)| *s);
+        Ok(docmonk_storage::read::GraphFreshness {
+            state: match &g {
+                None => "unavailable",
+                Some(_) if stale => "stale",
+                Some(_) => "ready",
+            }
+            .into(),
+            visible: g.is_some(),
+            generation: g.map(|(g, _)| g),
+            stale,
+        })
+    }
     fn source_id(&self) -> &str {
         &self.source_id
     }
@@ -797,6 +1112,19 @@ impl KnowledgeRead for ServerReader {
         expression: &str,
         limit: i64,
     ) -> Result<Vec<EntitySearchRow>> {
+        self.search_entities_fts_in(b, expression, limit, &ReadFilter::default())
+    }
+
+    fn search_entities_fts_in(
+        &self,
+        b: &str,
+        expression: &str,
+        limit: i64,
+        filter: &ReadFilter,
+    ) -> Result<Vec<EntitySearchRow>> {
+        if !filter.document_ids.is_empty() {
+            return Ok(Vec::new());
+        }
         let Some(must) = Self::fts_query(expression, &["name", "qualified_name", "signature"])
         else {
             return Ok(Vec::new());
@@ -804,7 +1132,7 @@ impl KnowledgeRead for ServerReader {
         let hits = self.find(
             IndexKind::Code,
             b,
-            vec![],
+            path_filter(filter),
             Some(must),
             json!([{ "_score": "desc" }, { "rel_path": "asc" }, { "qualified_name.raw": "asc" }, { "start_line": "asc" }, { "entity_id": "asc" }]),
             limit.max(0) as usize,
@@ -838,6 +1166,7 @@ impl KnowledgeRead for ServerReader {
                 let t = str_of(s, "title");
                 DocumentSearchRow {
                     id: str_of(s, "document_id"),
+                    document_id: str_of(s, "document_id"),
                     snippet: Some(t.clone()),
                     title: t,
                     rel_path: str_of(s, "rel_path"),
@@ -861,12 +1190,26 @@ impl KnowledgeRead for ServerReader {
         limit: i64,
         snippet_tokens: i64,
     ) -> Result<Vec<DocumentSearchRow>> {
+        self.search_chunks_fts_in(b, expression, limit, snippet_tokens, &ReadFilter::default())
+    }
+
+    fn search_chunks_fts_in(
+        &self,
+        b: &str,
+        expression: &str,
+        limit: i64,
+        snippet_tokens: i64,
+        filter: &ReadFilter,
+    ) -> Result<Vec<DocumentSearchRow>> {
         let Some(must) = Self::fts_query(expression, &["fts_heading^5", "search_text", "title^8"])
         else {
             return Ok(Vec::new());
         };
         let mut f = self.scope(b);
-        f.shrink_to_fit();
+        f.extend(path_filter(filter));
+        if !filter.document_ids.is_empty() {
+            f.push(json!({ "terms": { "document_id": filter.document_ids } }));
+        }
         let tokens = snippet_tokens.clamp(1, 64) as usize;
         let body = json!({
             "size": (limit.max(0) as usize).min(MAX_READ),
@@ -907,6 +1250,7 @@ impl KnowledgeRead for ServerReader {
                     .or((!fallback.is_empty()).then_some(fallback));
                 DocumentSearchRow {
                     id: str_of(s, "chunk_id"),
+                    document_id: str_of(s, "document_id"),
                     title: opt_str(s, "title")
                         .filter(|t| !t.is_empty())
                         .unwrap_or_else(|| rel_path.clone()),
@@ -926,6 +1270,19 @@ impl KnowledgeRead for ServerReader {
     }
 
     fn search_paths_projection(&self, b: &str, q: &str, limit: i64) -> Result<Vec<PathSearchRow>> {
+        self.search_paths_projection_in(b, q, limit, &ReadFilter::default())
+    }
+
+    fn search_paths_projection_in(
+        &self,
+        b: &str,
+        q: &str,
+        limit: i64,
+        filter: &ReadFilter,
+    ) -> Result<Vec<PathSearchRow>> {
+        if !filter.document_ids.is_empty() {
+            return Ok(Vec::new());
+        }
         let map = |hits: Vec<Value>| -> Vec<PathSearchRow> {
             hits.iter()
                 .map(|h| {
@@ -944,7 +1301,7 @@ impl KnowledgeRead for ServerReader {
             let rows = map(self.find(
                 IndexKind::Files,
                 b,
-                vec![],
+                path_filter(filter),
                 Some(json!({ "match": { "path_text": { "query": tokens.join(" "), "operator": "and" } } })),
                 json!([{ "_score": "desc" }, { "rel_path": "asc" }]),
                 size,
@@ -953,11 +1310,13 @@ impl KnowledgeRead for ServerReader {
                 return Ok(rows);
             }
         }
+        let mut f = path_filter(filter);
+        f.push(json!({ "wildcard": { "rel_path": {
+            "value": format!("*{}*", wildcard_literal(q)), "case_insensitive": true } } }));
         Ok(map(self.find(
             IndexKind::Files,
             b,
-            vec![json!({ "wildcard": { "rel_path": {
-                "value": format!("*{}*", wildcard_literal(q)), "case_insensitive": true } } })],
+            f,
             None,
             json!([{ "rel_path": "asc" }]),
             size,
@@ -1207,6 +1566,7 @@ impl KnowledgeRead for ServerReader {
         fingerprint: &str,
         query: &[f32],
         k: usize,
+        num_candidates: usize,
     ) -> Result<Option<Vec<VectorHit>>> {
         let Some(spec) = self.backend.vector_spec() else {
             return Ok(None);
@@ -1230,7 +1590,10 @@ impl KnowledgeRead for ServerReader {
             (IndexKind::Chunks, SUBJECT_CHUNK, "chunk_id"),
             (IndexKind::Code, SUBJECT_ENTITY, "entity_id"),
         ] {
-            for h in self.hits(kind, self.knn_body(filter.clone(), query, k))? {
+            for h in self.hits(
+                kind,
+                self.knn_body(filter.clone(), query, k, num_candidates),
+            )? {
                 out.push((
                     subject.to_owned(),
                     str_of(&h["_source"], id_field),
@@ -1244,18 +1607,63 @@ impl KnowledgeRead for ServerReader {
     }
 
     fn subject_meta(&self, b: &str, keys: &[(String, String)]) -> Result<Vec<SubjectMeta>> {
+        // Three searches for the whole key set (entities, their files,
+        // chunks), not one or two per key.
+        let entity_ids: Vec<&str> = keys
+            .iter()
+            .filter(|(t, _)| t == SUBJECT_ENTITY)
+            .map(|(_, id)| id.as_str())
+            .collect();
+        let chunk_ids: Vec<&str> = keys
+            .iter()
+            .filter(|(t, _)| t != SUBJECT_ENTITY)
+            .map(|(_, id)| id.as_str())
+            .collect();
+        let mut entities: std::collections::HashMap<String, EntityRow> = Default::default();
+        for batch in entity_ids.chunks(MAX_READ) {
+            for h in self.find(
+                IndexKind::Code,
+                b,
+                vec![json!({ "terms": { "entity_id": batch } })],
+                None,
+                json!([{ "entity_id": "asc" }]),
+                batch.len(),
+            )? {
+                let e = entity_row(&h["_source"]);
+                entities.entry(e.id.clone()).or_insert(e);
+            }
+        }
+        let file_ids: Vec<String> = entities.values().map(|e| e.file_id.clone()).collect();
+        let paths = self.file_rel_paths(b, &file_ids)?;
+        let mut chunks: std::collections::HashMap<String, Value> = Default::default();
+        for batch in chunk_ids.chunks(MAX_READ) {
+            for h in self.find(
+                IndexKind::Chunks,
+                b,
+                vec![json!({ "terms": { "chunk_id": batch } })],
+                None,
+                json!([{ "chunk_id": "asc" }]),
+                batch.len(),
+            )? {
+                let id = str_of(&h["_source"], "chunk_id");
+                chunks.entry(id).or_insert_with(|| h["_source"].clone());
+            }
+        }
         let mut out = Vec::with_capacity(keys.len());
         for (t, id) in keys {
             if t == SUBJECT_ENTITY {
-                if let Some(e) = self.entity(b, id)? {
-                    let path = self.file_rel_path(b, &e.file_id)?.unwrap_or_default();
+                if let Some(e) = entities.get(id) {
+                    let path = paths.get(&e.file_id).cloned().unwrap_or_default();
                     out.push(SubjectMeta {
                         subject_type: t.clone(),
                         subject_id: id.clone(),
                         kind: "entity".into(),
                         rel_path: path,
                         title: e.qualified_name.clone(),
-                        snippet: e.signature.clone().unwrap_or(e.qualified_name),
+                        snippet: e
+                            .signature
+                            .clone()
+                            .unwrap_or_else(|| e.qualified_name.clone()),
                         section: None,
                         position: e.start_line,
                         end_line: Some(e.end_line),
@@ -1265,16 +1673,7 @@ impl KnowledgeRead for ServerReader {
                 }
                 continue;
             }
-            let hits = self.find(
-                IndexKind::Chunks,
-                b,
-                vec![json!({ "term": { "chunk_id": id } })],
-                None,
-                json!([{ "chunk_id": "asc" }]),
-                1,
-            )?;
-            let Some(h) = hits.first() else { continue };
-            let s = &h["_source"];
+            let Some(s) = chunks.get(id) else { continue };
             let c = chunk_row(s);
             let path = str_of(s, "rel_path");
             let title = opt_str(s, "title")

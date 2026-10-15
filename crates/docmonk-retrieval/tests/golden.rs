@@ -168,6 +168,36 @@ fn hyb_row(h: &RankedHit) -> (Value, Value) {
     (json!([c.kind, h.tier_label, c.path, c.title]), key)
 }
 
+/// Expected-file form of compared rows: `[kind, tier, path, title, key]`.
+fn record(rows: &[(Value, Value)]) -> Value {
+    Value::Array(
+        rows.iter()
+            .map(|(row, key)| {
+                let mut v = row.as_array().unwrap().clone();
+                v.push(key.clone());
+                Value::Array(v)
+            })
+            .collect(),
+    )
+}
+
+fn bless() -> bool {
+    std::env::var("DOCMONK_BLESS").as_deref() == Ok("1")
+}
+
+/// Writes the expected rankings (one-space indent, like the checked-in file).
+fn write_golden(g: &Value) {
+    let mut out = Vec::new();
+    let fmt = serde_json::ser::PrettyFormatter::with_indent(b" ");
+    serde::Serialize::serialize(
+        g,
+        &mut serde_json::Serializer::with_formatter(&mut out, fmt),
+    )
+    .unwrap();
+    out.push(b'\n');
+    std::fs::write(repo_root().join("fixtures/expected/search.json"), out).unwrap();
+}
+
 /// Tie keys equal, allowing rounding noise in floats.
 fn keys_eq(a: &Value, b: &Value) -> bool {
     match (a, b) {
@@ -262,7 +292,9 @@ const CORPORA: [(&str, &str); 2] = [
 
 #[test]
 fn lexical_rankings_are_as_expected() {
-    let g = golden();
+    // With DOCMONK_BLESS=1 run with --test-threads=1: both ranking tests
+    // rewrite the same file.
+    let mut g = golden();
     let mut failures = Vec::new();
     let mut total = 0;
     for (name, rel) in CORPORA {
@@ -271,19 +303,27 @@ fn lexical_rankings_are_as_expected() {
             store: &ix.store,
             build_id: &ix.build,
         }];
-        for item in g[name].as_array().unwrap() {
+        for item in g[name].as_array_mut().unwrap() {
             total += 1;
-            let q = item["query"].as_str().unwrap();
+            let q = item["query"].as_str().unwrap().to_owned();
+            let q = q.as_str();
             let got: Vec<_> = lexical::search(&corpora, q, 50, 32)
                 .unwrap()
                 .iter()
                 .take(TOP)
                 .map(lex_row)
                 .collect();
+            if bless() {
+                item["lexical"] = record(&got);
+                continue;
+            }
             if let Some(m) = compare(item["lexical"].as_array().unwrap(), &got) {
                 failures.push(format!("[{name}] {q:?}: {m}"));
             }
         }
+    }
+    if bless() {
+        write_golden(&g);
     }
     report(&failures, total, "lexical");
 }
@@ -301,36 +341,48 @@ fn hybrid_and_neural_rankings_are_as_expected() {
     let ce = models_root(DEFAULT_RERANKER_MODEL.slug).map(|m| {
         CrossEncoder::load(&m.join(DEFAULT_RERANKER_MODEL.slug), DEFAULT_RERANKER_MODEL).unwrap()
     });
-    let g = golden();
+    let mut g = golden();
+    let bless = std::env::var("DOCMONK_BLESS").as_deref() == Ok("1");
     let mut failures = Vec::new();
     let mut neural_failures = Vec::new();
     let mut total = 0;
     for (name, rel) in CORPORA {
         let ix = index(rel, Some(&models));
+        let items = g[name].as_array_mut().unwrap();
         let corpora = [Corpus {
             store: &ix.store,
             build_id: &ix.build,
         }];
-        for item in g[name].as_array().unwrap() {
+        for item in items.iter_mut() {
             total += 1;
-            let q = item["query"].as_str().unwrap();
+            let q = item["query"].as_str().unwrap().to_owned();
+            let q = q.as_str();
             let opts = HybridOptions {
                 limit: TOP,
                 ..Default::default()
             };
             let r = hybrid::hybrid_search(&corpora, q, Some(&emb), None, opts).unwrap();
             let got: Vec<_> = r.hits.iter().map(hyb_row).collect();
-            if let Some(m) = compare(item["hybrid"].as_array().unwrap(), &got) {
+            if bless {
+                item["hybrid"] = record(&got);
+            } else if let Some(m) = compare(item["hybrid"].as_array().unwrap(), &got) {
                 failures.push(format!("[{name}] {q:?}: {m}"));
             }
             if let Some(ce) = &ce {
                 let neural = hybrid::neural_rerank(q, r.hits, TOP, Some(ce));
                 let got: Vec<Value> = neural.iter().map(|h| hyb_row(h).0).collect();
+                if bless {
+                    item["hybrid_neural"] = json!(got);
+                    continue;
+                }
                 if let Some(m) = compare_neural(item["hybrid_neural"].as_array().unwrap(), &got) {
                     neural_failures.push(format!("[{name}] {q:?}: {m}"));
                 }
             }
         }
+    }
+    if bless {
+        write_golden(&g);
     }
     report(&failures, total, "hybrid");
     report(&neural_failures, total, "hybrid + neural");

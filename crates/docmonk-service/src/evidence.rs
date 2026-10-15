@@ -48,23 +48,17 @@ pub struct EvidenceRequest<'a> {
     pub limit: usize,
 }
 
-/// Whether `r` (a lexical result) passes the hard filters.
-fn lexical_allowed(
-    c: &Corpus<'_>,
-    r: &SearchResult,
-    f: &SearchFilters,
-) -> Result<bool, DocMonkError> {
+/// Whether `r` (a lexical result) passes the hard filters (every document
+/// hit carries its document id: no lookup per hit).
+fn lexical_allowed(r: &SearchResult, f: &SearchFilters) -> bool {
     let attachment = r.location.as_ref().is_some_and(|l| l.attachment.is_some());
-    let doc_id = if r.kind == "document" && !f.document_ids.is_empty() {
-        match c.store.chunk(c.build_id, &r.id).map_err(search_err_s)? {
-            Some(ch) => Some(ch.document_id),
-            // A title hit's id is the document id.
-            None => Some(r.id.clone()),
-        }
-    } else {
-        None
-    };
-    Ok(f.allows(&r.source_id, &r.path, r.kind, doc_id.as_deref(), attachment))
+    f.allows(
+        &r.source_id,
+        &r.path,
+        r.kind,
+        r.document_id.as_deref(),
+        attachment,
+    )
 }
 
 fn search_err_s(e: docmonk_storage::StorageError) -> DocMonkError {
@@ -100,36 +94,43 @@ fn run_part(
 ) -> Result<Vec<RankedHit>, DocMonkError> {
     // Over-fetch so filtering still leaves enough candidates.
     let fetch = (limit * 4).max(20);
+    // Filters are pushed down into the reads; a conceptual question that
+    // semantic search will answer skips the loosest lexical tier (its hits
+    // are mostly common-word noise).
+    let mut opts = filters.lexical_options();
+    opts.plan.or_fallback = !(plan.intent == QueryIntent::Conceptual
+        && plan.strategies.contains(&RouteStrategy::Semantic));
     let mut lex = Vec::new();
     for c in corp {
-        for r in lexical::search(
+        let (rows, _) = lexical::search_with_options(
             std::slice::from_ref(c),
             text,
             fetch,
             cfg.search.output.snippet_max_tokens,
+            &opts,
         )
-        .map_err(search_err)?
-        {
-            if lexical_allowed(c, &r, filters)? {
-                lex.push(r);
-            }
-        }
+        .map_err(search_err)?;
+        lex.extend(rows.into_iter().filter(|r| lexical_allowed(r, filters)));
     }
     let lex = lexical::merge(lex);
     let mut sem: Vec<SourcedHit> = Vec::new();
     if plan.strategies.contains(&RouteStrategy::Semantic) {
         let lazy = lazy_embedder(home, cfg);
         let embedder = lazy.get().ok().map(|a| a.as_ref());
-        let s = hybrid::semantic_search(
+        let s = hybrid::semantic_search_with(
             corp,
             embedder,
             text,
             fetch,
             Some(cfg.search.semantic_top_k.max(1) as usize),
+            crate::query::ann_params(cfg),
         )
         .map_err(search_err)?;
         if !s.available {
             degraded.push(format!("semantic unavailable: {}", s.reason));
+        }
+        for d in &s.degraded {
+            degraded.push(format!("semantic unavailable for {d}"));
         }
         sem = s
             .hits

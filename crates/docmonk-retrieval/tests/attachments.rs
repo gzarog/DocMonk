@@ -19,6 +19,9 @@ use serde_json::{json, Value};
 
 const MTIME: u64 = 1_700_000_000;
 
+/// The tests share process-wide model counters.
+static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -127,6 +130,7 @@ fn attachment_hits_carry_parent_provenance() {
         &std::fs::read_to_string(repo_root().join("fixtures/expected/attachments.json")).unwrap(),
     )
     .unwrap();
+    let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
     let models = models_root(DEFAULT_EMBEDDING_MODEL.slug);
     let ix = index("fixtures/attachments", models.as_deref());
     let corpora = [Corpus {
@@ -169,4 +173,198 @@ fn attachment_hits_carry_parent_provenance() {
             assert_eq!(got, want, "semantic {q:?}");
         }
     }
+}
+
+/// A reader whose backend has no vector search (a server without kNN).
+struct NoKnn;
+
+impl docmonk_storage::read::KnowledgeRead for NoKnn {
+    fn source_id(&self) -> &str {
+        "no-knn"
+    }
+    fn backend_kind(&self) -> &'static str {
+        "opensearch"
+    }
+    fn search_entities_exact(
+        &self,
+        _: &str,
+        _: &str,
+    ) -> docmonk_storage::error::Result<Vec<docmonk_storage::search::EntitySearchRow>> {
+        Ok(Vec::new())
+    }
+    fn search_entities_alias(
+        &self,
+        _: &str,
+        _: &str,
+        _: i64,
+    ) -> docmonk_storage::error::Result<Vec<docmonk_storage::search::EntitySearchRow>> {
+        Ok(Vec::new())
+    }
+    fn search_entities_fts(
+        &self,
+        _: &str,
+        _: &str,
+        _: i64,
+    ) -> docmonk_storage::error::Result<Vec<docmonk_storage::search::EntitySearchRow>> {
+        Ok(Vec::new())
+    }
+    fn search_document_titles(
+        &self,
+        _: &str,
+        _: &str,
+        _: i64,
+    ) -> docmonk_storage::error::Result<Vec<docmonk_storage::search::DocumentSearchRow>> {
+        Ok(Vec::new())
+    }
+    fn search_chunks_fts(
+        &self,
+        _: &str,
+        _: &str,
+        _: i64,
+        _: i64,
+    ) -> docmonk_storage::error::Result<Vec<docmonk_storage::search::DocumentSearchRow>> {
+        Ok(Vec::new())
+    }
+    fn search_paths_projection(
+        &self,
+        _: &str,
+        _: &str,
+        _: i64,
+    ) -> docmonk_storage::error::Result<Vec<docmonk_storage::search::PathSearchRow>> {
+        Ok(Vec::new())
+    }
+    fn symbol_entities(
+        &self,
+        _: &str,
+        _: &str,
+    ) -> docmonk_storage::error::Result<Vec<docmonk_storage::knowledge::EntityRow>> {
+        Ok(Vec::new())
+    }
+    fn entity(
+        &self,
+        _: &str,
+        _: &str,
+    ) -> docmonk_storage::error::Result<Option<docmonk_storage::knowledge::EntityRow>> {
+        Ok(None)
+    }
+    fn entity_edges(
+        &self,
+        _: &str,
+        _: &str,
+        _: Option<&str>,
+        _: bool,
+        _: i64,
+    ) -> docmonk_storage::error::Result<Vec<docmonk_storage::knowledge::RelationshipRow>> {
+        Ok(Vec::new())
+    }
+    fn unresolved_edges(
+        &self,
+        _: &str,
+        _: &str,
+        _: Option<&str>,
+        _: i64,
+    ) -> docmonk_storage::error::Result<Vec<docmonk_storage::knowledge::RelationshipRow>> {
+        Ok(Vec::new())
+    }
+    fn file_rel_path(&self, _: &str, _: &str) -> docmonk_storage::error::Result<Option<String>> {
+        Ok(None)
+    }
+    fn entity_links(
+        &self,
+        _: &str,
+        _: &str,
+    ) -> docmonk_storage::error::Result<Vec<docmonk_storage::search::EntityLinkRow>> {
+        Ok(Vec::new())
+    }
+    fn document_attachment(
+        &self,
+        _: &str,
+        _: &str,
+    ) -> docmonk_storage::error::Result<Option<docmonk_storage::search::AttachmentProvenance>> {
+        Ok(None)
+    }
+    fn chunk(
+        &self,
+        _: &str,
+        _: &str,
+    ) -> docmonk_storage::error::Result<Option<docmonk_storage::knowledge::ChunkRow>> {
+        Ok(None)
+    }
+    fn chunk_at(
+        &self,
+        _: &str,
+        _: &str,
+        _: i64,
+    ) -> docmonk_storage::error::Result<Option<docmonk_storage::knowledge::ChunkRow>> {
+        Ok(None)
+    }
+    fn chunk_siblings(
+        &self,
+        _: &str,
+        _: &docmonk_storage::knowledge::ChunkRow,
+        _: i64,
+        _: i64,
+    ) -> docmonk_storage::error::Result<(
+        Vec<docmonk_storage::knowledge::ChunkRow>,
+        Vec<docmonk_storage::knowledge::ChunkRow>,
+    )> {
+        Ok((Vec::new(), Vec::new()))
+    }
+    fn subject_meta(
+        &self,
+        _: &str,
+        _: &[(String, String)],
+    ) -> docmonk_storage::error::Result<Vec<docmonk_storage::vectors::SubjectMeta>> {
+        Ok(Vec::new())
+    }
+}
+
+#[test]
+fn one_embedding_per_query_and_per_corpus_availability() {
+    let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+    let Some(models) = models_root(DEFAULT_EMBEDDING_MODEL.slug) else {
+        return;
+    };
+    let ix = index("fixtures/attachments", Some(&models));
+    let emb = Embedder::load(
+        &models.join(DEFAULT_EMBEDDING_MODEL.slug),
+        DEFAULT_EMBEDDING_MODEL,
+    )
+    .unwrap();
+    let alone = hybrid::semantic_search(
+        &[Corpus {
+            store: &ix.store,
+            build_id: &ix.build,
+        }],
+        Some(&emb),
+        "invoice",
+        5,
+        None,
+    )
+    .unwrap();
+    assert!(!alone.hits.is_empty());
+    let corpora = [
+        Corpus {
+            store: &NoKnn,
+            build_id: "b",
+        },
+        Corpus {
+            store: &ix.store,
+            build_id: &ix.build,
+        },
+        Corpus {
+            store: &ix.store,
+            build_id: &ix.build,
+        },
+    ];
+    let before = docmonk_ml::counters::snapshot();
+    let s = hybrid::semantic_search(&corpora, Some(&emb), "invoice", 5, None).unwrap();
+    let used = docmonk_ml::counters::snapshot().since(&before);
+    assert_eq!(used.query_embeds, 1, "one forward pass for three corpora");
+    assert!(s.available, "{}", s.reason);
+    assert_eq!(s.degraded, ["no-knn: vector search unavailable"]);
+    assert_eq!(
+        s.hits.iter().map(|h| &h.hit.id).collect::<Vec<_>>()[..1],
+        alone.hits.iter().map(|h| &h.hit.id).collect::<Vec<_>>()[..1]
+    );
 }

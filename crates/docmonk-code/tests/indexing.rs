@@ -389,7 +389,7 @@ fn the_primary_index_never_derives_relationships() {
 }
 
 #[test]
-fn a_republished_base_hides_the_old_graph_until_it_is_rebuilt() {
+fn a_republished_base_serves_the_old_graph_as_stale_until_it_is_rebuilt() {
     let mut f = fixture();
     f.index();
     common::write(
@@ -398,7 +398,12 @@ fn a_republished_base_hides_the_old_graph_until_it_is_rebuilt() {
         "def unknown_function():\n    return 0\n",
     );
     assert!(f.index_base().published);
-    let (store, active) = f.store();
+    let (mut store, active) = f.store();
+    // By default the last committed graph stays readable, flagged stale.
+    let fresh = store.graph_freshness(&active).unwrap();
+    assert!(fresh.visible && fresh.stale, "{fresh:?}");
+    // graph.require_current: nothing until the graph matches the base.
+    store.require_current_graph(true);
     assert!(!store.graph_visible(&active).unwrap());
     assert_eq!(
         store.graph_status(Some(&active)).unwrap().state,

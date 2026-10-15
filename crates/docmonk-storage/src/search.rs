@@ -3,8 +3,6 @@
 //! file search projections).
 //! Ranking and tiering live in `docmonk-retrieval`.
 
-use rusqlite::params;
-
 use crate::error::{Result, StorageError};
 use crate::knowledge::{
     entity_from_row, relationship_from_row, EntityRow, ProjectStore, RelationshipRow,
@@ -12,8 +10,15 @@ use crate::knowledge::{
 };
 
 /// Document-FTS column weights (`bm25(chunk_fts, ...)`): chunk id and build
-/// id are unindexed placeholders, then heading 5, body 1, title 8.
-const CHUNK_BM25: &str = "bm25(chunk_fts, 0.0, 0.0, 5.0, 1.0, 8.0)";
+/// id are unindexed placeholders, then heading 5, body 1, title 8 and the
+/// identifier parts 0.5.
+const CHUNK_BM25: &str = "bm25(chunk_fts, 0.0, 0.0, 5.0, 1.0, 8.0, 0.5)";
+/// Code-FTS weights: name 10, qualified name 5, signature 2, and the
+/// name's parts 10 (`project store` finds `ProjectStore` as readily as
+/// `project_store`; shorter names rank first).
+const CODE_BM25: &str = "bm25(code_fts, 0.0, 0.0, 10.0, 5.0, 2.0, 10.0)";
+/// Path-FTS weights: path 2, identifier parts 1.
+const PATH_BM25: &str = "bm25(path_fts, 0.0, 0.0, 2.0, 1.0)";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EntitySearchRow {
@@ -46,6 +51,8 @@ pub struct AttachmentProvenance {
 pub struct DocumentSearchRow {
     /// Chunk id for FTS hits, document id for title hits.
     pub id: String,
+    /// The document the hit belongs to.
+    pub document_id: String,
     pub title: String,
     pub rel_path: String,
     pub mtime: f64,
@@ -105,6 +112,31 @@ fn attachment(r: &rusqlite::Row<'_>, at: usize) -> rusqlite::Result<Option<Attac
     })
 }
 
+pub use crate::read::ReadFilter;
+
+/// `AND (col LIKE ?n ESCAPE '\' OR ...)` over `count` patterns numbered
+/// from `first`; empty without patterns.
+fn path_clause(column: &str, count: usize, first: usize) -> String {
+    if count == 0 {
+        return String::new();
+    }
+    let ors = (0..count)
+        .map(|i| format!("{column} LIKE ?{} ESCAPE '\\'", first + i))
+        .collect::<Vec<_>>()
+        .join(" OR ");
+    format!("AND ({ors})")
+}
+
+impl ReadFilter {
+    /// `LIKE` patterns of the path prefixes.
+    fn like_patterns(&self) -> Vec<String> {
+        self.path_prefixes
+            .iter()
+            .map(|p| format!("{}%", like_literal(p)))
+            .collect()
+    }
+}
+
 /// SQL `LIKE` pattern matching `s` literally (escape `\`).
 fn like_literal(s: &str) -> String {
     s.replace('\\', "\\\\")
@@ -162,17 +194,39 @@ impl ProjectStore {
         expression: &str,
         limit: i64,
     ) -> Result<Vec<EntitySearchRow>> {
+        self.search_entities_fts_in(build_id, expression, limit, &ReadFilter::default())
+    }
+
+    /// [`Self::search_entities_fts`] restricted to `filter`'s paths in SQL,
+    /// so `limit` counts only in-scope rows.
+    pub fn search_entities_fts_in(
+        &self,
+        build_id: &str,
+        expression: &str,
+        limit: i64,
+        filter: &ReadFilter,
+    ) -> Result<Vec<EntitySearchRow>> {
+        if !filter.document_ids.is_empty() {
+            // A document filter admits no entity.
+            return Ok(Vec::new());
+        }
+        let patterns = filter.like_patterns();
+        let clause = path_clause("f.rel_path", patterns.len(), 4);
+        let mut args: Vec<&dyn rusqlite::ToSql> = vec![&expression, &build_id, &limit];
+        args.extend(patterns.iter().map(|p| p as &dyn rusqlite::ToSql));
         let mut rows = self.query_rows(
             "entity fts search",
-            "SELECT e.id, e.name, e.qualified_name, e.kind, e.signature,
-                    e.start_line, e.end_line, f.rel_path, f.mtime, bm25(code_fts)
-             FROM code_fts
-             JOIN entities e ON e.rowid = code_fts.rowid
-             JOIN files f ON f.build_id = e.build_id AND f.id = e.file_id
-             WHERE code_fts MATCH ?1 AND code_fts.build_id = ?2
-             ORDER BY bm25(code_fts), f.rel_path, e.qualified_name, e.start_line, e.id
-             LIMIT ?3",
-            &[&expression, &build_id, &limit],
+            &format!(
+                "SELECT e.id, e.name, e.qualified_name, e.kind, e.signature,
+                    e.start_line, e.end_line, f.rel_path, f.mtime, {CODE_BM25}
+                 FROM code_fts
+                 JOIN entities e ON e.rowid = code_fts.rowid
+                 JOIN files f ON f.build_id = e.build_id AND f.id = e.file_id
+                 WHERE code_fts MATCH ?1 AND code_fts.build_id = ?2 {clause}
+                 ORDER BY {CODE_BM25}, f.rel_path, e.qualified_name, e.start_line, e.id
+                 LIMIT ?3"
+            ),
+            &args,
             |r| {
                 let mut row = entity_row(r)?;
                 row.bm25 = Some(r.get(9)?);
@@ -207,6 +261,7 @@ impl ProjectStore {
                 let title: String = r.get(1)?;
                 Ok(DocumentSearchRow {
                     id: r.get(0)?,
+                    document_id: r.get(0)?,
                     snippet: Some(title.clone()),
                     title,
                     rel_path: r.get(2)?,
@@ -234,24 +289,63 @@ impl ProjectStore {
         limit: i64,
         snippet_tokens: i64,
     ) -> Result<Vec<DocumentSearchRow>> {
+        self.search_chunks_fts_in(
+            build_id,
+            expression,
+            limit,
+            snippet_tokens,
+            &ReadFilter::default(),
+        )
+    }
+
+    /// [`Self::search_chunks_fts`] restricted to `filter` (paths and
+    /// documents) in SQL, so `limit` counts only in-scope rows.
+    pub fn search_chunks_fts_in(
+        &self,
+        build_id: &str,
+        expression: &str,
+        limit: i64,
+        snippet_tokens: i64,
+        filter: &ReadFilter,
+    ) -> Result<Vec<DocumentSearchRow>> {
         let tokens = snippet_tokens.clamp(1, 64);
+        let patterns = filter.like_patterns();
+        let clause = path_clause("f.rel_path", patterns.len(), 5);
+        let first_doc = 5 + patterns.len();
+        let docs = if filter.document_ids.is_empty() {
+            String::new()
+        } else {
+            let marks = (0..filter.document_ids.len())
+                .map(|i| format!("?{}", first_doc + i))
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("AND c.document_id IN ({marks})")
+        };
+        let mut args: Vec<&dyn rusqlite::ToSql> = vec![&tokens, &expression, &build_id, &limit];
+        args.extend(patterns.iter().map(|p| p as &dyn rusqlite::ToSql));
+        args.extend(
+            filter
+                .document_ids
+                .iter()
+                .map(|d| d as &dyn rusqlite::ToSql),
+        );
         let mut stmt = self
             .conn
             .prepare_cached(&format!(
                 "SELECT c.id, fts.heading, fts.body, fts.title, d.title, f.rel_path, f.mtime,
                         c.page_start, c.page_end, c.heading_path, {ATTACHMENT_COLUMNS},
-                        {CHUNK_BM25}, snippet(chunk_fts, -1, '', '', '...', ?1)
+                        {CHUNK_BM25}, snippet(chunk_fts, -1, '', '', '...', ?1), c.document_id
                  FROM chunk_fts fts
                  JOIN chunks c ON c.rowid = fts.rowid
                  JOIN documents d ON d.build_id = c.build_id AND d.id = c.document_id
                  JOIN files f ON f.build_id = c.build_id AND f.id = c.file_id
                  LEFT JOIN documents p ON p.build_id = d.build_id AND p.id = d.parent_document_id
-                 WHERE chunk_fts MATCH ?2 AND fts.build_id = ?3
+                 WHERE chunk_fts MATCH ?2 AND fts.build_id = ?3 {clause} {docs}
                  ORDER BY {CHUNK_BM25}, f.rel_path, c.ordinal, c.id LIMIT ?4"
             ))
             .map_err(StorageError::sqlite("chunk fts search"))?;
         let rows = stmt
-            .query_map(params![tokens, expression, build_id, limit], |r| {
+            .query_map(args.as_slice(), |r| {
                 let heading: String = r.get(1)?;
                 let body: String = r.get(2)?;
                 let fts_title: String = r.get(3)?;
@@ -273,6 +367,7 @@ impl ProjectStore {
                     .unwrap_or_else(|| rel_path.clone());
                 Ok(DocumentSearchRow {
                     id: r.get(0)?,
+                    document_id: r.get(18)?,
                     title,
                     rel_path,
                     mtime: r.get(6)?,
@@ -305,6 +400,22 @@ impl ProjectStore {
         q: &str,
         limit: i64,
     ) -> Result<Vec<PathSearchRow>> {
+        self.search_paths_projection_in(build_id, q, limit, &ReadFilter::default())
+    }
+
+    /// [`Self::search_paths_projection`] restricted to `filter`'s paths in
+    /// SQL.
+    pub fn search_paths_projection_in(
+        &self,
+        build_id: &str,
+        q: &str,
+        limit: i64,
+        filter: &ReadFilter,
+    ) -> Result<Vec<PathSearchRow>> {
+        if !filter.document_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let patterns = filter.like_patterns();
         let map = |r: &rusqlite::Row<'_>| -> rusqlite::Result<PathSearchRow> {
             Ok(PathSearchRow {
                 id: r.get(0)?,
@@ -319,13 +430,18 @@ impl ProjectStore {
                 .map(|t| format!("\"{t}\""))
                 .collect::<Vec<_>>()
                 .join(" AND ");
+            let clause = path_clause("f.rel_path", patterns.len(), 4);
+            let mut args: Vec<&dyn rusqlite::ToSql> = vec![&expression, &build_id, &limit];
+            args.extend(patterns.iter().map(|p| p as &dyn rusqlite::ToSql));
             let rows = self.query_rows(
                 "path fts search",
-                "SELECT f.id, f.rel_path, f.mtime FROM path_fts
-                 JOIN files f ON f.rowid = path_fts.rowid
-                 WHERE path_fts MATCH ?1 AND path_fts.build_id = ?2
-                 ORDER BY bm25(path_fts), f.rel_path LIMIT ?3",
-                &[&expression, &build_id, &limit],
+                &format!(
+                    "SELECT f.id, f.rel_path, f.mtime FROM path_fts
+                     JOIN files f ON f.rowid = path_fts.rowid
+                     WHERE path_fts MATCH ?1 AND path_fts.build_id = ?2 {clause}
+                     ORDER BY {PATH_BM25}, f.rel_path LIMIT ?3"
+                ),
+                &args,
                 map,
             )?;
             if !rows.is_empty() {
@@ -333,12 +449,17 @@ impl ProjectStore {
             }
         }
         let pattern = format!("%{}%", like_literal(q));
+        let clause = path_clause("rel_path", patterns.len(), 4);
+        let mut args: Vec<&dyn rusqlite::ToSql> = vec![&build_id, &pattern, &limit];
+        args.extend(patterns.iter().map(|p| p as &dyn rusqlite::ToSql));
         self.query_rows(
             "path substring search",
-            "SELECT id, rel_path, mtime FROM files
-             WHERE build_id = ?1 AND rel_path LIKE ?2 ESCAPE '\\'
-             ORDER BY rel_path LIMIT ?3",
-            &[&build_id, &pattern, &limit],
+            &format!(
+                "SELECT id, rel_path, mtime FROM files
+                 WHERE build_id = ?1 AND rel_path LIKE ?2 ESCAPE '\\' {clause}
+                 ORDER BY rel_path LIMIT ?3"
+            ),
+            &args,
             map,
         )
     }
@@ -359,6 +480,57 @@ pub fn word_tokens(text: &str) -> Vec<String> {
         out.push(cur);
     }
     out
+}
+
+/// The words inside identifiers of `text` that the FTS tokenizer does not
+/// already separate, lowercased: every `_`-separated piece that splits on
+/// a case change (camelCase, PascalCase, `HTTPServer`) or a letter/digit
+/// boundary contributes its parts (`ProjectStore` -> `project store`,
+/// `v2Api` -> `v 2 api`). `embedding_digest` contributes nothing: the
+/// tokenizer splits on `_` itself. This is the `words` column of the FTS
+/// tables, so natural-language queries find identifiers.
+pub fn identifier_words(text: &str) -> String {
+    let mut out: Vec<String> = Vec::new();
+    for token in word_tokens(text) {
+        for piece in token.split('_').filter(|p| !p.is_empty()) {
+            let parts = split_identifier(piece);
+            if parts.len() > 1 {
+                out.extend(parts);
+            }
+        }
+    }
+    out.join(" ")
+}
+
+/// Parts of one identifier token, lowercased (see [`identifier_words`]).
+pub fn split_identifier(token: &str) -> Vec<String> {
+    let chars: Vec<char> = token.chars().collect();
+    let mut parts: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    for (i, &c) in chars.iter().enumerate() {
+        if c == '_' {
+            if !cur.is_empty() {
+                parts.push(std::mem::take(&mut cur));
+            }
+            continue;
+        }
+        if let Some(&p) = cur.chars().last().as_ref() {
+            let next = chars.get(i + 1).copied();
+            let boundary = (p.is_lowercase() && c.is_uppercase())
+                || (p.is_alphabetic() && c.is_ascii_digit())
+                || (p.is_ascii_digit() && c.is_alphabetic())
+                // `HTTPServer`: the last capital of a run starts a word.
+                || (p.is_uppercase() && c.is_uppercase() && next.is_some_and(char::is_lowercase));
+            if boundary {
+                parts.push(std::mem::take(&mut cur));
+            }
+        }
+        cur.push(c);
+    }
+    if !cur.is_empty() {
+        parts.push(cur);
+    }
+    parts.into_iter().map(|p| p.to_lowercase()).collect()
 }
 
 /// Combining marks count as word characters in Unicode `\w`.
@@ -445,6 +617,167 @@ impl ProjectStore {
         )
     }
 
+    /// Edges of many entities in one statement per
+    /// [`crate::graph::LOOKUP_BATCH`] ids (see
+    /// [`crate::read::KnowledgeRead::entity_edges_many`]): a window
+    /// function keeps, per entity (and type when `types` is given), the
+    /// first `limit` rows in exactly [`Self::entity_edges`]' order.
+    pub fn entity_edges_many(
+        &self,
+        build_id: &str,
+        entity_ids: &[String],
+        types: &[&str],
+        outgoing: bool,
+        limit: i64,
+    ) -> Result<std::collections::HashMap<String, Vec<RelationshipRow>>> {
+        let column = if outgoing {
+            "source_entity_id"
+        } else {
+            "target_entity_id"
+        };
+        self.edges_many(build_id, entity_ids, types, column, "", limit)
+    }
+
+    /// Unresolved edges of many symbols at once (see
+    /// [`Self::entity_edges_many`]).
+    pub fn unresolved_edges_many(
+        &self,
+        build_id: &str,
+        symbols: &[String],
+        types: &[&str],
+        limit: i64,
+    ) -> Result<std::collections::HashMap<String, Vec<RelationshipRow>>> {
+        self.edges_many(
+            build_id,
+            symbols,
+            types,
+            "target_symbol",
+            "AND target_entity_id IS NULL",
+            limit,
+        )
+    }
+
+    fn edges_many(
+        &self,
+        build_id: &str,
+        keys: &[String],
+        types: &[&str],
+        column: &str,
+        extra: &str,
+        limit: i64,
+    ) -> Result<std::collections::HashMap<String, Vec<RelationshipRow>>> {
+        let mut out: std::collections::HashMap<String, Vec<RelationshipRow>> = Default::default();
+        if keys.is_empty() || !self.graph_visible(build_id)? {
+            return Ok(out);
+        }
+        let mut uniq: Vec<&String> = keys.iter().collect();
+        uniq.sort();
+        uniq.dedup();
+        let (partition, type_filter) = if types.is_empty() {
+            (
+                format!("PARTITION BY {column} ORDER BY relationship_type, id"),
+                String::new(),
+            )
+        } else {
+            let marks = (0..types.len())
+                .map(|i| format!("?{}", i + 3))
+                .collect::<Vec<_>>()
+                .join(",");
+            (
+                format!("PARTITION BY {column}, relationship_type ORDER BY id"),
+                format!("AND relationship_type IN ({marks})"),
+            )
+        };
+        for batch in uniq.chunks(crate::graph::LOOKUP_BATCH) {
+            let first = 3 + types.len();
+            let marks = (0..batch.len())
+                .map(|i| format!("?{}", i + first))
+                .collect::<Vec<_>>()
+                .join(",");
+            let mut args: Vec<&dyn rusqlite::ToSql> = vec![&build_id, &limit];
+            args.extend(types.iter().map(|t| t as &dyn rusqlite::ToSql));
+            args.extend(batch.iter().map(|k| *k as &dyn rusqlite::ToSql));
+            let rows = self.query_rows(
+                "edges many",
+                &format!(
+                    "SELECT {RELATIONSHIP_COLUMNS} FROM (
+                        SELECT *, ROW_NUMBER() OVER ({partition}) AS rn FROM relationships
+                        WHERE build_id = ?1 AND {column} IN ({marks}) {type_filter} {extra}
+                     ) WHERE rn <= ?2"
+                ),
+                &args,
+                relationship_from_row,
+            )?;
+            for r in rows {
+                let key = match column {
+                    "source_entity_id" => r.source_entity_id.clone(),
+                    "target_entity_id" => r.target_entity_id.clone().unwrap_or_default(),
+                    _ => r.target_symbol.clone().unwrap_or_default(),
+                };
+                out.entry(key).or_default().push(r);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Entities of many ids of `build_id`.
+    pub fn entities_by_ids(
+        &self,
+        build_id: &str,
+        ids: &[String],
+    ) -> Result<std::collections::HashMap<String, EntityRow>> {
+        let mut out = std::collections::HashMap::new();
+        let mut uniq: Vec<&String> = ids.iter().collect();
+        uniq.sort();
+        uniq.dedup();
+        for batch in uniq.chunks(crate::graph::LOOKUP_BATCH) {
+            let marks = (0..batch.len())
+                .map(|i| format!("?{}", i + 2))
+                .collect::<Vec<_>>()
+                .join(",");
+            let mut args: Vec<&dyn rusqlite::ToSql> = vec![&build_id];
+            args.extend(batch.iter().map(|k| *k as &dyn rusqlite::ToSql));
+            for e in self.query_rows(
+                "entities by ids",
+                &format!(
+                    "SELECT {ENTITY_COLUMNS} FROM entities WHERE build_id = ?1 AND id IN ({marks})"
+                ),
+                &args,
+                entity_from_row,
+            )? {
+                out.insert(e.id.clone(), e);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Source-relative paths of many files of `build_id`.
+    pub fn file_rel_paths(
+        &self,
+        build_id: &str,
+        file_ids: &[String],
+    ) -> Result<std::collections::HashMap<String, String>> {
+        let mut out = std::collections::HashMap::new();
+        let mut uniq: Vec<&String> = file_ids.iter().collect();
+        uniq.sort();
+        uniq.dedup();
+        for batch in uniq.chunks(crate::graph::LOOKUP_BATCH) {
+            let marks = (0..batch.len())
+                .map(|i| format!("?{}", i + 2))
+                .collect::<Vec<_>>()
+                .join(",");
+            let mut args: Vec<&dyn rusqlite::ToSql> = vec![&build_id];
+            args.extend(batch.iter().map(|k| *k as &dyn rusqlite::ToSql));
+            out.extend(self.query_rows(
+                "file paths",
+                &format!("SELECT id, rel_path FROM files WHERE build_id = ?1 AND id IN ({marks})"),
+                &args,
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+            )?);
+        }
+        Ok(out)
+    }
+
     /// Source-relative path of one file of `build_id`.
     pub fn file_rel_path(&self, build_id: &str, file_id: &str) -> Result<Option<String>> {
         Ok(self
@@ -517,6 +850,38 @@ impl ProjectStore {
         )
     }
 
+    /// Attachment provenance of each of `document_ids` (one statement per
+    /// [`crate::graph::LOOKUP_BATCH`] ids).
+    pub fn document_attachments(
+        &self,
+        build_id: &str,
+        document_ids: &[String],
+    ) -> Result<std::collections::HashMap<String, Option<AttachmentProvenance>>> {
+        let mut out = std::collections::HashMap::new();
+        let mut ids: Vec<&String> = document_ids.iter().collect();
+        ids.sort();
+        ids.dedup();
+        for batch in ids.chunks(crate::graph::LOOKUP_BATCH) {
+            let marks = vec!["?"; batch.len()].join(", ");
+            let mut params: Vec<&dyn rusqlite::ToSql> = vec![&build_id];
+            for id in batch {
+                params.push(*id);
+            }
+            let rows = self.query_rows(
+                "document attachments",
+                &format!(
+                    "SELECT d.id, {ATTACHMENT_COLUMNS} FROM documents d
+                     LEFT JOIN documents p ON p.build_id = d.build_id AND p.id = d.parent_document_id
+                     WHERE d.build_id = ?1 AND d.id IN ({marks})"
+                ),
+                &params,
+                |r| Ok((r.get::<_, String>(0)?, attachment(r, 1)?)),
+            )?;
+            out.extend(rows);
+        }
+        Ok(out)
+    }
+
     /// Attachment provenance of a document (`None` for a top-level one).
     pub fn document_attachment(
         &self,
@@ -557,6 +922,23 @@ mod tests {
             word_tokens("日本語のドキュメント"),
             ["日本語のドキュメント"]
         );
+    }
+
+    #[test]
+    fn identifiers_split_into_words() {
+        assert_eq!(split_identifier("ProjectStore"), ["project", "store"]);
+        assert_eq!(
+            split_identifier("embedding_digest"),
+            ["embedding", "digest"]
+        );
+        assert_eq!(split_identifier("HTTPServer2"), ["http", "server", "2"]);
+        assert_eq!(split_identifier("cancelOrder"), ["cancel", "order"]);
+        assert_eq!(split_identifier("plain"), ["plain"]);
+        assert_eq!(
+            identifier_words("fn embedding_digest(store: &ProjectStore) plain"),
+            "project store"
+        );
+        assert_eq!(identifier_words("nothing to split"), "");
     }
 
     #[test]

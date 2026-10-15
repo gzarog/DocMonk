@@ -376,7 +376,10 @@ fn update_consumer(
         .get(&consumer.id)
         .cloned()
         .unwrap_or_default();
-    if !view.store.graph_visible(&view.build).map_err(db)? {
+    // Bindings are computed against the consumer's current graph only
+    // (never the stale one readers may be served meanwhile).
+    let freshness = view.store.graph_freshness(&view.build).map_err(db)?;
+    if !freshness.visible || freshness.stale {
         if manifest.state != "stale" {
             manifest.state = "stale".into();
             manifest.reason = Some("the consumer's own graph is not current".into());
