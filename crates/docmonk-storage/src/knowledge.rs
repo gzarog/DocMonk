@@ -34,7 +34,10 @@ pub struct FileRow {
     /// When a `retry` file becomes due again.
     pub next_attempt_at: Option<String>,
     /// When the row was last written or its stat refreshed (ISO 8601).
-    /// Read back for the racy-clean rule; ignored on write.
+    /// Read back for the racy-clean rule; ignored on write. Never
+    /// serialized: it is not knowledge, and server knowledge digests hash
+    /// the serialized row.
+    #[serde(skip)]
     pub last_indexed_at: Option<String>,
 }
 

@@ -536,4 +536,20 @@ mod tests {
         feed(&mut b, &"bc");
         assert_ne!(hex(a), hex(b));
     }
+
+    #[test]
+    fn file_digest_ignores_when_the_row_was_written() {
+        let row = FileRow {
+            id: "f".into(),
+            rel_path: "a.py".into(),
+            content_hash: Some("h".into()),
+            ..FileRow::default()
+        };
+        let mut restaged = row.clone();
+        restaged.last_indexed_at = Some("2026-10-15T15:00:00Z".into());
+        let (mut a, mut b) = (Sha256::new(), Sha256::new());
+        feed(&mut a, &row);
+        feed(&mut b, &restaged);
+        assert_eq!(hex(a), hex(b), "a restaged file must still copy forward");
+    }
 }
