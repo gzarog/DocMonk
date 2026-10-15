@@ -21,7 +21,7 @@ use docmonk_ml::fusion::{
     rrf_score, MAX_FUSION_CANDIDATES, MAX_LEXICAL_CANDIDATES, MAX_SEMANTIC_CANDIDATES, RRF_K,
 };
 use docmonk_ml::reranker::CrossEncoder;
-use docmonk_ml::semantic::{self, SemanticHit};
+use docmonk_ml::semantic::{self, SemanticHit, SemanticStages};
 
 use crate::lexical::{LexicalTier, Location, RankTier, SearchResult};
 use crate::{Corpus, SearchError};
@@ -42,6 +42,27 @@ pub struct SemanticOutcome {
     pub available: bool,
     pub reason: String,
     pub hits: Vec<SourcedHit>,
+    /// Sub-stage timings summed over corpora (`--explain`).
+    pub stages: SemanticStages,
+    /// Attachment provenance lookups for chunk hits (milliseconds).
+    pub attachments_ms: f64,
+}
+
+impl SemanticOutcome {
+    /// `[{stage, duration_ms}]` of every sub-stage, for `--explain`.
+    pub fn substages_json(&self, model_load_ms: f64) -> serde_json::Value {
+        let s = &self.stages;
+        let row = |stage: &str, ms: f64| serde_json::json!({"stage": stage, "duration_ms": ms});
+        serde_json::json!([
+            row("model_load", model_load_ms),
+            row("query_embed", s.query_embed_ms),
+            row("ann_load", s.ann_load_ms),
+            row("ann_freshness", s.ann_freshness_ms),
+            row("ann_search", s.ann_search_ms),
+            row("meta_join", s.meta_join_ms),
+            row("attachments", self.attachments_ms),
+        ])
+    }
 }
 
 /// Semantic search over every corpus, merged best first
@@ -55,6 +76,8 @@ pub fn semantic_search(
     candidate_k: Option<usize>,
 ) -> Result<SemanticOutcome, SearchError> {
     let mut hits = Vec::new();
+    let mut stages = SemanticStages::default();
+    let mut attachments_ms = 0.0;
     for c in corpora {
         let dir = c
             .store
@@ -71,18 +94,23 @@ pub fn semantic_search(
             candidate_k,
         )
         .map_err(SearchError)?;
+        stages.add(&r.stages);
         if !r.available || r.reason == "empty query" {
             return Ok(SemanticOutcome {
                 available: r.available,
                 reason: r.reason,
                 hits: Vec::new(),
+                stages,
+                attachments_ms,
             });
         }
         for hit in r.hits {
+            let t = std::time::Instant::now();
             let attachment = match (&hit.document_id, hit.attachment_index) {
                 (Some(doc), Some(_)) => c.store.document_attachment(c.build_id, doc)?,
                 _ => None,
             };
+            attachments_ms += t.elapsed().as_secs_f64() * 1000.0;
             hits.push(SourcedHit {
                 source_id: c.store.source_id().to_owned(),
                 hit,
@@ -102,6 +130,8 @@ pub fn semantic_search(
         available: true,
         reason,
         hits,
+        stages,
+        attachments_ms,
     })
 }
 

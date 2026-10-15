@@ -80,6 +80,7 @@ impl CrossEncoder {
         let model = Bert::load(vb.clone(), &config).map_err(load_err)?;
         let pooler = candle_nn::linear(h, h, vb.pp("bert.pooler.dense")).map_err(load_err)?;
         let classifier = candle_nn::linear(h, 1, vb.pp("classifier")).map_err(load_err)?;
+        crate::counters::reranker_loaded();
         Ok(Self {
             spec,
             tokenizer,

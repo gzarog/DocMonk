@@ -489,6 +489,18 @@ impl ProjectStore {
             && state.base_generation == self.base_generation(build_id)?)
     }
 
+    /// What graph readers of `build_id` get, and how current it is.
+    pub fn graph_freshness(&self, build_id: &str) -> Result<crate::read::GraphFreshness> {
+        let status = self.graph_status(Some(build_id))?;
+        let visible = self.graph_visible(build_id)?;
+        Ok(crate::read::GraphFreshness {
+            state: status.state.as_str().to_owned(),
+            generation: (status.generation > 0).then(|| status.generation.to_string()),
+            visible,
+            stale: visible && status.state == GraphLifecycle::Stale,
+        })
+    }
+
     /// The effective graph status against `build_id` (the active base).
     pub fn graph_status(&self, build_id: Option<&str>) -> Result<GraphStatus> {
         let generation = match build_id {

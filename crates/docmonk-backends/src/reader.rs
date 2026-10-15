@@ -744,6 +744,15 @@ fn wildcard_literal(s: &str) -> String {
 }
 
 impl KnowledgeRead for ServerReader {
+    fn graph_freshness(&self, b: &str) -> Result<docmonk_storage::read::GraphFreshness> {
+        let g = self.graph_generation(b)?;
+        Ok(docmonk_storage::read::GraphFreshness {
+            state: if g.is_some() { "ready" } else { "unavailable" }.into(),
+            visible: g.is_some(),
+            generation: g,
+            stale: false,
+        })
+    }
     fn source_id(&self) -> &str {
         &self.source_id
     }

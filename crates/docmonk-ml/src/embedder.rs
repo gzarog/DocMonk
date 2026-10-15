@@ -121,6 +121,7 @@ impl Embedder {
             VarBuilder::from_buffered_safetensors(file("model.safetensors")?, DType::F32, &device)
                 .map_err(load_err)?;
         let model = Bert::load(vb, &config).map_err(load_err)?;
+        crate::counters::embedder_loaded();
         Ok(Self {
             fingerprint: spec.fingerprint(),
             spec,

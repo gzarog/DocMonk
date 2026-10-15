@@ -18,6 +18,32 @@ use crate::search::{
 };
 use crate::vectors::SubjectMeta;
 
+/// How current a source's relationship graph is, as reported next to
+/// graph-backed results (`search`, `explore`, `impact`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct GraphFreshness {
+    /// `ready`, `stale`, `pending`, `building`, `failed`, `disabled` or
+    /// `unknown`.
+    pub state: String,
+    /// The graph generation graph queries read (`None` without one).
+    pub generation: Option<String>,
+    /// Graph queries return rows.
+    pub visible: bool,
+    /// The rows served were derived from an older base publication.
+    pub stale: bool,
+}
+
+impl GraphFreshness {
+    pub fn unknown() -> Self {
+        Self {
+            state: "unknown".into(),
+            generation: None,
+            visible: false,
+            stale: false,
+        }
+    }
+}
+
 /// `(subject_type, subject_id, similarity)` of one vector candidate.
 pub type VectorHit = (String, String, f32);
 
@@ -118,6 +144,11 @@ pub trait KnowledgeRead {
     }
 
     fn subject_meta(&self, build_id: &str, keys: &[(String, String)]) -> Result<Vec<SubjectMeta>>;
+
+    /// The graph's freshness against `build_id`.
+    fn graph_freshness(&self, _build_id: &str) -> Result<GraphFreshness> {
+        Ok(GraphFreshness::unknown())
+    }
 }
 
 impl KnowledgeRead for ProjectStore {
@@ -205,6 +236,9 @@ impl KnowledgeRead for ProjectStore {
     }
     fn subject_meta(&self, b: &str, keys: &[(String, String)]) -> Result<Vec<SubjectMeta>> {
         ProjectStore::subject_meta(self, b, keys)
+    }
+    fn graph_freshness(&self, b: &str) -> Result<GraphFreshness> {
+        ProjectStore::graph_freshness(self, b)
     }
 }
 

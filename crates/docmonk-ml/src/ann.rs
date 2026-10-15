@@ -227,7 +227,9 @@ pub fn save(path: &Path, index: &Hnsw, meta: &IndexMeta) -> std::io::Result<()> 
 
 /// Loads a valid index file; `None` when missing or invalid.
 pub fn load(path: &Path) -> Option<(Hnsw, IndexMeta)> {
-    decode(&std::fs::read(path).ok()?)
+    let bytes = std::fs::read(path).ok()?;
+    crate::counters::ann_loaded();
+    decode(&bytes)
 }
 
 /// What a `sync` did.
@@ -323,6 +325,21 @@ pub enum Engine {
     Server,
 }
 
+/// Where one ANN query spent its time (milliseconds).
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct AnnTimings {
+    /// Reading, verifying and decoding the index file.
+    pub load_ms: f64,
+    /// Confirming the index still mirrors the build's vectors.
+    pub freshness_ms: f64,
+    /// The graph search (or the exact scan when the index was unusable).
+    pub search_ms: f64,
+}
+
+fn ms(t: std::time::Instant) -> f64 {
+    t.elapsed().as_secs_f64() * 1000.0
+}
+
 /// Top-`k` `(subject_type, subject_id, similarity)` for `query` in
 /// `build_id`: the persisted index when it matches the build and model,
 /// else exact search over SQLite.
@@ -334,23 +351,45 @@ pub fn search(
     query: &[f32],
     k: usize,
 ) -> Result<(Engine, Vec<AnnHit>), String> {
+    search_timed(store, project_dir, build_id, fingerprint, query, k).map(|(e, h, _)| (e, h))
+}
+
+/// [`search`] plus where the time went.
+pub fn search_timed(
+    store: &ProjectStore,
+    project_dir: &Path,
+    build_id: &str,
+    fingerprint: &str,
+    query: &[f32],
+    k: usize,
+) -> Result<(Engine, Vec<AnnHit>, AnnTimings), String> {
     let split = |hits: Vec<(String, f32)>| {
         hits.into_iter()
             .filter_map(|(l, s)| split_label(&l).map(|(t, id)| (t.to_owned(), id.to_owned(), s)))
             .collect::<Vec<_>>()
     };
-    if let Some((index, meta)) = load(&index_path(project_dir)) {
+    let mut timings = AnnTimings::default();
+    let t = std::time::Instant::now();
+    let loaded = load(&index_path(project_dir));
+    timings.load_ms = ms(t);
+    if let Some((index, meta)) = loaded {
+        let t = std::time::Instant::now();
         let current = store
             .embedding_digest(build_id, fingerprint)
             .map_err(|e| e.to_string())?;
+        timings.freshness_ms = ms(t);
         if meta.build_id == build_id
             && meta.fingerprint == fingerprint
             && meta.dims == query.len()
             && meta.content == current
         {
-            return Ok((Engine::Hnsw, split(index.search(query, k))));
+            let t = std::time::Instant::now();
+            let hits = split(index.search(query, k));
+            timings.search_ms = ms(t);
+            return Ok((Engine::Hnsw, hits, timings));
         }
     }
+    let t = std::time::Instant::now();
     let all = store
         .embeddings(build_id)
         .map_err(|e| e.to_string())?
@@ -363,7 +402,8 @@ pub fn search(
         all.iter().map(|(l, v)| (l.as_str(), v.as_slice())),
         k,
     );
-    Ok((Engine::Exact, split(hits)))
+    timings.search_ms = ms(t);
+    Ok((Engine::Exact, split(hits), timings))
 }
 
 #[cfg(test)]

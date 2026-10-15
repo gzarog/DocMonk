@@ -4,6 +4,7 @@
 
 pub mod ann;
 pub mod bert;
+pub mod counters;
 pub mod embedder;
 pub mod fusion;
 pub mod hnsw;

@@ -32,6 +32,7 @@ tracing.workspace = true
 signal-hook.workspace = true
 
 [dev-dependencies]
+regex.workspace = true
 docmonk-retrieval.workspace = true
 reqwest.workspace = true
 tempfile.workspace = true

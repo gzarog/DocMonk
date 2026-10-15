@@ -332,6 +332,23 @@ pub fn traverse_value(
     }))
 }
 
+/// `[{source_id, state, generation, visible, stale}]`: how current each
+/// source's relationship graph is.
+pub fn graph_json(opened: &[Opened]) -> Result<Value, DocMonkError> {
+    let mut out = Vec::with_capacity(opened.len());
+    for o in opened {
+        let f = o.store.read().graph_freshness(&o.build).map_err(db)?;
+        out.push(json!({
+            "source_id": o.source.id,
+            "state": f.state,
+            "generation": f.generation,
+            "visible": f.visible,
+            "stale": f.stale,
+        }));
+    }
+    Ok(Value::Array(out))
+}
+
 /// `impact --json` data.
 pub fn impact_value(
     opened: &[Opened],
@@ -342,6 +359,7 @@ pub fn impact_value(
     let mut payload =
         explore::impact(&corpora(opened), name, max_depth, limit).map_err(search_err)?;
     absolutize_json(&mut payload, opened, None);
+    payload["graph"] = graph_json(opened)?;
     Ok(payload)
 }
 
@@ -402,6 +420,7 @@ pub fn explore_value(
     };
     let mut r = explore::explore(&corp, &plan, semantic.as_ref(), opts).map_err(search_err)?;
     absolutize_json(&mut r, opened, None);
+    r["graph"] = graph_json(opened)?;
     Ok(r)
 }
 
@@ -636,6 +655,8 @@ pub struct SearchRun {
     pub confidence: &'static str,
     /// Semantic search is enabled but was skipped for confident lexical hits.
     pub semantic_skipped: bool,
+    /// Model and ANN index loads and cache reuse during this run.
+    pub counters: docmonk_ml::counters::Counters,
 }
 
 impl SearchRun {
@@ -669,6 +690,7 @@ pub fn run_search(
 ) -> Result<SearchRun, DocMonkError> {
     let sc = &cfg.search;
     let f = &req.filters;
+    let counters_before = docmonk_ml::counters::snapshot();
     // Hard source filter: other sources are never read.
     let corp: Vec<Corpus<'_>> = corpora(opened)
         .into_iter()
@@ -719,6 +741,7 @@ pub fn run_search(
     let semantic = if run_semantic {
         let started = Instant::now();
         let embedder = lazy.get().ok().map(|a| a.as_ref());
+        let model_load_ms = started.elapsed().as_secs_f64() * 1000.0;
         let mut s = hybrid::semantic_search(
             &corp,
             embedder,
@@ -746,6 +769,7 @@ pub fn run_search(
             "stage": "semantic",
             "hits": s.hits.len(),
             "duration_ms": started.elapsed().as_secs_f64() * 1000.0,
+            "substages": s.substages_json(model_load_ms),
         }));
         Some(s)
     } else {
@@ -783,6 +807,7 @@ pub fn run_search(
     let ctx_opts = context::ContextOptions::from_config(&sc.context);
     let mut expanded = HashMap::new();
     if req.with_context && !ctx_opts.disabled() {
+        let started = Instant::now();
         for r in results.iter().filter(|r| r.kind == "document") {
             if let Some(o) = opened.iter().find(|o| o.source.id == r.source_id) {
                 if let Some(c) =
@@ -793,6 +818,11 @@ pub fn run_search(
                 }
             }
         }
+        timings.push(json!({
+            "stage": "context",
+            "hits": expanded.len(),
+            "duration_ms": started.elapsed().as_secs_f64() * 1000.0,
+        }));
     }
     Ok(SearchRun {
         results,
@@ -802,6 +832,7 @@ pub fn run_search(
         timings,
         confidence,
         semantic_skipped: sc.semantic && !run_semantic,
+        counters: docmonk_ml::counters::snapshot().since(&counters_before),
     })
 }
 

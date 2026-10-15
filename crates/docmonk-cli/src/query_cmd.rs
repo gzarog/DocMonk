@@ -572,6 +572,7 @@ pub fn search(a: &SearchArgs) -> Result<(), DocMonkError> {
         if let Some(h) = &run.ranked {
             payload["hybrid"] = json!(h.iter().map(hybrid::RankedHit::to_json).collect::<Vec<_>>());
         }
+        payload["graph"] = docmonk_service::query::graph_json(&opened)?;
         if a.explain {
             let round3 = |v: f64| (v * 1000.0).round() / 1000.0;
             payload["explain"] = json!({
@@ -581,9 +582,15 @@ pub fn search(a: &SearchArgs) -> Result<(), DocMonkError> {
                 "stages": run.timings.iter().map(|t| {
                     let mut t = t.clone();
                     t["duration_ms"] = json!(round3(t["duration_ms"].as_f64().unwrap_or(0.0)));
+                    if let Some(subs) = t.get_mut("substages").and_then(Value::as_array_mut) {
+                        for s in subs {
+                            s["duration_ms"] = json!(round3(s["duration_ms"].as_f64().unwrap_or(0.0)));
+                        }
+                    }
                     t
                 }).collect::<Vec<_>>(),
                 "total_ms": round3(total_ms),
+                "counters": run.counters,
                 "tokenizer": tokenizer_json(),
             });
             // Routing plan and filters (additive keys, ADR 0033).
