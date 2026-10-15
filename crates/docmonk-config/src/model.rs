@@ -298,6 +298,12 @@ section! {
         // Call graphs and code<->document links. Off skips their extraction,
         // cross-file resolution and knowledge linking (faster indexing).
         relationships_enabled: bool = true;
+        // false (default): a run indexes every selected source first, then
+        // builds relationship graphs as a second step. true: each source's
+        // graph starts as soon as its own index is published, while other
+        // sources still index (helps when one large source would hold
+        // small sources' graphs back).
+        pipeline_relationships: bool = false;
         // Experimental: indexing stores each code file's graph facts from
         // its parse (a disposable cache under <home>/cache), so the
         // relationship stage reuses them instead of parsing again. Off:

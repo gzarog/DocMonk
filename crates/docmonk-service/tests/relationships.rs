@@ -52,6 +52,26 @@ fn setup(relationships: bool) -> Env {
     Env { _d: d, home, roots }
 }
 
+fn set_pipelined(env: &Env, on: bool) {
+    let mut cfg = docmonk_service::load(&env.home).unwrap();
+    cfg.indexing.pipeline_relationships = on;
+    docmonk_config::write_user_config(&cfg, &env.home).unwrap();
+}
+
+/// Default: every source is indexed before any graph is built.
+fn assert_barrier(events: &[(String, &'static str)], states: &[&str]) {
+    let first_graph = events
+        .iter()
+        .position(|(_, p)| *p != "indexed")
+        .expect("graph stage ran");
+    assert_eq!(first_graph, 3, "barrier violated: {events:?}");
+    assert_eq!(events.len(), 6, "{events:?}");
+    assert!(
+        events[3..].iter().all(|(_, p)| states.contains(p)),
+        "{events:?}"
+    );
+}
+
 fn set_relationships(env: &Env, on: bool) {
     let mut cfg = docmonk_service::load(&env.home).unwrap();
     cfg.indexing.relationships_enabled = on;
@@ -118,8 +138,27 @@ fn assert_pipelined(events: &[(String, &'static str)], states: &[&str]) {
 }
 
 #[test]
-fn each_source_graph_is_built_right_after_its_own_index() {
+fn every_source_is_indexed_before_any_relationship_graph_is_built() {
     let env = setup(true);
+    let (events, r) = run(&env);
+    assert_eq!(r, Ok(()));
+    assert_barrier(&events, &["ready"]);
+    for i in 0..3 {
+        let (s, b) = store(&env, i);
+        assert!(s.graph_visible(&b).unwrap());
+        assert!(s.count("relationships", &b).unwrap() > 0);
+    }
+
+    // A warm pass reindexes nothing and finds every graph current.
+    let (events, r) = run(&env);
+    assert_eq!(r, Ok(()));
+    assert_barrier(&events, &["up_to_date"]);
+}
+
+#[test]
+fn pipelined_runs_build_each_source_graph_right_after_its_own_index() {
+    let env = setup(true);
+    set_pipelined(&env, true);
     let (events, r) = run(&env);
     assert_eq!(r, Ok(()));
     assert_pipelined(&events, &["ready"]);
@@ -239,7 +278,7 @@ fn disabled_relationships_skip_the_stage_and_hide_graphs_without_reindexing() {
     set_relationships(&env, true);
     let (events, r) = run(&env);
     assert_eq!(r, Ok(()));
-    assert_pipelined(&events, &["ready", "up_to_date"]);
+    assert_barrier(&events, &["ready", "up_to_date"]);
     let (s, b3) = store(&env, 1);
     assert_eq!(b3, b);
     assert!(s.graph_visible(&b3).unwrap());
