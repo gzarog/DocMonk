@@ -648,13 +648,21 @@ pub fn run_source_with(
         &source.include_patterns,
     );
     let targets = targets.filter(|_| matches!(plan, RebuildPlan::Incremental { .. }));
-    let (scanned, missing) = match targets {
+    let targeted = match targets {
         Some(t) => {
             let ts = scan_targets(root, &ignore, t, opts.follow_symlinks).map_err(|e| {
                 DocMonkError::new(ErrorKind::SourceUnavailable, format!("scan failed: {e}"))
             })?;
+            // A named directory can expand to many files: past the targeted
+            // limit a full pass is as cheap and simpler to reason about.
+            (ts.present.files.len() <= crate::daemon::MAX_TARGETED_PATHS).then_some(ts)
+        }
+        None => None,
+    };
+    let (scanned, missing, dirs) = match targeted {
+        Some(ts) => {
             result.targeted = true;
-            (ts.present, Some(ts.missing))
+            (ts.present, Some(ts.missing), ts.dirs)
         }
         None => (
             scan(
@@ -669,6 +677,7 @@ pub fn run_source_with(
                 DocMonkError::new(ErrorKind::SourceUnavailable, format!("scan failed: {e}"))
             })?,
             None,
+            Vec::new(),
         ),
     };
     result.timings.scan_seconds = started.elapsed().as_secs_f64();
@@ -691,14 +700,30 @@ pub fn run_source_with(
     .map_err(db_err)?;
     if let Some(missing) = &missing {
         // Only the named paths take part: rows for every other file are
-        // neither diffed nor touched.
+        // neither diffed nor touched. A named path that vanished may have
+        // been a directory, and a walked directory was seen whole, so rows
+        // under either are in scope too (and deleted when gone).
         let named: std::collections::HashSet<&str> = scanned
             .files
             .iter()
             .map(|f| f.rel_path.as_str())
             .chain(missing.iter().map(String::as_str))
             .collect();
-        baseline.retain(|r| named.contains(r.rel_path.as_str()));
+        let prefixes: Vec<String> = missing
+            .iter()
+            .chain(&dirs)
+            .map(|d| {
+                if d.is_empty() {
+                    String::new()
+                } else {
+                    format!("{d}/")
+                }
+            })
+            .collect();
+        baseline.retain(|r| {
+            named.contains(r.rel_path.as_str())
+                || prefixes.iter().any(|p| r.rel_path.starts_with(p.as_str()))
+        });
     }
     let now = now_iso();
     let prehashed = hash_parallel(&hash_candidates(&scanned, &baseline, &now), opts.workers);

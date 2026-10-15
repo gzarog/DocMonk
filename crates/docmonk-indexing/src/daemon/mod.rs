@@ -47,8 +47,10 @@ use crate::watcher::network::{NetworkSpec, NetworkWatcher};
 
 /// A batch of touched paths larger than this runs as a full pass.
 pub const MAX_TARGETED_PATHS: usize = 200;
-/// Reasons that always force a full scan.
-pub const FORCE_FULL_REASONS: [&str; 2] = ["startup", "reconciliation"];
+/// Reasons that always force a full scan. `watcher_rescan`: the watcher
+/// reported an error or that it lost events (a queue overflow), so
+/// touched paths no longer describe every change.
+pub const FORCE_FULL_REASONS: [&str; 3] = ["startup", "reconciliation", "watcher_rescan"];
 
 /// What the next pass for one source should scan.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -315,6 +317,7 @@ impl Shared {
             return;
         }
         let sid = id.clone();
+        let (rescan_me, rescan_id) = (me.clone(), id.clone());
         match LocalWatcher::start(
             &root,
             self.opts.debounce_ms,
@@ -323,6 +326,12 @@ impl Shared {
             Arc::new(move |path| {
                 if let Some(s) = me.upgrade() {
                     s.enqueue(&sid, "local_watcher", &[path]);
+                }
+            }),
+            Arc::new(move |why| {
+                tracing::warn!(component = "daemon", event = "watcher_rescan", source_id = %rescan_id, reason = %why);
+                if let Some(s) = rescan_me.upgrade() {
+                    s.enqueue(&rescan_id, "watcher_rescan", &[]);
                 }
             }),
         ) {
@@ -671,6 +680,19 @@ impl Daemon {
     /// paths for a targeted pass. Empty means a full pass.
     pub fn enqueue_source(&self, source_id: &str, reason: &str, paths: &[PathBuf]) {
         self.shared.enqueue(source_id, reason, paths);
+    }
+
+    /// Fault injection (tests/drills only): delivers a watcher error to
+    /// `source_id`'s local watcher, as the OS would after losing events.
+    /// False when the source has no local watcher.
+    pub fn inject_watcher_error(&self, source_id: &str) -> bool {
+        match lock(&self.shared.watchers).local.get(source_id) {
+            Some(w) => {
+                w.inject(Err(notify::Error::generic("injected watcher error")));
+                true
+            }
+            None => false,
+        }
     }
 
     /// Enqueues every enabled source for a full pass now.

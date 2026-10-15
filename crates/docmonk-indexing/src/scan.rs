@@ -98,15 +98,38 @@ pub fn scan(
 ) -> std::io::Result<ScanOutcome> {
     let root = docmonk_core::paths::resolve(root)?;
     let guard = PathGuard::new(std::slice::from_ref(&root))?;
+    let mut out = ScanOutcome::default();
+    let mut seen_files: HashSet<PathBuf> = HashSet::new();
+    walk(
+        &root,
+        &guard,
+        root.clone(),
+        ignore,
+        opts,
+        &mut seen_files,
+        &mut out,
+    );
+    Ok(out)
+}
+
+/// Walks `start` (a resolved directory inside `root`) with the root's
+/// rules, appending to `out`; rel paths stay relative to `root`.
+fn walk(
+    root: &Path,
+    guard: &PathGuard,
+    start: PathBuf,
+    ignore: &IgnoreMatcher,
+    opts: &ScanOptions,
+    seen_files: &mut HashSet<PathBuf>,
+    out: &mut ScanOutcome,
+) {
     let unreadable: HashSet<PathBuf> = opts
         .inject_unreadable
         .iter()
         .filter_map(|p| docmonk_core::paths::resolve(p).ok())
         .collect();
-    let mut out = ScanOutcome::default();
-    let mut seen_dirs: HashSet<PathBuf> = HashSet::from([root.clone()]);
-    let mut seen_files: HashSet<PathBuf> = HashSet::new();
-    let mut stack = vec![root.clone()];
+    let mut seen_dirs: HashSet<PathBuf> = HashSet::from([start.clone()]);
+    let mut stack = vec![start];
     while let Some(dir) = stack.pop() {
         if unreadable.contains(&dir) {
             out.errors.push(ScanError {
@@ -189,7 +212,7 @@ pub fn scan(
             };
             match meta {
                 Ok(meta) => out.files.push(ScannedFile {
-                    rel_path: rel_posix(&root, &resolved),
+                    rel_path: rel_posix(root, &resolved),
                     size: meta.len() as i64,
                     mtime: mtime_secs(&meta),
                     path: resolved,
@@ -204,23 +227,27 @@ pub fn scan(
         subdirs.reverse();
         stack.extend(subdirs);
     }
-    Ok(out)
 }
 
 /// A scan of named paths only (a watcher's touched paths).
 #[derive(Debug, Clone, Default)]
 pub struct TargetedScan {
-    /// Named paths that exist as regular, non-ignored files.
+    /// Named paths that exist as regular, non-ignored files, plus every
+    /// file under a named directory.
     pub present: ScanOutcome,
-    /// Relative paths of named paths that no longer exist.
+    /// Relative paths of named paths that no longer exist (a file or a
+    /// whole directory: the caller cannot tell which).
     pub missing: Vec<String>,
+    /// Relative paths of named directories that were walked (`""` for
+    /// the root itself). Their baseline rows are all in scope.
+    pub dirs: Vec<String>,
 }
 
-/// Examines exactly `targets` (`IndexCoordinator._run_targeted`). There
-/// is no directory walk, so nothing can be silently truncated. A path is
-/// skipped when it is a symlink (unless followed), escapes the root, is a
-/// directory, or is ignored. A path that no longer exists is reported as
-/// missing.
+/// Examines exactly `targets` (`IndexCoordinator._run_targeted`). A named
+/// file is stat'ed; a named directory (created or renamed in, whose files
+/// produce no events of their own) is walked with the root's rules. A path
+/// is skipped when it is a symlink (unless followed), escapes the root, or
+/// is ignored. A path that no longer exists is reported as missing.
 pub fn scan_targets(
     root: &Path,
     ignore: &IgnoreMatcher,
@@ -248,7 +275,26 @@ pub fn scan_targets(
                 continue;
             }
         };
-        if meta.is_dir() || ignore.is_ignored(&resolved, false) {
+        if meta.is_dir() {
+            if resolved == root || !ignore.is_ignored(&resolved, true) {
+                out.dirs.push(rel_posix(&root, &resolved));
+                let opts = ScanOptions {
+                    follow_symlinks,
+                    inject_unreadable: Vec::new(),
+                };
+                walk(
+                    &root,
+                    &guard,
+                    resolved,
+                    ignore,
+                    &opts,
+                    &mut seen,
+                    &mut out.present,
+                );
+            }
+            continue;
+        }
+        if ignore.is_ignored(&resolved, false) {
             continue;
         }
         out.present.files.push(ScannedFile {

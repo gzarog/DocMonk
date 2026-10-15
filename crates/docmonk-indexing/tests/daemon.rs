@@ -427,9 +427,83 @@ fn check_watched(network: bool, reason: &str) {
     assert_eq!(files, ["a.py", "b.py"]);
 }
 
+fn visible(home: &Home, src: &SourceRecord) -> Vec<String> {
+    let cp = common::control(home);
+    let Some(active) = cp.state(&src.id).unwrap().active_build_id else {
+        return Vec::new();
+    };
+    let store = docmonk_storage::knowledge::ProjectStore::open(
+        &docmonk_storage::StorageLayout::new(home),
+        &docmonk_core::paths::project_id_for_canonical(&src.path),
+        &src.id,
+        8,
+    )
+    .unwrap();
+    let mut files: Vec<String> = store
+        .files(&active)
+        .unwrap()
+        .into_iter()
+        .map(|f| f.rel_path)
+        .collect();
+    files.sort();
+    files
+}
+
 #[test]
 fn local_watcher_triggers_targeted_pass() {
     check_watched(false, "local_watcher");
+}
+
+#[test]
+fn directories_moved_in_and_out_are_reflected_by_targeted_passes() {
+    let (dir, root, home, log, d, src) = watched_daemon(false);
+    std::thread::sleep(Duration::from_millis(300));
+    let outside = dir.path().join("staging");
+    common::write(&outside, "pkg/x.py", "X = 1\n");
+    common::write(&outside, "pkg/deep/y.py", "Y = 2\n");
+    std::fs::rename(outside.join("pkg"), root.join("pkg")).unwrap();
+    assert!(
+        wait_until(|| visible(&home, &src) == ["a.py", "pkg/deep/y.py", "pkg/x.py"]),
+        "moved-in directory indexed: {:?} {:?}",
+        visible(&home, &src),
+        log.lock().unwrap()
+    );
+    assert!(d.wait_idle(Duration::from_secs(10)));
+    std::fs::rename(root.join("pkg"), dir.path().join("gone")).unwrap();
+    assert!(
+        wait_until(|| visible(&home, &src) == ["a.py"]),
+        "moved-out directory dropped: {:?} {:?}",
+        visible(&home, &src),
+        log.lock().unwrap()
+    );
+    assert!(d.wait_idle(Duration::from_secs(10)));
+    d.stop();
+    assert!(
+        log.lock()
+            .unwrap()
+            .iter()
+            .skip(1)
+            .all(|r| !r.full && r.reason == "local_watcher"),
+        "both were targeted passes: {:?}",
+        log.lock().unwrap()
+    );
+}
+
+#[test]
+fn a_watcher_error_triggers_a_full_pass() {
+    let (_dir, _root, _home, log, d, src) = watched_daemon(false);
+    assert!(d.inject_watcher_error(&src.id));
+    assert!(
+        wait_until(|| log
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|r| r.reason == "watcher_rescan" && r.full)),
+        "{:?}",
+        log.lock().unwrap()
+    );
+    assert!(d.wait_idle(Duration::from_secs(10)));
+    d.stop();
 }
 
 #[test]
