@@ -192,12 +192,12 @@
     "documentation": [
      {
       "source": "linker:exact_identifier",
-      "path": "docs/billing.md",
+      "path": "docs/unicode.txt",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": "Billing guide > Endpoints"
+       "section": null
       },
       "entity": "src.billing.ledger.Ledger",
       "relationship": "mentioned_in",
@@ -205,12 +205,12 @@
      },
      {
       "source": "linker:exact_identifier",
-      "path": "docs/unicode.txt",
+      "path": "docs/billing.md",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": null
+       "section": "Billing guide > Endpoints"
       },
       "entity": "src.billing.ledger.Ledger",
       "relationship": "mentioned_in",
@@ -242,12 +242,12 @@
     "documentation": [
      {
       "source": "linker:exact_identifier",
-      "path": "docs/billing.md",
+      "path": "docs/unicode.txt",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": "Billing guide > Endpoints"
+       "section": null
       },
       "entity": "src.billing.ledger.Ledger",
       "relationship": "mentioned_in",
@@ -255,12 +255,12 @@
      },
      {
       "source": "linker:exact_identifier",
-      "path": "docs/unicode.txt",
+      "path": "docs/billing.md",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": null
+       "section": "Billing guide > Endpoints"
       },
       "entity": "src.billing.ledger.Ledger",
       "relationship": "mentioned_in",
@@ -1174,12 +1174,12 @@
     "documentation": [
      {
       "source": "linker:exact_identifier",
-      "path": "docs/unicode.txt",
+      "path": "docs/billing.md",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": null
+       "section": "Billing guide > Tax"
       },
       "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "mentioned_in",
@@ -1187,12 +1187,12 @@
      },
      {
       "source": "linker:exact_identifier",
-      "path": "docs/billing.md",
+      "path": "docs/unicode.txt",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": "Billing guide > Tax"
+       "section": null
       },
       "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "mentioned_in",
@@ -1224,12 +1224,12 @@
     "documentation": [
      {
       "source": "linker:exact_identifier",
-      "path": "docs/unicode.txt",
+      "path": "docs/billing.md",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": null
+       "section": "Billing guide > Tax"
       },
       "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "mentioned_in",
@@ -1237,12 +1237,12 @@
      },
      {
       "source": "linker:exact_identifier",
-      "path": "docs/billing.md",
+      "path": "docs/unicode.txt",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": "Billing guide > Tax"
+       "section": null
       },
       "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "mentioned_in",
@@ -2180,12 +2180,12 @@
     "documentation": [
      {
       "source": "linker:exact_identifier",
-      "path": "docs/billing.md",
+      "path": "docs/unicode.txt",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": "Billing guide > Endpoints"
+       "section": null
       },
       "entity": "src.billing.ledger.Ledger",
       "relationship": "mentioned_in",
@@ -2193,12 +2193,12 @@
      },
      {
       "source": "linker:exact_identifier",
-      "path": "docs/unicode.txt",
+      "path": "docs/billing.md",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": null
+       "section": "Billing guide > Endpoints"
       },
       "entity": "src.billing.ledger.Ledger",
       "relationship": "mentioned_in",
@@ -2230,6 +2230,19 @@
     "documentation": [
      {
       "source": "linker:exact_identifier",
+      "path": "docs/unicode.txt",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.ledger.Ledger",
+      "relationship": "mentioned_in",
+      "confidence": "high"
+     },
+     {
+      "source": "linker:exact_identifier",
       "path": "docs/billing.md",
       "location": {
        "line_start": null,
@@ -2240,19 +2253,6 @@
       "entity": "src.billing.ledger.Ledger",
       "relationship": "mentioned_in",
       "confidence": "high"
-     },
-     {
-      "source": "linker:exact_identifier",
-      "path": "docs/unicode.txt",
-      "location": {
-       "line_start": null,
-       "line_end": null,
-       "page": null,
-       "section": null
-      },
-      "entity": "src.billing.ledger.Ledger",
-      "relationship": "mentioned_in",
-      "confidence": "high"
      }
     ],
     "confidence": {
@@ -2520,12 +2520,12 @@
     "documentation": [
      {
       "source": "linker:exact_identifier",
-      "path": "docs/unicode.txt",
+      "path": "docs/billing.md",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": null
+       "section": "Billing guide > Tax"
       },
       "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "mentioned_in",
@@ -2533,12 +2533,12 @@
      },
      {
       "source": "linker:exact_identifier",
-      "path": "docs/billing.md",
+      "path": "docs/unicode.txt",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": "Billing guide > Tax"
+       "section": null
       },
       "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "mentioned_in",
@@ -2570,12 +2570,12 @@
     "documentation": [
      {
       "source": "linker:exact_identifier",
-      "path": "docs/unicode.txt",
+      "path": "docs/billing.md",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": null
+       "section": "Billing guide > Tax"
       },
       "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "mentioned_in",
@@ -2583,12 +2583,12 @@
      },
      {
       "source": "linker:exact_identifier",
-      "path": "docs/billing.md",
+      "path": "docs/unicode.txt",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": "Billing guide > Tax"
+       "section": null
       },
       "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "mentioned_in",
@@ -3238,7 +3238,7 @@
      "identifier",
      "fts"
     ],
-    "summary": "Found 1 symbol(s) and 8 document(s) matching 'src.billing.invoice_service.InvoiceService.void_invoice'; see below for details.",
+    "summary": "Found 1 symbol(s) and 3 document(s) matching 'src.billing.invoice_service.InvoiceService.void_invoice'; see below for details.",
     "symbols": [
      {
       "qualified_name": "src.billing.invoice_service.InvoiceService.void_invoice",
@@ -3248,9 +3248,7 @@
     "paths": [
      "docs/billing.md",
      "docs/unicode.txt",
-     "src/billing/invoice_service.py",
-     "src/billing/ledger.py",
-     "src/billing/my-helpers.v2.py"
+     "src/billing/invoice_service.py"
     ],
     "call_flows": [],
     "dependencies": [],
@@ -3273,22 +3271,6 @@
      {
       "kind": "document",
       "tier": "fts",
-      "title": "Billing guide",
-      "path": "docs/billing.md",
-      "snippet": "Billing guide\nBilling guide\nTax\nUse calculate_tax for VAT. See invoice_service.py and the ledger module, and the helper in my-helpers.v2.py.",
-      "location": {
-       "section": "Billing guide > Tax",
-       "page_start": null,
-       "page_end": null,
-       "heading_path": [
-        "Billing guide",
-        "Tax"
-       ]
-      }
-     },
-     {
-      "kind": "document",
-      "tier": "fts",
       "title": "unicode",
       "path": "docs/unicode.txt",
       "snippet": "unicode\nΤο σύνολο υπολογίζεται με café_total και Λογαριασμός.\n\nEdge: InvoiceService.create_invoice. Also (Ledger) and [post_entry] and \"helper\".\n\nPathological: a.b.c.d..e, ...,\n\ninit\n\n, $$$, ((())), Ledger.post_entry.extra",
@@ -3304,73 +3286,14 @@
       "tier": "fts",
       "title": "Billing guide",
       "path": "docs/billing.md",
-      "snippet": "Billing guide\nBilling guide",
+      "snippet": "Billing guide\nBilling guide\nTax\nUse calculate_tax for VAT. See invoice_service.py and the ledger module, and the helper in my-helpers.v2.py.",
       "location": {
-       "section": "Billing guide",
-       "page_start": null,
-       "page_end": null,
-       "heading_path": []
-      }
-     },
-     {
-      "kind": "document",
-      "tier": "fts",
-      "title": "Billing guide",
-      "path": "docs/billing.md",
-      "snippet": "Billing guide\nBilling guide\nTax",
-      "location": {
-       "section": "Tax",
-       "page_start": null,
-       "page_end": null,
-       "heading_path": [
-        "Billing guide"
-       ]
-      }
-     },
-     {
-      "kind": "document",
-      "tier": "fts",
-      "title": "Billing guide",
-      "path": "docs/billing.md",
-      "snippet": "Billing guide\nBilling guide\nEndpoints",
-      "location": {
-       "section": "Endpoints",
-       "page_start": null,
-       "page_end": null,
-       "heading_path": [
-        "Billing guide"
-       ]
-      }
-     },
-     {
-      "kind": "document",
-      "tier": "fts",
-      "title": "Billing guide",
-      "path": "docs/billing.md",
-      "snippet": "Billing guide\nBilling guide\nEndpoints\nComponent | Owner\nLedger | finance\nPaymentGateway | platform",
-      "location": {
-       "section": "Billing guide > Endpoints",
+       "section": "Billing guide > Tax",
        "page_start": null,
        "page_end": null,
        "heading_path": [
         "Billing guide",
-        "Endpoints"
-       ]
-      }
-     },
-     {
-      "kind": "document",
-      "tier": "fts",
-      "title": "Billing guide",
-      "path": "docs/billing.md",
-      "snippet": "Billing guide\nBilling guide\nEndpoints\nPOST /api/invoices/{id}/void voids an invoice. Payments use api/payments/charge.",
-      "location": {
-       "section": "Billing guide > Endpoints",
-       "page_start": null,
-       "page_end": null,
-       "heading_path": [
-        "Billing guide",
-        "Endpoints"
+        "Tax"
        ]
       }
      }
@@ -3569,83 +3492,17 @@
      "tests",
      "documents"
     ],
-    "summary": "Found 1 symbol(s) and 4 document(s) matching 'what breaks if Ledger changes?'; see below for details.",
+    "summary": "Found 1 symbol(s) and 0 document(s) matching 'what breaks if Ledger changes?'; see below for details.",
     "symbols": [
      {
       "qualified_name": "src.billing.ledger.Ledger",
       "kind": "class"
      }
     ],
-    "paths": [
-     "docs/billing.md",
-     "docs/orders.html",
-     "docs/unicode.txt",
-     "src/billing/ledger.py"
-    ],
+    "paths": [],
     "call_flows": [],
     "dependencies": [],
-    "documents": [
-     {
-      "kind": "document",
-      "tier": "fts",
-      "title": "unicode",
-      "path": "docs/unicode.txt",
-      "snippet": "unicode\nΤο σύνολο υπολογίζεται με café_total και Λογαριασμός.\n\nEdge: InvoiceService.create_invoice. Also (Ledger) and [post_entry] and \"helper\".\n\nPathological: a.b.c.d..e, ...,\n\ninit\n\n, $$$, ((())), Ledger.post_entry.extra",
-      "location": {
-       "section": null,
-       "page_start": null,
-       "page_end": null,
-       "heading_path": []
-      }
-     },
-     {
-      "kind": "document",
-      "tier": "fts",
-      "title": "Billing guide",
-      "path": "docs/billing.md",
-      "snippet": "Billing guide\nBilling guide\nEndpoints\nComponent | Owner\nLedger | finance\nPaymentGateway | platform",
-      "location": {
-       "section": "Billing guide > Endpoints",
-       "page_start": null,
-       "page_end": null,
-       "heading_path": [
-        "Billing guide",
-        "Endpoints"
-       ]
-      }
-     },
-     {
-      "kind": "document",
-      "tier": "fts",
-      "title": "Orders",
-      "path": "docs/orders.html",
-      "snippet": "Orders\nOrders\nThe OrderController exposes placeOrder and cancelOrder.\n\nFormatting uses formatCurrency; the Shop.Payments.PaymentGateway handles Charge and Refund.\n\nNot matches: placeOrders, xformatCurrency, OrderController.placeOrderX, Ledger.post_entry2.",
-      "location": {
-       "section": "Orders",
-       "page_start": null,
-       "page_end": null,
-       "heading_path": [
-        "Orders"
-       ]
-      }
-     },
-     {
-      "kind": "document",
-      "tier": "fts",
-      "title": "Billing guide",
-      "path": "docs/billing.md",
-      "snippet": "Billing guide\nBilling guide\nTax\nUse calculate_tax for VAT. See invoice_service.py and the ledger module, and the helper in my-helpers.v2.py.",
-      "location": {
-       "section": "Billing guide > Tax",
-       "page_start": null,
-       "page_end": null,
-       "heading_path": [
-        "Billing guide",
-        "Tax"
-       ]
-      }
-     }
-    ],
+    "documents": [],
     "tests": [],
     "requirements": [],
     "incidents": [],
@@ -3871,21 +3728,6 @@
       "tier": "fts",
       "title": "Billing guide",
       "path": "docs/billing.md",
-      "snippet": "Billing guide\nBilling guide\nThe\n\nInvoiceService\n\ncreates invoices through\n\ncreate_invoice\n\n. Fully qualified, that is\n\nsrc.billing.invoice_service.InvoiceService.create_invoice\n\n, and in short form\n\nInvoiceService.void_invoice\n\n.",
-      "location": {
-       "section": "Billing guide",
-       "page_start": null,
-       "page_end": null,
-       "heading_path": [
-        "Billing guide"
-       ]
-      }
-     },
-     {
-      "kind": "document",
-      "tier": "fts",
-      "title": "Billing guide",
-      "path": "docs/billing.md",
       "snippet": "Billing guide\nBilling guide\nTax\nUse calculate_tax for VAT. See invoice_service.py and the ledger module, and the helper in my-helpers.v2.py.",
       "location": {
        "section": "Billing guide > Tax",
@@ -3894,6 +3736,21 @@
        "heading_path": [
         "Billing guide",
         "Tax"
+       ]
+      }
+     },
+     {
+      "kind": "document",
+      "tier": "fts",
+      "title": "Billing guide",
+      "path": "docs/billing.md",
+      "snippet": "Billing guide\nBilling guide\nThe\n\nInvoiceService\n\ncreates invoices through\n\ncreate_invoice\n\n. Fully qualified, that is\n\nsrc.billing.invoice_service.InvoiceService.create_invoice\n\n, and in short form\n\nInvoiceService.void_invoice\n\n.",
+      "location": {
+       "section": "Billing guide",
+       "page_start": null,
+       "page_end": null,
+       "heading_path": [
+        "Billing guide"
        ]
       }
      }
@@ -4127,10 +3984,13 @@
      "fts",
      "graph_references"
     ],
-    "summary": "Found 0 symbol(s) and 2 document(s) matching 'how are invoices voided'; see below for details.",
+    "summary": "Found 0 symbol(s) and 4 document(s) matching 'how are invoices voided'; see below for details.",
     "symbols": [],
     "paths": [
-     "docs/billing.md"
+     "docs/billing.md",
+     "docs/unicode.txt",
+     "src/billing/invoice_service.py",
+     "web/Payments.cs"
     ],
     "call_flows": [],
     "dependencies": [],
@@ -4163,6 +4023,35 @@
        "page_end": null,
        "heading_path": [
         "Billing guide"
+       ]
+      }
+     },
+     {
+      "kind": "document",
+      "tier": "fts",
+      "title": "unicode",
+      "path": "docs/unicode.txt",
+      "snippet": "unicode\nΤο σύνολο υπολογίζεται με café_total και Λογαριασμός.\n\nEdge: InvoiceService.create_invoice. Also (Ledger) and [post_entry] and \"helper\".\n\nPathological: a.b.c.d..e, ...,\n\ninit\n\n, $$$, ((())), Ledger.post_entry.extra",
+      "location": {
+       "section": null,
+       "page_start": null,
+       "page_end": null,
+       "heading_path": []
+      }
+     },
+     {
+      "kind": "document",
+      "tier": "fts",
+      "title": "Billing guide",
+      "path": "docs/billing.md",
+      "snippet": "Billing guide\nBilling guide\nTax\nUse calculate_tax for VAT. See invoice_service.py and the ledger module, and the helper in my-helpers.v2.py.",
+      "location": {
+       "section": "Billing guide > Tax",
+       "page_start": null,
+       "page_end": null,
+       "heading_path": [
+        "Billing guide",
+        "Tax"
        ]
       }
      }
@@ -4198,6 +4087,118 @@
       "relationship": "match",
       "confidence": "medium",
       "snippet": "Billing guide\nBilling guide\nThe\n\nInvoiceService\n\ncreates invoices through\n\ncreate_invoice\n\n. Fully qualified, that is\n\nsrc.billing.invoice_service.InvoiceService.create_invoice\n\n, and in short form\n\nInvoiceService.void_invoice\n\n."
+     },
+     {
+      "source": "lexical:document",
+      "path": "docs/billing.md",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": "Billing guide > Tax"
+      },
+      "entity": "Billing guide",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "Billing guide\nBilling guide\nTax\nUse calculate_tax for VAT. See invoice_service.py and the ledger module, and the helper in my-helpers.v2.py."
+     },
+     {
+      "source": "lexical:document",
+      "path": "docs/unicode.txt",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": null
+      },
+      "entity": "unicode",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "unicode\nΤο σύνολο υπολογίζεται με café_total και Λογαριασμός.\n\nEdge: InvoiceService.create_invoice. Also (Ledger) and [post_entry] and \"helper\".\n\nPathological: a.b.c.d..e, ...,\n\ninit\n\n, $$$, ((())), Ledger.post_entry.extra"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "src/billing/invoice_service.py",
+      "location": {
+       "line_start": 4,
+       "line_end": 9,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.InvoiceService",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "class InvoiceService:"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "src/billing/invoice_service.py",
+      "location": {
+       "line_start": 5,
+       "line_end": 6,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.InvoiceService.create_invoice",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "def create_invoice(self, order):"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "src/billing/invoice_service.py",
+      "location": {
+       "line_start": 8,
+       "line_end": 9,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.InvoiceService.void_invoice",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "def void_invoice(self, invoice_id):"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "src/billing/invoice_service.py",
+      "location": {
+       "line_start": 12,
+       "line_end": 13,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.calculate_tax",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "def calculate_tax(amount):"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "src/billing/invoice_service.py",
+      "location": {
+       "line_start": 17,
+       "line_end": 18,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.void_endpoint",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "def void_endpoint(id):"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "web/Payments.cs",
+      "location": {
+       "line_start": 8,
+       "line_end": 8,
+       "page": null,
+       "section": null
+      },
+      "entity": "Shop.Payments.PaymentGateway.Refund",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "public void Refund(int amount) { }"
      }
     ],
     "evidence_truncated": false,
@@ -4214,7 +4215,7 @@
      "fts",
      "graph_references"
     ],
-    "summary": "Found 0 symbol(s) and 1 document(s) matching 'cancel order'; see below for details.",
+    "summary": "Found 0 symbol(s) and 2 document(s) matching 'cancel order'; see below for details.",
     "symbols": [],
     "paths": [
      "docs/orders.html",
@@ -4229,7 +4230,7 @@
       "tier": "fts",
       "title": "Orders",
       "path": "docs/orders.html",
-      "snippet": "Orders\nOrders\nThe OrderController exposes placeOrder and cancelOrder.\n\nFormatting uses formatCurrency; the Shop.Payments.PaymentGateway handles Charge and Refund.\n\nNot matches: placeOrders, xformatCurrency, OrderController.placeOrderX, Ledger.post_entry2.",
+      "snippet": "order controller place order cancel order format currency payment gateway place orders xformat currency order controller place order x entry 2",
       "location": {
        "section": "Orders",
        "page_start": null,
@@ -4237,6 +4238,19 @@
        "heading_path": [
         "Orders"
        ]
+      }
+     },
+     {
+      "kind": "document",
+      "tier": "fts",
+      "title": "Orders",
+      "path": "docs/orders.html",
+      "snippet": "Orders\nOrders",
+      "location": {
+       "section": "Orders",
+       "page_start": null,
+       "page_end": null,
+       "heading_path": []
       }
      }
     ],
@@ -4256,7 +4270,7 @@
       "entity": "Orders",
       "relationship": "match",
       "confidence": "medium",
-      "snippet": "Orders\nOrders\nThe OrderController exposes placeOrder and cancelOrder.\n\nFormatting uses formatCurrency; the Shop.Payments.PaymentGateway handles Charge and Refund.\n\nNot matches: placeOrders, xformatCurrency, OrderController.placeOrderX, Ledger.post_entry2."
+      "snippet": "order controller place order cancel order format currency payment gateway place orders xformat currency order controller place order x entry 2"
      },
      {
       "source": "lexical:entity",
@@ -4276,6 +4290,34 @@
       "source": "lexical:entity",
       "path": "web/orders.ts",
       "location": {
+       "line_start": 1,
+       "line_end": 4,
+       "page": null,
+       "section": null
+      },
+      "entity": "web.orders.OrderController",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "class OrderController {"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "web/orders.ts",
+      "location": {
+       "line_start": 2,
+       "line_end": 2,
+       "page": null,
+       "section": null
+      },
+      "entity": "web.orders.OrderController.placeOrder",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "placeOrder(id: string): string { return id; }"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "web/orders.ts",
+      "location": {
        "line_start": 3,
        "line_end": 3,
        "page": null,
@@ -4285,6 +4327,20 @@
       "relationship": "match",
       "confidence": "medium",
       "snippet": "cancelOrder(id: string): string { return id; }"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "web/orders.ts",
+      "location": {
+       "line_start": 6,
+       "line_end": 8,
+       "page": null,
+       "section": null
+      },
+      "entity": "web.orders.formatCurrency",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "function formatCurrency(value: number): string {"
      }
     ],
     "evidence_truncated": false,
@@ -7279,11 +7335,18 @@
     "paths": [
      "app/core_test.py",
      "app/util.py",
-     "svc/svc.go"
+     "svc/svc.go",
+     "web/money.ts"
     ],
     "call_flows": [
      {
-      "source": "app.core.settle",
+      "source": "tests.test_core.test_settle",
+      "relationship": "calls",
+      "target": "app.util.normalize",
+      "confidence": "medium"
+     },
+     {
+      "source": "app.core.Ledger.validate",
       "relationship": "calls",
       "target": "app.util.normalize",
       "confidence": "medium"
@@ -7295,13 +7358,7 @@
       "confidence": "exact"
      },
      {
-      "source": "tests.test_core.test_settle",
-      "relationship": "calls",
-      "target": "app.util.normalize",
-      "confidence": "medium"
-     },
-     {
-      "source": "app.core.Ledger.validate",
+      "source": "app.core.settle",
       "relationship": "calls",
       "target": "app.util.normalize",
       "confidence": "medium"
@@ -7418,16 +7475,16 @@
     ],
     "call_flows": [
      {
-      "source": "app.core.run",
-      "relationship": "calls",
-      "target": "app.core.settle",
-      "confidence": "exact"
-     },
-     {
       "source": "tests.test_core.test_settle",
       "relationship": "calls",
       "target": "app.core.settle",
       "confidence": "medium"
+     },
+     {
+      "source": "app.core.run",
+      "relationship": "calls",
+      "target": "app.core.settle",
+      "confidence": "exact"
      }
     ],
     "dependencies": [],
@@ -7495,6 +7552,12 @@
      {
       "source": "app.core.settle",
       "relationship": "calls",
+      "target": "app.core.Ledger.post",
+      "confidence": "exact"
+     },
+     {
+      "source": "app.core.settle",
+      "relationship": "calls",
       "target": "app.util.normalize",
       "confidence": "medium"
      },
@@ -7503,21 +7566,15 @@
       "relationship": "calls",
       "target": "audit_log",
       "confidence": "medium"
-     },
-     {
-      "source": "app.core.settle",
-      "relationship": "calls",
-      "target": "app.core.Ledger.post",
-      "confidence": "exact"
      }
     ],
     "dependencies": [
      {
-      "qualified_name": "app.util.normalize",
+      "qualified_name": "app.core.Ledger.post",
       "relationship": "calls"
      },
      {
-      "qualified_name": "app.core.Ledger.post",
+      "qualified_name": "app.util.normalize",
       "relationship": "calls"
      }
     ],
@@ -7578,14 +7635,16 @@
       "kind": "function"
      }
     ],
-    "paths": [
-     "app/core_test.py",
-     "app/util.py",
-     "svc/svc.go"
-    ],
+    "paths": [],
     "call_flows": [
      {
-      "source": "app.core.settle",
+      "source": "tests.test_core.test_settle",
+      "relationship": "calls",
+      "target": "app.util.normalize",
+      "confidence": "medium"
+     },
+     {
+      "source": "app.core.Ledger.validate",
       "relationship": "calls",
       "target": "app.util.normalize",
       "confidence": "medium"
@@ -7597,13 +7656,7 @@
       "confidence": "exact"
      },
      {
-      "source": "tests.test_core.test_settle",
-      "relationship": "calls",
-      "target": "app.util.normalize",
-      "confidence": "medium"
-     },
-     {
-      "source": "app.core.Ledger.validate",
+      "source": "app.core.settle",
       "relationship": "calls",
       "target": "app.util.normalize",
       "confidence": "medium"
@@ -7720,8 +7773,7 @@
     "summary": "Found 0 symbol(s) and 0 document(s) matching 'what depends on Ledger.post'; see below for details.",
     "symbols": [],
     "paths": [
-     "app/core.py",
-     "tests/test_core.py"
+     "app/core.py"
     ],
     "call_flows": [],
     "dependencies": [],
@@ -7730,20 +7782,6 @@
     "requirements": [],
     "incidents": [],
     "evidence": [
-     {
-      "source": "lexical:entity",
-      "path": "app/core.py",
-      "location": {
-       "line_start": 6,
-       "line_end": 17,
-       "page": null,
-       "section": null
-      },
-      "entity": "app.core.Ledger",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "class Ledger:"
-     },
      {
       "source": "lexical:entity",
       "path": "app/core.py",
@@ -7757,76 +7795,6 @@
       "relationship": "match",
       "confidence": "medium",
       "snippet": "def post(self, amount):"
-     },
-     {
-      "source": "lexical:entity",
-      "path": "app/core.py",
-      "location": {
-       "line_start": 10,
-       "line_end": 11,
-       "page": null,
-       "section": null
-      },
-      "entity": "app.core.Ledger.validate",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "def validate(self, amount):"
-     },
-     {
-      "source": "lexical:entity",
-      "path": "app/core.py",
-      "location": {
-       "line_start": 13,
-       "line_end": 14,
-       "page": null,
-       "section": null
-      },
-      "entity": "app.core.Ledger.ping",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "def ping(self):"
-     },
-     {
-      "source": "lexical:entity",
-      "path": "app/core.py",
-      "location": {
-       "line_start": 16,
-       "line_end": 17,
-       "page": null,
-       "section": null
-      },
-      "entity": "app.core.Ledger.pong",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "def pong(self):"
-     },
-     {
-      "source": "lexical:entity",
-      "path": "app/core.py",
-      "location": {
-       "line_start": 20,
-       "line_end": 23,
-       "page": null,
-       "section": null
-      },
-      "entity": "app.core.settle",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "def settle(ledger, amount):"
-     },
-     {
-      "source": "lexical:entity",
-      "path": "tests/test_core.py",
-      "location": {
-       "line_start": 9,
-       "line_end": 10,
-       "page": null,
-       "section": null
-      },
-      "entity": "tests.test_core.test_post",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "def test_post():"
      }
     ],
     "evidence_truncated": false,
@@ -7879,8 +7847,7 @@
     "summary": "Found 0 symbol(s) and 0 document(s) matching 'ledger post amount'; see below for details.",
     "symbols": [],
     "paths": [
-     "app/core.py",
-     "tests/test_core.py"
+     "app/core.py"
     ],
     "call_flows": [],
     "dependencies": [],
@@ -7889,20 +7856,6 @@
     "requirements": [],
     "incidents": [],
     "evidence": [
-     {
-      "source": "lexical:entity",
-      "path": "app/core.py",
-      "location": {
-       "line_start": 6,
-       "line_end": 17,
-       "page": null,
-       "section": null
-      },
-      "entity": "app.core.Ledger",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "class Ledger:"
-     },
      {
       "source": "lexical:entity",
       "path": "app/core.py",
@@ -7935,34 +7888,6 @@
       "source": "lexical:entity",
       "path": "app/core.py",
       "location": {
-       "line_start": 13,
-       "line_end": 14,
-       "page": null,
-       "section": null
-      },
-      "entity": "app.core.Ledger.ping",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "def ping(self):"
-     },
-     {
-      "source": "lexical:entity",
-      "path": "app/core.py",
-      "location": {
-       "line_start": 16,
-       "line_end": 17,
-       "page": null,
-       "section": null
-      },
-      "entity": "app.core.Ledger.pong",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "def pong(self):"
-     },
-     {
-      "source": "lexical:entity",
-      "path": "app/core.py",
-      "location": {
        "line_start": 20,
        "line_end": 23,
        "page": null,
@@ -7972,20 +7897,6 @@
       "relationship": "match",
       "confidence": "medium",
       "snippet": "def settle(ledger, amount):"
-     },
-     {
-      "source": "lexical:entity",
-      "path": "tests/test_core.py",
-      "location": {
-       "line_start": 9,
-       "line_end": 10,
-       "page": null,
-       "section": null
-      },
-      "entity": "tests.test_core.test_post",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "def test_post():"
      }
     ],
     "evidence_truncated": false,

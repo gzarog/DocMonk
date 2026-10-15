@@ -4,25 +4,25 @@
   "arms": {
     "lexical": {
       "all": {
-        "ndcg@10": 0.6766,
-        "mrr": 0.6755,
-        "recall@1": 0.585,
-        "recall@5": 0.7338,
-        "recall@10": 0.78
+        "ndcg@10": 0.8411,
+        "mrr": 0.8611,
+        "recall@1": 0.8095,
+        "recall@5": 0.8712,
+        "recall@10": 0.8878
       },
       "camel_nl": {
-        "ndcg@10": 0.3435,
-        "mrr": 0.273,
-        "recall@1": 0.12,
-        "recall@5": 0.52,
-        "recall@10": 0.56
+        "ndcg@10": 0.8302,
+        "mrr": 0.8,
+        "recall@1": 0.72,
+        "recall@5": 0.92,
+        "recall@10": 0.92
       },
       "conceptual": {
-        "ndcg@10": 0.5192,
-        "mrr": 0.5898,
-        "recall@1": 0.4571,
-        "recall@5": 0.5333,
-        "recall@10": 0.6714
+        "ndcg@10": 0.5758,
+        "mrr": 0.6929,
+        "recall@1": 0.6,
+        "recall@5": 0.5762,
+        "recall@10": 0.619
       },
       "exact_symbol": {
         "ndcg@10": 1.0,
@@ -32,11 +32,11 @@
         "recall@10": 1.0
       },
       "filtered": {
-        "ndcg@10": 0.8622,
-        "mrr": 0.9,
-        "recall@1": 0.8667,
-        "recall@5": 0.88,
-        "recall@10": 0.8778
+        "ndcg@10": 0.9174,
+        "mrr": 0.9556,
+        "recall@1": 0.9333,
+        "recall@5": 0.9267,
+        "recall@10": 0.9222
       },
       "negative": {
         "ndcg@10": 0.0,
@@ -46,23 +46,23 @@
         "recall@10": 0.0
       },
       "path": {
-        "ndcg@10": 0.8349,
-        "mrr": 0.7778,
-        "recall@1": 0.6,
+        "ndcg@10": 1.0,
+        "mrr": 1.0,
+        "recall@1": 1.0,
         "recall@5": 1.0,
         "recall@10": 1.0
       },
       "plural": {
-        "ndcg@10": 0.3745,
-        "mrr": 0.3444,
-        "recall@1": 0.2667,
-        "recall@5": 0.4,
-        "recall@10": 0.4667
+        "ndcg@10": 0.8566,
+        "mrr": 0.8111,
+        "recall@1": 0.7333,
+        "recall@5": 0.9333,
+        "recall@10": 1.0
       },
       "snake_nl": {
-        "ndcg@10": 0.9815,
-        "mrr": 0.975,
-        "recall@1": 0.95,
+        "ndcg@10": 0.9565,
+        "mrr": 0.9417,
+        "recall@1": 0.9,
         "recall@5": 1.0,
         "recall@10": 1.0
       }

@@ -501,3 +501,93 @@ fn batched_candidate_lookups_equal_the_single_name_lookups() {
     }
     assert!(by_name["absent"].is_empty() && by_qn["absent"].is_empty());
 }
+
+#[test]
+fn identifiers_are_found_by_their_words_and_filters_apply_in_sql() {
+    use docmonk_storage::read::ReadFilter;
+    let tmp = tempfile::tempdir().unwrap();
+    let home = Home::new(tmp.path());
+    let layout = StorageLayout::new(&home);
+    let mut store = ProjectStore::open(&layout, "proj", "s", 8).unwrap();
+    store.create_build("b1", true, &versions()).unwrap();
+    let put = |store: &mut ProjectStore, rel: &str, names: &[&str]| {
+        let f = file("s", rel, rel);
+        let entities = names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| EntityRow {
+                id: record::entity_id(&f.id, "struct", n, i as u64),
+                file_id: f.id.clone(),
+                kind: "struct".into(),
+                name: (*n).into(),
+                qualified_name: format!("store::{n}"),
+                language: "python".into(),
+                signature: Some(format!("pub struct {n}")),
+                start_line: i as i64,
+                end_line: i as i64 + 1,
+                ..EntityRow::default()
+            })
+            .collect();
+        store
+            .put_file(
+                "b1",
+                &f,
+                &FileKnowledge {
+                    entities,
+                    ..FileKnowledge::default()
+                },
+            )
+            .unwrap();
+    };
+    put(
+        &mut store,
+        "src/knowledge.py",
+        &["ProjectStore", "embedding_digest"],
+    );
+    put(&mut store, "other/as_store.py", &["as_project_store"]);
+    store.mark_published("b1").unwrap();
+
+    let names = |expr: &str, filter: &ReadFilter| -> Vec<String> {
+        store
+            .search_entities_fts_in("b1", expr, 10, filter)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.name)
+            .collect()
+    };
+    let all = ReadFilter::default();
+    // A camelCase identifier by its words (in the top 3, next to names
+    // that contain the same words).
+    let hits = names("\"project\" AND \"store\"", &all);
+    assert!(hits.iter().take(3).any(|n| n == "ProjectStore"), "{hits:?}");
+    // A plural finds the singular (porter stemming) of a snake_case name.
+    assert_eq!(
+        names("\"embeddings\" AND \"digest\"", &all),
+        ["embedding_digest"]
+    );
+    // The identifier as written still matches, and ranks first.
+    assert_eq!(names("\"ProjectStore\"", &all)[0], "ProjectStore");
+    // Path filters are applied in SQL.
+    let scoped = ReadFilter {
+        path_prefixes: vec!["other/".into()],
+        document_ids: vec![],
+    };
+    assert_eq!(
+        names("\"project\" AND \"store\"", &scoped),
+        ["as_project_store"]
+    );
+    // A document filter admits no entity.
+    let docs = ReadFilter {
+        path_prefixes: vec![],
+        document_ids: vec!["d".into()],
+    };
+    assert!(names("\"store\"", &docs).is_empty());
+    // File names split too.
+    assert_eq!(
+        store
+            .search_paths_projection("b1", "as store", 10)
+            .unwrap()
+            .len(),
+        1
+    );
+}

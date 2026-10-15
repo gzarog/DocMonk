@@ -462,9 +462,14 @@ fn put_file_rows(
             .map_err(StorageError::sqlite("insert file"))?;
             cached(
                 tx,
-                "INSERT INTO path_fts (rowid, file_id, build_id, path)
-                 VALUES (last_insert_rowid(), ?1, ?2, ?3)",
-                params![file.id, build_id, file.rel_path],
+                "INSERT INTO path_fts (rowid, file_id, build_id, path, words)
+                 VALUES (last_insert_rowid(), ?1, ?2, ?3, ?4)",
+                params![
+                    file.id,
+                    build_id,
+                    file.rel_path,
+                    crate::search::identifier_words(&file.rel_path)
+                ],
             )
             .map_err(StorageError::sqlite("index path"))?;
             insert_knowledge(tx, build_id, knowledge)
@@ -492,8 +497,11 @@ impl ProjectStore {
                     attempt_count, next_attempt_at
                   FROM files WHERE build_id = ?2 AND id = ?3")?;
             exec(
-                "INSERT INTO path_fts (rowid, file_id, build_id, path)
-                  SELECT rowid, id, ?1, rel_path FROM files WHERE build_id = ?1 AND id = ?3",
+                "INSERT INTO path_fts (rowid, file_id, build_id, path, words)
+                  SELECT n.rowid, n.id, ?1, f.path, f.words
+                  FROM files o JOIN path_fts f ON f.rowid = o.rowid
+                    JOIN files n ON n.build_id = ?1 AND n.id = o.id
+                  WHERE o.build_id = ?2 AND o.id = ?3",
             )?;
             exec(
                 "INSERT INTO entities SELECT id, ?1, file_id, kind, name, qualified_name, language,
@@ -501,9 +509,12 @@ impl ProjectStore {
                   FROM entities WHERE build_id = ?2 AND file_id = ?3",
             )?;
             exec(
-                "INSERT INTO code_fts (rowid, entity_id, build_id, name, qualified_name, signature)
-                  SELECT rowid, id, ?1, name, qualified_name, COALESCE(signature, name)
-                  FROM entities WHERE build_id = ?1 AND file_id = ?3",
+                "INSERT INTO code_fts (rowid, entity_id, build_id, name, qualified_name, signature,
+                    words)
+                  SELECT n.rowid, n.id, ?1, f.name, f.qualified_name, f.signature, f.words
+                  FROM entities o JOIN code_fts f ON f.rowid = o.rowid
+                    JOIN entities n ON n.build_id = ?1 AND n.id = o.id
+                  WHERE o.build_id = ?2 AND o.file_id = ?3",
             )?;
             exec("INSERT INTO relationships SELECT id, ?1, file_id, relationship_type, source_entity_id,
                     target_entity_id, target_symbol, resolver, confidence, source_location, evidence,
@@ -526,8 +537,8 @@ impl ProjectStore {
             )?;
             crate::vectors::bump_embeddings_revision(tx, to_build)?;
             exec(
-                "INSERT INTO chunk_fts (rowid, chunk_id, build_id, heading, body, title)
-                  SELECT n.rowid, n.id, ?1, f.heading, f.body, f.title
+                "INSERT INTO chunk_fts (rowid, chunk_id, build_id, heading, body, title, words)
+                  SELECT n.rowid, n.id, ?1, f.heading, f.body, f.title, f.words
                   FROM chunks o JOIN chunk_fts f ON f.rowid = o.rowid
                     JOIN chunks n ON n.build_id = ?1 AND n.id = o.id
                   WHERE o.build_id = ?2 AND o.file_id = ?3",
@@ -578,9 +589,10 @@ impl ProjectStore {
                  FROM files WHERE build_id = ?2 AND id NOT IN (SELECT id FROM carry_skip)",
             )?;
             exec(
-                "INSERT INTO path_fts (rowid, file_id, build_id, path)
-                  SELECT n.rowid, n.id, ?1, n.rel_path
-                  FROM files o JOIN files n ON n.build_id = ?1 AND n.id = o.id
+                "INSERT INTO path_fts (rowid, file_id, build_id, path, words)
+                  SELECT n.rowid, n.id, ?1, f.path, f.words
+                  FROM files o JOIN path_fts f ON f.rowid = o.rowid
+                    JOIN files n ON n.build_id = ?1 AND n.id = o.id
                   WHERE o.build_id = ?2 AND o.id NOT IN (SELECT id FROM carry_skip)",
             )?;
             exec(
@@ -589,9 +601,11 @@ impl ProjectStore {
                   FROM entities WHERE build_id = ?2 AND file_id NOT IN (SELECT id FROM carry_skip)",
             )?;
             exec(
-                "INSERT INTO code_fts (rowid, entity_id, build_id, name, qualified_name, signature)
-                  SELECT n.rowid, n.id, ?1, n.name, n.qualified_name, COALESCE(n.signature, n.name)
-                  FROM entities o JOIN entities n ON n.build_id = ?1 AND n.id = o.id
+                "INSERT INTO code_fts (rowid, entity_id, build_id, name, qualified_name, signature,
+                    words)
+                  SELECT n.rowid, n.id, ?1, f.name, f.qualified_name, f.signature, f.words
+                  FROM entities o JOIN code_fts f ON f.rowid = o.rowid
+                    JOIN entities n ON n.build_id = ?1 AND n.id = o.id
                   WHERE o.build_id = ?2 AND o.file_id NOT IN (SELECT id FROM carry_skip)",
             )?;
             exec("INSERT INTO relationships SELECT id, ?1, file_id, relationship_type, source_entity_id,
@@ -613,8 +627,8 @@ impl ProjectStore {
             )?;
             crate::vectors::bump_embeddings_revision(tx, to_build)?;
             exec(
-                "INSERT INTO chunk_fts (rowid, chunk_id, build_id, heading, body, title)
-                  SELECT n.rowid, n.id, ?1, f.heading, f.body, f.title
+                "INSERT INTO chunk_fts (rowid, chunk_id, build_id, heading, body, title, words)
+                  SELECT n.rowid, n.id, ?1, f.heading, f.body, f.title, f.words
                   FROM chunks o JOIN chunk_fts f ON f.rowid = o.rowid
                     JOIN chunks n ON n.build_id = ?1 AND n.id = o.id
                   WHERE o.build_id = ?2 AND o.file_id NOT IN (SELECT id FROM carry_skip)",
@@ -1078,14 +1092,17 @@ fn insert_knowledge(tx: &Connection, build_id: &str, k: &FileKnowledge) -> Resul
         .map_err(err("insert entity"))?;
         cached(
             tx,
-            "INSERT INTO code_fts (rowid, entity_id, build_id, name, qualified_name, signature)
-             VALUES (last_insert_rowid(), ?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO code_fts (rowid, entity_id, build_id, name, qualified_name, signature,
+                words)
+             VALUES (last_insert_rowid(), ?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 e.id,
                 build_id,
                 e.name,
                 e.qualified_name,
-                e.signature.clone().unwrap_or_else(|| e.name.clone())
+                e.signature.clone().unwrap_or_else(|| e.name.clone()),
+                // The name's parts, weighted like the name itself.
+                crate::search::identifier_words(&e.name)
             ],
         )
         .map_err(err("index entity"))?;
@@ -1179,24 +1196,21 @@ fn insert_knowledge(tx: &Connection, build_id: &str, k: &FileKnowledge) -> Resul
             .iter()
             .find(|d| d.id == c.document_id)
             .and_then(|d| d.title.clone());
+        // A heading chunk is indexed under its own text, every other chunk
+        // under its heading path (its `fts_heading`).
+        let heading = if c.kind.as_str() == "heading" {
+            c.text.clone()
+        } else {
+            c.heading_path.join(" > ")
+        };
+        let title = title.unwrap_or_default();
+        let words =
+            crate::search::identifier_words(&format!("{heading} {} {title}", c.search_text));
         cached(
             tx,
-            "INSERT INTO chunk_fts (rowid, chunk_id, build_id, heading, body, title)
-             VALUES (last_insert_rowid(), ?1, ?2, ?3, ?4, ?5)",
-            params![
-                c.id,
-                build_id,
-                // A heading chunk is indexed under its own text, every other
-                // chunk under its heading path (its
-                // `fts_heading`).
-                if c.kind.as_str() == "heading" {
-                    c.text.clone()
-                } else {
-                    c.heading_path.join(" > ")
-                },
-                c.search_text,
-                title.unwrap_or_default()
-            ],
+            "INSERT INTO chunk_fts (rowid, chunk_id, build_id, heading, body, title, words)
+             VALUES (last_insert_rowid(), ?1, ?2, ?3, ?4, ?5, ?6)",
+            params![c.id, build_id, heading, c.search_text, title, words],
         )
         .map_err(err("index chunk"))?;
     }

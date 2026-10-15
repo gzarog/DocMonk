@@ -524,7 +524,7 @@ pub fn impact(
 fn tier_confidence(tier: RankTier) -> &'static str {
     match tier {
         RankTier::ExactSymbol => "exact",
-        RankTier::QualifiedSymbol | RankTier::TitleOrHeading => "high",
+        RankTier::QualifiedSymbol | RankTier::TitleOrHeading | RankTier::ExactPath => "high",
         RankTier::AliasSymbol | RankTier::Fts => "medium",
         RankTier::Path => "heuristic",
     }

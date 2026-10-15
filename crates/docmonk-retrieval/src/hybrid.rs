@@ -412,21 +412,49 @@ pub fn neural_rerank(
         );
         return hits;
     };
-    neural_rerank_with(hits, top_n, |texts| encoder.score(query, texts))
+    neural_rerank_with(hits, top_n, snippet_passage, |texts| {
+        encoder.score(query, texts)
+    })
 }
 
-/// [`neural_rerank`] with any scorer (tests).
+/// The passage a hit is rescored by without stored text: its snippet,
+/// else its title.
+pub fn snippet_passage(h: &RankedHit) -> String {
+    match &h.candidate.snippet {
+        Some(s) if !s.is_empty() => s.clone(),
+        _ => h.candidate.title.clone(),
+    }
+}
+
+/// Words of chunk text a reranker passage keeps (the cross-encoder
+/// truncates to its own token budget anyway).
+pub const PASSAGE_WORDS: usize = 256;
+
+/// A reranker passage: title, heading path and the first
+/// [`PASSAGE_WORDS`] words of the text (for an entity: qualified name and
+/// signature), so the cross-encoder sees what the hit is about rather than
+/// a short match-centred snippet.
+pub fn passage(title: &str, headings: &[String], text: &str) -> String {
+    let mut out = title.to_owned();
+    if !headings.is_empty() {
+        out.push_str(" — ");
+        out.push_str(&headings.join(" > "));
+    }
+    let body: Vec<&str> = text.split_whitespace().take(PASSAGE_WORDS).collect();
+    if !body.is_empty() {
+        out.push_str(". ");
+        out.push_str(&body.join(" "));
+    }
+    out
+}
+
+/// [`neural_rerank`] with any passage builder and scorer.
 pub fn neural_rerank_with(
     hits: Vec<RankedHit>,
     top_n: usize,
+    text: impl Fn(&RankedHit) -> String,
     score: impl FnOnce(&[&str]) -> Result<Vec<f32>, docmonk_ml::embedder::MlError>,
 ) -> Vec<RankedHit> {
-    let text = |h: &RankedHit| -> String {
-        match &h.candidate.snippet {
-            Some(s) if !s.is_empty() => s.clone(),
-            _ => h.candidate.title.clone(),
-        }
-    };
     let pinned = hits.iter().take_while(|h| h.candidate.exact_match).count();
     let mut hits = hits;
     let tail = hits.split_off(pinned);
@@ -558,7 +586,7 @@ mod tests {
         ];
         // The cross-encoder scores only the hybrid tier: the exact match
         // would be scored lowest, but it is never rescored.
-        let out = neural_rerank_with(hits, 3, |texts| {
+        let out = neural_rerank_with(hits, 3, snippet_passage, |texts| {
             assert_eq!(texts.len(), 3, "only the hybrid tier is rescored");
             Ok(vec![0.1, 0.5, 0.9])
         });
@@ -571,7 +599,7 @@ mod tests {
     #[test]
     fn a_failed_neural_pass_keeps_the_order() {
         let hits = vec![hit("exact", true), hit("a", false), hit("b", false)];
-        let out = neural_rerank_with(hits.clone(), 5, |_| {
+        let out = neural_rerank_with(hits.clone(), 5, snippet_passage, |_| {
             Err(docmonk_ml::embedder::MlError::Load("no model".into()))
         });
         assert_eq!(out, hits);

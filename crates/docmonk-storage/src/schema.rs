@@ -284,14 +284,22 @@ CREATE TABLE embedding_cache (
 -- Lexical indexes. Rows are written explicitly together with their base
 -- rows, share the base row's rowid (so per-file and per-build deletes are
 -- rowid lookups) and carry build_id so searches filter to the active build.
+-- `words` holds the parts of identifiers (`ProjectStore` -> `project
+-- store`; for code, the entity name's), so natural-language queries find
+-- code; the porter stemmer makes
+-- plural and singular forms match. Column weights keep the identifiers as
+-- written ahead of their parts.
 CREATE VIRTUAL TABLE code_fts USING fts5(
-    entity_id UNINDEXED, build_id UNINDEXED, name, qualified_name, signature
+    entity_id UNINDEXED, build_id UNINDEXED, name, qualified_name, signature, words,
+    tokenize = 'porter unicode61'
 );
 CREATE VIRTUAL TABLE chunk_fts USING fts5(
-    chunk_id UNINDEXED, build_id UNINDEXED, heading, body, title
+    chunk_id UNINDEXED, build_id UNINDEXED, heading, body, title, words,
+    tokenize = 'porter unicode61'
 );
 CREATE VIRTUAL TABLE path_fts USING fts5(
-    file_id UNINDEXED, build_id UNINDEXED, path
+    file_id UNINDEXED, build_id UNINDEXED, path, words,
+    tokenize = 'porter unicode61'
 );
 "#;
 

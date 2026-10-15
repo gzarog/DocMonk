@@ -52,6 +52,7 @@ pub fn estimate_confidence(results: &[SearchResult]) -> &'static str {
                 | RankTier::QualifiedSymbol
                 | RankTier::AliasSymbol
                 | RankTier::TitleOrHeading
+                | RankTier::ExactPath
         )
     });
     if high {

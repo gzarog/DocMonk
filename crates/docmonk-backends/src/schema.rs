@@ -13,7 +13,7 @@ use crate::engine::{Engine, VectorSpec};
 /// Mapping identity, bumped on any mapping change. Existing indexes with
 /// another identity are refused: the operator uses a fresh prefix/cluster or
 /// resets the current indexes; nothing is ever mutated in place.
-pub const SCHEMA_VERSION: u64 = 3;
+pub const SCHEMA_VERSION: u64 = 4;
 pub const SCHEMA_TAG: &str = "docmonk";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
@@ -77,8 +77,42 @@ fn stored() -> Value {
 fn stored_text() -> Value {
     json!({ "type": "text", "index": false })
 }
+/// The analyzer of every searchable text field: identifiers split on case
+/// changes, `_` and digits (the original token is kept), lowercased and
+/// English-stemmed: the server-side equivalent of the local FTS `words`
+/// column and porter stemmer, so both storage modes match the same terms.
+pub const TEXT_ANALYZER: &str = "docmonk_text";
+
+fn analysis() -> Value {
+    json!({
+        "filter": {
+            "docmonk_word_parts": {
+                "type": "word_delimiter_graph",
+                "split_on_case_change": true,
+                "split_on_numerics": true,
+                "preserve_original": true,
+            },
+            "docmonk_stem": { "type": "stemmer", "language": "english" },
+        },
+        "analyzer": {
+            TEXT_ANALYZER: {
+                "type": "custom",
+                "tokenizer": "standard",
+                "filter": ["docmonk_word_parts", "flatten_graph", "lowercase", "docmonk_stem"],
+            },
+        },
+    })
+}
+
+fn text() -> Value {
+    json!({ "type": "text", "analyzer": TEXT_ANALYZER })
+}
 fn text_kw() -> Value {
-    json!({ "type": "text", "fields": { "raw": { "type": "keyword", "ignore_above": 1024 } } })
+    json!({
+        "type": "text",
+        "analyzer": TEXT_ANALYZER,
+        "fields": { "raw": { "type": "keyword", "ignore_above": 1024 } },
+    })
 }
 fn int() -> Value {
     json!({ "type": "integer" })
@@ -150,7 +184,7 @@ fn properties(kind: IndexKind, engine: Engine, vector: Option<&VectorSpec>) -> M
         IndexKind::Files => {
             let mut f = scoped();
             f.extend([
-                ("path_text", json!({ "type": "text" })),
+                ("path_text", text()),
                 ("kind", kw()),
                 ("size", long()),
                 ("mtime", json!({ "type": "double" })),
@@ -179,7 +213,7 @@ fn properties(kind: IndexKind, engine: Engine, vector: Option<&VectorSpec>) -> M
                 ("qualified_name", text_kw()),
                 ("language", kw()),
                 ("parent_id", kw()),
-                ("signature", json!({ "type": "text" })),
+                ("signature", text()),
                 ("start_line", int()),
                 ("end_line", int()),
                 ("start_col", int()),
@@ -222,15 +256,15 @@ fn properties(kind: IndexKind, engine: Engine, vector: Option<&VectorSpec>) -> M
                 ("ordinal", int()),
                 ("heading_path", text_kw()),
                 ("heading_level", int()),
-                ("title", json!({ "type": "text" })),
-                ("search_text", json!({ "type": "text" })),
+                ("title", text()),
+                ("search_text", text()),
                 ("text", stored_text()),
                 ("embedding_text", stored_text()),
                 ("token_count", int()),
                 ("page_start", int()),
                 ("page_end", int()),
                 ("table_rows", opaque()),
-                ("caption", json!({ "type": "text" })),
+                ("caption", text()),
                 ("parent_ordinal", int()),
                 ("fts_heading", text_kw()),
                 ("document_format", kw()),
@@ -348,7 +382,7 @@ pub fn create_body(
         }
     }
     json!({
-        "settings": { "index": index_settings },
+        "settings": { "index": index_settings, "analysis": analysis() },
         "mappings": {
             "dynamic": "strict",
             "_meta": meta(kind, vector),

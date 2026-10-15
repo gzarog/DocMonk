@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 
 use docmonk_storage::error::{Result, StorageError};
 use docmonk_storage::knowledge::{ChunkRow, EntityRow, RelationshipRow};
-use docmonk_storage::read::{parse_expression, FtsTerm, KnowledgeRead, VectorHit};
+use docmonk_storage::read::{parse_expression, FtsTerm, KnowledgeRead, ReadFilter, VectorHit};
 use docmonk_storage::search::{
     AttachmentProvenance, DocumentSearchRow, EntityLinkRow, EntitySearchRow, PathSearchRow,
 };
@@ -261,7 +261,7 @@ impl ServerReader {
         Some(if parsed.all {
             json!({ "bool": { "must": clauses } })
         } else {
-            json!({ "bool": { "should": clauses, "minimum_should_match": 1 } })
+            json!({ "bool": { "should": clauses, "minimum_should_match": parsed.min_should } })
         })
     }
 
@@ -439,6 +439,19 @@ impl ServerReader {
             }),
         }
     }
+}
+
+/// `rel_path` prefix clauses of `filter` (any of them), as a filter list.
+fn path_filter(filter: &ReadFilter) -> Vec<Value> {
+    if filter.path_prefixes.is_empty() {
+        return Vec::new();
+    }
+    let should: Vec<Value> = filter
+        .path_prefixes
+        .iter()
+        .map(|p| json!({ "prefix": { "rel_path": p } }))
+        .collect();
+    vec![json!({ "bool": { "should": should, "minimum_should_match": 1 } })]
 }
 
 /// A knowledge link as listed by `link list`.
@@ -910,6 +923,7 @@ impl KnowledgeRead for ServerReader {
         expressions: &[String],
         limit: i64,
         snippet_tokens: i64,
+        filter: &ReadFilter,
     ) -> Result<()> {
         // Exactly the calls (and arguments) lexical retrieval makes.
         self.prefetch(|r| {
@@ -918,13 +932,13 @@ impl KnowledgeRead for ServerReader {
                 let _ = r.search_entities_alias(b, q, limit);
             }
             for e in expressions {
-                let _ = r.search_entities_fts(b, e, limit);
+                let _ = r.search_entities_fts_in(b, e, limit, filter);
             }
             let _ = r.search_document_titles(b, q, limit);
             for e in expressions {
-                let _ = r.search_chunks_fts(b, e, limit, snippet_tokens);
+                let _ = r.search_chunks_fts_in(b, e, limit, snippet_tokens, filter);
             }
-            let _ = r.search_paths_projection(b, q, limit);
+            let _ = r.search_paths_projection_in(b, q, limit, filter);
         })
     }
 
@@ -1076,6 +1090,19 @@ impl KnowledgeRead for ServerReader {
         expression: &str,
         limit: i64,
     ) -> Result<Vec<EntitySearchRow>> {
+        self.search_entities_fts_in(b, expression, limit, &ReadFilter::default())
+    }
+
+    fn search_entities_fts_in(
+        &self,
+        b: &str,
+        expression: &str,
+        limit: i64,
+        filter: &ReadFilter,
+    ) -> Result<Vec<EntitySearchRow>> {
+        if !filter.document_ids.is_empty() {
+            return Ok(Vec::new());
+        }
         let Some(must) = Self::fts_query(expression, &["name", "qualified_name", "signature"])
         else {
             return Ok(Vec::new());
@@ -1083,7 +1110,7 @@ impl KnowledgeRead for ServerReader {
         let hits = self.find(
             IndexKind::Code,
             b,
-            vec![],
+            path_filter(filter),
             Some(must),
             json!([{ "_score": "desc" }, { "rel_path": "asc" }, { "qualified_name.raw": "asc" }, { "start_line": "asc" }, { "entity_id": "asc" }]),
             limit.max(0) as usize,
@@ -1117,6 +1144,7 @@ impl KnowledgeRead for ServerReader {
                 let t = str_of(s, "title");
                 DocumentSearchRow {
                     id: str_of(s, "document_id"),
+                    document_id: str_of(s, "document_id"),
                     snippet: Some(t.clone()),
                     title: t,
                     rel_path: str_of(s, "rel_path"),
@@ -1140,12 +1168,26 @@ impl KnowledgeRead for ServerReader {
         limit: i64,
         snippet_tokens: i64,
     ) -> Result<Vec<DocumentSearchRow>> {
+        self.search_chunks_fts_in(b, expression, limit, snippet_tokens, &ReadFilter::default())
+    }
+
+    fn search_chunks_fts_in(
+        &self,
+        b: &str,
+        expression: &str,
+        limit: i64,
+        snippet_tokens: i64,
+        filter: &ReadFilter,
+    ) -> Result<Vec<DocumentSearchRow>> {
         let Some(must) = Self::fts_query(expression, &["fts_heading^5", "search_text", "title^8"])
         else {
             return Ok(Vec::new());
         };
         let mut f = self.scope(b);
-        f.shrink_to_fit();
+        f.extend(path_filter(filter));
+        if !filter.document_ids.is_empty() {
+            f.push(json!({ "terms": { "document_id": filter.document_ids } }));
+        }
         let tokens = snippet_tokens.clamp(1, 64) as usize;
         let body = json!({
             "size": (limit.max(0) as usize).min(MAX_READ),
@@ -1186,6 +1228,7 @@ impl KnowledgeRead for ServerReader {
                     .or((!fallback.is_empty()).then_some(fallback));
                 DocumentSearchRow {
                     id: str_of(s, "chunk_id"),
+                    document_id: str_of(s, "document_id"),
                     title: opt_str(s, "title")
                         .filter(|t| !t.is_empty())
                         .unwrap_or_else(|| rel_path.clone()),
@@ -1205,6 +1248,19 @@ impl KnowledgeRead for ServerReader {
     }
 
     fn search_paths_projection(&self, b: &str, q: &str, limit: i64) -> Result<Vec<PathSearchRow>> {
+        self.search_paths_projection_in(b, q, limit, &ReadFilter::default())
+    }
+
+    fn search_paths_projection_in(
+        &self,
+        b: &str,
+        q: &str,
+        limit: i64,
+        filter: &ReadFilter,
+    ) -> Result<Vec<PathSearchRow>> {
+        if !filter.document_ids.is_empty() {
+            return Ok(Vec::new());
+        }
         let map = |hits: Vec<Value>| -> Vec<PathSearchRow> {
             hits.iter()
                 .map(|h| {
@@ -1223,7 +1279,7 @@ impl KnowledgeRead for ServerReader {
             let rows = map(self.find(
                 IndexKind::Files,
                 b,
-                vec![],
+                path_filter(filter),
                 Some(json!({ "match": { "path_text": { "query": tokens.join(" "), "operator": "and" } } })),
                 json!([{ "_score": "desc" }, { "rel_path": "asc" }]),
                 size,
@@ -1232,11 +1288,13 @@ impl KnowledgeRead for ServerReader {
                 return Ok(rows);
             }
         }
+        let mut f = path_filter(filter);
+        f.push(json!({ "wildcard": { "rel_path": {
+            "value": format!("*{}*", wildcard_literal(q)), "case_insensitive": true } } }));
         Ok(map(self.find(
             IndexKind::Files,
             b,
-            vec![json!({ "wildcard": { "rel_path": {
-                "value": format!("*{}*", wildcard_literal(q)), "case_insensitive": true } } })],
+            f,
             None,
             json!([{ "rel_path": "asc" }]),
             size,

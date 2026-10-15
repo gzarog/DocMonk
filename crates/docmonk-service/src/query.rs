@@ -810,6 +810,33 @@ pub fn tokenizer_json() -> Value {
     })
 }
 
+/// Reranker passages (see [`hybrid::passage`]) of the first `top_n`
+/// hybrid-tier hits, keyed by `(source, id)`: chunks with their stored
+/// text, entities with their qualified name and signature.
+fn rerank_passages(
+    opened: &[Opened],
+    hits: &[hybrid::RankedHit],
+    top_n: usize,
+) -> HashMap<(String, String), String> {
+    let mut out = HashMap::new();
+    for h in hits.iter().filter(|h| !h.candidate.exact_match).take(top_n) {
+        let c = &h.candidate;
+        let Some(o) = opened.iter().find(|o| o.source.id == c.source_id) else {
+            continue;
+        };
+        let text = match c.kind.as_str() {
+            "document" => match o.store.read().chunk(&o.build, &c.id) {
+                Ok(Some(ch)) => hybrid::passage(&c.title, &ch.heading_path, &context::text_of(&ch)),
+                _ => continue,
+            },
+            "entity" => hybrid::passage(&c.title, &[], c.snippet.as_deref().unwrap_or_default()),
+            _ => continue,
+        };
+        out.insert((c.source_id.clone(), c.id.clone()), text);
+    }
+    out
+}
+
 /// Document chunks of one file kept on a plain `search` page.
 pub const PLAIN_SEARCH_CHUNKS_PER_DOCUMENT: usize = 2;
 
@@ -861,9 +888,18 @@ pub fn run_search(
         .iter()
         .map(|c| c.store.as_sync().map(|s| (s, c.build_id)))
         .collect();
+    // Hard filters are pushed down into every read (so in-scope hits are
+    // never crowded out by out-of-scope ones), then re-checked below.
+    let lexical_opts = f.lexical_options();
     let lexical_job = || {
-        lexical::search_with_timings(&corp, req.query, fetch, sc.output.snippet_max_tokens)
-            .map_err(search_err)
+        lexical::search_with_options(
+            &corp,
+            req.query,
+            fetch,
+            sc.output.snippet_max_tokens,
+            &lexical_opts,
+        )
+        .map_err(search_err)
     };
     let (lexical_out, early_semantic) = match sync {
         Some(stores) if sc.semantic && !sc.lazy_semantic => std::thread::scope(|scope| {
@@ -897,21 +933,13 @@ pub fn run_search(
         let mut kept = Vec::with_capacity(results.len());
         for r in results {
             let attachment = r.location.as_ref().is_some_and(|l| l.attachment.is_some());
-            let doc = if r.kind == "document" && !f.document_ids.is_empty() {
-                let c = corp.iter().find(|c| c.store.source_id() == r.source_id);
-                match c {
-                    Some(c) => c
-                        .store
-                        .chunk(c.build_id, &r.id)
-                        .map_err(DocMonkError::from)?
-                        .map(|ch| ch.document_id)
-                        .or_else(|| Some(r.id.clone())),
-                    None => None,
-                }
-            } else {
-                None
-            };
-            if f.allows(&r.source_id, &r.path, r.kind, doc.as_deref(), attachment) {
+            if f.allows(
+                &r.source_id,
+                &r.path,
+                r.kind,
+                r.document_id.as_deref(),
+                attachment,
+            ) {
                 kept.push(r);
             }
         }
@@ -973,7 +1001,21 @@ pub fn run_search(
             let pooled = collapse(hybrid::rerank(candidates, req.limit.max(top_n) * 2));
             let started = Instant::now();
             let encoder = cross_encoder(home);
-            let mut hits = hybrid::neural_rerank(req.query, pooled, top_n, encoder.as_deref());
+            let passages = rerank_passages(opened, &pooled, top_n);
+            let mut hits = match encoder.as_deref() {
+                Some(ce) => hybrid::neural_rerank_with(
+                    pooled,
+                    top_n,
+                    |h| {
+                        passages
+                            .get(&(h.candidate.source_id.clone(), h.candidate.id.clone()))
+                            .cloned()
+                            .unwrap_or_else(|| hybrid::snippet_passage(h))
+                    },
+                    |texts| ce.score(req.query, texts),
+                ),
+                None => hybrid::neural_rerank(req.query, pooled, top_n, None),
+            };
             timings.push(json!({
                 "stage": "neural_rerank",
                 "hits": hits.len().min(top_n),
