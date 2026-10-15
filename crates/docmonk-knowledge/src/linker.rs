@@ -3,11 +3,14 @@
 //!
 //! | Resolver | Confidence | Link type | Signal |
 //! |---|---|---|---|
-//! | `linker:exact_identifier` | high | `mentioned_in` | bare name |
+//! | `linker:exact_identifier` | high | `mentioned_in` | bare name (not a [`COMMON_NAMES`] word, 3+ chars) |
 //! | `linker:qualified_identifier` | high | `documented_by` | dotted qualified name |
 //! | `linker:alias` | medium | `mentioned_in` | final two segments (3+ segment names) |
 //! | `linker:filename` | medium | `mentioned_in` | source filename/stem, on the file's namespace entity |
-//! | `linker:route_heuristic` | heuristic | `related_to` | framework route path, plain substring |
+//! | `linker:route_heuristic` | heuristic | `related_to` | framework route path, not followed by a word character |
+//!
+//! An entity links to at most [`MAX_LINKS_PER_DOCUMENT`] chunks of one
+//! document per resolver.
 //!
 //! `exact` is reserved for manual links (`resolver = "user"`); this module
 //! cannot produce it. Scoping: touched code files
@@ -113,13 +116,102 @@ fn candidate(
     }
 }
 
+/// Names too generic to link on their own (compared case-insensitively):
+/// a document saying "find the order, then save it" is not about every
+/// `Find` and `Save` method. Such entities still link through their
+/// qualified name, alias, file name or route.
+pub const COMMON_NAMES: &[&str] = &[
+    "add",
+    "apply",
+    "build",
+    "call",
+    "check",
+    "clear",
+    "clone",
+    "close",
+    "compare",
+    "config",
+    "copy",
+    "count",
+    "create",
+    "data",
+    "debug",
+    "default",
+    "delete",
+    "dispose",
+    "equals",
+    "error",
+    "execute",
+    "find",
+    "format",
+    "get",
+    "handle",
+    "hash",
+    "id",
+    "index",
+    "info",
+    "init",
+    "item",
+    "items",
+    "key",
+    "keys",
+    "len",
+    "length",
+    "list",
+    "load",
+    "log",
+    "main",
+    "map",
+    "name",
+    "new",
+    "next",
+    "open",
+    "options",
+    "parse",
+    "process",
+    "read",
+    "remove",
+    "reset",
+    "result",
+    "run",
+    "save",
+    "send",
+    "set",
+    "size",
+    "start",
+    "stop",
+    "test",
+    "to_string",
+    "tostring",
+    "type",
+    "update",
+    "validate",
+    "value",
+    "warn",
+    "write",
+];
+
+/// Shortest name that links on its own (bare-name resolver).
+pub const MIN_BARE_NAME_CHARS: usize = 3;
+
+/// Most chunks of one document a single entity links to per resolver (the
+/// first ones, in document order): a long document repeating a name does
+/// not flood the graph.
+pub const MAX_LINKS_PER_DOCUMENT: usize = 5;
+
+/// Whether a bare name may link on its own.
+pub fn links_by_bare_name(name: &str) -> bool {
+    name.chars().count() >= MIN_BARE_NAME_CHARS
+        && !COMMON_NAMES.contains(&name.to_lowercase().as_str())
+}
+
 pub fn match_exact(
     entities: &[&EntityRow],
     units: &[&Unit],
     idx: &UnitIndex<'_>,
 ) -> Vec<Candidate> {
     let mut out = Vec::new();
-    for e in entities {
+    for e in entities.iter().filter(|e| links_by_bare_name(&e.name)) {
         for p in idx.matching(&e.name) {
             out.push(candidate(
                 &e.id,
@@ -235,8 +327,18 @@ pub fn match_routes(routes: &[&RelationshipRow], units: &[&Unit]) -> Vec<Candida
     }
 }
 
-/// The reference route matcher: one plain substring search per (route,
-/// unit) pair.
+/// Whether `text` mentions route `path`: an occurrence not followed by a
+/// word character (`api/orders1` is not mentioned by `api/orders12/{id}`).
+pub fn mentions_route(text: &str, path: &str) -> bool {
+    text.match_indices(path).any(|(i, m)| {
+        text[i + m.len()..]
+            .chars()
+            .next()
+            .is_none_or(|c| !crate::matcher::is_word(c))
+    })
+}
+
+/// The reference route matcher: one search per (route, unit) pair.
 pub fn match_routes_naive(routes: &[&RelationshipRow], units: &[&Unit]) -> Vec<Candidate> {
     let mut out = Vec::new();
     for r in routes {
@@ -244,7 +346,7 @@ pub fn match_routes_naive(routes: &[&RelationshipRow], units: &[&Unit]) -> Vec<C
             continue;
         };
         let evidence = format!("{method} {path}");
-        for u in units.iter().filter(|u| u.text.contains(path)) {
+        for u in units.iter().filter(|u| mentions_route(&u.text, path)) {
             out.push(route_candidate(r, u, &evidence));
         }
     }
@@ -282,8 +384,8 @@ fn match_routes_with(
 }
 
 /// Every route path at once (Aho-Corasick, overlapping matches): one pass
-/// over each unit finds exactly the units whose text contains a path, as
-/// `str::contains` would, instead of one search per (route, unit) pair.
+/// over each unit finds exactly the units that mention a path, as
+/// [`mentions_route`] would, instead of one search per (route, unit) pair.
 pub struct RouteMatcher<'r> {
     paths: Vec<&'r str>,
     automaton: aho_corasick::AhoCorasick,
@@ -318,7 +420,12 @@ impl<'r> RouteMatcher<'r> {
             seen.clear();
             for m in self.automaton.find_overlapping_iter(u.text.as_str()) {
                 let i = m.pattern().as_usize();
-                if seen.insert(i) {
+                // Only a mention that ends the path (see `mentions_route`).
+                let ends = u.text[m.end()..]
+                    .chars()
+                    .next()
+                    .is_none_or(|c| !crate::matcher::is_word(c));
+                if ends && seen.insert(i) {
                     out.entry(self.paths[i]).or_default().push(pos);
                 }
             }
@@ -403,7 +510,58 @@ pub fn link_touched_files_with(
         && !touched
             .iter()
             .any(|f| units_by_file.contains_key(f.as_str()));
-    let (entities, routes) = if narrow {
+    // A pass that touches documents matches them against the entities of
+    // the build; only entities a touched unit can match are loaded: those
+    // whose name is one of the units' words (a qualified or alias needle
+    // ends in the name, and every needle match is a whole-word match),
+    // plus every entity of files whose name or stem is spelled out there
+    // (filename links).
+    let doc_narrow = !narrow && load == LinkLoad::Auto;
+    let (entities, routes) = if doc_narrow {
+        let mut words: HashSet<&str> = HashSet::new();
+        for f in touched {
+            for u in units_by_file.get(f.as_str()).into_iter().flatten() {
+                words.extend(crate::matcher::words(&u.text));
+            }
+        }
+        let mut by_id: HashMap<String, EntityRow> = HashMap::new();
+        let names: Vec<&str> = words.iter().copied().collect();
+        for rows in store
+            .entities_by_bare_names(build_id, &names)?
+            .into_values()
+        {
+            for e in rows {
+                by_id.entry(e.id.clone()).or_insert(e);
+            }
+        }
+        let mut files: Vec<&str> = touched.iter().map(String::as_str).collect();
+        let all_files = store.files(build_id)?;
+        for f in &all_files {
+            let spelled = filename_candidates(&f.rel_path).iter().any(|c| {
+                let w = crate::matcher::words(c);
+                !w.is_empty() && w.iter().all(|w| words.contains(w))
+            });
+            if spelled {
+                files.push(f.id.as_str());
+            }
+        }
+        files.sort_unstable();
+        files.dedup();
+        for f in files {
+            for e in store.file_entities(build_id, f)? {
+                by_id.entry(e.id.clone()).or_insert(e);
+            }
+        }
+        let mut entities: Vec<EntityRow> = by_id.into_values().collect();
+        // The whole-build order (`all_entities`): file, line, id.
+        entities.sort_by(|a, b| {
+            (&a.file_id, a.start_line, &a.id).cmp(&(&b.file_id, b.start_line, &b.id))
+        });
+        (
+            entities,
+            store.relationships_with_symbol_prefix(build_id, ROUTE_TARGET_PREFIX)?,
+        )
+    } else if narrow {
         let mut entities = Vec::new();
         let mut routes = Vec::new();
         for f in touched {
@@ -590,6 +748,16 @@ pub fn link_touched_files_with(
             c.resolver,
         ))
     });
+    // Per entity, document and resolver, the first chunks only (local to
+    // one document, so incremental passes equal a full build).
+    let mut per_doc: HashMap<(String, String, &'static str), usize> = HashMap::new();
+    out.retain(|c| {
+        let n = per_doc
+            .entry((c.entity_id.clone(), c.document_id.clone(), c.resolver))
+            .or_default();
+        *n += 1;
+        *n <= MAX_LINKS_PER_DOCUMENT
+    });
     timed(&mut stats.match_seconds, Vec::new(), &mut out);
     stats.match_seconds += stats.exact_seconds
         + stats.qualified_seconds
@@ -622,7 +790,7 @@ mod tests {
     }
 
     #[test]
-    fn the_route_automaton_finds_exactly_what_substring_search_finds() {
+    fn the_route_automaton_finds_exactly_what_the_reference_search_finds() {
         let units = [
             unit("u1", "GET /api/a/b and /api/a"),
             unit("u2", "no routes here"),
@@ -643,7 +811,9 @@ mod tests {
         let routes: Vec<&RelationshipRow> = routes.iter().collect();
         let fast = match_routes(&routes, &units);
         assert_eq!(fast, match_routes_naive(&routes, &units));
-        assert_eq!(fast.len(), 3 + 2 + 1 + 3, "{fast:?}");
+        // r1 and r5 (`/api/a`): u1, u3 ("/" follows) and u5; r2
+        // (`/api/a/b`): u1 only (u3 continues with "x"); r3: u4.
+        assert_eq!(fast.len(), 3 + 1 + 1 + 3, "{fast:?}");
         assert!(
             RouteMatcher::new(&routes[3..4]).is_none(),
             "no path, no automaton"

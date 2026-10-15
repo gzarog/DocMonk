@@ -168,6 +168,20 @@ fn cold_links_are_as_expected() {
     let mut want: Vec<Value> = golden["links"].as_array().unwrap().clone();
     want.sort_by_key(key);
     let got = f.canonical();
+    if std::env::var("DOCMONK_BLESS").as_deref() == Ok("1") {
+        let mut g = golden.clone();
+        g["links"] = Value::Array(got.clone());
+        let mut out = Vec::new();
+        let fmt = serde_json::ser::PrettyFormatter::with_indent(b" ");
+        serde::Serialize::serialize(
+            &g,
+            &mut serde_json::Serializer::with_formatter(&mut out, fmt),
+        )
+        .unwrap();
+        out.push(b'\n');
+        std::fs::write(repo_root().join("fixtures/expected/links.json"), out).unwrap();
+        return;
+    }
     let only_rust: Vec<_> = got.iter().filter(|x| !want.contains(x)).collect();
     let only_py: Vec<_> = want.iter().filter(|x| !got.contains(x)).collect();
     assert!(

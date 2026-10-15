@@ -192,12 +192,12 @@
     "documentation": [
      {
       "source": "linker:exact_identifier",
-      "path": "docs/unicode.txt",
+      "path": "docs/billing.md",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": null
+       "section": "Billing guide > Endpoints"
       },
       "entity": "src.billing.ledger.Ledger",
       "relationship": "mentioned_in",
@@ -205,12 +205,12 @@
      },
      {
       "source": "linker:exact_identifier",
-      "path": "docs/billing.md",
+      "path": "docs/unicode.txt",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": "Billing guide > Endpoints"
+       "section": null
       },
       "entity": "src.billing.ledger.Ledger",
       "relationship": "mentioned_in",
@@ -242,6 +242,19 @@
     "documentation": [
      {
       "source": "linker:exact_identifier",
+      "path": "docs/billing.md",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": "Billing guide > Endpoints"
+      },
+      "entity": "src.billing.ledger.Ledger",
+      "relationship": "mentioned_in",
+      "confidence": "high"
+     },
+     {
+      "source": "linker:exact_identifier",
       "path": "docs/unicode.txt",
       "location": {
        "line_start": null,
@@ -252,19 +265,6 @@
       "entity": "src.billing.ledger.Ledger",
       "relationship": "mentioned_in",
       "confidence": "high"
-     },
-     {
-      "source": "linker:exact_identifier",
-      "path": "docs/billing.md",
-      "location": {
-       "line_start": null,
-       "line_end": null,
-       "page": null,
-       "section": "Billing guide > Endpoints"
-      },
-      "entity": "src.billing.ledger.Ledger",
-      "relationship": "mentioned_in",
-      "confidence": "high"
      }
     ],
     "confidence": {
@@ -463,13 +463,27 @@
     "callers": [],
     "callees": [],
     "tests": [],
-    "documentation": [],
+    "documentation": [
+     {
+      "source": "linker:exact_identifier",
+      "path": "docs/orders.html",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": "Orders"
+      },
+      "entity": "Shop.Payments.PaymentGateway.Refund",
+      "relationship": "mentioned_in",
+      "confidence": "high"
+     }
+    ],
     "confidence": {
      "code_references": null,
-     "document_links": null
+     "document_links": "high"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 0,
+    "blast_radius_score": 1,
     "max_depth": 1
    },
    {
@@ -486,13 +500,27 @@
     "callers": [],
     "callees": [],
     "tests": [],
-    "documentation": [],
+    "documentation": [
+     {
+      "source": "linker:exact_identifier",
+      "path": "docs/orders.html",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": "Orders"
+      },
+      "entity": "Shop.Payments.PaymentGateway.Refund",
+      "relationship": "mentioned_in",
+      "confidence": "high"
+     }
+    ],
     "confidence": {
      "code_references": null,
-     "document_links": null
+     "document_links": "high"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 0,
+    "blast_radius_score": 1,
     "max_depth": 3
    },
    {
@@ -783,13 +811,27 @@
     "callers": [],
     "callees": [],
     "tests": [],
-    "documentation": [],
+    "documentation": [
+     {
+      "source": "linker:exact_identifier",
+      "path": "docs/orders.html",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": "Orders"
+      },
+      "entity": "Shop.Payments.PaymentGateway.Refund",
+      "relationship": "mentioned_in",
+      "confidence": "high"
+     }
+    ],
     "confidence": {
      "code_references": null,
-     "document_links": null
+     "document_links": "high"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 0,
+    "blast_radius_score": 1,
     "max_depth": 1
    },
    {
@@ -806,13 +848,27 @@
     "callers": [],
     "callees": [],
     "tests": [],
-    "documentation": [],
+    "documentation": [
+     {
+      "source": "linker:exact_identifier",
+      "path": "docs/orders.html",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": "Orders"
+      },
+      "entity": "Shop.Payments.PaymentGateway.Refund",
+      "relationship": "mentioned_in",
+      "confidence": "high"
+     }
+    ],
     "confidence": {
      "code_references": null,
-     "document_links": null
+     "document_links": "high"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 0,
+    "blast_radius_score": 1,
     "max_depth": 3
    },
    {
@@ -977,13 +1033,27 @@
     "callers": [],
     "callees": [],
     "tests": [],
-    "documentation": [],
+    "documentation": [
+     {
+      "source": "linker:exact_identifier",
+      "path": "docs/orders.html",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": "Orders"
+      },
+      "entity": "web.orders.OrderController.cancelOrder",
+      "relationship": "mentioned_in",
+      "confidence": "high"
+     }
+    ],
     "confidence": {
      "code_references": null,
-     "document_links": null
+     "document_links": "high"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 0,
+    "blast_radius_score": 1,
     "max_depth": 1
    },
    {
@@ -1000,13 +1070,27 @@
     "callers": [],
     "callees": [],
     "tests": [],
-    "documentation": [],
+    "documentation": [
+     {
+      "source": "linker:exact_identifier",
+      "path": "docs/orders.html",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": "Orders"
+      },
+      "entity": "web.orders.OrderController.cancelOrder",
+      "relationship": "mentioned_in",
+      "confidence": "high"
+     }
+    ],
     "confidence": {
      "code_references": null,
-     "document_links": null
+     "document_links": "high"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 0,
+    "blast_radius_score": 1,
     "max_depth": 3
    },
    {
@@ -1036,6 +1120,19 @@
       "entity": "src.billing.invoice_service.InvoiceService.create_invoice",
       "relationship": "mentioned_in",
       "confidence": "high"
+     },
+     {
+      "source": "linker:alias",
+      "path": "docs/unicode.txt",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.InvoiceService.create_invoice",
+      "relationship": "mentioned_in",
+      "confidence": "medium"
      }
     ],
     "confidence": {
@@ -1043,7 +1140,7 @@
      "document_links": "high"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 1,
+    "blast_radius_score": 2,
     "max_depth": 1
    },
    {
@@ -1073,6 +1170,19 @@
       "entity": "src.billing.invoice_service.InvoiceService.create_invoice",
       "relationship": "mentioned_in",
       "confidence": "high"
+     },
+     {
+      "source": "linker:alias",
+      "path": "docs/unicode.txt",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.InvoiceService.create_invoice",
+      "relationship": "mentioned_in",
+      "confidence": "medium"
      }
     ],
     "confidence": {
@@ -1080,7 +1190,7 @@
      "document_links": "high"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 1,
+    "blast_radius_score": 2,
     "max_depth": 3
    },
    {
@@ -1174,12 +1284,12 @@
     "documentation": [
      {
       "source": "linker:exact_identifier",
-      "path": "docs/billing.md",
+      "path": "docs/unicode.txt",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": "Billing guide > Tax"
+       "section": null
       },
       "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "mentioned_in",
@@ -1187,12 +1297,12 @@
      },
      {
       "source": "linker:exact_identifier",
-      "path": "docs/unicode.txt",
+      "path": "docs/billing.md",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": null
+       "section": "Billing guide > Tax"
       },
       "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "mentioned_in",
@@ -1224,12 +1334,12 @@
     "documentation": [
      {
       "source": "linker:exact_identifier",
-      "path": "docs/billing.md",
+      "path": "docs/unicode.txt",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": "Billing guide > Tax"
+       "section": null
       },
       "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "mentioned_in",
@@ -1237,12 +1347,12 @@
      },
      {
       "source": "linker:exact_identifier",
-      "path": "docs/unicode.txt",
+      "path": "docs/billing.md",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": null
+       "section": "Billing guide > Tax"
       },
       "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "mentioned_in",
@@ -1419,13 +1529,27 @@
     "callers": [],
     "callees": [],
     "tests": [],
-    "documentation": [],
+    "documentation": [
+     {
+      "source": "linker:filename",
+      "path": "docs/billing.md",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": "Billing guide > Tax"
+      },
+      "entity": "src.billing.my-helpers.v2",
+      "relationship": "mentioned_in",
+      "confidence": "medium"
+     }
+    ],
     "confidence": {
      "code_references": null,
-     "document_links": null
+     "document_links": "medium"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 0,
+    "blast_radius_score": 1,
     "max_depth": 1
    },
    {
@@ -1442,13 +1566,27 @@
     "callers": [],
     "callees": [],
     "tests": [],
-    "documentation": [],
+    "documentation": [
+     {
+      "source": "linker:filename",
+      "path": "docs/billing.md",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": "Billing guide > Tax"
+      },
+      "entity": "src.billing.my-helpers.v2",
+      "relationship": "mentioned_in",
+      "confidence": "medium"
+     }
+    ],
     "confidence": {
      "code_references": null,
-     "document_links": null
+     "document_links": "medium"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 0,
+    "blast_radius_score": 1,
     "max_depth": 3
    },
    {
@@ -1820,6 +1958,19 @@
       "entity": "src.billing.invoice_service.InvoiceService.create_invoice",
       "relationship": "mentioned_in",
       "confidence": "high"
+     },
+     {
+      "source": "linker:alias",
+      "path": "docs/unicode.txt",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.InvoiceService.create_invoice",
+      "relationship": "mentioned_in",
+      "confidence": "medium"
      }
     ],
     "confidence": {
@@ -1827,7 +1978,7 @@
      "document_links": "high"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 1,
+    "blast_radius_score": 2,
     "max_depth": 1
    },
    {
@@ -1857,6 +2008,19 @@
       "entity": "src.billing.invoice_service.InvoiceService.create_invoice",
       "relationship": "mentioned_in",
       "confidence": "high"
+     },
+     {
+      "source": "linker:alias",
+      "path": "docs/unicode.txt",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.InvoiceService.create_invoice",
+      "relationship": "mentioned_in",
+      "confidence": "medium"
      }
     ],
     "confidence": {
@@ -1864,7 +2028,7 @@
      "document_links": "high"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 1,
+    "blast_radius_score": 2,
     "max_depth": 3
    },
    {
@@ -2180,12 +2344,12 @@
     "documentation": [
      {
       "source": "linker:exact_identifier",
-      "path": "docs/unicode.txt",
+      "path": "docs/billing.md",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": null
+       "section": "Billing guide > Endpoints"
       },
       "entity": "src.billing.ledger.Ledger",
       "relationship": "mentioned_in",
@@ -2193,12 +2357,12 @@
      },
      {
       "source": "linker:exact_identifier",
-      "path": "docs/billing.md",
+      "path": "docs/unicode.txt",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": "Billing guide > Endpoints"
+       "section": null
       },
       "entity": "src.billing.ledger.Ledger",
       "relationship": "mentioned_in",
@@ -2230,19 +2394,6 @@
     "documentation": [
      {
       "source": "linker:exact_identifier",
-      "path": "docs/unicode.txt",
-      "location": {
-       "line_start": null,
-       "line_end": null,
-       "page": null,
-       "section": null
-      },
-      "entity": "src.billing.ledger.Ledger",
-      "relationship": "mentioned_in",
-      "confidence": "high"
-     },
-     {
-      "source": "linker:exact_identifier",
       "path": "docs/billing.md",
       "location": {
        "line_start": null,
@@ -2253,6 +2404,19 @@
       "entity": "src.billing.ledger.Ledger",
       "relationship": "mentioned_in",
       "confidence": "high"
+     },
+     {
+      "source": "linker:exact_identifier",
+      "path": "docs/unicode.txt",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.ledger.Ledger",
+      "relationship": "mentioned_in",
+      "confidence": "high"
      }
     ],
     "confidence": {
@@ -2425,13 +2589,27 @@
     "callers": [],
     "callees": [],
     "tests": [],
-    "documentation": [],
+    "documentation": [
+     {
+      "source": "linker:exact_identifier",
+      "path": "docs/unicode.txt",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.ledger.Λογαριασμός",
+      "relationship": "mentioned_in",
+      "confidence": "high"
+     }
+    ],
     "confidence": {
      "code_references": null,
-     "document_links": null
+     "document_links": "high"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 0,
+    "blast_radius_score": 1,
     "max_depth": 1
    },
    {
@@ -2448,13 +2626,27 @@
     "callers": [],
     "callees": [],
     "tests": [],
-    "documentation": [],
+    "documentation": [
+     {
+      "source": "linker:exact_identifier",
+      "path": "docs/unicode.txt",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.ledger.Λογαριασμός",
+      "relationship": "mentioned_in",
+      "confidence": "high"
+     }
+    ],
     "confidence": {
      "code_references": null,
-     "document_links": null
+     "document_links": "high"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 0,
+    "blast_radius_score": 1,
     "max_depth": 3
    },
    {
@@ -2471,13 +2663,27 @@
     "callers": [],
     "callees": [],
     "tests": [],
-    "documentation": [],
+    "documentation": [
+     {
+      "source": "linker:filename",
+      "path": "docs/billing.md",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": "Billing guide > Tax"
+      },
+      "entity": "src.billing.my-helpers.v2",
+      "relationship": "mentioned_in",
+      "confidence": "medium"
+     }
+    ],
     "confidence": {
      "code_references": null,
-     "document_links": null
+     "document_links": "medium"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 0,
+    "blast_radius_score": 1,
     "max_depth": 1
    },
    {
@@ -2494,13 +2700,27 @@
     "callers": [],
     "callees": [],
     "tests": [],
-    "documentation": [],
+    "documentation": [
+     {
+      "source": "linker:filename",
+      "path": "docs/billing.md",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": "Billing guide > Tax"
+      },
+      "entity": "src.billing.my-helpers.v2",
+      "relationship": "mentioned_in",
+      "confidence": "medium"
+     }
+    ],
     "confidence": {
      "code_references": null,
-     "document_links": null
+     "document_links": "medium"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 0,
+    "blast_radius_score": 1,
     "max_depth": 3
    },
    {
@@ -2520,12 +2740,12 @@
     "documentation": [
      {
       "source": "linker:exact_identifier",
-      "path": "docs/billing.md",
+      "path": "docs/unicode.txt",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": "Billing guide > Tax"
+       "section": null
       },
       "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "mentioned_in",
@@ -2533,12 +2753,12 @@
      },
      {
       "source": "linker:exact_identifier",
-      "path": "docs/unicode.txt",
+      "path": "docs/billing.md",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": null
+       "section": "Billing guide > Tax"
       },
       "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "mentioned_in",
@@ -2570,12 +2790,12 @@
     "documentation": [
      {
       "source": "linker:exact_identifier",
-      "path": "docs/billing.md",
+      "path": "docs/unicode.txt",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": "Billing guide > Tax"
+       "section": null
       },
       "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "mentioned_in",
@@ -2583,12 +2803,12 @@
      },
      {
       "source": "linker:exact_identifier",
-      "path": "docs/unicode.txt",
+      "path": "docs/billing.md",
       "location": {
        "line_start": null,
        "line_end": null,
        "page": null,
-       "section": null
+       "section": "Billing guide > Tax"
       },
       "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "mentioned_in",
@@ -2885,13 +3105,27 @@
     "callers": [],
     "callees": [],
     "tests": [],
-    "documentation": [],
+    "documentation": [
+     {
+      "source": "linker:exact_identifier",
+      "path": "docs/orders.html",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": "Orders"
+      },
+      "entity": "web.orders.OrderController.cancelOrder",
+      "relationship": "mentioned_in",
+      "confidence": "high"
+     }
+    ],
     "confidence": {
      "code_references": null,
-     "document_links": null
+     "document_links": "high"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 0,
+    "blast_radius_score": 1,
     "max_depth": 1
    },
    {
@@ -2908,13 +3142,27 @@
     "callers": [],
     "callees": [],
     "tests": [],
-    "documentation": [],
+    "documentation": [
+     {
+      "source": "linker:exact_identifier",
+      "path": "docs/orders.html",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": "Orders"
+      },
+      "entity": "web.orders.OrderController.cancelOrder",
+      "relationship": "mentioned_in",
+      "confidence": "high"
+     }
+    ],
     "confidence": {
      "code_references": null,
-     "document_links": null
+     "document_links": "high"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 0,
+    "blast_radius_score": 1,
     "max_depth": 3
    },
    {
@@ -3079,13 +3327,27 @@
     "callers": [],
     "callees": [],
     "tests": [],
-    "documentation": [],
+    "documentation": [
+     {
+      "source": "linker:exact_identifier",
+      "path": "docs/unicode.txt",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.ledger.Λογαριασμός",
+      "relationship": "mentioned_in",
+      "confidence": "high"
+     }
+    ],
     "confidence": {
      "code_references": null,
-     "document_links": null
+     "document_links": "high"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 0,
+    "blast_radius_score": 1,
     "max_depth": 1
    },
    {
@@ -3102,13 +3364,27 @@
     "callers": [],
     "callees": [],
     "tests": [],
-    "documentation": [],
+    "documentation": [
+     {
+      "source": "linker:exact_identifier",
+      "path": "docs/unicode.txt",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.ledger.Λογαριασμός",
+      "relationship": "mentioned_in",
+      "confidence": "high"
+     }
+    ],
     "confidence": {
      "code_references": null,
-     "document_links": null
+     "document_links": "high"
     },
     "blast_radius": "LOW",
-    "blast_radius_score": 0,
+    "blast_radius_score": 1,
     "max_depth": 3
    },
    {
@@ -7340,6 +7616,12 @@
     ],
     "call_flows": [
      {
+      "source": "app.util.unused",
+      "relationship": "calls",
+      "target": "app.util.normalize",
+      "confidence": "exact"
+     },
+     {
       "source": "tests.test_core.test_settle",
       "relationship": "calls",
       "target": "app.util.normalize",
@@ -7350,12 +7632,6 @@
       "relationship": "calls",
       "target": "app.util.normalize",
       "confidence": "medium"
-     },
-     {
-      "source": "app.util.unused",
-      "relationship": "calls",
-      "target": "app.util.normalize",
-      "confidence": "exact"
      },
      {
       "source": "app.core.settle",
@@ -7475,16 +7751,16 @@
     ],
     "call_flows": [
      {
-      "source": "tests.test_core.test_settle",
-      "relationship": "calls",
-      "target": "app.core.settle",
-      "confidence": "medium"
-     },
-     {
       "source": "app.core.run",
       "relationship": "calls",
       "target": "app.core.settle",
       "confidence": "exact"
+     },
+     {
+      "source": "tests.test_core.test_settle",
+      "relationship": "calls",
+      "target": "app.core.settle",
+      "confidence": "medium"
      }
     ],
     "dependencies": [],
@@ -7558,13 +7834,13 @@
      {
       "source": "app.core.settle",
       "relationship": "calls",
-      "target": "app.util.normalize",
+      "target": "audit_log",
       "confidence": "medium"
      },
      {
       "source": "app.core.settle",
       "relationship": "calls",
-      "target": "audit_log",
+      "target": "app.util.normalize",
       "confidence": "medium"
      }
     ],
@@ -7638,6 +7914,12 @@
     "paths": [],
     "call_flows": [
      {
+      "source": "app.util.unused",
+      "relationship": "calls",
+      "target": "app.util.normalize",
+      "confidence": "exact"
+     },
+     {
       "source": "tests.test_core.test_settle",
       "relationship": "calls",
       "target": "app.util.normalize",
@@ -7648,12 +7930,6 @@
       "relationship": "calls",
       "target": "app.util.normalize",
       "confidence": "medium"
-     },
-     {
-      "source": "app.util.unused",
-      "relationship": "calls",
-      "target": "app.util.normalize",
-      "confidence": "exact"
      },
      {
       "source": "app.core.settle",

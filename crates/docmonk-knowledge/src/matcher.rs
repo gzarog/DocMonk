@@ -1,8 +1,10 @@
 //! Whole-identifier matching and the inverted word index
 //! used by the linker.
 //!
-//! A needle matches where it is neither preceded nor followed by a word
-//! character or `.` (`(?<![\w.])needle(?![\w.])`), with a
+//! A needle matches where it is neither preceded by a word character or
+//! `.` nor followed by a word character or by `.` + word character
+//! (`(?<![\w.])needle(?![\w]|\.\w)`, so a sentence-final period ends an
+//! identifier), with a
 //! Unicode `\w`: letters (L*), numbers (N*) and `_`. Because each
 //! maximal word run inside a needle is then a whole word of any text it
 //! matches, a unit lacking any of the needle's words cannot match; the index
@@ -40,6 +42,17 @@ fn boundary(c: Option<char>) -> bool {
     c.is_none_or(|c| !is_word(c) && c != '.')
 }
 
+/// After a needle: like [`boundary`], except that a `.` ends the
+/// identifier too unless a word character follows it (a sentence-final
+/// "calls cancelOrder." matches; "cancelOrder.v2" does not).
+fn trailing_boundary(rest: &str) -> bool {
+    let mut it = rest.chars();
+    match it.next() {
+        Some('.') => it.next().is_none_or(|c| !is_word(c)),
+        c => boundary(c),
+    }
+}
+
 /// True when `needle` occurs in `text` as a standalone identifier.
 pub fn contains_identifier(text: &str, needle: &str) -> bool {
     if needle.is_empty() {
@@ -48,7 +61,7 @@ pub fn contains_identifier(text: &str, needle: &str) -> bool {
     let mut from = 0;
     while let Some(i) = text[from..].find(needle).map(|i| i + from) {
         let end = i + needle.len();
-        if boundary(text[..i].chars().next_back()) && boundary(text[end..].chars().next()) {
+        if boundary(text[..i].chars().next_back()) && trailing_boundary(&text[end..]) {
             return true;
         }
         // Advance one character (overlapping occurrences are still found).
@@ -142,8 +155,13 @@ mod tests {
             "calculate_tax"
         ));
         assert!(!contains_identifier("xcalculate_tax", "calculate_tax"));
-        // A trailing "." blocks the match.
-        assert!(!contains_identifier("exposes cancelOrder.", "cancelOrder"));
+        // A sentence-final "." ends the identifier; ".word" does not.
+        assert!(contains_identifier("exposes cancelOrder.", "cancelOrder"));
+        assert!(contains_identifier(
+            "calls cancelOrder. Then",
+            "cancelOrder"
+        ));
+        assert!(!contains_identifier("see cancelOrder.v2", "cancelOrder"));
         assert!(contains_identifier("(Ledger) and [post_entry]", "Ledger"));
         assert!(contains_identifier("Dog.bark here", "Dog.bark"));
         assert!(!contains_identifier("a.Dog.bark here", "Dog.bark"));

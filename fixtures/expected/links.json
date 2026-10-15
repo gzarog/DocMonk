@@ -1,326 +1,396 @@
 {
  "links": [
   {
-   "confidence": "heuristic",
-   "document": "docs/billing.md",
    "entity": [
     "src/billing/invoice_service.py",
     "src.billing.invoice_service.void_endpoint",
     "function",
     17
    ],
-   "evidence": "POST /api/invoices/{id}/void",
-   "resolver": "linker:route_heuristic",
+   "document": "docs/billing.md",
    "section": 5,
-   "type": "related_to"
+   "type": "related_to",
+   "resolver": "linker:route_heuristic",
+   "confidence": "heuristic",
+   "evidence": "POST /api/invoices/{id}/void"
   },
   {
-   "confidence": "heuristic",
-   "document": "docs/billing.md",
    "entity": [
     "web/Payments.cs",
     "Shop.Payments.PaymentGateway.Charge",
     "method",
     5
    ],
-   "evidence": "POST api/payments/charge",
-   "resolver": "linker:route_heuristic",
+   "document": "docs/billing.md",
    "section": 5,
-   "type": "related_to"
+   "type": "related_to",
+   "resolver": "linker:route_heuristic",
+   "confidence": "heuristic",
+   "evidence": "POST api/payments/charge"
   },
   {
-   "confidence": "high",
-   "document": "docs/billing.md",
    "entity": [
     "src/billing/invoice_service.py",
     "src.billing.invoice_service.InvoiceService",
     "class",
     4
    ],
-   "evidence": "InvoiceService",
-   "resolver": "linker:exact_identifier",
+   "document": "docs/billing.md",
    "section": 1,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "InvoiceService"
   },
   {
-   "confidence": "high",
-   "document": "docs/billing.md",
    "entity": [
     "src/billing/invoice_service.py",
     "src.billing.invoice_service.InvoiceService.create_invoice",
     "method",
     5
    ],
-   "evidence": "create_invoice",
-   "resolver": "linker:exact_identifier",
+   "document": "docs/billing.md",
    "section": 1,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "create_invoice"
   },
   {
-   "confidence": "high",
-   "document": "docs/billing.md",
    "entity": [
     "src/billing/invoice_service.py",
     "src.billing.invoice_service.InvoiceService.create_invoice",
     "method",
     5
    ],
-   "evidence": "src.billing.invoice_service.InvoiceService.create_invoice",
+   "document": "docs/billing.md",
+   "section": 1,
+   "type": "documented_by",
    "resolver": "linker:qualified_identifier",
-   "section": 1,
-   "type": "documented_by"
+   "confidence": "high",
+   "evidence": "src.billing.invoice_service.InvoiceService.create_invoice"
   },
   {
-   "confidence": "high",
-   "document": "docs/billing.md",
    "entity": [
     "src/billing/invoice_service.py",
     "src.billing.invoice_service.calculate_tax",
     "function",
     12
    ],
-   "evidence": "calculate_tax",
-   "resolver": "linker:exact_identifier",
+   "document": "docs/billing.md",
    "section": 3,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "calculate_tax"
   },
   {
-   "confidence": "high",
-   "document": "docs/billing.md",
    "entity": [
     "src/billing/ledger.py",
     "src.billing.ledger",
     "namespace",
     1
    ],
-   "evidence": "ledger",
-   "resolver": "linker:exact_identifier",
+   "document": "docs/billing.md",
    "section": 3,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "ledger"
   },
   {
-   "confidence": "high",
-   "document": "docs/billing.md",
    "entity": [
     "src/billing/ledger.py",
     "src.billing.ledger.Ledger",
     "class",
     1
    ],
-   "evidence": "Ledger",
-   "resolver": "linker:exact_identifier",
+   "document": "docs/billing.md",
    "section": 6,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "Ledger"
   },
   {
-   "confidence": "high",
-   "document": "docs/billing.md",
    "entity": [
     "src/billing/my-helpers.v2.py",
     "src.billing.my-helpers.v2.helper",
     "function",
     1
    ],
-   "evidence": "helper",
-   "resolver": "linker:exact_identifier",
-   "section": 3,
-   "type": "mentioned_in"
-  },
-  {
-   "confidence": "high",
    "document": "docs/billing.md",
-   "entity": [
-    "web/Payments.cs",
-    "Shop.Payments.PaymentGateway",
-    "class",
-    3
-   ],
-   "evidence": "PaymentGateway",
+   "section": 3,
+   "type": "mentioned_in",
    "resolver": "linker:exact_identifier",
-   "section": 6,
-   "type": "mentioned_in"
+   "confidence": "high",
+   "evidence": "helper"
   },
   {
-   "confidence": "high",
-   "document": "docs/orders.html",
    "entity": [
     "web/Payments.cs",
     "Shop.Payments.PaymentGateway",
     "class",
     3
    ],
-   "evidence": "Shop.Payments.PaymentGateway",
-   "resolver": "linker:qualified_identifier",
-   "section": 1,
-   "type": "documented_by"
+   "document": "docs/billing.md",
+   "section": 6,
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "PaymentGateway"
   },
   {
-   "confidence": "high",
+   "entity": [
+    "web/Payments.cs",
+    "Shop.Payments.PaymentGateway",
+    "class",
+    3
+   ],
    "document": "docs/orders.html",
+   "section": 1,
+   "type": "documented_by",
+   "resolver": "linker:qualified_identifier",
+   "confidence": "high",
+   "evidence": "Shop.Payments.PaymentGateway"
+  },
+  {
    "entity": [
     "web/Payments.cs",
     "Shop.Payments.PaymentGateway.Charge",
     "method",
     5
    ],
-   "evidence": "Charge",
-   "resolver": "linker:exact_identifier",
+   "document": "docs/orders.html",
    "section": 1,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "Charge"
   },
   {
-   "confidence": "high",
+   "entity": [
+    "web/Payments.cs",
+    "Shop.Payments.PaymentGateway.Refund",
+    "method",
+    8
+   ],
    "document": "docs/orders.html",
+   "section": 1,
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "Refund"
+  },
+  {
    "entity": [
     "web/orders.ts",
     "web.orders.OrderController",
     "class",
     1
    ],
-   "evidence": "OrderController",
-   "resolver": "linker:exact_identifier",
+   "document": "docs/orders.html",
    "section": 1,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "OrderController"
   },
   {
-   "confidence": "high",
+   "entity": [
+    "web/orders.ts",
+    "web.orders.OrderController.cancelOrder",
+    "method",
+    3
+   ],
    "document": "docs/orders.html",
+   "section": 1,
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "cancelOrder"
+  },
+  {
    "entity": [
     "web/orders.ts",
     "web.orders.OrderController.placeOrder",
     "method",
     2
    ],
-   "evidence": "placeOrder",
-   "resolver": "linker:exact_identifier",
+   "document": "docs/orders.html",
    "section": 1,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "placeOrder"
   },
   {
-   "confidence": "high",
-   "document": "docs/orders.html",
    "entity": [
     "web/orders.ts",
     "web.orders.formatCurrency",
     "function",
     6
    ],
-   "evidence": "formatCurrency",
-   "resolver": "linker:exact_identifier",
+   "document": "docs/orders.html",
    "section": 1,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "formatCurrency"
   },
   {
-   "confidence": "high",
-   "document": "docs/unicode.txt",
    "entity": [
     "src/billing/ledger.py",
     "src.billing.ledger.Ledger",
     "class",
     1
    ],
-   "evidence": "Ledger",
-   "resolver": "linker:exact_identifier",
+   "document": "docs/unicode.txt",
    "section": 0,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "Ledger"
   },
   {
-   "confidence": "high",
-   "document": "docs/unicode.txt",
    "entity": [
     "src/billing/ledger.py",
     "src.billing.ledger.Ledger.post_entry",
     "method",
     2
    ],
-   "evidence": "post_entry",
-   "resolver": "linker:exact_identifier",
+   "document": "docs/unicode.txt",
    "section": 0,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "post_entry"
   },
   {
-   "confidence": "high",
-   "document": "docs/unicode.txt",
    "entity": [
     "src/billing/ledger.py",
     "src.billing.ledger.café_total",
     "function",
     6
    ],
-   "evidence": "café_total",
-   "resolver": "linker:exact_identifier",
+   "document": "docs/unicode.txt",
    "section": 0,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "café_total"
   },
   {
-   "confidence": "high",
+   "entity": [
+    "src/billing/ledger.py",
+    "src.billing.ledger.Λογαριασμός",
+    "function",
+    10
+   ],
    "document": "docs/unicode.txt",
+   "section": 0,
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "Λογαριασμός"
+  },
+  {
    "entity": [
     "src/billing/my-helpers.v2.py",
     "src.billing.my-helpers.v2.helper",
     "function",
     1
    ],
-   "evidence": "helper",
-   "resolver": "linker:exact_identifier",
+   "document": "docs/unicode.txt",
    "section": 0,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:exact_identifier",
+   "confidence": "high",
+   "evidence": "helper"
   },
   {
-   "confidence": "medium",
-   "document": "docs/billing.md",
    "entity": [
     "src/billing/invoice_service.py",
     "src.billing.invoice_service",
     "namespace",
     1
    ],
-   "evidence": "invoice_service.py",
-   "resolver": "linker:filename",
+   "document": "docs/billing.md",
    "section": 3,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:filename",
+   "confidence": "medium",
+   "evidence": "invoice_service.py"
   },
   {
-   "confidence": "medium",
-   "document": "docs/billing.md",
    "entity": [
     "src/billing/invoice_service.py",
     "src.billing.invoice_service.InvoiceService.void_invoice",
     "method",
     8
    ],
-   "evidence": "InvoiceService.void_invoice",
-   "resolver": "linker:alias",
+   "document": "docs/billing.md",
    "section": 1,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:alias",
+   "confidence": "medium",
+   "evidence": "InvoiceService.void_invoice"
   },
   {
-   "confidence": "medium",
-   "document": "docs/billing.md",
    "entity": [
     "src/billing/ledger.py",
     "src.billing.ledger",
     "namespace",
     1
    ],
-   "evidence": "ledger",
-   "resolver": "linker:filename",
+   "document": "docs/billing.md",
    "section": 3,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:filename",
+   "confidence": "medium",
+   "evidence": "ledger"
   },
   {
-   "confidence": "medium",
+   "entity": [
+    "src/billing/my-helpers.v2.py",
+    "src.billing.my-helpers.v2",
+    "namespace",
+    1
+   ],
    "document": "docs/billing.md",
+   "section": 3,
+   "type": "mentioned_in",
+   "resolver": "linker:filename",
+   "confidence": "medium",
+   "evidence": "my-helpers.v2.py"
+  },
+  {
    "entity": [
     "web/Payments.cs",
     "Shop.Payments",
     "namespace",
     1
    ],
-   "evidence": "Payments",
-   "resolver": "linker:filename",
+   "document": "docs/billing.md",
    "section": 5,
-   "type": "mentioned_in"
+   "type": "mentioned_in",
+   "resolver": "linker:filename",
+   "confidence": "medium",
+   "evidence": "Payments"
+  },
+  {
+   "entity": [
+    "src/billing/invoice_service.py",
+    "src.billing.invoice_service.InvoiceService.create_invoice",
+    "method",
+    5
+   ],
+   "document": "docs/unicode.txt",
+   "section": 0,
+   "type": "mentioned_in",
+   "resolver": "linker:alias",
+   "confidence": "medium",
+   "evidence": "InvoiceService.create_invoice"
   }
  ]
 }
