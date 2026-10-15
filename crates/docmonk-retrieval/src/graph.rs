@@ -14,7 +14,7 @@
 //!   end resolved to an entity and file.
 //! * [`find_tests_referencing`]: callers in files named like tests.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use docmonk_storage::knowledge::{EntityRow, RelationshipRow};
 use serde::Serialize;
@@ -76,11 +76,11 @@ pub fn find_symbol_matches(
 ) -> Result<Vec<SourceMatch>, SearchError> {
     let mut out = Vec::new();
     for (i, c) in corpora.iter().enumerate() {
-        for entity in c.store.symbol_entities(c.build_id, name)? {
-            let rel_path = c
-                .store
-                .file_rel_path(c.build_id, &entity.file_id)?
-                .unwrap_or_default();
+        let entities = c.store.symbol_entities(c.build_id, name)?;
+        let file_ids: Vec<String> = entities.iter().map(|e| e.file_id.clone()).collect();
+        let paths = c.store.file_rel_paths(c.build_id, &file_ids)?;
+        for entity in entities {
+            let rel_path = paths.get(&entity.file_id).cloned().unwrap_or_default();
             out.push(SourceMatch {
                 corpus: i,
                 source_id: c.store.source_id().to_owned(),
@@ -122,58 +122,169 @@ pub fn traverse(
     max_depth: usize,
     limit: usize,
 ) -> Result<Vec<TraversalEdge>, SearchError> {
-    let c = corpora[corpus];
+    Ok(traverse_many(
+        corpora,
+        &[(corpus, start.to_owned())],
+        direction,
+        types,
+        max_depth,
+        limit,
+    )?
+    .pop()
+    .unwrap_or_default())
+}
+
+/// [`traverse`] from many starts at once: each start keeps its own BFS
+/// (visited set, depth and `limit`), so the result per start is exactly
+/// what [`traverse`] returns for it, but every BFS level of every start in
+/// one corpus is read with one batched query.
+pub fn traverse_many(
+    corpora: &[Corpus<'_>],
+    starts: &[(usize, String)],
+    direction: Direction,
+    types: &[&str],
+    max_depth: usize,
+    limit: usize,
+) -> Result<Vec<Vec<TraversalEdge>>, SearchError> {
+    struct Walk {
+        corpus: usize,
+        visited: HashSet<String>,
+        frontier: Vec<String>,
+        out: Vec<TraversalEdge>,
+    }
     let outgoing = direction == Direction::Outgoing;
-    let mut visited: HashSet<String> = HashSet::from([start.to_owned()]);
-    let mut frontier = vec![start.to_owned()];
-    let mut out = Vec::new();
+    let mut walks: Vec<Walk> = starts
+        .iter()
+        .map(|(corpus, start)| Walk {
+            corpus: *corpus,
+            visited: HashSet::from([start.clone()]),
+            frontier: vec![start.clone()],
+            out: Vec::new(),
+        })
+        .collect();
     let mut depth = 1;
-    while !frontier.is_empty() && depth <= max_depth && out.len() < limit {
-        let mut next = Vec::new();
-        'frontier: for id in &frontier {
-            let mut edges = Vec::new();
-            if types.is_empty() {
-                edges = c
-                    .store
-                    .entity_edges(c.build_id, id, None, outgoing, limit as i64)?;
-            } else {
-                for t in types {
-                    edges.extend(c.store.entity_edges(
-                        c.build_id,
-                        id,
-                        Some(t),
-                        outgoing,
-                        limit as i64,
-                    )?);
-                }
+    while depth <= max_depth {
+        let active = |w: &Walk| !w.frontier.is_empty() && w.out.len() < limit;
+        // One batched read per corpus for this level of every walk.
+        let mut wanted: HashMap<usize, Vec<String>> = HashMap::new();
+        for w in walks.iter().filter(|w| active(w)) {
+            wanted
+                .entry(w.corpus)
+                .or_default()
+                .extend(w.frontier.iter().cloned());
+        }
+        if wanted.is_empty() {
+            break;
+        }
+        let mut level: HashMap<usize, HashMap<String, Vec<RelationshipRow>>> = HashMap::new();
+        for (corpus, mut ids) in wanted {
+            ids.sort();
+            ids.dedup();
+            let c = corpora[corpus];
+            level.insert(
+                corpus,
+                c.store
+                    .entity_edges_many(c.build_id, &ids, types, outgoing, limit as i64)?,
+            );
+        }
+        for w in walks.iter_mut() {
+            if !active(w) {
+                continue;
             }
-            edges.sort_by_key(edge_key);
-            for e in edges {
-                let neighbor = if outgoing {
-                    e.target_entity_id.clone()
-                } else {
-                    Some(e.source_entity_id.clone())
-                };
-                out.push(TraversalEdge {
-                    corpus,
-                    depth,
-                    relationship: e,
-                });
-                if out.len() >= limit {
-                    break 'frontier;
-                }
-                if let Some(n) = neighbor {
-                    if visited.insert(n.clone()) {
-                        next.push(n);
+            let rows = &level[&w.corpus];
+            let mut next = Vec::new();
+            'frontier: for id in &w.frontier {
+                let mut edges = rows.get(id).cloned().unwrap_or_default();
+                edges.sort_by_key(edge_key);
+                for e in edges {
+                    let neighbor = if outgoing {
+                        e.target_entity_id.clone()
+                    } else {
+                        Some(e.source_entity_id.clone())
+                    };
+                    w.out.push(TraversalEdge {
+                        corpus: w.corpus,
+                        depth,
+                        relationship: e,
+                    });
+                    if w.out.len() >= limit {
+                        break 'frontier;
+                    }
+                    if let Some(n) = neighbor {
+                        if w.visited.insert(n.clone()) {
+                            next.push(n);
+                        }
                     }
                 }
             }
+            w.frontier = next;
         }
-        frontier = next;
         depth += 1;
     }
-    out.truncate(limit);
-    Ok(out)
+    Ok(walks
+        .into_iter()
+        .map(|mut w| {
+            w.out.truncate(limit);
+            w.out
+        })
+        .collect())
+}
+
+/// Depth-1 unresolved edges of every match, as [`unresolved_for_matches`]
+/// returns them one match at a time (each `(corpus, symbol)` pair goes to
+/// the first match that names it), with one batched read per corpus.
+fn unresolved_for_all(
+    corpora: &[Corpus<'_>],
+    matches: &[SourceMatch],
+    name: &str,
+    types: &[&str],
+    limit: usize,
+) -> Result<Vec<Vec<TraversalEdge>>, SearchError> {
+    let mut seen: HashSet<(usize, String)> = HashSet::new();
+    let mut claims: Vec<Vec<(usize, String)>> = Vec::with_capacity(matches.len());
+    let mut wanted: HashMap<usize, Vec<String>> = HashMap::new();
+    for m in matches {
+        let mut symbols = vec![name.to_owned(), m.entity.name.clone()];
+        symbols.dedup();
+        let mut mine = Vec::new();
+        for s in symbols {
+            if seen.insert((m.corpus, s.clone())) {
+                wanted.entry(m.corpus).or_default().push(s.clone());
+                mine.push((m.corpus, s));
+            }
+        }
+        claims.push(mine);
+    }
+    let mut found: HashMap<(usize, String), Vec<TraversalEdge>> = HashMap::new();
+    for (corpus, symbols) in wanted {
+        let c = corpora[corpus];
+        for (symbol, mut edges) in
+            c.store
+                .unresolved_edges_many(c.build_id, &symbols, types, limit as i64)?
+        {
+            edges.sort_by_key(edge_key);
+            edges.truncate(limit);
+            found.insert(
+                (corpus, symbol),
+                edges
+                    .into_iter()
+                    .map(|relationship| TraversalEdge {
+                        corpus,
+                        depth: 1,
+                        relationship,
+                    })
+                    .collect(),
+            );
+        }
+    }
+    Ok(claims
+        .into_iter()
+        .map(|mine| {
+            mine.into_iter()
+                .flat_map(|k| found.remove(&k).unwrap_or_default())
+                .collect()
+        })
+        .collect())
 }
 
 /// Depth-1 edges recorded only under `symbol` in one corpus.
@@ -210,31 +321,6 @@ pub fn unresolved_symbol_edges(
         .collect())
 }
 
-/// Unresolved incoming edges under `name` and each match's bare name, each
-/// `(corpus, symbol)` pair once.
-fn unresolved_for_matches(
-    corpora: &[Corpus<'_>],
-    matches: &[SourceMatch],
-    name: &str,
-    types: &[&str],
-    limit: usize,
-    seen: &mut HashSet<(usize, String)>,
-    m: &SourceMatch,
-) -> Result<Vec<TraversalEdge>, SearchError> {
-    let _ = matches;
-    let mut out = Vec::new();
-    let mut symbols = vec![name.to_owned(), m.entity.name.clone()];
-    symbols.dedup();
-    for s in symbols {
-        if seen.insert((m.corpus, s.clone())) {
-            out.extend(unresolved_symbol_edges(
-                corpora, m.corpus, &s, types, limit,
-            )?);
-        }
-    }
-    Ok(out)
-}
-
 fn sort_by_depth(edges: &mut [TraversalEdge]) {
     edges.sort_by(|a, b| {
         (a.depth, edge_key(&a.relationship)).cmp(&(b.depth, edge_key(&b.relationship)))
@@ -253,22 +339,19 @@ pub fn traverse_symbol(
     let matches = find_symbol_matches(corpora, name)?;
     let mut edges = Vec::new();
     if !matches.is_empty() {
-        let mut seen = HashSet::new();
-        for m in &matches {
-            edges.extend(traverse(
-                corpora,
-                m.corpus,
-                &m.entity.id,
-                direction,
-                types,
-                max_depth,
-                limit,
-            )?);
-            if direction == Direction::Incoming {
-                edges.extend(unresolved_for_matches(
-                    corpora, &matches, name, types, limit, &mut seen, m,
-                )?);
-            }
+        let starts: Vec<(usize, String)> = matches
+            .iter()
+            .map(|m| (m.corpus, m.entity.id.clone()))
+            .collect();
+        let walks = traverse_many(corpora, &starts, direction, types, max_depth, limit)?;
+        let unresolved = if direction == Direction::Incoming {
+            unresolved_for_all(corpora, &matches, name, types, limit)?
+        } else {
+            vec![Vec::new(); matches.len()]
+        };
+        for (walk, extra) in walks.into_iter().zip(unresolved) {
+            edges.extend(walk);
+            edges.extend(extra);
         }
         sort_by_depth(&mut edges);
         edges.truncate(limit);
@@ -293,35 +376,31 @@ pub fn references(
 ) -> Result<(Vec<SourceMatch>, Vec<TraversalEdge>), SearchError> {
     let matches = find_symbol_matches(corpora, name)?;
     let mut edges = Vec::new();
-    let mut seen = HashSet::new();
-    for m in &matches {
-        edges.extend(traverse(
-            corpora,
-            m.corpus,
-            &m.entity.id,
-            Direction::Incoming,
-            &REFERENCE_TYPES,
-            max_depth,
-            limit,
-        )?);
-        edges.extend(unresolved_for_matches(
-            corpora,
-            &matches,
-            name,
-            &REFERENCE_TYPES,
-            limit,
-            &mut seen,
-            m,
-        )?);
-        edges.extend(traverse(
-            corpora,
-            m.corpus,
-            &m.entity.id,
-            Direction::Outgoing,
-            &REFERENCE_TYPES,
-            max_depth,
-            limit,
-        )?);
+    let starts: Vec<(usize, String)> = matches
+        .iter()
+        .map(|m| (m.corpus, m.entity.id.clone()))
+        .collect();
+    let incoming = traverse_many(
+        corpora,
+        &starts,
+        Direction::Incoming,
+        &REFERENCE_TYPES,
+        max_depth,
+        limit,
+    )?;
+    let unresolved = unresolved_for_all(corpora, &matches, name, &REFERENCE_TYPES, limit)?;
+    let outgoing = traverse_many(
+        corpora,
+        &starts,
+        Direction::Outgoing,
+        &REFERENCE_TYPES,
+        max_depth,
+        limit,
+    )?;
+    for ((i, u), o) in incoming.into_iter().zip(unresolved).zip(outgoing) {
+        edges.extend(i);
+        edges.extend(u);
+        edges.extend(o);
     }
     sort_by_depth(&mut edges);
     edges.truncate(limit);
@@ -338,32 +417,55 @@ pub struct ResolvedEdge {
     pub neighbor_path: Option<String>,
 }
 
-fn resolve(
+/// Resolves the other end of every edge with one entity read and one path
+/// read per corpus (not two reads per edge), keeping the order of `edges`.
+fn resolve_all(
     corpora: &[Corpus<'_>],
-    source_id: &str,
-    edge: TraversalEdge,
+    edges: Vec<(String, TraversalEdge)>,
     direction: Direction,
-) -> Result<ResolvedEdge, SearchError> {
-    let c = corpora[edge.corpus];
-    let r = &edge.relationship;
-    let neighbor_id = match direction {
-        Direction::Incoming => Some(r.source_entity_id.clone()),
-        Direction::Outgoing => r.target_entity_id.clone(),
+) -> Result<Vec<ResolvedEdge>, SearchError> {
+    let neighbor = |e: &TraversalEdge| -> Option<String> {
+        let r = &e.relationship;
+        match direction {
+            Direction::Incoming => Some(r.source_entity_id.clone()),
+            Direction::Outgoing => r.target_entity_id.clone(),
+        }
+        .filter(|id| !id.is_empty())
     };
-    let entity = match neighbor_id {
-        Some(id) if !id.is_empty() => c.store.entity(c.build_id, &id)?,
-        _ => None,
-    };
-    let neighbor_path = match &entity {
-        Some(e) => c.store.file_rel_path(c.build_id, &e.file_id)?,
-        None => None,
-    };
-    Ok(ResolvedEdge {
-        edge,
-        source_id: source_id.to_owned(),
-        neighbor_entity: entity,
-        neighbor_path,
-    })
+    let mut by_corpus: HashMap<usize, Vec<String>> = HashMap::new();
+    for (_, e) in &edges {
+        if let Some(id) = neighbor(e) {
+            by_corpus.entry(e.corpus).or_default().push(id);
+        }
+    }
+    let mut entities: HashMap<(usize, String), EntityRow> = HashMap::new();
+    let mut paths: HashMap<(usize, String), String> = HashMap::new();
+    for (corpus, ids) in by_corpus {
+        let c = corpora[corpus];
+        let found = c.store.entities_by_ids(c.build_id, &ids)?;
+        let files: Vec<String> = found.values().map(|e| e.file_id.clone()).collect();
+        for (f, p) in c.store.file_rel_paths(c.build_id, &files)? {
+            paths.insert((corpus, f), p);
+        }
+        for (id, e) in found {
+            entities.insert((corpus, id), e);
+        }
+    }
+    Ok(edges
+        .into_iter()
+        .map(|(source_id, edge)| {
+            let entity = neighbor(&edge).and_then(|id| entities.get(&(edge.corpus, id)).cloned());
+            let neighbor_path = entity
+                .as_ref()
+                .and_then(|e| paths.get(&(edge.corpus, e.file_id.clone())).cloned());
+            ResolvedEdge {
+                edge,
+                source_id,
+                neighbor_entity: entity,
+                neighbor_path,
+            }
+        })
+        .collect())
 }
 
 /// Incoming edges of `types` into every match (plus unresolved edges under
@@ -376,25 +478,28 @@ pub fn resolved_incoming(
     max_depth: usize,
     limit: usize,
 ) -> Result<Vec<ResolvedEdge>, SearchError> {
-    let mut out = Vec::new();
-    let mut seen = HashSet::new();
-    for m in matches {
-        for e in traverse(
-            corpora,
-            m.corpus,
-            &m.entity.id,
-            Direction::Incoming,
-            types,
-            max_depth,
-            limit,
-        )? {
-            out.push(resolve(corpora, &m.source_id, e, Direction::Incoming)?);
-        }
-        for e in unresolved_for_matches(corpora, matches, name, types, limit, &mut seen, m)? {
-            out.push(resolve(corpora, &m.source_id, e, Direction::Incoming)?);
-        }
+    let starts: Vec<(usize, String)> = matches
+        .iter()
+        .map(|m| (m.corpus, m.entity.id.clone()))
+        .collect();
+    let walks = traverse_many(
+        corpora,
+        &starts,
+        Direction::Incoming,
+        types,
+        max_depth,
+        limit,
+    )?;
+    let unresolved = unresolved_for_all(corpora, matches, name, types, limit)?;
+    let mut tagged = Vec::new();
+    for ((m, walk), extra) in matches.iter().zip(walks).zip(unresolved) {
+        tagged.extend(
+            walk.into_iter()
+                .chain(extra)
+                .map(|e| (m.source_id.clone(), e)),
+        );
     }
-    Ok(out)
+    resolve_all(corpora, tagged, Direction::Incoming)
 }
 
 /// Outgoing edges of `types` from every match, callees resolved.
@@ -405,21 +510,23 @@ pub fn resolved_outgoing(
     max_depth: usize,
     limit: usize,
 ) -> Result<Vec<ResolvedEdge>, SearchError> {
-    let mut out = Vec::new();
-    for m in matches {
-        for e in traverse(
-            corpora,
-            m.corpus,
-            &m.entity.id,
-            Direction::Outgoing,
-            types,
-            max_depth,
-            limit,
-        )? {
-            out.push(resolve(corpora, &m.source_id, e, Direction::Outgoing)?);
-        }
+    let starts: Vec<(usize, String)> = matches
+        .iter()
+        .map(|m| (m.corpus, m.entity.id.clone()))
+        .collect();
+    let walks = traverse_many(
+        corpora,
+        &starts,
+        Direction::Outgoing,
+        types,
+        max_depth,
+        limit,
+    )?;
+    let mut tagged = Vec::new();
+    for (m, walk) in matches.iter().zip(walks) {
+        tagged.extend(walk.into_iter().map(|e| (m.source_id.clone(), e)));
     }
-    Ok(out)
+    resolve_all(corpora, tagged, Direction::Outgoing)
 }
 
 /// Test-file naming conventions per indexed language (`.py`, Go, C#, Java,

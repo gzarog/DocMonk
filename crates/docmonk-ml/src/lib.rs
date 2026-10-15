@@ -14,7 +14,7 @@ pub mod semantic;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use docmonk_indexing::coordinator::{BuildFinalizer, ProcessError};
 use docmonk_storage::knowledge::ProjectStore;
@@ -74,6 +74,61 @@ impl LazyEmbedder {
             .as_ref()
             .map_err(String::as_str)
     }
+}
+
+impl LazyEmbedder {
+    /// The model was tried and could not be loaded.
+    pub fn failed(&self) -> bool {
+        matches!(self.cell.get(), Some(Err(_)))
+    }
+}
+
+type SharedEmbedders = Mutex<HashMap<(PathBuf, i64), Arc<LazyEmbedder>>>;
+
+/// The process-wide embedder for `models_root/<spec.slug>` at
+/// `batch_size`: loaded on first use and reused by every later request,
+/// so a long-lived process (MCP, UI, daemon) loads the model once. A
+/// failed load is retried on the next call (the model may have been
+/// installed since).
+pub fn shared_embedder(
+    models_root: PathBuf,
+    spec: EmbeddingModelSpec,
+    batch_size: i64,
+) -> Arc<LazyEmbedder> {
+    static CACHE: OnceLock<SharedEmbedders> = OnceLock::new();
+    let key = (models_root.join(spec.slug), batch_size);
+    let mut cache = CACHE
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    match cache.get(&key) {
+        Some(e) if !e.failed() => e.clone(),
+        _ => {
+            let e = Arc::new(LazyEmbedder::new(models_root, spec, batch_size));
+            cache.insert(key, e.clone());
+            e
+        }
+    }
+}
+
+/// The process-wide cross-encoder for `dir`, loaded once; `None` while it
+/// cannot be loaded (retried on the next call).
+pub fn shared_cross_encoder(
+    dir: &std::path::Path,
+    spec: manifest::RerankerModelSpec,
+) -> Option<Arc<reranker::CrossEncoder>> {
+    type Encoders = Mutex<HashMap<PathBuf, Arc<reranker::CrossEncoder>>>;
+    static CACHE: OnceLock<Encoders> = OnceLock::new();
+    let mut cache = CACHE
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    if let Some(e) = cache.get(dir) {
+        return Some(e.clone());
+    }
+    let e = Arc::new(reranker::CrossEncoder::load(dir, spec).ok()?);
+    cache.insert(dir.to_path_buf(), e.clone());
+    Some(e)
 }
 
 /// Embeds every entity and chunk of the build that lacks a vector under the

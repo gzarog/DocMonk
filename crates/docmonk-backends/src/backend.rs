@@ -327,6 +327,28 @@ impl ServerBackend {
         self.call_ok(method, path, Some(payload))
     }
 
+    /// One `_msearch` of `(index, body)` searches: the per-search
+    /// response objects in order (an `error` entry stays as returned).
+    pub fn msearch(&self, searches: &[(String, Value)]) -> Result<Vec<Value>> {
+        if searches.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut payload = Vec::new();
+        for (index, b) in searches {
+            payload.extend(body(&serde_json::json!({ "index": index })));
+            payload.push(b'\n');
+            payload.extend(body(b));
+            payload.push(b'\n');
+        }
+        let resp = self.client.send(
+            Method::Post,
+            "/_msearch",
+            Some((&payload, "application/x-ndjson")),
+        )?;
+        let v = ok(resp, "POST", "/_msearch")?;
+        Ok(v["responses"].as_array().cloned().unwrap_or_default())
+    }
+
     /// `GET path` (no body), failing on a non-2xx status.
     pub fn get_json(&self, path: &str) -> Result<Value> {
         self.call_ok(Method::Get, path, None)

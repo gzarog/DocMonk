@@ -27,14 +27,121 @@ use crate::{db, load};
 /// A source's knowledge reader: the local store, or a server reader pinned
 /// to the request's snapshot.
 pub enum Reader {
-    Local(ProjectStore),
+    Local(PooledStore),
     Server(ServerReader),
+}
+
+/// A local store borrowed from the process's connection pool; dropping it
+/// returns the connection for the next request of the same source and
+/// active build (so the schema check and pragmas run once per connection).
+pub struct PooledStore {
+    key: (String, String),
+    store: Option<ProjectStore>,
+}
+
+type StorePool =
+    std::sync::Mutex<HashMap<(String, String), Vec<(ProjectStore, std::time::Instant)>>>;
+
+/// Idle connections kept per `(source, build)`.
+const POOL_PER_KEY: usize = 4;
+/// An idle connection older than this is closed instead of reused, so a
+/// pooled handle never blocks another process from removing a source for
+/// long (Windows refuses to delete open files).
+const POOL_IDLE: std::time::Duration = std::time::Duration::from_secs(10);
+
+static POOL_ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Keeps read connections open between requests of this process (MCP
+/// server, Admin UI). Off by default: a one-shot CLI process gains
+/// nothing from it.
+pub fn enable_store_pool() {
+    POOL_ENABLED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Closes every pooled connection (before an operation that deletes or
+/// replaces knowledge databases, which open handles would block on
+/// Windows).
+pub fn release_pooled_stores() {
+    store_pool()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clear();
+}
+
+fn pool_enabled() -> bool {
+    POOL_ENABLED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn store_pool() -> &'static StorePool {
+    static POOL: std::sync::OnceLock<StorePool> = std::sync::OnceLock::new();
+    POOL.get_or_init(Default::default)
+}
+
+impl PooledStore {
+    /// A pooled connection to `source_id`'s store for `build`, else a new
+    /// one from `open`. Connections pooled for another build of the source
+    /// are dropped (the active build changed).
+    fn take(
+        source_id: &str,
+        build: &str,
+        open: impl FnOnce() -> Result<ProjectStore, DocMonkError>,
+    ) -> Result<Self, DocMonkError> {
+        let key = (source_id.to_owned(), build.to_owned());
+        let pooled = if !pool_enabled() {
+            None
+        } else {
+            let mut pool = store_pool().lock().unwrap_or_else(|p| p.into_inner());
+            pool.retain(|(s, b), _| s != source_id || b == build);
+            for idle in pool.values_mut() {
+                idle.retain(|(_, at)| at.elapsed() < POOL_IDLE);
+            }
+            pool.get_mut(&key).and_then(Vec::pop).map(|(s, _)| s)
+        };
+        let store = match pooled {
+            Some(s) => s,
+            None => open()?,
+        };
+        Ok(Self {
+            key,
+            store: Some(store),
+        })
+    }
+}
+
+impl std::ops::Deref for PooledStore {
+    type Target = ProjectStore;
+    fn deref(&self) -> &ProjectStore {
+        self.store.as_ref().expect("pooled store")
+    }
+}
+
+impl std::ops::DerefMut for PooledStore {
+    fn deref_mut(&mut self) -> &mut ProjectStore {
+        self.store.as_mut().expect("pooled store")
+    }
+}
+
+impl Drop for PooledStore {
+    fn drop(&mut self) {
+        let Some(store) = self.store.take() else {
+            return;
+        };
+        // Never pool a connection left inside a transaction.
+        if !pool_enabled() || store.in_session() {
+            return;
+        }
+        let mut pool = store_pool().lock().unwrap_or_else(|p| p.into_inner());
+        let idle = pool.entry(self.key.clone()).or_default();
+        if idle.len() < POOL_PER_KEY {
+            idle.push((store, std::time::Instant::now()));
+        }
+    }
 }
 
 impl Reader {
     pub fn read(&self) -> &dyn KnowledgeRead {
         match self {
-            Reader::Local(s) => s,
+            Reader::Local(s) => &**s,
             Reader::Server(s) => s,
         }
     }
@@ -98,13 +205,15 @@ fn open_local(home: &Home, only: Option<&str>) -> Result<Vec<Opened>, DocMonkErr
         let Some(build) = cp.state(&source.id).map_err(db)?.active_build_id else {
             continue;
         };
-        let store = ProjectStore::open(
-            &layout,
-            &project_id_for_canonical(&source.path),
-            &source.id,
-            cfg.runtime.sqlite_cache_size_mb,
-        )
-        .map_err(db)?;
+        let store = PooledStore::take(&source.id, &build, || {
+            ProjectStore::open(
+                &layout,
+                &project_id_for_canonical(&source.path),
+                &source.id,
+                cfg.runtime.sqlite_cache_size_mb,
+            )
+            .map_err(db)
+        })?;
         out.push(Opened {
             source,
             store: Reader::Local(store),
@@ -363,12 +472,31 @@ pub fn impact_value(
     Ok(payload)
 }
 
-pub fn lazy_embedder(home: &Home, cfg: &docmonk_config::DocMonkConfig) -> docmonk_ml::LazyEmbedder {
-    docmonk_ml::LazyEmbedder::new(
+/// The process-wide query embedder (loaded on first use, then reused).
+pub fn lazy_embedder(
+    home: &Home,
+    cfg: &docmonk_config::DocMonkConfig,
+) -> std::sync::Arc<docmonk_ml::LazyEmbedder> {
+    docmonk_ml::shared_embedder(
         docmonk_ml::embedder::models_root(Some(&home.root().join("models"))),
         docmonk_ml::manifest::DEFAULT_EMBEDDING_MODEL,
         cfg.indexing.embedding_batch_size,
     )
+}
+
+/// The process-wide cross-encoder, when it can be loaded.
+pub fn cross_encoder(home: &Home) -> Option<std::sync::Arc<docmonk_ml::reranker::CrossEncoder>> {
+    let root = docmonk_ml::embedder::models_root(Some(&home.models_dir()));
+    let spec = docmonk_ml::manifest::DEFAULT_RERANKER_MODEL;
+    docmonk_ml::shared_cross_encoder(&root.join(spec.slug), spec)
+}
+
+/// `search.ann` as query-time ANN parameters.
+pub fn ann_params(cfg: &docmonk_config::DocMonkConfig) -> docmonk_ml::semantic::AnnParams {
+    docmonk_ml::semantic::AnnParams {
+        ef_search: cfg.search.ann.ef_search.max(1) as usize,
+        num_candidates: cfg.search.ann.num_candidates.max(0) as usize,
+    }
 }
 
 pub fn semantic_json(s: &hybrid::SemanticOutcome) -> Value {
@@ -402,12 +530,13 @@ pub fn explore_value(
         let lazy = lazy_embedder(home, cfg);
         let embedder = lazy.get().ok().map(|a| a.as_ref());
         Some(
-            hybrid::semantic_search(
+            hybrid::semantic_search_with(
                 &corp,
                 embedder,
                 query,
                 lexical::DEFAULT_LIMIT,
                 Some(cfg.search.semantic_top_k.max(1) as usize),
+                ann_params(cfg),
             )
             .map_err(search_err)?,
         )
@@ -434,12 +563,13 @@ pub fn semantic_value(
 ) -> Result<Value, DocMonkError> {
     let lazy = lazy_embedder(home, cfg);
     let embedder = lazy.get().ok().map(|a| a.as_ref());
-    let mut s = hybrid::semantic_search(
+    let mut s = hybrid::semantic_search_with(
         &corpora(opened),
         embedder,
         query,
         limit,
         Some(cfg.search.semantic_top_k.max(1) as usize),
+        ann_params(cfg),
     )
     .map_err(search_err)?;
     absolutize_hits(&mut s.hits, opened);
@@ -680,6 +810,9 @@ pub fn tokenizer_json() -> Value {
     })
 }
 
+/// Document chunks of one file kept on a plain `search` page.
+pub const PLAIN_SEARCH_CHUNKS_PER_DOCUMENT: usize = 2;
+
 /// Runs lexical search, then the semantic, hybrid and context stages the
 /// configuration and request call for.
 pub fn run_search(
@@ -696,15 +829,70 @@ pub fn run_search(
         .into_iter()
         .filter(|c| f.allows_source(c.store.source_id()))
         .collect();
-    // Over-fetch when filtering, so the limit still fills after it.
+    // Over-fetch so the limit still fills after collapsing sibling chunks
+    // (and more when filtering).
     let fetch = if f.is_empty() {
-        req.limit
+        req.limit * 2
     } else {
         req.limit * 4
     };
-    let (mut results, stage_timings) =
-        lexical::search_with_timings(&corp, req.query, fetch, sc.output.snippet_max_tokens)
+    // The semantic stage: model (shared, loaded once per process), one
+    // query embedding, every corpus.
+    let semantic_job =
+        |corp: &[Corpus<'_>]| -> Result<(hybrid::SemanticOutcome, f64, f64), DocMonkError> {
+            let started = Instant::now();
+            let lazy = lazy_embedder(home, cfg);
+            let embedder = lazy.get().ok().map(|a| a.as_ref());
+            let model_load_ms = started.elapsed().as_secs_f64() * 1000.0;
+            let s = hybrid::semantic_search_with(
+                corp,
+                embedder,
+                req.query,
+                req.limit,
+                Some(sc.semantic_top_k.max(1) as usize),
+                ann_params(cfg),
+            )
             .map_err(search_err)?;
+            Ok((s, model_load_ms, started.elapsed().as_secs_f64() * 1000.0))
+        };
+    // With thread-safe readers (server mode) and no lexical-confidence
+    // gate, semantic search runs concurrently with the lexical stages.
+    let sync: Option<Vec<(&(dyn KnowledgeRead + Sync), &str)>> = corp
+        .iter()
+        .map(|c| c.store.as_sync().map(|s| (s, c.build_id)))
+        .collect();
+    let lexical_job = || {
+        lexical::search_with_timings(&corp, req.query, fetch, sc.output.snippet_max_tokens)
+            .map_err(search_err)
+    };
+    let (lexical_out, early_semantic) = match sync {
+        Some(stores) if sc.semantic && !sc.lazy_semantic => std::thread::scope(|scope| {
+            let sem = scope.spawn(move || {
+                let corp: Vec<Corpus<'_>> = stores
+                    .iter()
+                    .map(|(store, build_id)| Corpus {
+                        store: *store as &dyn KnowledgeRead,
+                        build_id,
+                    })
+                    .collect();
+                semantic_job(&corp)
+            });
+            let lex = lexical_job();
+            let sem = sem.join().unwrap_or_else(|_| {
+                Err(DocMonkError::new(
+                    ErrorKind::Generic,
+                    "semantic search thread panicked",
+                ))
+            });
+            (lex, Some(sem))
+        }),
+        _ => (lexical_job(), None),
+    };
+    let (mut results, stage_timings) = lexical_out?;
+    docmonk_retrieval::diversify::collapse_document_chunks(
+        &mut results,
+        PLAIN_SEARCH_CHUNKS_PER_DOCUMENT,
+    );
     if !f.is_empty() {
         let mut kept = Vec::with_capacity(results.len());
         for r in results {
@@ -727,9 +915,9 @@ pub fn run_search(
                 kept.push(r);
             }
         }
-        kept.truncate(req.limit);
         results = kept;
     }
+    results.truncate(req.limit);
     absolutize_results(&mut results, opened);
     let mut timings: Vec<Value> = stage_timings
         .iter()
@@ -737,19 +925,11 @@ pub fn run_search(
         .collect();
     let confidence = classify::estimate_confidence(&results);
     let run_semantic = sc.semantic && !(sc.lazy_semantic && confidence == "high");
-    let lazy = lazy_embedder(home, cfg);
     let semantic = if run_semantic {
-        let started = Instant::now();
-        let embedder = lazy.get().ok().map(|a| a.as_ref());
-        let model_load_ms = started.elapsed().as_secs_f64() * 1000.0;
-        let mut s = hybrid::semantic_search(
-            &corp,
-            embedder,
-            req.query,
-            req.limit,
-            Some(sc.semantic_top_k.max(1) as usize),
-        )
-        .map_err(search_err)?;
+        let (mut s, model_load_ms, duration_ms) = match early_semantic {
+            Some(done) => done?,
+            None => semantic_job(&corp)?,
+        };
         s.hits.retain(|h| {
             let kind = if h.hit.kind == "entity" {
                 "entity"
@@ -768,7 +948,7 @@ pub fn run_search(
         timings.push(json!({
             "stage": "semantic",
             "hits": s.hits.len(),
-            "duration_ms": started.elapsed().as_secs_f64() * 1000.0,
+            "duration_ms": duration_ms,
             "substages": s.substages_json(model_load_ms),
         }));
         Some(s)
@@ -781,15 +961,19 @@ pub fn run_search(
             .map(|s| s.hits.clone())
             .unwrap_or_default();
         let candidates = hybrid::merge(&results, &sem_hits);
+        let collapse = |mut hits: Vec<hybrid::RankedHit>| {
+            docmonk_retrieval::diversify::collapse_ranked_document_chunks(
+                &mut hits,
+                PLAIN_SEARCH_CHUNKS_PER_DOCUMENT,
+            );
+            hits
+        };
         if sc.reranker.enabled {
             let top_n = sc.reranker.top_n.max(1) as usize;
-            let pooled = hybrid::rerank(candidates, req.limit.max(top_n));
+            let pooled = collapse(hybrid::rerank(candidates, req.limit.max(top_n) * 2));
             let started = Instant::now();
-            let root = docmonk_ml::embedder::models_root(Some(&home.models_dir()));
-            let spec = docmonk_ml::manifest::DEFAULT_RERANKER_MODEL;
-            let encoder =
-                docmonk_ml::reranker::CrossEncoder::load(&root.join(spec.slug), spec).ok();
-            let mut hits = hybrid::neural_rerank(req.query, pooled, top_n, encoder.as_ref());
+            let encoder = cross_encoder(home);
+            let mut hits = hybrid::neural_rerank(req.query, pooled, top_n, encoder.as_deref());
             timings.push(json!({
                 "stage": "neural_rerank",
                 "hits": hits.len().min(top_n),
@@ -798,7 +982,9 @@ pub fn run_search(
             hits.truncate(req.limit);
             Some(hits)
         } else {
-            Some(hybrid::rerank(candidates, req.limit))
+            let mut hits = collapse(hybrid::rerank(candidates, req.limit * 2));
+            hits.truncate(req.limit);
+            Some(hits)
         }
     } else {
         None

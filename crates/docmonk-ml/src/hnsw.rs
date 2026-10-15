@@ -356,6 +356,13 @@ impl Hnsw {
 
     /// Top-`k` live labels by cosine similarity (best first; ties by label).
     pub fn search(&self, q: &[f32], k: usize) -> Vec<(String, f32)> {
+        self.search_ef(q, k, self.params.ef_search)
+    }
+
+    /// [`Self::search`] with the beam width `ef_search` chosen per query
+    /// (the stored parameter is the build-time default).
+    pub fn search_ef(&self, q: &[f32], k: usize, ef_search: usize) -> Vec<(String, f32)> {
+        let ef_search = ef_search.max(1);
         let Some(entry) = self.entry else {
             return Vec::new();
         };
@@ -370,7 +377,7 @@ impl Hnsw {
         // Widen the beam by the tombstone count so deleted nodes cannot
         // crowd out live results.
         let dead = self.labels.len() - self.live;
-        let ef = self.params.ef_search.max(k) + dead.min(4 * self.params.ef_search);
+        let ef = ef_search.max(k) + dead.min(4 * ef_search);
         let mut hits: Vec<(String, f32)> = self
             .search_layer(q, &cur, ef, 0)
             .into_iter()

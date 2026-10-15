@@ -88,6 +88,44 @@ pub fn collapse_siblings(
     before - hits.len()
 }
 
+/// Plain-search variant of [`collapse_siblings`] for document chunks only:
+/// keeps at most `cap` chunk hits per `(source, file)`, so one long
+/// document cannot fill a page. Pinned (title, heading) hits and other
+/// kinds are never dropped. Returns how many were collapsed.
+pub fn collapse_document_chunks(
+    results: &mut Vec<crate::lexical::SearchResult>,
+    cap: usize,
+) -> usize {
+    let before = results.len();
+    let mut per_doc: HashMap<(String, String), usize> = HashMap::new();
+    results.retain(|r| {
+        if r.kind != "document" || r.tier < crate::lexical::RankTier::Fts {
+            return true;
+        }
+        let n = per_doc
+            .entry((r.source_id.clone(), r.path.clone()))
+            .or_default();
+        *n += 1;
+        *n <= cap.max(1)
+    });
+    before - results.len()
+}
+
+/// [`collapse_document_chunks`] for ranked hybrid hits.
+pub fn collapse_ranked_document_chunks(hits: &mut Vec<RankedHit>, cap: usize) -> usize {
+    let before = hits.len();
+    let mut per_doc: HashMap<String, usize> = HashMap::new();
+    hits.retain(|h| {
+        if h.candidate.kind != "document" || h.candidate.exact_match {
+            return true;
+        }
+        let n = per_doc.entry(group_of(h)).or_default();
+        *n += 1;
+        *n <= cap.max(1)
+    });
+    before - hits.len()
+}
+
 fn tokens(t: &str) -> HashSet<String> {
     t.split(|c: char| !c.is_alphanumeric())
         .filter(|w| w.chars().count() >= 3)

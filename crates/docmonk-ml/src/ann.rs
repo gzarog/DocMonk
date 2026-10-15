@@ -10,14 +10,21 @@
 //! * `sync` diffs the index's labels against the build's vectors in SQLite.
 //!   Missing ones are added and extra ones tombstoned. It compacts when
 //!   tombstones exceed `COMPACT_RATIO`, and rebuilds when the model changed.
-//! * Queries use the index only when its header names the requested build
-//!   and model and its content digest (over the build's `(subject,
-//!   text_hash)` set) still matches SQLite. Otherwise they fall back to
-//!   exact search over SQLite, which is always correct.
+//! * The header's `content` is the build's embeddings revision token
+//!   ([`ProjectStore::embeddings_revision`]), a random value SQLite
+//!   replaces in the same transaction as every insert or delete of the
+//!   build's vectors. Queries use the index only when its header names the
+//!   requested build and model and its token still equals SQLite's (one
+//!   point read). Otherwise they fall back to exact search over SQLite,
+//!   which is always correct.
+//! * A process keeps the last valid index per project directory in memory
+//!   ([`search`]), so a long-lived process (MCP, UI, daemon) reads and
+//!   decodes the file once per revision, not once per query.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use docmonk_storage::knowledge::ProjectStore;
 use sha2::{Digest, Sha256};
@@ -37,7 +44,7 @@ pub struct IndexMeta {
     pub fingerprint: String,
     pub build_id: String,
     pub dims: usize,
-    /// Digest of the build's `(subject, text_hash)` set the index mirrors.
+    /// The build's embeddings revision token the index mirrors.
     pub content: String,
 }
 
@@ -254,7 +261,7 @@ pub fn sync(
     let path = index_path(project_dir);
     let mut stats = SyncStats::default();
     let content = store
-        .embedding_digest(build_id, fingerprint)
+        .embeddings_revision(build_id)
         .map_err(|e| e.to_string())?;
     let mut index = match load(&path) {
         Some((index, meta)) if meta.fingerprint == fingerprint && meta.dims == dims => {
@@ -340,6 +347,42 @@ fn ms(t: std::time::Instant) -> f64 {
     t.elapsed().as_secs_f64() * 1000.0
 }
 
+/// The last valid index loaded per index path in this process, with the
+/// header it was loaded with.
+type IndexCache = Mutex<HashMap<PathBuf, (Arc<Hnsw>, IndexMeta)>>;
+
+fn index_cache() -> &'static IndexCache {
+    static CACHE: OnceLock<IndexCache> = OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+fn cached_index(path: &Path) -> Option<(Arc<Hnsw>, IndexMeta)> {
+    index_cache()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .get(path)
+        .cloned()
+}
+
+fn remember_index(path: &Path, index: Arc<Hnsw>, meta: IndexMeta) {
+    index_cache()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .insert(path.to_path_buf(), (index, meta));
+}
+
+/// Drops every cached index (tests).
+pub fn clear_cache() {
+    index_cache()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clear();
+}
+
+/// Default `ef_search` for queries (`search.ann.ef_search`): recall@10 is
+/// about 0.96 at this value on a 20k-vector MiniLM corpus, for about 1 ms.
+pub const DEFAULT_EF_SEARCH: usize = 400;
+
 /// Top-`k` `(subject_type, subject_id, similarity)` for `query` in
 /// `build_id`: the persisted index when it matches the build and model,
 /// else exact search over SQLite.
@@ -351,10 +394,19 @@ pub fn search(
     query: &[f32],
     k: usize,
 ) -> Result<(Engine, Vec<AnnHit>), String> {
-    search_timed(store, project_dir, build_id, fingerprint, query, k).map(|(e, h, _)| (e, h))
+    search_timed(
+        store,
+        project_dir,
+        build_id,
+        fingerprint,
+        query,
+        k,
+        DEFAULT_EF_SEARCH,
+    )
+    .map(|(e, h, _)| (e, h))
 }
 
-/// [`search`] plus where the time went.
+/// [`search`] with an explicit `ef_search`, plus where the time went.
 pub fn search_timed(
     store: &ProjectStore,
     project_dir: &Path,
@@ -362,6 +414,7 @@ pub fn search_timed(
     fingerprint: &str,
     query: &[f32],
     k: usize,
+    ef_search: usize,
 ) -> Result<(Engine, Vec<AnnHit>, AnnTimings), String> {
     let split = |hits: Vec<(String, f32)>| {
         hits.into_iter()
@@ -370,24 +423,35 @@ pub fn search_timed(
     };
     let mut timings = AnnTimings::default();
     let t = std::time::Instant::now();
-    let loaded = load(&index_path(project_dir));
-    timings.load_ms = ms(t);
-    if let Some((index, meta)) = loaded {
-        let t = std::time::Instant::now();
-        let current = store
-            .embedding_digest(build_id, fingerprint)
-            .map_err(|e| e.to_string())?;
-        timings.freshness_ms = ms(t);
-        if meta.build_id == build_id
-            && meta.fingerprint == fingerprint
-            && meta.dims == query.len()
-            && meta.content == current
-        {
-            let t = std::time::Instant::now();
-            let hits = split(index.search(query, k));
-            timings.search_ms = ms(t);
-            return Ok((Engine::Hnsw, hits, timings));
+    let current = store
+        .embeddings_revision(build_id)
+        .map_err(|e| e.to_string())?;
+    timings.freshness_ms = ms(t);
+    let usable = |m: &IndexMeta| {
+        m.build_id == build_id
+            && m.fingerprint == fingerprint
+            && m.dims == query.len()
+            && m.content == current
+    };
+    let path = index_path(project_dir);
+    let t = std::time::Instant::now();
+    let index = match cached_index(&path).filter(|c| usable(&c.1)) {
+        Some(hit) => {
+            crate::counters::ann_cache_hit();
+            Some(hit.0)
         }
+        None => load(&path).filter(|(_, m)| usable(m)).map(|(index, meta)| {
+            let index = Arc::new(index);
+            remember_index(&path, index.clone(), meta);
+            index
+        }),
+    };
+    timings.load_ms = ms(t);
+    if let Some(index) = index {
+        let t = std::time::Instant::now();
+        let hits = split(index.search_ef(query, k, ef_search));
+        timings.search_ms = ms(t);
+        return Ok((Engine::Hnsw, hits, timings));
     }
     let t = std::time::Instant::now();
     let all = store

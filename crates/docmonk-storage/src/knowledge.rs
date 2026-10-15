@@ -524,6 +524,7 @@ impl ProjectStore {
                     model_fingerprint, text_hash, dims, vector
                   FROM embeddings WHERE build_id = ?2 AND file_id = ?3",
             )?;
+            crate::vectors::bump_embeddings_revision(tx, to_build)?;
             exec(
                 "INSERT INTO chunk_fts (rowid, chunk_id, build_id, heading, body, title)
                   SELECT n.rowid, n.id, ?1, f.heading, f.body, f.title
@@ -610,6 +611,7 @@ impl ProjectStore {
                     model_fingerprint, text_hash, dims, vector
                   FROM embeddings WHERE build_id = ?2 AND file_id NOT IN (SELECT id FROM carry_skip)",
             )?;
+            crate::vectors::bump_embeddings_revision(tx, to_build)?;
             exec(
                 "INSERT INTO chunk_fts (rowid, chunk_id, build_id, heading, body, title)
                   SELECT n.rowid, n.id, ?1, f.heading, f.body, f.title
@@ -1011,6 +1013,7 @@ fn delete_build_rows(tx: &Connection, build_id: &str) -> Result<()> {
         "DELETE FROM path_fts WHERE rowid IN (SELECT rowid FROM files WHERE build_id = ?1)",
         "DELETE FROM cross_links WHERE build_id = ?1",
         "DELETE FROM embeddings WHERE build_id = ?1",
+        "DELETE FROM metadata WHERE key = 'embeddings_revision:' || ?1",
         "DELETE FROM chunks WHERE build_id = ?1",
         "DELETE FROM documents WHERE build_id = ?1",
         "DELETE FROM relationships WHERE build_id = ?1",
@@ -1045,7 +1048,7 @@ fn delete_file_rows(tx: &Connection, build_id: &str, file_id: &str) -> Result<()
         cached(tx, sql, params![build_id, file_id])
             .map_err(StorageError::sqlite("delete file rows"))?;
     }
-    Ok(())
+    crate::vectors::bump_embeddings_revision(tx, build_id)
 }
 
 fn insert_knowledge(tx: &Connection, build_id: &str, k: &FileKnowledge) -> Result<()> {

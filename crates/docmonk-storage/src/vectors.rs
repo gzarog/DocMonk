@@ -76,6 +76,26 @@ pub struct SubjectMeta {
     pub document_id: Option<String>,
 }
 
+/// `metadata` key prefix of a build's embeddings revision token.
+pub const EMBEDDINGS_REVISION_KEY: &str = "embeddings_revision:";
+
+/// Replaces `build_id`'s embeddings revision token with a fresh random
+/// one. Every statement that inserts or deletes embedding rows calls this
+/// in the same transaction, so a derived index stamped with a token is
+/// current exactly while the token is unchanged. Tokens are random rather
+/// than counters, so a rolled-back write can never make a stale index
+/// match again.
+pub(crate) fn bump_embeddings_revision(tx: &rusqlite::Connection, build_id: &str) -> Result<()> {
+    cached(
+        tx,
+        "INSERT INTO metadata (key, value) VALUES (?1, lower(hex(randomblob(12))))
+         ON CONFLICT(key) DO UPDATE SET value = lower(hex(randomblob(12)))",
+        params![format!("{EMBEDDINGS_REVISION_KEY}{build_id}")],
+    )
+    .map_err(StorageError::sqlite("bump embeddings revision"))?;
+    Ok(())
+}
+
 /// Little-endian f32 encoding used for every vector blob.
 pub fn encode_vector(v: &[f32]) -> Vec<u8> {
     v.iter().flat_map(|x| x.to_le_bytes()).collect()
@@ -151,12 +171,14 @@ impl ProjectStore {
     /// Drops vectors of `build_id` that were produced by another model.
     pub fn delete_stale_embeddings(&mut self, build_id: &str, fingerprint: &str) -> Result<usize> {
         write_tx(&mut self.conn, |tx| {
-            cached(
+            let n = cached(
                 tx,
                 "DELETE FROM embeddings WHERE build_id = ?1 AND model_fingerprint != ?2",
                 params![build_id, fingerprint],
             )
-            .map_err(StorageError::sqlite("delete stale embeddings"))
+            .map_err(StorageError::sqlite("delete stale embeddings"))?;
+            bump_embeddings_revision(tx, build_id)?;
+            Ok(n)
         })
     }
 
@@ -236,7 +258,7 @@ impl ProjectStore {
                 )
                 .map_err(StorageError::sqlite("put embedding cache"))?;
             }
-            Ok(())
+            bump_embeddings_revision(tx, build_id)
         })
     }
 
@@ -322,6 +344,22 @@ impl ProjectStore {
             }
         }
         Ok(out)
+    }
+
+    /// `build_id`'s current embeddings revision token (`""` before any
+    /// vector was written or removed). One indexed point read.
+    pub fn embeddings_revision(&self, build_id: &str) -> Result<String> {
+        use rusqlite::OptionalExtension;
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT value FROM metadata WHERE key = ?1",
+                [format!("{EMBEDDINGS_REVISION_KEY}{build_id}")],
+                |r| r.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(StorageError::sqlite("embeddings revision"))?
+            .unwrap_or_default())
     }
 
     /// sha256 over the ordered `(subject_type, subject_id, text_hash)` set

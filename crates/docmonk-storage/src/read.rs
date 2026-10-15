@@ -11,6 +11,8 @@
 //! (`"tok"`, `"a b"`, `tok*`, joined by ` AND ` or ` OR `); see
 //! [`parse_expression`].
 
+use std::collections::HashMap;
+
 use crate::error::Result;
 use crate::knowledge::{ChunkRow, EntityRow, ProjectStore, RelationshipRow};
 use crate::search::{
@@ -112,12 +114,138 @@ pub trait KnowledgeRead {
         limit: i64,
     ) -> Result<Vec<RelationshipRow>>;
     fn file_rel_path(&self, build_id: &str, file_id: &str) -> Result<Option<String>>;
+
+    /// [`Self::entity_edges`] for many entities at once: for each id, the
+    /// edges of each of `types` (every type when empty), each type capped
+    /// at `limit` exactly as one `entity_edges` call per id and type would
+    /// return them. Ids without edges map to nothing.
+    fn entity_edges_many(
+        &self,
+        build_id: &str,
+        entity_ids: &[String],
+        types: &[&str],
+        outgoing: bool,
+        limit: i64,
+    ) -> Result<HashMap<String, Vec<RelationshipRow>>> {
+        let mut out: HashMap<String, Vec<RelationshipRow>> = HashMap::new();
+        for id in entity_ids {
+            let mut edges = Vec::new();
+            if types.is_empty() {
+                edges = self.entity_edges(build_id, id, None, outgoing, limit)?;
+            } else {
+                for t in types {
+                    edges.extend(self.entity_edges(build_id, id, Some(t), outgoing, limit)?);
+                }
+            }
+            if !edges.is_empty() {
+                out.entry(id.clone()).or_default().extend(edges);
+            }
+        }
+        Ok(out)
+    }
+
+    /// [`Self::unresolved_edges`] for many symbols at once (same per-symbol
+    /// and per-type caps).
+    fn unresolved_edges_many(
+        &self,
+        build_id: &str,
+        symbols: &[String],
+        types: &[&str],
+        limit: i64,
+    ) -> Result<HashMap<String, Vec<RelationshipRow>>> {
+        let mut out: HashMap<String, Vec<RelationshipRow>> = HashMap::new();
+        for s in symbols {
+            let mut edges = Vec::new();
+            if types.is_empty() {
+                edges = self.unresolved_edges(build_id, s, None, limit)?;
+            } else {
+                for t in types {
+                    edges.extend(self.unresolved_edges(build_id, s, Some(t), limit)?);
+                }
+            }
+            if !edges.is_empty() {
+                out.entry(s.clone()).or_default().extend(edges);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Hint that a lexical query is about to run every tier for `q` (and
+    /// each FTS `expression`): a remote reader answers all of them in one
+    /// round-trip up front. The results the individual calls return are
+    /// unchanged. The local store does nothing.
+    fn prefetch_lexical(
+        &self,
+        _build_id: &str,
+        _q: &str,
+        _expressions: &[String],
+        _limit: i64,
+        _snippet_tokens: i64,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    /// The reader can be shared across threads (a remote reader); `None`
+    /// for a SQLite connection, which belongs to one thread.
+    fn as_sync(&self) -> Option<&(dyn KnowledgeRead + Sync)> {
+        None
+    }
+
+    /// Entities of `ids` by id (unknown ids map to nothing).
+    fn entities_by_ids(
+        &self,
+        build_id: &str,
+        ids: &[String],
+    ) -> Result<HashMap<String, EntityRow>> {
+        let mut out = HashMap::new();
+        for id in ids {
+            if !out.contains_key(id) {
+                if let Some(e) = self.entity(build_id, id)? {
+                    out.insert(id.clone(), e);
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Source-relative paths of `file_ids` (unknown ids map to nothing).
+    fn file_rel_paths(
+        &self,
+        build_id: &str,
+        file_ids: &[String],
+    ) -> Result<HashMap<String, String>> {
+        let mut out = HashMap::new();
+        for f in file_ids {
+            if !out.contains_key(f) {
+                if let Some(p) = self.file_rel_path(build_id, f)? {
+                    out.insert(f.clone(), p);
+                }
+            }
+        }
+        Ok(out)
+    }
     fn entity_links(&self, build_id: &str, entity_id: &str) -> Result<Vec<EntityLinkRow>>;
     fn document_attachment(
         &self,
         build_id: &str,
         document_id: &str,
     ) -> Result<Option<AttachmentProvenance>>;
+
+    /// Attachment provenance of each of `document_ids` (missing ids map to
+    /// nothing; a top-level document maps to `None`).
+    fn document_attachments(
+        &self,
+        build_id: &str,
+        document_ids: &[String],
+    ) -> Result<HashMap<String, Option<AttachmentProvenance>>> {
+        let mut out = HashMap::new();
+        for d in document_ids {
+            if !out.contains_key(d) {
+                out.insert(d.clone(), self.document_attachment(build_id, d)?);
+            }
+        }
+        Ok(out)
+    }
 
     fn chunk(&self, build_id: &str, id: &str) -> Result<Option<ChunkRow>>;
     fn chunk_at(&self, build_id: &str, document_id: &str, ordinal: i64)
@@ -133,12 +261,14 @@ pub trait KnowledgeRead {
     /// Server-side top-`k` vector candidates for `query`, or `None` when
     /// this backend answers vector queries elsewhere (the local store uses
     /// its own ANN index files). An empty `Some` means no vectors.
+    /// `num_candidates` is the engine's candidate pool (0 = automatic).
     fn vector_search(
         &self,
         _build_id: &str,
         _fingerprint: &str,
         _query: &[f32],
         _k: usize,
+        _num_candidates: usize,
     ) -> Result<Option<Vec<VectorHit>>> {
         Ok(None)
     }
@@ -213,11 +343,43 @@ impl KnowledgeRead for ProjectStore {
     fn file_rel_path(&self, b: &str, f: &str) -> Result<Option<String>> {
         ProjectStore::file_rel_path(self, b, f)
     }
+    fn entity_edges_many(
+        &self,
+        b: &str,
+        ids: &[String],
+        types: &[&str],
+        out: bool,
+        l: i64,
+    ) -> Result<HashMap<String, Vec<RelationshipRow>>> {
+        ProjectStore::entity_edges_many(self, b, ids, types, out, l)
+    }
+    fn unresolved_edges_many(
+        &self,
+        b: &str,
+        symbols: &[String],
+        types: &[&str],
+        l: i64,
+    ) -> Result<HashMap<String, Vec<RelationshipRow>>> {
+        ProjectStore::unresolved_edges_many(self, b, symbols, types, l)
+    }
+    fn file_rel_paths(&self, b: &str, ids: &[String]) -> Result<HashMap<String, String>> {
+        ProjectStore::file_rel_paths(self, b, ids)
+    }
+    fn entities_by_ids(&self, b: &str, ids: &[String]) -> Result<HashMap<String, EntityRow>> {
+        ProjectStore::entities_by_ids(self, b, ids)
+    }
     fn entity_links(&self, b: &str, e: &str) -> Result<Vec<EntityLinkRow>> {
         ProjectStore::entity_links(self, b, e)
     }
     fn document_attachment(&self, b: &str, d: &str) -> Result<Option<AttachmentProvenance>> {
         ProjectStore::document_attachment(self, b, d)
+    }
+    fn document_attachments(
+        &self,
+        b: &str,
+        ids: &[String],
+    ) -> Result<HashMap<String, Option<AttachmentProvenance>>> {
+        ProjectStore::document_attachments(self, b, ids)
     }
     fn chunk(&self, b: &str, id: &str) -> Result<Option<ChunkRow>> {
         ProjectStore::chunk(self, b, id)

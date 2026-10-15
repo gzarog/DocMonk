@@ -301,19 +301,22 @@ fn hybrid_and_neural_rankings_are_as_expected() {
     let ce = models_root(DEFAULT_RERANKER_MODEL.slug).map(|m| {
         CrossEncoder::load(&m.join(DEFAULT_RERANKER_MODEL.slug), DEFAULT_RERANKER_MODEL).unwrap()
     });
-    let g = golden();
+    let mut g = golden();
+    let bless = std::env::var("DOCMONK_BLESS").as_deref() == Ok("1");
     let mut failures = Vec::new();
     let mut neural_failures = Vec::new();
     let mut total = 0;
     for (name, rel) in CORPORA {
         let ix = index(rel, Some(&models));
+        let items = g[name].as_array_mut().unwrap();
         let corpora = [Corpus {
             store: &ix.store,
             build_id: &ix.build,
         }];
-        for item in g[name].as_array().unwrap() {
+        for item in items.iter_mut() {
             total += 1;
-            let q = item["query"].as_str().unwrap();
+            let q = item["query"].as_str().unwrap().to_owned();
+            let q = q.as_str();
             let opts = HybridOptions {
                 limit: TOP,
                 ..Default::default()
@@ -326,11 +329,28 @@ fn hybrid_and_neural_rankings_are_as_expected() {
             if let Some(ce) = &ce {
                 let neural = hybrid::neural_rerank(q, r.hits, TOP, Some(ce));
                 let got: Vec<Value> = neural.iter().map(|h| hyb_row(h).0).collect();
+                if bless {
+                    // Only the neural pass is re-recorded (e.g. after a
+                    // deliberate change to what it may reorder).
+                    item["hybrid_neural"] = json!(got);
+                    continue;
+                }
                 if let Some(m) = compare_neural(item["hybrid_neural"].as_array().unwrap(), &got) {
                     neural_failures.push(format!("[{name}] {q:?}: {m}"));
                 }
             }
         }
+    }
+    if bless && ce.is_some() {
+        let mut out = Vec::new();
+        let fmt = serde_json::ser::PrettyFormatter::with_indent(b" ");
+        serde::Serialize::serialize(
+            &g,
+            &mut serde_json::Serializer::with_formatter(&mut out, fmt),
+        )
+        .unwrap();
+        out.push(b'\n');
+        std::fs::write(repo_root().join("fixtures/expected/search.json"), out).unwrap();
     }
     report(&failures, total, "hybrid");
     report(&neural_failures, total, "hybrid + neural");

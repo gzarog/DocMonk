@@ -497,6 +497,21 @@ section! {
 }
 
 section! {
+    /// Approximate nearest-neighbour search.
+    SearchAnnConfig {
+        // HNSW beam width per query (local index). Higher raises recall
+        // at a small latency cost.
+        ef_search: i64 = 400, check = |v| if (10..=10_000).contains(v) { Ok(()) } else {
+            Err("must be between 10 and 10000".into())
+        };
+        // Elasticsearch kNN `num_candidates`; 0 = `max(10 * k, 100)`.
+        num_candidates: i64 = 0, check = |v| if (0..=10_000).contains(v) { Ok(()) } else {
+            Err("must be between 0 and 10000 (0 = automatic)".into())
+        };
+    }
+}
+
+section! {
     SearchRoutingConfig {
         enabled: bool = true;
     }
@@ -542,6 +557,7 @@ section! {
         output: SearchOutputConfig = SearchOutputConfig::default();
         context: SearchContextConfig = SearchContextConfig::default();
         reranker: SearchRerankerConfig = SearchRerankerConfig::default();
+        ann: SearchAnnConfig = SearchAnnConfig::default();
         routing: SearchRoutingConfig = SearchRoutingConfig::default();
         decomposition: SearchDecompositionConfig = SearchDecompositionConfig::default();
         diversity: SearchDiversityConfig = SearchDiversityConfig::default();

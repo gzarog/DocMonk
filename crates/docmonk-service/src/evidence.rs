@@ -120,16 +120,20 @@ fn run_part(
     if plan.strategies.contains(&RouteStrategy::Semantic) {
         let lazy = lazy_embedder(home, cfg);
         let embedder = lazy.get().ok().map(|a| a.as_ref());
-        let s = hybrid::semantic_search(
+        let s = hybrid::semantic_search_with(
             corp,
             embedder,
             text,
             fetch,
             Some(cfg.search.semantic_top_k.max(1) as usize),
+            crate::query::ann_params(cfg),
         )
         .map_err(search_err)?;
         if !s.available {
             degraded.push(format!("semantic unavailable: {}", s.reason));
+        }
+        for d in &s.degraded {
+            degraded.push(format!("semantic unavailable for {d}"));
         }
         sem = s
             .hits

@@ -854,6 +854,12 @@
    "hybrid_neural": [
     [
      "entity",
+     "qualified_symbol",
+     "services/settlement_service.py",
+     "services.settlement_service.SettlementService.process"
+    ],
+    [
+     "entity",
      "hybrid",
      "services/settlement_service.py",
      "services.settlement_service"
@@ -899,12 +905,6 @@
      "hybrid",
      "services/settlement_service.py",
      "services.settlement_service.SettlementService.retry_settlement"
-    ],
-    [
-     "entity",
-     "qualified_symbol",
-     "services/settlement_service.py",
-     "services.settlement_service.SettlementService.process"
     ],
     [
      "document",
@@ -1334,6 +1334,12 @@
    ],
    "hybrid_neural": [
     [
+     "entity",
+     "alias_symbol",
+     "services/settlement_service.py",
+     "services.settlement_service.SettlementService.process"
+    ],
+    [
      "document",
      "hybrid",
      "docs/settlement_guide.md",
@@ -1380,12 +1386,6 @@
      "hybrid",
      "services/settlement_service.py",
      "services.settlement_service.SettlementService.retry_settlement"
-    ],
-    [
-     "entity",
-     "alias_symbol",
-     "services/settlement_service.py",
-     "services.settlement_service.SettlementService.process"
     ],
     [
      "entity",
@@ -2682,6 +2682,12 @@
    "hybrid_neural": [
     [
      "entity",
+     "qualified_symbol",
+     "consumers/payment_consumer.py",
+     "consumers.payment_consumer.PaymentConsumer.handle"
+    ],
+    [
+     "entity",
      "hybrid",
      "consumers/payment_consumer.py",
      "consumers.payment_consumer"
@@ -2697,12 +2703,6 @@
      "hybrid",
      "docs/settlement_guide.md",
      "Settlement Guide"
-    ],
-    [
-     "entity",
-     "qualified_symbol",
-     "consumers/payment_consumer.py",
-     "consumers.payment_consumer.PaymentConsumer.handle"
     ],
     [
      "document",
@@ -3163,6 +3163,12 @@
    "hybrid_neural": [
     [
      "entity",
+     "qualified_symbol",
+     "workers/retry_worker.py",
+     "workers.retry_worker.RetryWorker.run"
+    ],
+    [
+     "entity",
      "hybrid",
      "workers/retry_worker.py",
      "workers.retry_worker"
@@ -3208,12 +3214,6 @@
      "hybrid",
      "docs/settlement_guide.md",
      "Settlement Guide"
-    ],
-    [
-     "entity",
-     "qualified_symbol",
-     "workers/retry_worker.py",
-     "workers.retry_worker.RetryWorker.run"
     ],
     [
      "entity",
@@ -3607,6 +3607,12 @@
    ],
    "hybrid_neural": [
     [
+     "entity",
+     "alias_symbol",
+     "consumers/payment_consumer.py",
+     "consumers.payment_consumer.PaymentConsumer.handle"
+    ],
+    [
      "document",
      "hybrid",
      "docs/settlement_guide.md",
@@ -3623,12 +3629,6 @@
      "hybrid",
      "docs/payment_provider_notes.md",
      "Payment Provider Notes"
-    ],
-    [
-     "entity",
-     "alias_symbol",
-     "consumers/payment_consumer.py",
-     "consumers.payment_consumer.PaymentConsumer.handle"
     ],
     [
      "document",
@@ -4053,6 +4053,12 @@
    "hybrid_neural": [
     [
      "entity",
+     "alias_symbol",
+     "workers/retry_worker.py",
+     "workers.retry_worker.RetryWorker.run"
+    ],
+    [
+     "entity",
      "hybrid",
      "workers/retry_worker.py",
      "workers.retry_worker.RetryWorker"
@@ -4098,12 +4104,6 @@
      "hybrid",
      "services/settlement_service.py",
      "services.settlement_service.SettlementService.retry_settlement"
-    ],
-    [
-     "entity",
-     "alias_symbol",
-     "workers/retry_worker.py",
-     "workers.retry_worker.RetryWorker.run"
     ],
     [
      "document",
@@ -4485,16 +4485,16 @@
    ],
    "hybrid_neural": [
     [
-     "document",
-     "hybrid",
-     "docs/settlement_guide.md",
-     "Settlement Guide"
-    ],
-    [
      "entity",
      "exact_symbol",
      "services/settlement_service.py",
      "services.settlement_service.SettlementService.retry_settlement"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/settlement_guide.md",
+     "Settlement Guide"
     ],
     [
      "document",
@@ -4966,6 +4966,12 @@
    ],
    "hybrid_neural": [
     [
+     "entity",
+     "alias_symbol",
+     "services/settlement_service.py",
+     "services.settlement_service.SettlementService.retry_settlement"
+    ],
+    [
      "document",
      "hybrid",
      "docs/settlement_guide.md",
@@ -4982,12 +4988,6 @@
      "hybrid",
      "docs/payment_provider_notes.md",
      "Payment Provider Notes"
-    ],
-    [
-     "entity",
-     "alias_symbol",
-     "services/settlement_service.py",
-     "services.settlement_service.SettlementService.retry_settlement"
     ],
     [
      "entity",
@@ -10702,16 +10702,16 @@
      "Settlement Guide"
     ],
     [
-     "document",
-     "hybrid",
-     "docs/settlement_guide.md",
-     "Settlement Guide"
-    ],
-    [
      "path",
      "hybrid",
      "docs/payment_provider_notes.md",
      "docs/payment_provider_notes.md"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/settlement_guide.md",
+     "Settlement Guide"
     ],
     [
      "document",
@@ -15344,19 +15344,19 @@
     ],
     [
      "document",
-     "hybrid",
-     "docs/settlement_guide.md",
-     "Settlement Guide"
-    ],
-    [
-     "document",
-     "hybrid",
-     "docs/settlement_guide.md",
-     "Settlement Guide"
-    ],
-    [
-     "document",
      "title_or_heading",
+     "docs/settlement_guide.md",
+     "Settlement Guide"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/settlement_guide.md",
+     "Settlement Guide"
+    ],
+    [
+     "document",
+     "hybrid",
      "docs/settlement_guide.md",
      "Settlement Guide"
     ],
@@ -15921,19 +15921,19 @@
     ],
     [
      "document",
-     "hybrid",
-     "docs/settlement_guide.md",
-     "Settlement Guide"
-    ],
-    [
-     "document",
-     "hybrid",
-     "docs/settlement_guide.md",
-     "Settlement Guide"
-    ],
-    [
-     "document",
      "title_or_heading",
+     "docs/settlement_guide.md",
+     "Settlement Guide"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/settlement_guide.md",
+     "Settlement Guide"
+    ],
+    [
+     "document",
+     "hybrid",
      "docs/settlement_guide.md",
      "Settlement Guide"
     ],
@@ -16456,25 +16456,25 @@
     ],
     [
      "document",
+     "title_or_heading",
+     "docs/health_notes.md",
+     "Health Notes"
+    ],
+    [
+     "document",
+     "title_or_heading",
+     "docs/health_notes.md",
+     "Health Notes"
+    ],
+    [
+     "document",
+     "title_or_heading",
+     "docs/health_notes.md",
+     "Health Notes"
+    ],
+    [
+     "document",
      "hybrid",
-     "docs/health_notes.md",
-     "Health Notes"
-    ],
-    [
-     "document",
-     "title_or_heading",
-     "docs/health_notes.md",
-     "Health Notes"
-    ],
-    [
-     "document",
-     "title_or_heading",
-     "docs/health_notes.md",
-     "Health Notes"
-    ],
-    [
-     "document",
-     "title_or_heading",
      "docs/health_notes.md",
      "Health Notes"
     ],
@@ -17009,25 +17009,25 @@
     ],
     [
      "document",
+     "title_or_heading",
+     "docs/health_notes.md",
+     "Health Notes"
+    ],
+    [
+     "document",
+     "title_or_heading",
+     "docs/health_notes.md",
+     "Health Notes"
+    ],
+    [
+     "document",
+     "title_or_heading",
+     "docs/health_notes.md",
+     "Health Notes"
+    ],
+    [
+     "document",
      "hybrid",
-     "docs/health_notes.md",
-     "Health Notes"
-    ],
-    [
-     "document",
-     "title_or_heading",
-     "docs/health_notes.md",
-     "Health Notes"
-    ],
-    [
-     "document",
-     "title_or_heading",
-     "docs/health_notes.md",
-     "Health Notes"
-    ],
-    [
-     "document",
-     "title_or_heading",
      "docs/health_notes.md",
      "Health Notes"
     ],
@@ -17658,13 +17658,13 @@
     ],
     [
      "document",
-     "hybrid",
+     "title_or_heading",
      "docs/payment_provider_notes.md",
      "Payment Provider Notes"
     ],
     [
      "document",
-     "title_or_heading",
+     "hybrid",
      "docs/payment_provider_notes.md",
      "Payment Provider Notes"
     ],
@@ -18295,13 +18295,13 @@
     ],
     [
      "document",
-     "hybrid",
+     "title_or_heading",
      "docs/payment_provider_notes.md",
      "Payment Provider Notes"
     ],
     [
      "document",
-     "title_or_heading",
+     "hybrid",
      "docs/payment_provider_notes.md",
      "Payment Provider Notes"
     ],
@@ -27072,16 +27072,16 @@
      "Settlement Guide"
     ],
     [
-     "entity",
-     "hybrid",
-     "workers/retry_worker.py",
-     "workers.retry_worker.RetryWorker"
-    ],
-    [
      "path",
      "hybrid",
      "workers/retry_worker.py",
      "workers/retry_worker.py"
+    ],
+    [
+     "entity",
+     "hybrid",
+     "workers/retry_worker.py",
+     "workers.retry_worker.RetryWorker"
     ],
     [
      "document",
@@ -30950,6 +30950,12 @@
    ],
    "hybrid_neural": [
     [
+     "entity",
+     "alias_symbol",
+     "services/settlement_service.py",
+     "services.settlement_service.SettlementService.retry_settlement"
+    ],
+    [
      "document",
      "hybrid",
      "docs/settlement_guide.md",
@@ -30966,12 +30972,6 @@
      "hybrid",
      "docs/payment_provider_notes.md",
      "Payment Provider Notes"
-    ],
-    [
-     "entity",
-     "alias_symbol",
-     "services/settlement_service.py",
-     "services.settlement_service.SettlementService.retry_settlement"
     ],
     [
      "entity",
@@ -31383,16 +31383,16 @@
    ],
    "hybrid_neural": [
     [
-     "document",
-     "hybrid",
-     "docs/settlement_guide.md",
-     "Settlement Guide"
-    ],
-    [
      "entity",
      "exact_symbol",
      "services/settlement_service.py",
      "services.settlement_service.SettlementService.retry_settlement"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/settlement_guide.md",
+     "Settlement Guide"
     ],
     [
      "document",
@@ -31840,12 +31840,6 @@
      "Health Notes"
     ],
     [
-     "path",
-     "hybrid",
-     "services/settlement_service.py",
-     "services/settlement_service.py"
-    ],
-    [
      "entity",
      "hybrid",
      "workers/retry_worker.py",
@@ -31886,6 +31880,12 @@
      "hybrid",
      "services/settlement_service.py",
      "services.settlement_service.SettlementService.process"
+    ],
+    [
+     "path",
+     "hybrid",
+     "services/settlement_service.py",
+     "services/settlement_service.py"
     ],
     [
      "entity",
@@ -32315,16 +32315,16 @@
      "services.settlement_service.SettlementService.process"
     ],
     [
-     "document",
-     "hybrid",
-     "docs/settlement_guide.md",
-     "Settlement Guide"
-    ],
-    [
      "path",
      "hybrid",
      "consumers/payment_consumer.py",
      "consumers/payment_consumer.py"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/settlement_guide.md",
+     "Settlement Guide"
     ],
     [
      "entity",
@@ -36544,6 +36544,12 @@
    ],
    "hybrid_neural": [
     [
+     "entity",
+     "qualified_symbol",
+     "src/billing/invoice_service.py",
+     "src.billing.invoice_service.InvoiceService.void_invoice"
+    ],
+    [
      "document",
      "hybrid",
      "docs/billing.md",
@@ -36572,12 +36578,6 @@
      "hybrid",
      "src/billing/my-helpers.v2.py",
      "src.billing.my-helpers.v2"
-    ],
-    [
-     "entity",
-     "qualified_symbol",
-     "src/billing/invoice_service.py",
-     "src.billing.invoice_service.InvoiceService.void_invoice"
     ],
     [
      "document",
@@ -37013,16 +37013,16 @@
    ],
    "hybrid_neural": [
     [
-     "document",
-     "hybrid",
-     "docs/billing.md",
-     "Billing guide"
-    ],
-    [
      "entity",
      "alias_symbol",
      "src/billing/invoice_service.py",
      "src.billing.invoice_service.InvoiceService.void_invoice"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/billing.md",
+     "Billing guide"
     ],
     [
      "document",
@@ -37470,6 +37470,12 @@
    ],
    "hybrid_neural": [
     [
+     "entity",
+     "alias_symbol",
+     "web/orders.ts",
+     "web.orders.OrderController.cancelOrder"
+    ],
+    [
      "document",
      "hybrid",
      "docs/orders.html",
@@ -37480,12 +37486,6 @@
      "hybrid",
      "web/orders.ts",
      "web.orders.OrderController"
-    ],
-    [
-     "entity",
-     "alias_symbol",
-     "web/orders.ts",
-     "web.orders.OrderController.cancelOrder"
     ],
     [
      "document",
@@ -37987,6 +37987,12 @@
    ],
    "hybrid_neural": [
     [
+     "entity",
+     "alias_symbol",
+     "src/billing/ledger.py",
+     "src.billing.ledger.Ledger.post_entry"
+    ],
+    [
      "document",
      "hybrid",
      "docs/unicode.txt",
@@ -37997,12 +38003,6 @@
      "hybrid",
      "docs/orders.html",
      "Orders"
-    ],
-    [
-     "entity",
-     "alias_symbol",
-     "src/billing/ledger.py",
-     "src.billing.ledger.Ledger.post_entry"
     ],
     [
      "entity",
@@ -38655,31 +38655,31 @@
     ],
     [
      "document",
+     "title_or_heading",
+     "docs/billing.md",
+     "Billing guide"
+    ],
+    [
+     "document",
+     "title_or_heading",
+     "docs/billing.md",
+     "Billing guide"
+    ],
+    [
+     "document",
+     "title_or_heading",
+     "docs/billing.md",
+     "Billing guide"
+    ],
+    [
+     "document",
      "hybrid",
      "docs/billing.md",
      "Billing guide"
     ],
     [
      "document",
-     "title_or_heading",
-     "docs/billing.md",
-     "Billing guide"
-    ],
-    [
-     "document",
-     "title_or_heading",
-     "docs/billing.md",
-     "Billing guide"
-    ],
-    [
-     "document",
      "hybrid",
-     "docs/billing.md",
-     "Billing guide"
-    ],
-    [
-     "document",
-     "title_or_heading",
      "docs/billing.md",
      "Billing guide"
     ],
@@ -39304,31 +39304,31 @@
     ],
     [
      "document",
+     "title_or_heading",
+     "docs/billing.md",
+     "Billing guide"
+    ],
+    [
+     "document",
+     "title_or_heading",
+     "docs/billing.md",
+     "Billing guide"
+    ],
+    [
+     "document",
+     "title_or_heading",
+     "docs/billing.md",
+     "Billing guide"
+    ],
+    [
+     "document",
      "hybrid",
      "docs/billing.md",
      "Billing guide"
     ],
     [
      "document",
-     "title_or_heading",
-     "docs/billing.md",
-     "Billing guide"
-    ],
-    [
-     "document",
-     "title_or_heading",
-     "docs/billing.md",
-     "Billing guide"
-    ],
-    [
-     "document",
      "hybrid",
-     "docs/billing.md",
-     "Billing guide"
-    ],
-    [
-     "document",
-     "title_or_heading",
      "docs/billing.md",
      "Billing guide"
     ],
@@ -39736,16 +39736,16 @@
      "Billing guide"
     ],
     [
-     "entity",
-     "hybrid",
-     "src/billing/invoice_service.py",
-     "src.billing.invoice_service.calculate_tax"
-    ],
-    [
      "document",
      "title_or_heading",
      "docs/billing.md",
      "Billing guide"
+    ],
+    [
+     "entity",
+     "hybrid",
+     "src/billing/invoice_service.py",
+     "src.billing.invoice_service.calculate_tax"
     ],
     [
      "entity",
@@ -40728,10 +40728,10 @@
      "web.orders"
     ],
     [
-     "entity",
+     "path",
      "hybrid",
-     "web/orders.ts",
-     "web.orders.OrderController"
+     "docs/orders.html",
+     "docs/orders.html"
     ],
     [
      "path",
@@ -40740,10 +40740,10 @@
      "web/orders.ts"
     ],
     [
-     "path",
+     "entity",
      "hybrid",
-     "docs/orders.html",
-     "docs/orders.html"
+     "web/orders.ts",
+     "web.orders.OrderController"
     ],
     [
      "entity",
@@ -43602,16 +43602,16 @@
    ],
    "hybrid_neural": [
     [
-     "document",
-     "hybrid",
-     "docs/billing.md",
-     "Billing guide"
-    ],
-    [
      "entity",
      "exact_symbol",
      "src/billing/invoice_service.py",
      "src.billing.invoice_service"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/billing.md",
+     "Billing guide"
     ],
     [
      "path",
@@ -45639,6 +45639,12 @@
      "src.billing.my-helpers.v2.helper"
     ],
     [
+     "path",
+     "hybrid",
+     "src/billing/my-helpers.v2.py",
+     "src/billing/my-helpers.v2.py"
+    ],
+    [
      "entity",
      "hybrid",
      "src/billing/my-helpers.v2.py",
@@ -45649,12 +45655,6 @@
      "hybrid",
      "docs/unicode.txt",
      "unicode"
-    ],
-    [
-     "path",
-     "hybrid",
-     "src/billing/my-helpers.v2.py",
-     "src/billing/my-helpers.v2.py"
     ],
     [
      "document",
@@ -47882,6 +47882,12 @@
    ],
    "hybrid_neural": [
     [
+     "entity",
+     "qualified_symbol",
+     "web/Payments.cs",
+     "Shop.Payments.PaymentGateway"
+    ],
+    [
      "document",
      "hybrid",
      "docs/orders.html",
@@ -47892,12 +47898,6 @@
      "hybrid",
      "web/Payments.cs",
      "Shop.Payments"
-    ],
-    [
-     "entity",
-     "qualified_symbol",
-     "web/Payments.cs",
-     "Shop.Payments.PaymentGateway"
     ],
     [
      "document",

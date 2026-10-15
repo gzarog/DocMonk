@@ -445,6 +445,167 @@ impl ProjectStore {
         )
     }
 
+    /// Edges of many entities in one statement per
+    /// [`crate::graph::LOOKUP_BATCH`] ids (see
+    /// [`crate::read::KnowledgeRead::entity_edges_many`]): a window
+    /// function keeps, per entity (and type when `types` is given), the
+    /// first `limit` rows in exactly [`Self::entity_edges`]' order.
+    pub fn entity_edges_many(
+        &self,
+        build_id: &str,
+        entity_ids: &[String],
+        types: &[&str],
+        outgoing: bool,
+        limit: i64,
+    ) -> Result<std::collections::HashMap<String, Vec<RelationshipRow>>> {
+        let column = if outgoing {
+            "source_entity_id"
+        } else {
+            "target_entity_id"
+        };
+        self.edges_many(build_id, entity_ids, types, column, "", limit)
+    }
+
+    /// Unresolved edges of many symbols at once (see
+    /// [`Self::entity_edges_many`]).
+    pub fn unresolved_edges_many(
+        &self,
+        build_id: &str,
+        symbols: &[String],
+        types: &[&str],
+        limit: i64,
+    ) -> Result<std::collections::HashMap<String, Vec<RelationshipRow>>> {
+        self.edges_many(
+            build_id,
+            symbols,
+            types,
+            "target_symbol",
+            "AND target_entity_id IS NULL",
+            limit,
+        )
+    }
+
+    fn edges_many(
+        &self,
+        build_id: &str,
+        keys: &[String],
+        types: &[&str],
+        column: &str,
+        extra: &str,
+        limit: i64,
+    ) -> Result<std::collections::HashMap<String, Vec<RelationshipRow>>> {
+        let mut out: std::collections::HashMap<String, Vec<RelationshipRow>> = Default::default();
+        if keys.is_empty() || !self.graph_visible(build_id)? {
+            return Ok(out);
+        }
+        let mut uniq: Vec<&String> = keys.iter().collect();
+        uniq.sort();
+        uniq.dedup();
+        let (partition, type_filter) = if types.is_empty() {
+            (
+                format!("PARTITION BY {column} ORDER BY relationship_type, id"),
+                String::new(),
+            )
+        } else {
+            let marks = (0..types.len())
+                .map(|i| format!("?{}", i + 3))
+                .collect::<Vec<_>>()
+                .join(",");
+            (
+                format!("PARTITION BY {column}, relationship_type ORDER BY id"),
+                format!("AND relationship_type IN ({marks})"),
+            )
+        };
+        for batch in uniq.chunks(crate::graph::LOOKUP_BATCH) {
+            let first = 3 + types.len();
+            let marks = (0..batch.len())
+                .map(|i| format!("?{}", i + first))
+                .collect::<Vec<_>>()
+                .join(",");
+            let mut args: Vec<&dyn rusqlite::ToSql> = vec![&build_id, &limit];
+            args.extend(types.iter().map(|t| t as &dyn rusqlite::ToSql));
+            args.extend(batch.iter().map(|k| *k as &dyn rusqlite::ToSql));
+            let rows = self.query_rows(
+                "edges many",
+                &format!(
+                    "SELECT {RELATIONSHIP_COLUMNS} FROM (
+                        SELECT *, ROW_NUMBER() OVER ({partition}) AS rn FROM relationships
+                        WHERE build_id = ?1 AND {column} IN ({marks}) {type_filter} {extra}
+                     ) WHERE rn <= ?2"
+                ),
+                &args,
+                relationship_from_row,
+            )?;
+            for r in rows {
+                let key = match column {
+                    "source_entity_id" => r.source_entity_id.clone(),
+                    "target_entity_id" => r.target_entity_id.clone().unwrap_or_default(),
+                    _ => r.target_symbol.clone().unwrap_or_default(),
+                };
+                out.entry(key).or_default().push(r);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Entities of many ids of `build_id`.
+    pub fn entities_by_ids(
+        &self,
+        build_id: &str,
+        ids: &[String],
+    ) -> Result<std::collections::HashMap<String, EntityRow>> {
+        let mut out = std::collections::HashMap::new();
+        let mut uniq: Vec<&String> = ids.iter().collect();
+        uniq.sort();
+        uniq.dedup();
+        for batch in uniq.chunks(crate::graph::LOOKUP_BATCH) {
+            let marks = (0..batch.len())
+                .map(|i| format!("?{}", i + 2))
+                .collect::<Vec<_>>()
+                .join(",");
+            let mut args: Vec<&dyn rusqlite::ToSql> = vec![&build_id];
+            args.extend(batch.iter().map(|k| *k as &dyn rusqlite::ToSql));
+            for e in self.query_rows(
+                "entities by ids",
+                &format!(
+                    "SELECT {ENTITY_COLUMNS} FROM entities WHERE build_id = ?1 AND id IN ({marks})"
+                ),
+                &args,
+                entity_from_row,
+            )? {
+                out.insert(e.id.clone(), e);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Source-relative paths of many files of `build_id`.
+    pub fn file_rel_paths(
+        &self,
+        build_id: &str,
+        file_ids: &[String],
+    ) -> Result<std::collections::HashMap<String, String>> {
+        let mut out = std::collections::HashMap::new();
+        let mut uniq: Vec<&String> = file_ids.iter().collect();
+        uniq.sort();
+        uniq.dedup();
+        for batch in uniq.chunks(crate::graph::LOOKUP_BATCH) {
+            let marks = (0..batch.len())
+                .map(|i| format!("?{}", i + 2))
+                .collect::<Vec<_>>()
+                .join(",");
+            let mut args: Vec<&dyn rusqlite::ToSql> = vec![&build_id];
+            args.extend(batch.iter().map(|k| *k as &dyn rusqlite::ToSql));
+            out.extend(self.query_rows(
+                "file paths",
+                &format!("SELECT id, rel_path FROM files WHERE build_id = ?1 AND id IN ({marks})"),
+                &args,
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+            )?);
+        }
+        Ok(out)
+    }
+
     /// Source-relative path of one file of `build_id`.
     pub fn file_rel_path(&self, build_id: &str, file_id: &str) -> Result<Option<String>> {
         Ok(self
@@ -515,6 +676,38 @@ impl ProjectStore {
                 })
             },
         )
+    }
+
+    /// Attachment provenance of each of `document_ids` (one statement per
+    /// [`crate::graph::LOOKUP_BATCH`] ids).
+    pub fn document_attachments(
+        &self,
+        build_id: &str,
+        document_ids: &[String],
+    ) -> Result<std::collections::HashMap<String, Option<AttachmentProvenance>>> {
+        let mut out = std::collections::HashMap::new();
+        let mut ids: Vec<&String> = document_ids.iter().collect();
+        ids.sort();
+        ids.dedup();
+        for batch in ids.chunks(crate::graph::LOOKUP_BATCH) {
+            let marks = vec!["?"; batch.len()].join(", ");
+            let mut params: Vec<&dyn rusqlite::ToSql> = vec![&build_id];
+            for id in batch {
+                params.push(*id);
+            }
+            let rows = self.query_rows(
+                "document attachments",
+                &format!(
+                    "SELECT d.id, {ATTACHMENT_COLUMNS} FROM documents d
+                     LEFT JOIN documents p ON p.build_id = d.build_id AND p.id = d.parent_document_id
+                     WHERE d.build_id = ?1 AND d.id IN ({marks})"
+                ),
+                &params,
+                |r| Ok((r.get::<_, String>(0)?, attachment(r, 1)?)),
+            )?;
+            out.extend(rows);
+        }
+        Ok(out)
     }
 
     /// Attachment provenance of a document (`None` for a top-level one).

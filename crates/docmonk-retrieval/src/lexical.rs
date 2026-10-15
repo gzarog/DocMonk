@@ -310,7 +310,6 @@ fn search_documents(
     let Some(plan) = query_plan(q) else {
         return Ok(out);
     };
-    let q_lower = q.to_lowercase();
     let rows = run_plan(
         &plan,
         limit,
@@ -324,7 +323,7 @@ fn search_documents(
         let in_heading = row
             .heading
             .as_deref()
-            .is_some_and(|h| h.to_lowercase().contains(&q_lower));
+            .is_some_and(|h| heading_matches(h, q));
         out.push(SearchResult {
             kind: "document",
             tier: if in_heading {
@@ -377,6 +376,26 @@ fn search_paths(c: Corpus<'_>, q: &str, limit: usize) -> Result<Vec<SearchResult
         .collect())
 }
 
+/// Whether a chunk hit is pinned as a heading match: the query is the
+/// whole heading, or its words appear in the heading as a contiguous run
+/// of whole words (case-insensitive). `order` matches "Order policy" but
+/// not "Reorder policy".
+pub fn heading_matches(heading: &str, query: &str) -> bool {
+    let h: Vec<String> = word_tokens(heading)
+        .iter()
+        .map(|w| w.to_lowercase())
+        .collect();
+    let q: Vec<String> = word_tokens(query)
+        .iter()
+        .map(|w| w.to_lowercase())
+        .collect();
+    if q.is_empty() {
+        return false;
+    }
+    heading.trim().eq_ignore_ascii_case(query.trim())
+        || h.windows(q.len()).any(|w| w == q.as_slice())
+}
+
 /// Keeps each `(kind, id)`'s best-ranked hit and sorts best first.
 pub fn merge(results: Vec<SearchResult>) -> Vec<SearchResult> {
     let mut best: HashMap<(&'static str, String), SearchResult> = HashMap::new();
@@ -414,6 +433,11 @@ pub fn search(
 }
 
 /// [`search`] plus a per-stage timing breakdown.
+///
+/// Corpora whose readers can be shared across threads (server mode) are
+/// searched concurrently, and each prefetches its whole plan in one
+/// round-trip; SQLite corpora run one after another on this thread. The
+/// merged ranking does not depend on either.
 pub fn search_with_timings(
     corpora: &[Corpus<'_>],
     query: &str,
@@ -424,6 +448,67 @@ pub fn search_with_timings(
     if q.is_empty() {
         return Ok((Vec::new(), Vec::new()));
     }
+    let sync: Option<Vec<&(dyn docmonk_storage::read::KnowledgeRead + Sync)>> =
+        corpora.iter().map(|c| c.store.as_sync()).collect();
+    let per_corpus: Vec<CorpusOutput> = match sync {
+        Some(stores) if corpora.len() > 1 => std::thread::scope(|scope| {
+            let handles: Vec<_> = stores
+                .into_iter()
+                .zip(corpora)
+                .map(|(store, c)| {
+                    let build_id = c.build_id;
+                    scope.spawn(move || {
+                        corpus_search(
+                            Corpus {
+                                store: store as &dyn docmonk_storage::read::KnowledgeRead,
+                                build_id,
+                            },
+                            q,
+                            limit,
+                            snippet_tokens,
+                        )
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|h| {
+                    h.join()
+                        .unwrap_or_else(|_| Err(SearchError("search thread panicked".into())))
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })?,
+        _ => corpora
+            .iter()
+            .map(|&c| corpus_search(c, q, limit, snippet_tokens))
+            .collect::<Result<Vec<_>, _>>()?,
+    };
+    let mut timings = Vec::new();
+    let mut all = Vec::new();
+    for (hits, t) in per_corpus {
+        all.extend(hits);
+        timings.extend(t);
+    }
+    let t = std::time::Instant::now();
+    let mut merged = merge(all);
+    merged.truncate(limit);
+    timings.push(StageTiming {
+        stage: "merge",
+        hits: merged.len(),
+        duration_ms: t.elapsed().as_secs_f64() * 1000.0,
+    });
+    Ok((merged, timings))
+}
+
+type CorpusOutput = (Vec<SearchResult>, Vec<StageTiming>);
+
+/// Every lexical stage of one corpus.
+fn corpus_search(
+    c: Corpus<'_>,
+    q: &str,
+    limit: usize,
+    snippet_tokens: i64,
+) -> Result<CorpusOutput, SearchError> {
     let mut timings = Vec::new();
     let mut all = Vec::new();
     let mut stage = |name: &'static str,
@@ -440,22 +525,25 @@ pub fn search_with_timings(
         all.extend(hits);
         Ok(())
     };
-    for &c in corpora {
-        stage("entities", &mut all, &|| search_entities(c, q, limit))?;
-        stage("documents", &mut all, &|| {
-            search_documents(c, q, limit, snippet_tokens)
+    if c.store.backend_kind() != "sqlite" {
+        let mut expressions: Vec<String> = Vec::new();
+        for v in query_plan(q).unwrap_or_default() {
+            if !expressions.contains(&v.expression) {
+                expressions.push(v.expression);
+            }
+        }
+        stage("prefetch", &mut all, &|| {
+            c.store
+                .prefetch_lexical(c.build_id, q, &expressions, limit as i64, snippet_tokens)?;
+            Ok(Vec::new())
         })?;
-        stage("paths", &mut all, &|| search_paths(c, q, limit))?;
     }
-    let t = std::time::Instant::now();
-    let mut merged = merge(all);
-    merged.truncate(limit);
-    timings.push(StageTiming {
-        stage: "merge",
-        hits: merged.len(),
-        duration_ms: t.elapsed().as_secs_f64() * 1000.0,
-    });
-    Ok((merged, timings))
+    stage("entities", &mut all, &|| search_entities(c, q, limit))?;
+    stage("documents", &mut all, &|| {
+        search_documents(c, q, limit, snippet_tokens)
+    })?;
+    stage("paths", &mut all, &|| search_paths(c, q, limit))?;
+    Ok((all, timings))
 }
 
 #[cfg(test)]
@@ -501,6 +589,16 @@ mod tests {
         );
         // No token long enough: no prefix tier.
         assert_eq!(exprs("a to b").len(), 3);
+    }
+
+    #[test]
+    fn heading_pins_need_whole_words() {
+        assert!(heading_matches("Order policy", "order"));
+        assert!(heading_matches("Reorder policy", "reorder policy"));
+        assert!(!heading_matches("Reorder policy", "order"));
+        assert!(heading_matches("Cancel an order", "an order"));
+        assert!(!heading_matches("Cancel an order", "order an"));
+        assert!(heading_matches("C++ notes", "c++ notes"));
     }
 
     #[test]

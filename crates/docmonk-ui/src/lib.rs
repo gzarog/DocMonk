@@ -276,7 +276,11 @@ fn html(name: &str, active: &str, csrf: &CsrfToken, mut ctx: Value) -> Response 
     }
 }
 
-/// Runs `f` on a blocking thread holding the database lock.
+/// Runs `f` on a blocking thread holding the database lock. Only writes
+/// take it: SQLite runs in WAL mode, so reads (status pages, searches) go
+/// through [`unlocked`] and never wait behind a slow request. Pooled read
+/// connections are closed first, so a write may delete or replace a
+/// knowledge database.
 async fn locked<T: Send + 'static>(
     st: &AppState,
     f: impl FnOnce(&Home) -> T + Send + 'static,
@@ -285,6 +289,7 @@ async fn locked<T: Send + 'static>(
     let db = st.db.clone();
     tokio::task::spawn_blocking(move || {
         let _guard = db.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        docmonk_service::query::release_pooled_stores();
         f(&home)
     })
     .await
@@ -316,7 +321,7 @@ async fn health_probe() -> Json<Value> {
 /// Readiness: a status snapshot of the configured backend could be taken.
 /// An unreachable server (or a schema that does not match) is `503`.
 async fn ready_probe(State(st): State<AppState>) -> Response {
-    match locked(&st, data::report).await {
+    match unlocked(&st, data::report).await {
         Ok(r) => Json(json!({
             "ready": true,
             "health": r.health.state,
@@ -335,7 +340,7 @@ async fn ready_probe(State(st): State<AppState>) -> Response {
 
 /// The canonical status report as JSON (the CLI's `status --json` data).
 async fn status_api(State(st): State<AppState>) -> Response {
-    match locked(&st, data::report).await {
+    match unlocked(&st, data::report).await {
         Ok(r) => Json(r).into_response(),
         Err(e) => (
             if e.kind() == ErrorKind::SourceUnavailable {
@@ -353,7 +358,7 @@ async fn dashboard(
     State(st): State<AppState>,
     axum::Extension(csrf): axum::Extension<CsrfToken>,
 ) -> Response {
-    let r = locked(&st, data::dashboard).await;
+    let r = unlocked(&st, data::dashboard).await;
     match r {
         Ok(ctx) => html("dashboard.html", "dashboard", &csrf, ctx),
         Err(e) => error_response(&e),
@@ -366,7 +371,7 @@ async fn sources_page(
     Query(p): Query<Params>,
 ) -> Response {
     let error = p.get("error").cloned();
-    match locked(&st, data::list_sources).await {
+    match unlocked(&st, data::list_sources).await {
         Ok(sources) => html(
             "sources/list.html",
             "sources",
@@ -382,7 +387,7 @@ async fn source_detail(
     axum::Extension(csrf): axum::Extension<CsrfToken>,
     Path(id): Path<String>,
 ) -> Response {
-    match locked(&st, move |home| data::source_detail(home, &id)).await {
+    match unlocked(&st, move |home| data::source_detail(home, &id)).await {
         Ok(detail) => html(
             "sources/detail.html",
             "sources",
@@ -449,7 +454,7 @@ async fn indexing_page(
     Query(p): Query<Params>,
 ) -> Response {
     let indexer = st.indexer.clone();
-    match locked(&st, data::indexing_overview).await {
+    match unlocked(&st, data::indexing_overview).await {
         Ok(mut overview) => {
             overview["running"] = json!(indexer.is_running());
             overview["last_summary"] = indexer.last_summary();
@@ -468,7 +473,7 @@ async fn failed_files(
     State(st): State<AppState>,
     axum::Extension(csrf): axum::Extension<CsrfToken>,
 ) -> Response {
-    match locked(&st, data::failed_files).await {
+    match unlocked(&st, data::failed_files).await {
         Ok(failed) => html(
             "indexing/failed.html",
             "indexing",
@@ -557,7 +562,7 @@ async fn documents_page(
         "q": q.clone().unwrap_or_default(),
         "fmt": fmt.clone().unwrap_or_default(),
     });
-    let r = locked(&st, move |home| -> Result<Value, DocMonkError> {
+    let r = unlocked(&st, move |home| -> Result<Value, DocMonkError> {
         Ok(json!({
             "result": data::list_documents(home, source.as_deref(), q.as_deref(), fmt.as_deref(), page)?,
             "sources": data::list_sources(home)?,
@@ -579,7 +584,7 @@ async fn document_detail(
     Path((source, doc)): Path<(String, String)>,
 ) -> Response {
     let id = doc.clone();
-    match locked(&st, move |home| data::document_detail(home, &source, &doc)).await {
+    match unlocked(&st, move |home| data::document_detail(home, &source, &doc)).await {
         Ok(Some(d)) => html(
             "documents/detail.html",
             "documents",
@@ -606,7 +611,7 @@ async fn search_page(
     let results = if q.is_empty() {
         Ok(Value::Null)
     } else {
-        locked(&st, move |home| data::run_search(home, &qq, &mm, limit)).await
+        unlocked(&st, move |home| data::run_search(home, &qq, &mm, limit)).await
     };
     match results {
         Ok(results) => html(
@@ -626,7 +631,7 @@ async fn knowledge_page(
 ) -> Response {
     let q = param(&p, "q").map(str::to_owned);
     let query = q.clone().unwrap_or_default();
-    match locked(&st, move |home| data::list_symbols(home, q.as_deref(), 100)).await {
+    match unlocked(&st, move |home| data::list_symbols(home, q.as_deref(), 100)).await {
         Ok(symbols) => html(
             "knowledge/index.html",
             "knowledge",
@@ -651,7 +656,7 @@ async fn symbol_page(
     let data = if name.is_empty() {
         Ok(Value::Null)
     } else {
-        locked(&st, move |home| data::symbol_relation(home, &n, &r)).await
+        unlocked(&st, move |home| data::symbol_relation(home, &n, &r)).await
     };
     match data {
         Ok(data) => html(
@@ -1009,6 +1014,7 @@ fn open_browser(url: &str) {
 pub fn serve(host: &str, port: u16, no_browser: bool) -> Result<(), DocMonkError> {
     let home = docmonk_service::prepared_home()?;
     docmonk_service::load(&home)?;
+    docmonk_service::query::enable_store_pool();
     let display_host = if host.contains(':') && !host.starts_with('[') {
         format!("[{host}]")
     } else {
