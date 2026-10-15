@@ -383,3 +383,121 @@ fn vector_blobs_round_trip_little_endian() {
     assert_eq!(&blob[4..8], &(-1.5f32).to_le_bytes());
     assert_eq!(decode_vector(&blob), v);
 }
+
+#[test]
+fn relationships_stream_by_file_in_one_statement_and_per_file_reads_use_the_file_index() {
+    let tmp = tempfile::tempdir().unwrap();
+    let layout = StorageLayout::new(&Home::new(tmp.path()));
+    let mut store = ProjectStore::open(&layout, "p", "s", 8).unwrap();
+    store.create_build("b1", true, &versions()).unwrap();
+    // Ids interleave across files so id order differs from file order.
+    let rows: Vec<RelationshipRow> = (0..30)
+        .map(|i| RelationshipRow {
+            id: format!("r{:02}", (i * 7) % 30),
+            file_id: format!("f{}", i % 4),
+            relationship_type: "calls".into(),
+            source_entity_id: "e".into(),
+            resolver: "pending".into(),
+            confidence: "medium".into(),
+            reference_text: Some(format!("t{i}")),
+            ..RelationshipRow::default()
+        })
+        .collect();
+    store.put_relationships("b1", &rows).unwrap();
+
+    let before = docmonk_storage::stats::sql_statements();
+    let mut groups: Vec<(String, Vec<RelationshipRow>)> = Vec::new();
+    store
+        .for_each_file_relationships("b1", |file, rows| {
+            groups.push((file, rows));
+            Ok::<(), docmonk_storage::StorageError>(())
+        })
+        .unwrap();
+    assert_eq!(docmonk_storage::stats::sql_statements() - before, 1);
+    let files: Vec<&str> = groups.iter().map(|(f, _)| f.as_str()).collect();
+    assert_eq!(files, ["f0", "f1", "f2", "f3"]);
+    for (file, rows) in &groups {
+        assert!(rows.iter().all(|r| &r.file_id == file));
+        assert_eq!(rows, &store.file_relationships("b1", file).unwrap());
+    }
+    assert_eq!(groups.iter().map(|(_, r)| r.len()).sum::<usize>(), 30);
+    let mut none = 0;
+    store
+        .for_each_file_relationships("other", |_, _| {
+            none += 1;
+            Ok::<(), docmonk_storage::StorageError>(())
+        })
+        .unwrap();
+    assert_eq!(none, 0);
+}
+
+#[test]
+fn batched_candidate_lookups_equal_the_single_name_lookups() {
+    let tmp = tempfile::tempdir().unwrap();
+    let layout = StorageLayout::new(&Home::new(tmp.path()));
+    let mut store = ProjectStore::open(&layout, "p", "s", 8).unwrap();
+    store.create_build("b1", true, &versions()).unwrap();
+    // 620 names (more than one batch), each defined in two files, some
+    // sharing a qualified name, at lines that disagree with id order.
+    for (n, rel) in ["b.py", "a.py"].iter().enumerate() {
+        let f = file("s", rel, &n.to_string());
+        let entities: Vec<EntityRow> = (0..620)
+            .map(|i| EntityRow {
+                id: format!("{rel}-{i:04}"),
+                file_id: f.id.clone(),
+                kind: "function".into(),
+                name: format!("n{}", i % 310),
+                qualified_name: format!("m{}.n{}", i % 7, i % 310),
+                language: "python".into(),
+                parent_id: None,
+                signature: None,
+                start_line: (1000 - i) as i64,
+                end_line: (1000 - i) as i64,
+                start_col: 0,
+                end_col: 1,
+            })
+            .collect();
+        store
+            .put_file(
+                "b1",
+                &f,
+                &FileKnowledge {
+                    entities,
+                    ..FileKnowledge::default()
+                },
+            )
+            .unwrap();
+    }
+    let names: Vec<String> = (0..310)
+        .map(|i| format!("n{i}"))
+        .chain(["absent".into()])
+        .collect();
+    let qns: Vec<String> = (0..620)
+        .map(|i| format!("m{}.n{}", i % 7, i % 310))
+        .chain(["absent".into()])
+        .collect();
+    fn refs(v: &[String]) -> Vec<&str> {
+        v.iter().map(String::as_str).collect()
+    }
+    let before = docmonk_storage::stats::sql_statements();
+    let by_name = store.entities_by_bare_names("b1", &refs(&names)).unwrap();
+    let by_qn = store
+        .entities_by_qualified_names("b1", &refs(&qns))
+        .unwrap();
+    assert_eq!(docmonk_storage::stats::sql_statements() - before, 1 + 2);
+    for n in &names {
+        assert_eq!(
+            by_name[n],
+            store.entities_by_bare_name("b1", n).unwrap(),
+            "{n}"
+        );
+    }
+    for q in &qns {
+        assert_eq!(
+            by_qn[q],
+            store.entities_by_qualified_name("b1", q).unwrap(),
+            "{q}"
+        );
+    }
+    assert!(by_name["absent"].is_empty() && by_qn["absent"].is_empty());
+}

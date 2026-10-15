@@ -79,6 +79,7 @@ fn main() {
         ocr_models_dir: std::env::var_os("DOCMONK_OCR_MODELS_DIR").map(PathBuf::from),
         cache_dir: None,
         models_root: None,
+        graph_facts: None,
     };
     let reg = docmonk_convert::registry_with(&cfg, &opts_reg);
     let opts = Options::from_config(&cfg);

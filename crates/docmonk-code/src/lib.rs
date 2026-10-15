@@ -20,8 +20,14 @@ use docmonk_indexing::coordinator::{RawProcessor, Registry};
 /// derived after publication by [`graph_stage`], so the relationship
 /// setting never changes this identity.
 pub fn registry() -> Registry {
+    registry_with_facts(None)
+}
+
+/// [`registry`] whose code processor stores graph facts in `facts`
+/// (`indexing.graph_fact_cache`; the registry's identity is unchanged).
+pub fn registry_with_facts(facts: Option<Arc<docmonk_storage::facts::FactCache>>) -> Registry {
     let mut r = Registry::raw();
-    r.code = Arc::new(process::CodeProcessor);
+    r.code = Arc::new(process::CodeProcessor { facts });
     r.document = Arc::new(RawProcessor);
     r.versions.parser_version = process::CODE_DERIVATION_VERSION.into();
     r

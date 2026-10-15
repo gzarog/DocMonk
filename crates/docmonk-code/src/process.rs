@@ -338,30 +338,85 @@ pub fn file_relationships(
     file_id: &str,
     source: &[u8],
 ) -> Result<Vec<RelationshipRow>, ParseFailure> {
-    let PreparedCode::Parsed {
-        language,
-        extraction,
-    } = prepare_source(source, rel_path)?
-    else {
-        return Ok(Vec::new());
-    };
-    let ids = entity_ids(file_id, &extraction);
-    let entities = entity_rows(file_id, language, &extraction, &ids);
-    let same_file = candidates(&entities);
-    Ok(build_relationships(
+    Ok(prepared_relationships(
         rel_path,
         file_id,
-        language,
-        &extraction,
-        &ids,
-        &mut |t| resolve_locally(t, &same_file),
+        &prepare_source(source, rel_path)?,
     ))
 }
 
+/// [`file_relationships`] of an already prepared file (the parse the base
+/// index made).
+pub fn prepared_relationships(
+    rel_path: &str,
+    file_id: &str,
+    prepared: &PreparedCode,
+) -> Vec<RelationshipRow> {
+    let PreparedCode::Parsed {
+        language,
+        extraction,
+    } = prepared
+    else {
+        return Vec::new();
+    };
+    let ids = entity_ids(file_id, extraction);
+    let entities = entity_rows(file_id, language, extraction, &ids);
+    let same_file = candidates(&entities);
+    build_relationships(rel_path, file_id, language, extraction, &ids, &mut |t| {
+        resolve_locally(t, &same_file)
+    })
+}
+
+/// Format of a cached fact set; part of its cache key.
+pub const FACTS_FORMAT: &str = "facts-1";
+
+/// The fact-cache key of a file's [`file_relationships`] for `content_hash`.
+pub fn graph_fact_key(file_id: &str, rel_path: &str, content_hash: &str) -> String {
+    docmonk_storage::facts::fact_key(
+        file_id,
+        rel_path,
+        content_hash,
+        &format!("{}+{FACTS_FORMAT}", graph_derivation()),
+    )
+}
+
 /// The registered `FileKind::Code` processor (entities only, whatever the
-/// relationship setting).
-#[derive(Debug, Default)]
-pub struct CodeProcessor;
+/// relationship setting). With a fact cache (`indexing.graph_fact_cache`)
+/// it also stores each file's graph facts from the same parse, so the
+/// graph stage does not parse the file again; nothing it stores is part
+/// of the published index.
+#[derive(Default)]
+pub struct CodeProcessor {
+    pub facts: Option<std::sync::Arc<docmonk_storage::facts::FactCache>>,
+}
+
+impl std::fmt::Debug for CodeProcessor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CodeProcessor")
+            .field("facts", &self.facts.is_some())
+            .finish()
+    }
+}
+
+impl CodeProcessor {
+    /// Stores the facts of these exact bytes when they are the content the
+    /// scan hashed (a file rewritten in between is left to the graph
+    /// stage's own parse). Failures only cost a later parse.
+    fn store_facts(&self, input: &PrepareInput, source: &[u8], prepared: &PreparedCode) {
+        let Some(cache) = &self.facts else {
+            return;
+        };
+        let hash = docmonk_indexing::fingerprint::hash_bytes(source);
+        if input.content_hash.as_deref() != Some(hash.as_str()) {
+            return;
+        }
+        let rows = prepared_relationships(&input.rel_path, &input.file_id, prepared);
+        let key = graph_fact_key(&input.file_id, &input.rel_path, &hash);
+        if let Err(e) = cache.put(&input.source_id, &input.file_id, &key, &rows) {
+            tracing::debug!(component = "relationships", event = "graph_facts_not_stored", error = %e);
+        }
+    }
+}
 
 impl Processor for CodeProcessor {
     fn prepare(&self, input: &PrepareInput) -> Result<FileKnowledge, ProcessError> {
@@ -378,16 +433,36 @@ impl Processor for CodeProcessor {
             ),
             transient: false,
         })?;
+        self.store_facts(input, &source, &prepared);
         Ok(file_knowledge(&input.file_id, &prepared))
     }
 }
 
-/// Re-resolves cross-file references; returns the number of rows changed.
+/// What one cross-file resolution pass examined and changed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+pub struct ResolveStats {
+    /// Rows whose resolution changed (and were rewritten).
+    pub changed: usize,
+    /// Cross-file references examined.
+    pub references_examined: usize,
+    /// Entity rows loaded as candidates.
+    pub candidate_rows: usize,
+    /// Candidate lookups issued against storage (one per distinct
+    /// qualified or bare name; whole-build resolution loads all at once).
+    pub candidate_queries: usize,
+}
+
+/// Re-resolves cross-file references.
 pub fn resolve_build(
     store: &mut ProjectStore,
     build_id: &str,
-) -> Result<usize, docmonk_storage::StorageError> {
+) -> Result<ResolveStats, docmonk_storage::StorageError> {
     let entities = store.all_entities(build_id)?;
+    let mut stats = ResolveStats {
+        candidate_rows: entities.len(),
+        candidate_queries: 1,
+        ..ResolveStats::default()
+    };
     let all = candidates(&entities);
     let mut by_qn: HashMap<&str, Vec<Candidate<'_>>> = HashMap::new();
     let mut by_name: HashMap<&str, Vec<Candidate<'_>>> = HashMap::new();
@@ -424,6 +499,7 @@ pub fn resolve_build(
         let Some(text) = r.reference_text.as_deref() else {
             continue;
         };
+        stats.references_examined += 1;
         let t = resolve::resolve_cross_file(
             text,
             &lookup(&by_qn, text, &r.file_id, 2),
@@ -445,35 +521,68 @@ pub fn resolve_build(
             confidence: t.confidence.as_str().into(),
         });
     }
-    store.apply_resolutions(build_id, &outcomes)
+    stats.changed = store.apply_resolutions(build_id, &outcomes)?;
+    Ok(stats)
 }
 
 /// Re-resolves only the cross-file references recorded by `files`, looking
 /// candidates up by symbol (indexed queries) instead of loading the whole
 /// build. Produces exactly what [`resolve_build`] would for those rows.
-/// Returns the number of rows changed.
+/// References and candidates are read in bounded batches (one statement
+/// per [`RESOLVE_BATCH`] files, and per batch of new names), never one per
+/// file or name.
 pub fn resolve_files(
     store: &mut ProjectStore,
     build_id: &str,
     files: &std::collections::BTreeSet<String>,
-) -> Result<usize, docmonk_storage::StorageError> {
+) -> Result<ResolveStats, docmonk_storage::StorageError> {
     let mut by_qn: HashMap<String, Vec<EntityRow>> = HashMap::new();
     let mut by_name: HashMap<String, Vec<EntityRow>> = HashMap::new();
     let mut outcomes = Vec::new();
-    for file in files {
-        for r in store.file_cross_file_references(build_id, file)? {
+    let mut stats = ResolveStats::default();
+    let files: Vec<&str> = files.iter().map(String::as_str).collect();
+    for chunk in files.chunks(RESOLVE_BATCH) {
+        docmonk_indexing::progress::heartbeat();
+        let refs = store.files_cross_file_references(build_id, chunk)?;
+        let refs: Vec<RelationshipRow> = chunk
+            .iter()
+            .filter_map(|f| refs.get(*f))
+            .flatten()
+            .filter(|r| r.reference_text.is_some())
+            .cloned()
+            .collect();
+        let mut qns: Vec<&str> = Vec::new();
+        let mut names: Vec<&str> = Vec::new();
+        for r in &refs {
+            let text = r.reference_text.as_deref().unwrap_or_default();
+            if !by_qn.contains_key(text) {
+                qns.push(text);
+            }
+            let bare = resolve::bare_name(text);
+            if !by_name.contains_key(bare) {
+                names.push(bare);
+            }
+        }
+        qns.sort_unstable();
+        qns.dedup();
+        names.sort_unstable();
+        names.dedup();
+        let batches = |n: usize| n.div_ceil(docmonk_storage::graph::LOOKUP_BATCH);
+        stats.candidate_queries += batches(qns.len()) + batches(names.len());
+        for (k, rows) in store.entities_by_qualified_names(build_id, &qns)? {
+            stats.candidate_rows += rows.len();
+            by_qn.insert(k, rows);
+        }
+        for (k, rows) in store.entities_by_bare_names(build_id, &names)? {
+            stats.candidate_rows += rows.len();
+            by_name.insert(k, rows);
+        }
+        for r in refs {
             let Some(text) = r.reference_text.as_deref() else {
                 continue;
             };
+            stats.references_examined += 1;
             let bare = resolve::bare_name(text);
-            if !by_qn.contains_key(text) {
-                let rows = store.entities_by_qualified_name(build_id, text)?;
-                by_qn.insert(text.to_owned(), rows);
-            }
-            if !by_name.contains_key(bare) {
-                let rows = store.entities_by_bare_name(build_id, bare)?;
-                by_name.insert(bare.to_owned(), rows);
-            }
             let pick = |rows: &[EntityRow], take: usize| -> Vec<EntityRow> {
                 rows.iter()
                     .filter(|e| e.file_id != r.file_id)
@@ -502,5 +611,9 @@ pub fn resolve_files(
             });
         }
     }
-    store.apply_resolutions(build_id, &outcomes)
+    stats.changed = store.apply_resolutions(build_id, &outcomes)?;
+    Ok(stats)
 }
+
+/// Files whose references [`resolve_files`] reads per statement.
+pub const RESOLVE_BATCH: usize = 500;

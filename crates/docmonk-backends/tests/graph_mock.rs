@@ -203,6 +203,7 @@ fn input<'a>(
         generation,
         input_digest: Some("digest-1"),
         manifest: None,
+        phase: None,
     }
 }
 
@@ -386,16 +387,54 @@ fn unchanged_files_are_copied_forward_and_only_changed_files_are_written() {
     let n = m.0.lock().unwrap().records.len();
     assert_eq!(n, 6, "no duplicated records");
 
-    // A new base with the same graph: everything is copied, nothing written.
+    // A new base with the same graph records: the visible generation is
+    // pointed at it, nothing is copied or written.
     m.0.lock().unwrap().state["active_build_id"] = json!("b2");
+    let before = b.stats();
     let r = b.publish_graph(&input(&store, &local, "b2", "g3")).unwrap();
-    assert!(r.published);
+    assert!(r.published && r.rebound, "{r:?}");
+    assert_eq!(r.generation.as_deref(), Some("g2"));
     assert_eq!(
-        (r.files_written, r.files_copied, r.edges_written),
-        (0, 2, 0)
+        (
+            r.files_written,
+            r.files_copied,
+            r.edges_written,
+            r.records_copied
+        ),
+        (0, 0, 0, 0)
     );
-    assert_eq!(b.visible_graph("s1", "b2").unwrap().as_deref(), Some("g3"));
-    assert_eq!(edges_of(&m, "g3"), 6);
+    let after = b.stats();
+    assert_eq!(after.bulk_requests, before.bulk_requests);
+    assert_eq!(
+        after.by_endpoint.get("POST _update_by_query"),
+        before.by_endpoint.get("POST _update_by_query"),
+        "no copy-forward"
+    );
+    assert_eq!(b.visible_graph("s1", "b2").unwrap().as_deref(), Some("g2"));
+    assert_eq!(b.visible_graph("s1", "b1").unwrap(), None);
+    assert_eq!(edges_of(&m, "g2"), 6);
+    assert_eq!(edges_of(&m, "g3"), 0);
+    let (g, _) = b.graph("s1").unwrap().unwrap();
+    assert_eq!(g.input_digest.as_deref(), Some("digest-1"));
+    assert_eq!(g.base_build_id.as_deref(), Some("b2"));
+
+    // A different record on the next base is a real new generation.
+    m.0.lock().unwrap().state["active_build_id"] = json!("b3");
+    store
+        .put_relationships(&local, &[edge("r10", "f2")])
+        .unwrap();
+    let r = b.publish_graph(&input(&store, &local, "b3", "g4")).unwrap();
+    assert!(r.published && !r.rebound, "{r:?}");
+    assert_eq!((r.files_written, r.files_copied), (1, 1), "{r:?}");
+    assert_eq!(b.visible_graph("s1", "b3").unwrap().as_deref(), Some("g4"));
+
+    // Repointing is fenced like a promotion: a superseded base conflicts.
+    m.0.lock().unwrap().state["active_build_id"] = json!("b5");
+    let e = b
+        .publish_graph(&input(&store, &local, "b4", "g5"))
+        .unwrap_err();
+    assert!(matches!(e, BackendError::Conflict(_)), "{e}");
+    assert_eq!(b.visible_graph("s1", "b5").unwrap(), None);
 }
 
 #[test]

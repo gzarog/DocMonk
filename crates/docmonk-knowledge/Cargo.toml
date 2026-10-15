@@ -8,12 +8,15 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+aho-corasick = "1.1"
 docmonk-code.workspace = true
 docmonk-core.workspace = true
 docmonk-documents.workspace = true
 docmonk-indexing.workspace = true
 docmonk-storage.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 unicode-general-category = "1.1"
@@ -21,7 +24,6 @@ unicode-general-category = "1.1"
 [dev-dependencies]
 docmonk-config.workspace = true
 docmonk-convert.workspace = true
-serde_json.workspace = true
 tempfile.workspace = true
 
 [lints]

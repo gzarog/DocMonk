@@ -19,7 +19,8 @@ pub fn open(path: &Path, cache_size_mb: i64) -> Result<Connection> {
             .map_err(|e| StorageError::Io(format!("cannot create {}: {e}", parent.display())))?;
     }
     let ctx = format!("open {}", path.display());
-    let conn = Connection::open(path).map_err(StorageError::sqlite(ctx.clone()))?;
+    let mut conn = Connection::open(path).map_err(StorageError::sqlite(ctx.clone()))?;
+    crate::stats::install(&mut conn);
     conn.busy_timeout(BUSY_TIMEOUT)
         .map_err(StorageError::sqlite(ctx.clone()))?;
     conn.execute_batch(&format!(

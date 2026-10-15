@@ -1,0 +1,340 @@
+{
+ "benchmark": "relationships",
+ "label": "p3-docs-heavy",
+ "measurement": "measured (SQLite, synthetic); server figures are request counts against an in-process engine",
+ "metadata": {
+  "git_sha": null,
+  "host_os": "linux",
+  "arch": "x86_64",
+  "cpus": 4,
+  "worker_count": 4,
+  "graph_batch": 256,
+  "code_files": 2000,
+  "documents": 3000,
+  "runs": 1,
+  "warmup": 0,
+  "scenarios": [
+   "body_edit",
+   "cold",
+   "doc_edit"
+  ],
+  "server": false,
+  "fact_cache": false
+ },
+ "summary": {
+  "cold": {
+   "index_seconds": {
+    "median": 11.727385239,
+    "p95": 11.727385239
+   },
+   "graph_seconds": {
+    "median": 19.240656879,
+    "p95": 19.240656879
+   },
+   "full_pipeline_seconds": {
+    "median": 30.969583416,
+    "p95": 30.969583416
+   },
+   "cpu_seconds": {
+    "median": 50.84,
+    "p95": 50.84
+   },
+   "peak_rss_mb": {
+    "median": 454.03125,
+    "p95": 454.03125
+   },
+   "deterministic": true,
+   "plan_action": "full",
+   "fingerprint": {
+    "edges": 36640,
+    "links": 389834,
+    "digest": "12e6dde78f8baad89055c50627cfd4af0370ded4c5f9760106e898f580632005"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": null,
+   "sql_statements": 441996,
+   "server_http_requests": null
+  },
+  "body_edit": {
+   "index_seconds": {
+    "median": 0.462685363,
+    "p95": 0.462685363
+   },
+   "graph_seconds": {
+    "median": 0.766029319,
+    "p95": 0.766029319
+   },
+   "full_pipeline_seconds": {
+    "median": 1.230285194,
+    "p95": 1.230285194
+   },
+   "cpu_seconds": {
+    "median": 4.3700000000000045,
+    "p95": 4.3700000000000045
+   },
+   "peak_rss_mb": {
+    "median": 329.73828125,
+    "p95": 329.73828125
+   },
+   "deterministic": true,
+   "plan_action": "incremental",
+   "fingerprint": {
+    "edges": 36640,
+    "links": 389834,
+    "digest": "12e6dde78f8baad89055c50627cfd4af0370ded4c5f9760106e898f580632005"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": null,
+   "sql_statements": 748,
+   "server_http_requests": null
+  },
+  "doc_edit": {
+   "index_seconds": {
+    "median": 0.375066603,
+    "p95": 0.375066603
+   },
+   "graph_seconds": {
+    "median": 0.884568338,
+    "p95": 0.884568338
+   },
+   "full_pipeline_seconds": {
+    "median": 1.2614771359999999,
+    "p95": 1.2614771359999999
+   },
+   "cpu_seconds": {
+    "median": 4.3700000000000045,
+    "p95": 4.3700000000000045
+   },
+   "peak_rss_mb": {
+    "median": 329.61328125,
+    "p95": 329.61328125
+   },
+   "deterministic": true,
+   "plan_action": "incremental",
+   "fingerprint": {
+    "edges": 36639,
+    "links": 389670,
+    "digest": "773460ff0ddc9672371146317732c0e2dc3da8c77d555360ad1c1cdf24894237"
+   },
+   "server_deterministic": true,
+   "server_graph_digest": null,
+   "sql_statements": 178,
+   "server_http_requests": null
+  }
+ },
+ "runs_detailed": "first run only; the summary covers all runs",
+ "runs": [
+  [
+   {
+    "scenario": "cold",
+    "plan_action": "full",
+    "plan_reason": "first_build",
+    "files_total": 4999,
+    "entities_total": 13326,
+    "index_seconds": 11.727385239,
+    "graph_seconds": 19.240656879,
+    "full_pipeline_seconds": 30.969583416,
+    "cpu_seconds": 50.84,
+    "peak_rss_mb": 454.03125,
+    "phase_seconds": {
+     "committing": 1.985362776,
+     "deriving": 1.7857441170000001,
+     "linking": 14.800396756,
+     "resolving": 0.631451706
+    },
+    "fingerprint": {
+     "edges": 36640,
+     "links": 389834,
+     "digest": "12e6dde78f8baad89055c50627cfd4af0370ded4c5f9760106e898f580632005"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.017571544999999997,
+     "clear_seconds": 0.000211749,
+     "derivation_seconds": 0.500428231,
+     "read_hash_seconds": 0.07563898899999993,
+     "parse_seconds": 1.4384855329999986,
+     "cache_load_seconds": 0.0002241340000000006,
+     "sqlite_write_seconds": 1.285090294,
+     "symbol_manifest_seconds": 0.191594665,
+     "resolution_seconds": 0.439855062,
+     "linking_seconds": 14.80039734,
+     "commit_seconds": 1.948821403
+    },
+    "graph_counters": {
+     "files_total": 4999,
+     "files_derived": 1999,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 1010729,
+     "resolution": {
+      "changed": 11322,
+      "references_examined": 11322,
+      "candidate_rows": 13326,
+      "candidate_queries": 1
+     },
+     "sql_statements": 441996
+    },
+    "linking": {
+     "links": 389834,
+     "manual": 0,
+     "entities_loaded": 13326,
+     "units_loaded": 75000,
+     "routes_loaded": 1332,
+     "candidates": 389834,
+     "narrow": false,
+     "load_seconds": 0.334469662,
+     "index_seconds": 0.3277726050000006,
+     "match_seconds": 4.594643231999962,
+     "exact_seconds": 0.20608923900001383,
+     "qualified_seconds": 2.4338019159999087,
+     "alias_seconds": 0.8103965780000079,
+     "filename_seconds": 0.5600939580000371,
+     "route_seconds": 0.09711324799999539,
+     "write_seconds": 9.102588546,
+     "manual_seconds": 0.000189053
+    }
+   },
+   {
+    "scenario": "body_edit",
+    "plan_action": "incremental",
+    "plan_reason": "files_changed",
+    "files_total": 4999,
+    "entities_total": 13326,
+    "index_seconds": 0.462685363,
+    "graph_seconds": 0.766029319,
+    "full_pipeline_seconds": 1.230285194,
+    "cpu_seconds": 4.3700000000000045,
+    "peak_rss_mb": 329.73828125,
+    "phase_seconds": {
+     "committing": 0.115903865,
+     "deriving": 0.003046581,
+     "linking": 0.561604154,
+     "resolving": 0.011334786
+    },
+    "fingerprint": {
+     "edges": 36640,
+     "links": 389834,
+     "digest": "12e6dde78f8baad89055c50627cfd4af0370ded4c5f9760106e898f580632005"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.031300851,
+     "clear_seconds": 0.000410585,
+     "derivation_seconds": 0.001396121,
+     "read_hash_seconds": 6.8735e-05,
+     "parse_seconds": 0.000925516,
+     "cache_load_seconds": 5.1e-08,
+     "sqlite_write_seconds": 0.001239741,
+     "symbol_manifest_seconds": 0.000206422,
+     "resolution_seconds": 0.004246161,
+     "linking_seconds": 0.568485578,
+     "commit_seconds": 0.092832513
+    },
+    "graph_counters": {
+     "files_total": 4999,
+     "files_derived": 1,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 605,
+     "resolution": {
+      "changed": 4,
+      "references_examined": 4,
+      "candidate_rows": 667,
+      "candidate_queries": 2
+     },
+     "sql_statements": 748
+    },
+    "linking": {
+     "links": 668,
+     "manual": 0,
+     "entities_loaded": 10,
+     "units_loaded": 75000,
+     "routes_loaded": 0,
+     "candidates": 668,
+     "narrow": true,
+     "load_seconds": 0.244012286,
+     "index_seconds": 0.175934443,
+     "match_seconds": 0.065732125,
+     "exact_seconds": 0.05002589,
+     "qualified_seconds": 0.01099875,
+     "alias_seconds": 0.00335601,
+     "filename_seconds": 0.001009292,
+     "route_seconds": 5.347e-06,
+     "write_seconds": 0.027227283,
+     "manual_seconds": 0.000979474
+    }
+   },
+   {
+    "scenario": "doc_edit",
+    "plan_action": "incremental",
+    "plan_reason": "files_changed",
+    "files_total": 4999,
+    "entities_total": 13325,
+    "index_seconds": 0.375066603,
+    "graph_seconds": 0.884568338,
+    "full_pipeline_seconds": 1.2614771359999999,
+    "cpu_seconds": 4.3700000000000045,
+    "peak_rss_mb": 329.61328125,
+    "phase_seconds": {
+     "committing": 0.10463988,
+     "deriving": 0.000312774,
+     "linking": 0.686037734,
+     "resolving": 0.009140254
+    },
+    "fingerprint": {
+     "edges": 36639,
+     "links": 389670,
+     "digest": "773460ff0ddc9672371146317732c0e2dc3da8c77d555360ad1c1cdf24894237"
+    },
+    "graph_timings": {
+     "state_load_seconds": 0.035707184,
+     "clear_seconds": 0.000310142,
+     "derivation_seconds": 4.695e-06,
+     "read_hash_seconds": 0.0,
+     "parse_seconds": 0.0,
+     "cache_load_seconds": 0.0,
+     "sqlite_write_seconds": 5.2e-08,
+     "symbol_manifest_seconds": 7.0868e-05,
+     "resolution_seconds": 0.000978573,
+     "linking_seconds": 0.694126831,
+     "commit_seconds": 0.083704564
+    },
+    "graph_counters": {
+     "files_total": 4999,
+     "files_derived": 0,
+     "facts_hits": 0,
+     "facts_misses": 0,
+     "facts_dropped": 0,
+     "bytes_read": 0,
+     "resolution": {
+      "changed": 0,
+      "references_examined": 0,
+      "candidate_rows": 0,
+      "candidate_queries": 0
+     },
+     "sql_statements": 178
+    },
+    "linking": {
+     "links": 132,
+     "manual": 0,
+     "entities_loaded": 13325,
+     "units_loaded": 75001,
+     "routes_loaded": 1332,
+     "candidates": 132,
+     "narrow": false,
+     "load_seconds": 0.369598355,
+     "index_seconds": 0.170877962,
+     "match_seconds": 0.07168619300000001,
+     "exact_seconds": 0.009613783,
+     "qualified_seconds": 0.025749797,
+     "alias_seconds": 0.016398296,
+     "filename_seconds": 0.001865747,
+     "route_seconds": 0.000374327,
+     "write_seconds": 0.009678943,
+     "manual_seconds": 0.000261008
+    }
+   }
+  ]
+ ]
+}

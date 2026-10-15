@@ -1,0 +1,98 @@
+[
+ {
+  "graph_batch": 64,
+  "workers": 1,
+  "graph_seconds": 17.184617838,
+  "index_seconds": 5.741599892,
+  "peak_rss_mb": 286.78515625,
+  "cpu_seconds": 25.8
+ },
+ {
+  "graph_batch": 64,
+  "workers": 2,
+  "graph_seconds": 16.476765001,
+  "index_seconds": 4.740909058,
+  "peak_rss_mb": 290.90234375,
+  "cpu_seconds": 26.81
+ },
+ {
+  "graph_batch": 64,
+  "workers": 4,
+  "graph_seconds": 15.305209943,
+  "index_seconds": 4.355517564,
+  "peak_rss_mb": 273.22265625,
+  "cpu_seconds": 26.17
+ },
+ {
+  "graph_batch": 128,
+  "workers": 1,
+  "graph_seconds": 17.72636035,
+  "index_seconds": 5.660368464,
+  "peak_rss_mb": 286.86328125,
+  "cpu_seconds": 26.11
+ },
+ {
+  "graph_batch": 128,
+  "workers": 2,
+  "graph_seconds": 15.94642082,
+  "index_seconds": 4.455070865,
+  "peak_rss_mb": 290.5,
+  "cpu_seconds": 25.86
+ },
+ {
+  "graph_batch": 128,
+  "workers": 4,
+  "graph_seconds": 14.552547519,
+  "index_seconds": 4.284097485,
+  "peak_rss_mb": 290.93359375,
+  "cpu_seconds": 25.61
+ },
+ {
+  "graph_batch": 256,
+  "workers": 1,
+  "graph_seconds": 16.440776726,
+  "index_seconds": 5.620997613,
+  "peak_rss_mb": 287.0546875,
+  "cpu_seconds": 24.96
+ },
+ {
+  "graph_batch": 256,
+  "workers": 2,
+  "graph_seconds": 14.680312252,
+  "index_seconds": 4.8413461810000005,
+  "peak_rss_mb": 287.55078125,
+  "cpu_seconds": 24.99
+ },
+ {
+  "graph_batch": 256,
+  "workers": 4,
+  "graph_seconds": 13.563265708,
+  "index_seconds": 4.135859992,
+  "peak_rss_mb": 275.81640625,
+  "cpu_seconds": 24.229999999999997
+ },
+ {
+  "graph_batch": 512,
+  "workers": 1,
+  "graph_seconds": 16.682734915,
+  "index_seconds": 5.631533989,
+  "peak_rss_mb": 293.4296875,
+  "cpu_seconds": 25.12
+ },
+ {
+  "graph_batch": 512,
+  "workers": 2,
+  "graph_seconds": 15.724942669,
+  "index_seconds": 4.529415284,
+  "peak_rss_mb": 291.9609375,
+  "cpu_seconds": 25.32
+ },
+ {
+  "graph_batch": 512,
+  "workers": 4,
+  "graph_seconds": 13.718691013,
+  "index_seconds": 4.420729798,
+  "peak_rss_mb": 296.890625,
+  "cpu_seconds": 24.79
+ }
+]

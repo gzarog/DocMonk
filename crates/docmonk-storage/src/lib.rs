@@ -15,12 +15,14 @@
 pub mod control;
 pub mod db;
 pub mod error;
+pub mod facts;
 pub mod graph;
 pub mod knowledge;
 pub mod maintenance;
 pub mod read;
 pub mod schema;
 pub mod search;
+pub mod stats;
 pub mod status;
 pub mod vectors;
 

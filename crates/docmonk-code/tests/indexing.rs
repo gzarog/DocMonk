@@ -97,6 +97,9 @@ impl Fixture {
                 workers: 3,
                 linker: None,
                 cancel: None,
+                phase: None,
+                facts: None,
+                batch: 0,
             },
             &mut |_, _| {},
         )
@@ -488,6 +491,106 @@ fn a_file_edited_after_indexing_never_yields_a_mixed_graph() {
 }
 
 #[test]
+fn a_graph_build_reports_its_phases_timings_and_counters() {
+    let mut f = fixture();
+    f.index_base();
+    let (mut store, active) = f.store();
+    let phases = std::cell::RefCell::new(Vec::new());
+    let phase = |p: &'static str| phases.borrow_mut().push(p);
+    let r = build_graph(
+        &mut store,
+        &f.root,
+        &active,
+        &GraphOptions {
+            workers: 2,
+            linker: None,
+            cancel: None,
+            phase: Some(&phase),
+            facts: None,
+            batch: 0,
+        },
+        &mut |_, _| {},
+    )
+    .unwrap();
+    assert_eq!(
+        phases.into_inner(),
+        ["deriving", "resolving", "linking", "committing"]
+    );
+    let code = f.count(
+        "SELECT COUNT(*) FROM files WHERE build_id = ?1 AND kind = 'code' AND status = 'indexed'",
+    ) as usize;
+    let c = &r.counters;
+    assert_eq!(c.files_derived, code, "{r:?}");
+    assert!(c.files_total >= code && c.bytes_read > 0, "{r:?}");
+    assert!(c.resolution.references_examined > 0, "{r:?}");
+    assert_eq!(c.resolution.changed, r.resolutions_changed);
+    assert!(c.sql_statements > 0, "{r:?}");
+    let t = &r.timings;
+    let phases = t.state_load_seconds
+        + t.clear_seconds
+        + t.derivation_seconds
+        + t.sqlite_write_seconds
+        + t.symbol_manifest_seconds
+        + t.resolution_seconds
+        + t.linking_seconds
+        + t.commit_seconds;
+    assert!(
+        phases > 0.0 && phases <= r.seconds,
+        "{t:?} vs {}",
+        r.seconds
+    );
+
+    // A skip reports its plan and does no work.
+    let r = build_graph(
+        &mut store,
+        &f.root,
+        &active,
+        &GraphOptions {
+            workers: 2,
+            linker: None,
+            cancel: None,
+            phase: None,
+            facts: None,
+            batch: 0,
+        },
+        &mut |_, _| {},
+    )
+    .unwrap();
+    assert_eq!(r.action.as_str(), "skip");
+    assert_eq!(r.counters.files_derived, 0);
+}
+
+#[test]
+fn graph_report_json_keeps_its_fields_and_adds_optional_ones() {
+    let v = serde_json::to_value(GraphReport::default()).unwrap();
+    for key in [
+        "outcome",
+        "action",
+        "reason",
+        "full",
+        "generation",
+        "base_generation",
+        "files_processed",
+        "relationships_written",
+        "resolutions_changed",
+        "files_reresolved",
+        "links",
+        "files_added",
+        "files_modified",
+        "files_removed",
+        "planning_seconds",
+        "seconds",
+    ] {
+        assert!(v.get(key).is_some(), "{key} missing from {v}");
+    }
+    assert_eq!(v["action"], "skip");
+    assert_eq!(v["outcome"], "up_to_date");
+    assert!(v["timings"]["resolution_seconds"].is_number());
+    assert!(v["counters"]["sql_statements"].is_number());
+    assert!(v["linking"]["units_loaded"].is_number());
+}
+
+#[test]
 fn a_cancelled_graph_build_publishes_nothing() {
     let mut f = fixture();
     f.index_base();
@@ -501,6 +604,9 @@ fn a_cancelled_graph_build_publishes_nothing() {
             workers: 2,
             linker: None,
             cancel: Some(&cancel),
+            phase: None,
+            facts: None,
+            batch: 0,
         },
         &mut |_, _| {},
     );
@@ -558,4 +664,221 @@ fn only_symbol_dependents_are_re_resolved_and_the_result_matches_a_full_build() 
     drop(store);
     assert!(f.graph().unwrap().full);
     assert_eq!(relationships_dump(&f), incremental);
+}
+
+impl Fixture {
+    fn index_base_with_facts(&mut self, cache: &std::sync::Arc<docmonk_storage::facts::FactCache>) {
+        run_source(
+            &self.layout,
+            &mut self.cp,
+            &self.src,
+            &docmonk_code::registry_with_facts(Some(cache.clone())),
+            &opts(),
+            &mut NoProgress,
+        )
+        .unwrap();
+    }
+
+    fn graph_with_facts(
+        &self,
+        cache: &docmonk_storage::facts::FactCache,
+    ) -> Result<GraphReport, GraphError> {
+        let (mut store, active) = self.store();
+        build_graph(
+            &mut store,
+            &self.root,
+            &active,
+            &GraphOptions {
+                workers: 3,
+                linker: None,
+                cancel: None,
+                phase: None,
+                facts: Some(cache),
+                batch: 0,
+            },
+            &mut |_, _| {},
+        )
+    }
+}
+
+fn fact_cache(f: &Fixture) -> std::sync::Arc<docmonk_storage::facts::FactCache> {
+    let dir = f.root.parent().unwrap().join("cache");
+    std::sync::Arc::new(
+        docmonk_storage::facts::FactCache::open(&dir.join("graph-facts.db")).unwrap(),
+    )
+}
+
+/// The same snapshot's graph derived from scratch, without any cache.
+fn uncached_oracle(f: &Fixture) -> BTreeMap<String, String> {
+    let (mut store, _) = f.store();
+    store
+        .put_graph_state_with_files(&docmonk_storage::graph::GraphState::default())
+        .unwrap();
+    drop(store);
+    let g = f.graph().unwrap();
+    assert!(g.full && g.counters.facts_hits == 0);
+    relationships_dump(f)
+}
+
+fn append(f: &Fixture, rel: &str, text: &str) -> String {
+    let p = f.root.join(rel);
+    let before = std::fs::read_to_string(&p).unwrap();
+    std::fs::write(&p, format!("{before}{text}")).unwrap();
+    before
+}
+
+#[test]
+fn cached_graph_facts_replace_the_second_parse_and_yield_the_same_graph() {
+    let mut f = fixture();
+    let cache = fact_cache(&f);
+    f.index_base_with_facts(&cache);
+    let g = f.graph_with_facts(&cache).unwrap();
+    let c = &g.counters;
+    assert!(c.files_derived > 0, "{g:?}");
+    assert_eq!(
+        (c.facts_hits, c.facts_misses),
+        (c.files_derived, 0),
+        "{g:?}"
+    );
+    assert_eq!(g.timings.parse_seconds, 0.0, "nothing was parsed again");
+    let cached = relationships_dump(&f);
+    assert_eq!(cached, uncached_oracle(&f));
+
+    // An edit: indexing stores the new content's facts, the graph stage
+    // uses them and drops the superseded entry.
+    append(
+        &f,
+        "python/animals.py",
+        "\ndef added_after():\n    return speak()\n",
+    );
+    f.index_base_with_facts(&cache);
+    let g = f.graph_with_facts(&cache).unwrap();
+    assert!(!g.full, "{g:?}");
+    assert_eq!(
+        (g.counters.facts_hits, g.counters.facts_misses),
+        (1, 0),
+        "{g:?}"
+    );
+    assert_eq!(g.counters.facts_dropped, 1, "{g:?}");
+    let cached = relationships_dump(&f);
+    assert_eq!(cached, uncached_oracle(&f));
+}
+
+#[test]
+fn missing_or_unusable_facts_fall_back_to_parsing_and_never_hide_a_change() {
+    let mut f = fixture();
+    let cache = fact_cache(&f);
+    // An index made without the cache (an existing source after turning
+    // the cache on): every file falls back to parsing, nothing reindexes.
+    f.index_base();
+    let g = f.graph_with_facts(&cache).unwrap();
+    assert_eq!(g.counters.facts_hits, 0, "{g:?}");
+    assert_eq!(g.counters.facts_misses, g.counters.files_derived, "{g:?}");
+
+    // Facts stored for an edit, then the file changes again on disk
+    // before the graph stage: the bytes no longer match the published
+    // hash, so the graph is stale whatever the cache holds.
+    let original = append(&f, "python/animals.py", "\n# edited\n");
+    f.index_base_with_facts(&cache);
+    let indexed = std::fs::read_to_string(f.root.join("python/animals.py")).unwrap();
+    append(&f, "python/animals.py", "\n# again\n");
+    match f.graph_with_facts(&cache) {
+        Err(GraphError::Stale(reason)) => assert!(reason.contains("python/animals.py"), "{reason}"),
+        other => panic!("expected a stale graph, got {other:?}"),
+    }
+    assert_ne!(indexed, original);
+    std::fs::write(f.root.join("python/animals.py"), &indexed).unwrap();
+    let g = f.graph_with_facts(&cache).unwrap();
+    assert_eq!(
+        (g.counters.facts_hits, g.counters.facts_misses),
+        (1, 0),
+        "{g:?}"
+    );
+    let cached = relationships_dump(&f);
+    assert_eq!(cached, uncached_oracle(&f));
+}
+
+/// Deterministic pseudo-random numbers (no dependency, stable seeds).
+struct Lcg(u64);
+
+impl Lcg {
+    fn next(&mut self, n: usize) -> usize {
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        ((self.0 >> 33) as usize) % n.max(1)
+    }
+}
+
+/// One generated module: functions `f<k>` that call functions of other
+/// modules by bare and qualified name (shared names make ambiguity).
+fn generated_module(rng: &mut Lcg, modules: usize, defs: &[usize]) -> String {
+    let mut s = String::new();
+    for d in defs {
+        let callee = rng.next(8);
+        let module = rng.next(modules);
+        let body = match rng.next(3) {
+            0 => format!("f{callee}()"),
+            1 => format!("gen.m{module}.f{callee}()"),
+            _ => "0".to_owned(),
+        };
+        s.push_str(&format!("def f{d}():\n    return {body}\n\n"));
+    }
+    s
+}
+
+#[test]
+fn random_change_sequences_resolve_incrementally_exactly_like_a_full_build() {
+    for seed in [7_u64, 1_234, 99_991] {
+        let mut f = fixture();
+        let mut rng = Lcg(seed);
+        let modules = 6;
+        let mut defs: Vec<Vec<usize>> = (0..modules)
+            .map(|_| (0..3).map(|_| rng.next(8)).collect())
+            .collect();
+        let write = |f: &Fixture, rng: &mut Lcg, m: usize, defs: &[usize]| {
+            common::write(
+                &f.root,
+                &format!("gen/m{m}.py"),
+                &generated_module(rng, modules, defs),
+            );
+        };
+        for (m, d) in defs.iter().enumerate() {
+            write(&f, &mut rng, m, d);
+        }
+        f.index();
+        for step in 0..8 {
+            let m = rng.next(modules);
+            match rng.next(4) {
+                // Add, remove or rename a definition.
+                0 => defs[m].push(rng.next(8)),
+                1 if defs[m].len() > 1 => {
+                    let i = rng.next(defs[m].len());
+                    defs[m].remove(i);
+                }
+                2 => {
+                    let i = rng.next(defs[m].len());
+                    defs[m][i] = rng.next(8);
+                }
+                // Body-only edit: same definitions, new calls.
+                _ => {}
+            }
+            if step == 5 {
+                // Delete a module outright, then bring it back next step.
+                std::fs::remove_file(f.root.join(format!("gen/m{m}.py"))).unwrap();
+            } else {
+                write(&f, &mut rng, m, &defs[m]);
+            }
+            f.index_base();
+            let g = f.graph().unwrap();
+            assert!(!g.full, "seed {seed} step {step}: {g:?}");
+            let incremental = relationships_dump(&f);
+            assert_eq!(
+                incremental,
+                uncached_oracle(&f),
+                "seed {seed} step {step}: incremental resolution diverged"
+            );
+        }
+    }
 }

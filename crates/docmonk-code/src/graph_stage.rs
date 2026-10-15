@@ -31,7 +31,10 @@
 //!    published and searchable throughout.
 //!
 //! Work and memory are bounded: files are parsed `workers` at a time in
-//! batches of [`GRAPH_BATCH`], each batch written before the next is read.
+//! batches of [`GRAPH_BATCH`], each batch written before the next is read,
+//! and every parse holds one `cpu` permit of the process-wide resource
+//! governor, so graph builds of several sources share the indexer's CPU
+//! budget instead of each adding its own parser threads.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -42,10 +45,42 @@ use docmonk_storage::knowledge::{ProjectStore, RelationshipRow};
 use docmonk_storage::StorageError;
 use serde::Serialize;
 
-use crate::process::{file_relationships, graph_derivation, resolve_build, resolve_files};
+use crate::process::{
+    file_relationships, graph_derivation, resolve_build, resolve_files, ResolveStats,
+};
 
 /// Most files parsed before their relationships are written.
 pub const GRAPH_BATCH: usize = 256;
+
+/// What one linking pass loaded, matched and wrote.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct LinkStats {
+    /// Automatic links written.
+    pub links: usize,
+    /// Manual link intents re-applied.
+    pub manual: usize,
+    pub entities_loaded: usize,
+    pub units_loaded: usize,
+    pub routes_loaded: usize,
+    /// Candidates before deduplication.
+    pub candidates: usize,
+    /// Only the touched files' entities and routes were loaded (a
+    /// code-only change).
+    pub narrow: bool,
+    /// Loading entities, units, routes and paths.
+    pub load_seconds: f64,
+    /// Building the inverted unit indexes.
+    pub index_seconds: f64,
+    /// All matching, and its share per resolver.
+    pub match_seconds: f64,
+    pub exact_seconds: f64,
+    pub qualified_seconds: f64,
+    pub alias_seconds: f64,
+    pub filename_seconds: f64,
+    pub route_seconds: f64,
+    pub write_seconds: f64,
+    pub manual_seconds: f64,
+}
 
 /// Builds code-document links for the graph stage (implemented by the
 /// knowledge linker; `None` derives code relationships only).
@@ -58,8 +93,13 @@ pub trait GraphLinker: Sync {
         build_id: &str,
         touched: &[String],
         full: bool,
-    ) -> Result<usize, StorageError>;
+    ) -> Result<LinkStats, StorageError>;
 }
+
+/// Phase names reported while a graph is built (`deriving`, `resolving`,
+/// `linking`, `committing`; server mode adds `staging`, `copying`,
+/// `writing` and `promoting`).
+pub type GraphPhaseFn<'a> = dyn Fn(&'static str) + 'a;
 
 pub struct GraphOptions<'a> {
     /// Parser threads (at least 1).
@@ -67,6 +107,59 @@ pub struct GraphOptions<'a> {
     pub linker: Option<&'a dyn GraphLinker>,
     /// Checked between batches; a cancelled build publishes nothing.
     pub cancel: Option<&'a AtomicBool>,
+    /// Called when the build enters a phase.
+    pub phase: Option<&'a GraphPhaseFn<'a>>,
+    /// Graph facts stored by the base index (`indexing.graph_fact_cache`):
+    /// a file whose verified bytes match a stored key is not parsed again.
+    pub facts: Option<&'a docmonk_storage::facts::FactCache>,
+    /// Files parsed per batch before their rows are written (0:
+    /// [`GRAPH_BATCH`]).
+    pub batch: usize,
+}
+
+/// Wall-clock seconds per phase of one graph build (monotonic timers).
+/// `read_hash_seconds` and `parse_seconds` are summed over the parser
+/// threads, so with several workers they can exceed `derivation_seconds`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct GraphTimings {
+    /// Graph state, dependency manifest and file rows of the build.
+    pub state_load_seconds: f64,
+    /// Removing the rows that are recomputed.
+    pub clear_seconds: f64,
+    /// Reading, verifying and parsing files (wall clock).
+    pub derivation_seconds: f64,
+    pub read_hash_seconds: f64,
+    pub parse_seconds: f64,
+    /// Fact-cache lookups (summed over the parser threads).
+    pub cache_load_seconds: f64,
+    /// Writing derived relationship rows.
+    pub sqlite_write_seconds: f64,
+    /// Reading per-file symbol dependencies.
+    pub symbol_manifest_seconds: f64,
+    pub resolution_seconds: f64,
+    pub linking_seconds: f64,
+    /// Recording the graph state and committing the transaction.
+    pub commit_seconds: f64,
+}
+
+/// Work counted during one graph build.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct GraphCounters {
+    /// File rows of the base build.
+    pub files_total: usize,
+    /// Code files read and hashed (and parsed, unless their facts were
+    /// cached).
+    pub files_derived: usize,
+    /// Of those, files whose graph facts came from the fact cache, and
+    /// files parsed because the cache had none (only with a cache).
+    pub facts_hits: usize,
+    pub facts_misses: usize,
+    /// Cache entries of superseded content dropped after the build.
+    pub facts_dropped: usize,
+    pub bytes_read: u64,
+    pub resolution: ResolveStats,
+    /// SQL statements the build issued on its own thread.
+    pub sql_statements: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
@@ -107,6 +200,10 @@ pub struct GraphReport {
     /// Time spent planning (graph state and file rows only).
     pub planning_seconds: f64,
     pub seconds: f64,
+    /// Per-phase timings; zero for phases a skip or rebind never ran.
+    pub timings: GraphTimings,
+    pub counters: GraphCounters,
+    pub linking: LinkStats,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -314,12 +411,14 @@ pub fn build_graph(
     progress: &mut GraphProgressFn<'_>,
 ) -> Result<GraphReport, GraphError> {
     let started = Instant::now();
+    let statements = docmonk_storage::stats::sql_statements();
     let plan = plan_graph(store, build_id)?;
     let planning_seconds = started.elapsed().as_secs_f64();
     tracing::debug!(component = "relationships", event = "graph_planned", action = ?plan.action, reason = plan.reason, added = plan.changes.added.len(), modified = plan.changes.modified.len(), removed = plan.changes.removed.len());
     build_planned(store, root, build_id, &plan, opts, progress).map(|mut r| {
         r.planning_seconds = planning_seconds;
         r.seconds = started.elapsed().as_secs_f64();
+        r.counters.sql_statements = docmonk_storage::stats::sql_statements() - statements;
         r
     })
 }
@@ -335,7 +434,9 @@ pub fn build_planned(
 ) -> Result<GraphReport, GraphError> {
     let generation = plan.expected_base.clone();
     let derivation = graph_derivation();
+    let loaded = Instant::now();
     let prev = store.graph_state_with_files().map_err(failed)?;
+    let state_seconds = loaded.elapsed().as_secs_f64();
     let mut report = GraphReport {
         action: plan.action,
         reason: plan.reason,
@@ -391,6 +492,7 @@ pub fn build_planned(
     );
     match outcome {
         Ok(mut built) => {
+            built.timings.state_load_seconds += state_seconds;
             built.action = plan.action;
             built.reason = plan.reason;
             built.files_added = report.files_added;
@@ -430,7 +532,21 @@ fn build(
     opts: &GraphOptions<'_>,
     progress: &mut GraphProgressFn<'_>,
 ) -> Result<GraphReport, GraphError> {
+    let mut timings = GraphTimings::default();
+    let mut counters = GraphCounters::default();
+    let phase = |name: &'static str| {
+        docmonk_indexing::progress::heartbeat();
+        if let Some(f) = opts.phase {
+            f(name);
+        }
+    };
+    let mut clock = Instant::now();
+    let mut lap = |slot: &mut f64| {
+        *slot += clock.elapsed().as_secs_f64();
+        clock = Instant::now();
+    };
     let files = store.graph_files(build_id).map_err(failed)?;
+    counters.files_total = files.len();
     // Incremental only on top of a complete record of this base build:
     // its file keys and its per-file symbol dependencies.
     let full = plan.full;
@@ -448,6 +564,8 @@ fn build(
     let current: std::collections::BTreeSet<&str> = files.iter().map(|f| f.id.as_str()).collect();
     let removed: Vec<&String> = plan.changes.removed.iter().collect();
     let total = changed.len();
+    lap(&mut timings.state_load_seconds);
+    phase("deriving");
     progress(0, total);
 
     store.begin_session().map_err(failed)?;
@@ -465,10 +583,16 @@ fn build(
             store.clear_file_graph(build_id, &f.id).map_err(failed)?;
         }
     }
+    lap(&mut timings.clear_seconds);
     let workers = opts.workers.max(1);
     let mut done = 0;
     let mut written = 0;
-    for batch in changed.chunks(GRAPH_BATCH) {
+    let batch_size = if opts.batch == 0 {
+        GRAPH_BATCH
+    } else {
+        opts.batch
+    };
+    for batch in changed.chunks(batch_size) {
         if opts.cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
             return Err(GraphError::Cancelled);
         }
@@ -478,17 +602,33 @@ fn build(
             .copied()
             .filter(|f| f.kind == "code" && f.status == "indexed")
             .collect();
-        for rows in derive_batch(root, &code, workers)? {
-            written += rows.len();
-            store.put_relationships(build_id, &rows).map_err(failed)?;
+        let derived = derive_batch(root, &code, workers, opts.facts)?;
+        lap(&mut timings.derivation_seconds);
+        for d in derived {
+            counters.files_derived += 1;
+            counters.bytes_read += d.bytes;
+            timings.read_hash_seconds += d.read_hash_seconds;
+            timings.parse_seconds += d.parse_seconds;
+            timings.cache_load_seconds += d.cache_load_seconds;
+            match d.cached {
+                Some(true) => counters.facts_hits += 1,
+                Some(false) => counters.facts_misses += 1,
+                None => {}
+            }
+            written += d.rows.len();
+            store.put_relationships(build_id, &d.rows).map_err(failed)?;
         }
+        lap(&mut timings.sqlite_write_seconds);
         done += batch.len();
         progress(done, total);
     }
+    phase("resolving");
     let changed_ids: Vec<String> = changed.iter().map(|f| f.id.clone()).collect();
-    let (symbols, resolutions_changed, files_reresolved) = if full || prev.resolve_all {
+    let (symbols, resolution, files_reresolved) = if full || prev.resolve_all {
         let n = resolve_build(store, build_id).map_err(failed)?;
+        lap(&mut timings.resolution_seconds);
         let symbols = store.file_symbols(build_id, None).map_err(failed)?;
+        lap(&mut timings.symbol_manifest_seconds);
         (symbols, n, files.len())
     } else {
         // Symbols whose candidates changed: a definition added, removed,
@@ -497,6 +637,7 @@ fn build(
         let fresh = store
             .file_symbols(build_id, Some(&changed_ids))
             .map_err(failed)?;
+        lap(&mut timings.symbol_manifest_seconds);
         let mut keys: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
         for f in changed_ids.iter().chain(removed.iter().copied()) {
             keys.extend(FileSymbols::changed_keys(prev.symbols.get(f), fresh.get(f)));
@@ -510,6 +651,7 @@ fn build(
             }
         }
         let n = resolve_files(store, build_id, &targets).map_err(failed)?;
+        lap(&mut timings.resolution_seconds);
         let mut symbols = prev.symbols.clone();
         for f in &removed {
             symbols.remove(*f);
@@ -517,12 +659,15 @@ fn build(
         symbols.extend(fresh);
         (symbols, n, targets.len())
     };
-    let links = match opts.linker {
+    phase("linking");
+    let linking = match opts.linker {
         Some(l) => l
             .link(store, build_id, &changed_ids, full)
             .map_err(failed)?,
-        None => 0,
+        None => LinkStats::default(),
     };
+    lap(&mut timings.linking_seconds);
+    phase("committing");
     let state = GraphState {
         state: GraphLifecycle::Ready,
         generation: prev.generation + 1,
@@ -546,6 +691,26 @@ fn build(
     };
     store.put_graph_state_with_files(&state).map_err(failed)?;
     store.commit_session().map_err(failed)?;
+    lap(&mut timings.commit_seconds);
+    if let Some(cache) = opts.facts {
+        // Only the current content's facts can be used again.
+        let keep: std::collections::HashSet<String> = files
+            .iter()
+            .filter(|f| f.kind == "code")
+            .filter_map(|f| {
+                f.content_hash
+                    .as_deref()
+                    .map(|h| crate::process::graph_fact_key(&f.id, &f.rel_path, h))
+            })
+            .collect();
+        match cache.retain(store.source_id(), &keep) {
+            Ok(n) => counters.facts_dropped = n,
+            Err(e) => {
+                tracing::debug!(component = "relationships", event = "graph_facts_not_collected", error = %e)
+            }
+        }
+    }
+    counters.resolution = resolution;
     Ok(GraphReport {
         outcome: GraphOutcome::Built,
         action: plan.action,
@@ -555,11 +720,25 @@ fn build(
         base_generation: generation.to_owned(),
         files_processed: total,
         relationships_written: written,
-        resolutions_changed,
+        resolutions_changed: resolution.changed,
         files_reresolved,
-        links,
+        links: linking.links,
+        timings,
+        counters,
+        linking,
         ..GraphReport::default()
     })
+}
+
+/// One file's derived rows and what deriving them cost.
+struct Derived {
+    rows: Vec<RelationshipRow>,
+    bytes: u64,
+    read_hash_seconds: f64,
+    parse_seconds: f64,
+    cache_load_seconds: f64,
+    /// `Some(hit)` when a fact cache was consulted.
+    cached: Option<bool>,
 }
 
 /// Reads, verifies and parses `files` on up to `workers` threads, in input
@@ -568,12 +747,13 @@ fn derive_batch(
     root: &Path,
     files: &[&GraphFile],
     workers: usize,
-) -> Result<Vec<Vec<RelationshipRow>>, GraphError> {
+    facts: Option<&docmonk_storage::facts::FactCache>,
+) -> Result<Vec<Derived>, GraphError> {
     let per = files.len().div_ceil(workers.max(1)).max(1);
-    let parts: Vec<Result<Vec<Vec<RelationshipRow>>, GraphError>> = std::thread::scope(|s| {
+    let parts: Vec<Result<Vec<Derived>, GraphError>> = std::thread::scope(|s| {
         let handles: Vec<_> = files
             .chunks(per)
-            .map(|part| s.spawn(move || part.iter().map(|f| derive_file(root, f)).collect()))
+            .map(|part| s.spawn(move || part.iter().map(|f| derive_file(root, f, facts)).collect()))
             .collect();
         handles
             .into_iter()
@@ -590,7 +770,12 @@ fn derive_batch(
     Ok(out)
 }
 
-fn derive_file(root: &Path, f: &GraphFile) -> Result<Vec<RelationshipRow>, GraphError> {
+fn derive_file(
+    root: &Path,
+    f: &GraphFile,
+    facts: Option<&docmonk_storage::facts::FactCache>,
+) -> Result<Derived, GraphError> {
+    let started = Instant::now();
     let source = std::fs::read(root.join(&f.rel_path)).map_err(|e| {
         GraphError::Stale(format!(
             "{} cannot be read since it was indexed ({e})",
@@ -604,13 +789,41 @@ fn derive_file(root: &Path, f: &GraphFile) -> Result<Vec<RelationshipRow>, Graph
             f.rel_path
         )));
     }
+    let read_hash_seconds = started.elapsed().as_secs_f64();
+    // The bytes are verified against the published hash above, so facts
+    // stored for that hash are exactly what parsing them would produce.
+    let looking = Instant::now();
+    let cached = facts.map(|c| c.get(&crate::process::graph_fact_key(&f.id, &f.rel_path, &hash)));
+    let cache_load_seconds = looking.elapsed().as_secs_f64();
+    let consulted = cached.is_some();
+    if let Some(Some(rows)) = cached {
+        return Ok(Derived {
+            rows,
+            bytes: source.len() as u64,
+            read_hash_seconds,
+            parse_seconds: 0.0,
+            cache_load_seconds,
+            cached: Some(true),
+        });
+    }
+    let _cpu =
+        docmonk_indexing::governor::global().acquire(docmonk_indexing::governor::Class::Cpu, 1);
+    let parsing = Instant::now();
     // The base index parsed these exact bytes; a parse failure here would
     // be a derivation bug, recorded as a failure rather than hidden.
-    file_relationships(&f.rel_path, &f.id, &source).map_err(|p| {
+    let rows = file_relationships(&f.rel_path, &f.id, &source).map_err(|p| {
         failed(format!(
             "{}: syntax error(s) in a {} file",
             f.rel_path, p.language
         ))
+    })?;
+    Ok(Derived {
+        rows,
+        bytes: source.len() as u64,
+        read_hash_seconds,
+        parse_seconds: parsing.elapsed().as_secs_f64(),
+        cache_load_seconds,
+        cached: consulted.then_some(false),
     })
 }
 

@@ -333,6 +333,21 @@ pub struct LiveRun {
     /// Server mode: the source's current lease matches this run and is live.
     pub lease_valid: Option<bool>,
     pub outcome: Option<String>,
+    /// A relationship graph being built by this pass (local runs): the
+    /// phase it is in and its derivation progress, which reaches its total
+    /// before resolving, linking and committing are done.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationships: Option<RelationshipProgress>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RelationshipProgress {
+    /// `deriving`, `resolving`, `linking`, `committing`; on a server also
+    /// `staging`, `copying`, `writing`, `promoting`.
+    pub phase: Option<String>,
+    /// Files derived so far, of `planned`.
+    pub processed: Option<u64>,
+    pub planned: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

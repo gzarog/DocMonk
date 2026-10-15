@@ -1159,6 +1159,7 @@ dependencies = [
 name = "docmonk-knowledge"
 version = "0.0.0"
 dependencies = [
+ "aho-corasick",
  "docmonk-code",
  "docmonk-config",
  "docmonk-convert",
@@ -1168,6 +1169,7 @@ dependencies = [
  "docmonk-storage",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "thiserror 2.0.21",
  "tracing",
@@ -1270,6 +1272,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "signal-hook",
  "tempfile",
  "tracing",
