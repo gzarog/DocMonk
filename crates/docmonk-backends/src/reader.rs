@@ -673,6 +673,7 @@ impl ServerReader {
                 last_error: opt_str(f, "last_error"),
                 attempt_count: f["attempt_count"].as_i64().unwrap_or(0),
                 next_attempt_at: opt_str(f, "next_attempt_at"),
+                last_indexed_at: opt_str(f, "indexed_at"),
             })
             .collect())
     }

@@ -168,8 +168,11 @@ CREATE TABLE relationships (
     -- the whole build before publication instead of depending on file order.
     reference_text TEXT,
     PRIMARY KEY (build_id, id)
-);
-CREATE INDEX idx_rel_resolver ON relationships(build_id, resolver);
+) WITHOUT ROWID;
+-- Only references re-resolved against the whole build are looked up by
+-- resolver, so only they are indexed.
+CREATE INDEX idx_rel_unresolved ON relationships(build_id, resolver)
+    WHERE reference_text IS NOT NULL;
 CREATE INDEX idx_rel_symbol ON relationships(build_id, target_symbol);
 CREATE INDEX idx_rel_source ON relationships(build_id, source_entity_id);
 CREATE INDEX idx_rel_target ON relationships(build_id, target_entity_id);

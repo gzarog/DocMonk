@@ -267,8 +267,15 @@ impl BuildFinalizer for EmbeddingFinalizer {
         })
     }
 
-    fn on_warm_pass(&self, store: &mut ProjectStore, build_id: &str) -> Result<(), ProcessError> {
-        self.run(store, build_id).map(|_| ())
+    fn on_warm_pass(
+        &self,
+        store: &mut ProjectStore,
+        build_id: &str,
+    ) -> Result<docmonk_indexing::coordinator::FinalizeReport, ProcessError> {
+        Ok(docmonk_indexing::coordinator::FinalizeReport {
+            linked: 0,
+            embedded: self.run(store, build_id)?,
+        })
     }
 }
 

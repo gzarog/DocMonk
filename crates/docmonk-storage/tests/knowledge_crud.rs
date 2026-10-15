@@ -135,7 +135,7 @@ fn email_knowledge(f: &FileRow) -> FileKnowledge {
 }
 
 #[test]
-fn builds_are_invisible_until_published_and_incremental_carry_forward_works() {
+fn builds_are_invisible_until_published_and_a_second_build_replaces_the_first() {
     let tmp = tempfile::tempdir().unwrap();
     let home = Home::new(tmp.path());
     let layout = StorageLayout::new(&home);
@@ -230,7 +230,9 @@ fn builds_are_invisible_until_published_and_incremental_carry_forward_works() {
     assert_eq!(reusable.len(), 2);
     cp.begin_build(&src.id, "b2").unwrap();
     store.create_build("b2", false, &versions()).unwrap();
-    store.carry_forward("b1", "b2", &mail.id).unwrap();
+    store
+        .put_file("b2", &mail, &email_knowledge(&mail))
+        .unwrap();
     let a2 = file(&src.id, "a.py", "h3");
     store
         .put_file("b2", &a2, &code_knowledge(&a2, "beta"))
@@ -246,7 +248,7 @@ fn builds_are_invisible_until_published_and_incremental_carry_forward_works() {
     assert_eq!(
         store.search_chunks("b2", "zebra", 10).unwrap().len(),
         1,
-        "carried forward with FTS"
+        "rewritten with FTS"
     );
     assert_eq!(store.documents("b2").unwrap().len(), 2);
 
@@ -334,44 +336,6 @@ fn fresh_home_creates_current_schema_and_refuses_anything_else() {
         )
         .unwrap();
     assert_eq!(tables, 1, "nothing was created or altered");
-}
-
-#[test]
-fn set_based_carry_forward_copies_everything_but_excluded_files() {
-    let tmp = tempfile::tempdir().unwrap();
-    let layout = StorageLayout::new(&Home::new(tmp.path()));
-    let mut store = ProjectStore::open(&layout, "p", "s", 8).unwrap();
-    store.create_build("b1", true, &versions()).unwrap();
-    let a = file("s", "a.py", "1");
-    let b = file("s", "b.py", "2");
-    let mail = file("s", "m.eml", "3");
-    store
-        .put_file("b1", &a, &code_knowledge(&a, "alpha"))
-        .unwrap();
-    store
-        .put_file("b1", &b, &code_knowledge(&b, "bravo"))
-        .unwrap();
-    store
-        .put_file("b1", &mail, &email_knowledge(&mail))
-        .unwrap();
-    store.create_build("b2", false, &versions()).unwrap();
-    let n = store
-        .carry_forward_except(
-            "b1",
-            "b2",
-            std::slice::from_ref(&b.id),
-            &[(a.id.clone(), 99, 9.5)],
-        )
-        .unwrap();
-    assert_eq!(n, 2);
-    assert_eq!(store.count("entities", "b2").unwrap(), 2);
-    assert_eq!(store.count("documents", "b2").unwrap(), 2);
-    assert_eq!(store.search_code("b2", "alpha", 5).unwrap().len(), 1);
-    assert!(store.search_code("b2", "bravo", 5).unwrap().is_empty());
-    assert_eq!(store.search_chunks("b2", "zebra", 5).unwrap().len(), 1);
-    let files = store.files("b2").unwrap();
-    let ra = files.iter().find(|f| f.id == a.id).unwrap();
-    assert_eq!((ra.size, ra.mtime), (99, 9.5));
 }
 
 #[test]

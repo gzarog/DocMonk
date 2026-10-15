@@ -33,6 +33,9 @@ pub struct FileRow {
     pub attempt_count: i64,
     /// When a `retry` file becomes due again.
     pub next_attempt_at: Option<String>,
+    /// When the row was last written or its stat refreshed (ISO 8601).
+    /// Read back for the racy-clean rule; ignored on write.
+    pub last_indexed_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize)]
@@ -304,6 +307,44 @@ impl ProjectStore {
         Ok(())
     }
 
+    /// Whether `build_id` is an unpublished full build made with exactly
+    /// `versions`, so a run that died part-way through it can resume it:
+    /// its committed segments are still valid rows of that build.
+    pub fn resumable_build(&self, build_id: &str, versions: &IndexVersions) -> Result<bool> {
+        let row: Option<(String, String, String)> = self
+            .conn
+            .query_row(
+                "SELECT kind, status, versions FROM builds WHERE id = ?1",
+                [build_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()
+            .map_err(StorageError::sqlite("read build"))?;
+        Ok(row.is_some_and(|(kind, status, v)| {
+            kind == "full"
+                && status == "building"
+                && serde_json::from_str::<IndexVersions>(&v).is_ok_and(|v| &v == versions)
+        }))
+    }
+
+    /// Commits the open session and starts a new one, then lets SQLite
+    /// copy the WAL back into the database without waiting for readers
+    /// (`PRAGMA wal_checkpoint(PASSIVE)`). A full build calls this
+    /// between segments, so the write lock is released regularly and the
+    /// WAL stays bounded.
+    pub fn commit_segment(&mut self) -> Result<()> {
+        self.commit_session()?;
+        self.checkpoint_passive()?;
+        self.begin_session()
+    }
+
+    /// `PRAGMA wal_checkpoint(PASSIVE)`; never blocks on readers.
+    pub fn checkpoint_passive(&mut self) -> Result<()> {
+        self.conn
+            .query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |_| Ok(()))
+            .map_err(StorageError::sqlite("wal checkpoint"))
+    }
+
     /// Marks `build_id` published and every older published build superseded.
     pub fn mark_published(&mut self, build_id: &str) -> Result<()> {
         let now = now_iso();
@@ -342,7 +383,18 @@ impl ProjectStore {
     /// Deletes every row of aborted/superseded builds (never the given
     /// active build). Returns the number of builds removed.
     pub fn gc_builds(&mut self, keep_active: Option<&str>) -> Result<usize> {
+        self.gc_builds_keeping(keep_active, None)
+    }
+
+    /// [`gc_builds`](Self::gc_builds) that also keeps `resuming`, a
+    /// pending full build whose committed segments a run picks up again.
+    pub fn gc_builds_keeping(
+        &mut self,
+        keep_active: Option<&str>,
+        resuming: Option<&str>,
+    ) -> Result<usize> {
         let keep = keep_active.unwrap_or("");
+        let resuming = resuming.unwrap_or("");
         write_tx(&mut self.conn, |tx| {
             let ids: Vec<String> = {
                 let mut stmt = tx
@@ -351,11 +403,11 @@ impl ProjectStore {
                         // after committing a build but before publishing it
                         // (callers hold the run lock, so none is in flight).
                         "SELECT id FROM builds WHERE status IN ('aborted', 'superseded', 'building')
-                           AND id <> ?1",
+                           AND id <> ?1 AND id <> ?2",
                     )
                     .map_err(StorageError::sqlite("gc builds"))?;
                 let rows = stmt
-                    .query_map([keep], |r| r.get(0))
+                    .query_map([keep, resuming], |r| r.get(0))
                     .map_err(StorageError::sqlite("gc builds"))?;
                 rows.collect::<rusqlite::Result<_>>()
                     .map_err(StorageError::sqlite("gc builds"))?
@@ -387,7 +439,8 @@ impl ProjectStore {
             .prepare(
                 "SELECT id, rel_path, kind, size, mtime, content_hash, status, parser_version,
                     chunker_version, converter_version, embedding_model_id,
-                    embedding_text_version, last_error, attempt_count, next_attempt_at
+                    embedding_text_version, last_error, attempt_count, next_attempt_at,
+                    last_indexed_at
                  FROM files WHERE build_id = ?1 ORDER BY rel_path",
             )
             .map_err(StorageError::sqlite("list files"))?;
@@ -409,6 +462,7 @@ impl ProjectStore {
                     last_error: r.get(12)?,
                     attempt_count: r.get(13)?,
                     next_attempt_at: r.get(14)?,
+                    last_indexed_at: r.get(15)?,
                 })
             })
             .map_err(StorageError::sqlite("list files"))?;
@@ -490,182 +544,6 @@ fn put_file_rows(
 }
 
 impl ProjectStore {
-    /// Copies an unchanged file's rows from the active build into a new
-    /// incremental build without re-extracting it.
-    pub fn carry_forward(&mut self, from_build: &str, to_build: &str, file_id: &str) -> Result<()> {
-        write_tx(&mut self.conn, |tx| {
-            delete_file_rows(tx, to_build, file_id)?;
-            cached(
-                tx,
-                "DELETE FROM relationships WHERE build_id = ?1 AND file_id = ?2",
-                params![to_build, file_id],
-            )
-            .map_err(StorageError::sqlite("carry forward"))?;
-            let exec = |sql: &str| {
-                cached(tx, sql, params![to_build, from_build, file_id])
-                    .map_err(StorageError::sqlite("carry forward"))
-            };
-            exec("INSERT INTO files (id, source_id, rel_path, kind, size, mtime, content_hash, status,
-                    build_id, parser_version, chunker_version, converter_version, embedding_model_id,
-                    embedding_text_version, last_indexed_at, last_error, created_at, updated_at,
-                    attempt_count, next_attempt_at)
-                  SELECT id, source_id, rel_path, kind, size, mtime, content_hash, status,
-                    ?1, parser_version, chunker_version, converter_version, embedding_model_id,
-                    embedding_text_version, last_indexed_at, last_error, created_at, updated_at,
-                    attempt_count, next_attempt_at
-                  FROM files WHERE build_id = ?2 AND id = ?3")?;
-            exec(
-                "INSERT INTO path_fts (rowid, file_id, build_id, path, words)
-                  SELECT n.rowid, n.id, ?1, f.path, f.words
-                  FROM files o JOIN path_fts f ON f.rowid = o.rowid
-                    JOIN files n ON n.build_id = ?1 AND n.id = o.id
-                  WHERE o.build_id = ?2 AND o.id = ?3",
-            )?;
-            exec(
-                "INSERT INTO entities SELECT id, ?1, file_id, kind, name, qualified_name, language,
-                    parent_id, signature, start_line, end_line, start_col, end_col
-                  FROM entities WHERE build_id = ?2 AND file_id = ?3",
-            )?;
-            exec(
-                "INSERT INTO code_fts (rowid, entity_id, build_id, name, qualified_name, signature,
-                    words)
-                  SELECT n.rowid, n.id, ?1, f.name, f.qualified_name, f.signature, f.words
-                  FROM entities o JOIN code_fts f ON f.rowid = o.rowid
-                    JOIN entities n ON n.build_id = ?1 AND n.id = o.id
-                  WHERE o.build_id = ?2 AND o.file_id = ?3",
-            )?;
-            exec("INSERT INTO relationships SELECT id, ?1, file_id, relationship_type, source_entity_id,
-                    target_entity_id, target_symbol, resolver, confidence, source_location, evidence,
-                    reference_text
-                  FROM relationships WHERE build_id = ?2 AND file_id = ?3")?;
-            exec(
-                "INSERT INTO documents SELECT id, ?1, file_id, format, title, author, page_count,
-                    is_scanned, content_hash, parent_document_id, attachment_name,
-                    attachment_content_type, attachment_index, attachment_content_id
-                  FROM documents WHERE build_id = ?2 AND file_id = ?3",
-            )?;
-            exec("INSERT INTO chunks SELECT id, ?1, document_id, file_id, kind, ordinal, heading_path,
-                    heading_level, text, search_text, embedding_text, token_count, page_start,
-                    page_end, table_rows, caption, parent_ordinal
-                  FROM chunks WHERE build_id = ?2 AND file_id = ?3")?;
-            exec(
-                "INSERT INTO embeddings SELECT ?1, subject_type, subject_id, file_id,
-                    model_fingerprint, text_hash, dims, vector
-                  FROM embeddings WHERE build_id = ?2 AND file_id = ?3",
-            )?;
-            crate::vectors::bump_embeddings_revision(tx, to_build)?;
-            exec(
-                "INSERT INTO chunk_fts (rowid, chunk_id, build_id, heading, body, title, words)
-                  SELECT n.rowid, n.id, ?1, f.heading, f.body, f.title, f.words
-                  FROM chunks o JOIN chunk_fts f ON f.rowid = o.rowid
-                    JOIN chunks n ON n.build_id = ?1 AND n.id = o.id
-                  WHERE o.build_id = ?2 AND o.file_id = ?3",
-            )?;
-            Ok(())
-        })
-    }
-
-    /// Copies every file of `from_build` except `exclude` (and all of their
-    /// knowledge) into `to_build` in one set-based transaction, applying
-    /// `restat` `(file_id, size, mtime)` updates. This is the incremental
-    /// fast path: cost is a few statements, not one transaction per file.
-    pub fn carry_forward_except(
-        &mut self,
-        from_build: &str,
-        to_build: &str,
-        exclude: &[String],
-        restat: &[(String, i64, f64)],
-    ) -> Result<usize> {
-        write_tx(&mut self.conn, |tx| {
-            tx.execute_batch(
-                "CREATE TEMP TABLE IF NOT EXISTS carry_skip (id TEXT PRIMARY KEY);
-                 DELETE FROM carry_skip;",
-            )
-            .map_err(StorageError::sqlite("prepare carry"))?;
-            {
-                let mut ins = tx
-                    .prepare("INSERT OR IGNORE INTO carry_skip (id) VALUES (?1)")
-                    .map_err(StorageError::sqlite("prepare carry"))?;
-                for id in exclude {
-                    ins.execute([id])
-                        .map_err(StorageError::sqlite("prepare carry"))?;
-                }
-            }
-            let exec = |sql: &str| {
-                cached(tx, sql, params![to_build, from_build])
-                    .map_err(StorageError::sqlite("carry forward"))
-            };
-            let n = exec(
-                "INSERT INTO files (id, source_id, rel_path, kind, size, mtime, content_hash, status,
-                    build_id, parser_version, chunker_version, converter_version, embedding_model_id,
-                    embedding_text_version, last_indexed_at, last_error, created_at, updated_at,
-                    attempt_count, next_attempt_at)
-                 SELECT id, source_id, rel_path, kind, size, mtime, content_hash, status,
-                    ?1, parser_version, chunker_version, converter_version, embedding_model_id,
-                    embedding_text_version, last_indexed_at, last_error, created_at, updated_at,
-                    attempt_count, next_attempt_at
-                 FROM files WHERE build_id = ?2 AND id NOT IN (SELECT id FROM carry_skip)",
-            )?;
-            exec(
-                "INSERT INTO path_fts (rowid, file_id, build_id, path, words)
-                  SELECT n.rowid, n.id, ?1, f.path, f.words
-                  FROM files o JOIN path_fts f ON f.rowid = o.rowid
-                    JOIN files n ON n.build_id = ?1 AND n.id = o.id
-                  WHERE o.build_id = ?2 AND o.id NOT IN (SELECT id FROM carry_skip)",
-            )?;
-            exec(
-                "INSERT INTO entities SELECT id, ?1, file_id, kind, name, qualified_name, language,
-                    parent_id, signature, start_line, end_line, start_col, end_col
-                  FROM entities WHERE build_id = ?2 AND file_id NOT IN (SELECT id FROM carry_skip)",
-            )?;
-            exec(
-                "INSERT INTO code_fts (rowid, entity_id, build_id, name, qualified_name, signature,
-                    words)
-                  SELECT n.rowid, n.id, ?1, f.name, f.qualified_name, f.signature, f.words
-                  FROM entities o JOIN code_fts f ON f.rowid = o.rowid
-                    JOIN entities n ON n.build_id = ?1 AND n.id = o.id
-                  WHERE o.build_id = ?2 AND o.file_id NOT IN (SELECT id FROM carry_skip)",
-            )?;
-            exec("INSERT INTO relationships SELECT id, ?1, file_id, relationship_type, source_entity_id,
-                    target_entity_id, target_symbol, resolver, confidence, source_location, evidence,
-                    reference_text
-                  FROM relationships WHERE build_id = ?2 AND file_id NOT IN (SELECT id FROM carry_skip)")?;
-            exec("INSERT INTO documents SELECT id, ?1, file_id, format, title, author, page_count,
-                    is_scanned, content_hash, parent_document_id, attachment_name,
-                    attachment_content_type, attachment_index, attachment_content_id
-                  FROM documents WHERE build_id = ?2 AND file_id NOT IN (SELECT id FROM carry_skip)")?;
-            exec("INSERT INTO chunks SELECT id, ?1, document_id, file_id, kind, ordinal, heading_path,
-                    heading_level, text, search_text, embedding_text, token_count, page_start,
-                    page_end, table_rows, caption, parent_ordinal
-                  FROM chunks WHERE build_id = ?2 AND file_id NOT IN (SELECT id FROM carry_skip)")?;
-            exec(
-                "INSERT INTO embeddings SELECT ?1, subject_type, subject_id, file_id,
-                    model_fingerprint, text_hash, dims, vector
-                  FROM embeddings WHERE build_id = ?2 AND file_id NOT IN (SELECT id FROM carry_skip)",
-            )?;
-            crate::vectors::bump_embeddings_revision(tx, to_build)?;
-            exec(
-                "INSERT INTO chunk_fts (rowid, chunk_id, build_id, heading, body, title, words)
-                  SELECT n.rowid, n.id, ?1, f.heading, f.body, f.title, f.words
-                  FROM chunks o JOIN chunk_fts f ON f.rowid = o.rowid
-                    JOIN chunks n ON n.build_id = ?1 AND n.id = o.id
-                  WHERE o.build_id = ?2 AND o.file_id NOT IN (SELECT id FROM carry_skip)",
-            )?;
-            {
-                let mut up = tx
-                    .prepare(
-                        "UPDATE files SET size = ?1, mtime = ?2 WHERE build_id = ?3 AND id = ?4",
-                    )
-                    .map_err(StorageError::sqlite("restat"))?;
-                for (id, size, mtime) in restat {
-                    up.execute(params![size, mtime, to_build, id])
-                        .map_err(StorageError::sqlite("restat"))?;
-                }
-            }
-            Ok(n)
-        })
-    }
-
     /// Updates the stat of a carried-forward file whose content hash proved
     /// unchanged, so the next run can fast-skip it without re-hashing.
     pub fn set_file_stat(
@@ -677,8 +555,9 @@ impl ProjectStore {
     ) -> Result<()> {
         self.conn
             .execute(
-                "UPDATE files SET size = ?1, mtime = ?2 WHERE build_id = ?3 AND id = ?4",
-                params![size, mtime, build_id, file_id],
+                "UPDATE files SET size = ?1, mtime = ?2, last_indexed_at = ?5
+                 WHERE build_id = ?3 AND id = ?4",
+                params![size, mtime, build_id, file_id, now_iso()],
             )
             .map_err(StorageError::sqlite("update file stat"))?;
         Ok(())

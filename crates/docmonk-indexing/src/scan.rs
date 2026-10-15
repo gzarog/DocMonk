@@ -138,17 +138,38 @@ pub fn scan(
                 }
             };
             let candidate = entry.path();
-            let link = is_link(&candidate);
+            // The entry's type comes with the directory listing (no stat
+            // on most platforms); only links are stat'ed and resolved.
+            let file_type = entry.file_type();
+            let link = match &file_type {
+                Ok(t) => t.is_symlink(),
+                Err(_) => is_link(&candidate),
+            };
             if link && !opts.follow_symlinks {
                 continue;
             }
-            // Follows links when allowed; plain entries are not followed.
-            let is_dir = std::fs::metadata(&candidate).is_ok_and(|m| m.is_dir());
-            if ignore.is_ignored(&candidate, is_dir) {
-                continue;
-            }
-            let Ok(resolved) = guard.resolve(&candidate) else {
-                continue;
+            let (is_dir, resolved) = if link {
+                // Follows links when allowed: the target must stay inside
+                // the root.
+                let is_dir = std::fs::metadata(&candidate).is_ok_and(|m| m.is_dir());
+                if ignore.is_ignored(&candidate, is_dir) {
+                    continue;
+                }
+                let Ok(resolved) = guard.resolve(&candidate) else {
+                    continue;
+                };
+                (is_dir, resolved)
+            } else {
+                // A plain entry of an already resolved directory is its
+                // own real path, inside the root.
+                let is_dir = match &file_type {
+                    Ok(t) => t.is_dir(),
+                    Err(_) => std::fs::metadata(&candidate).is_ok_and(|m| m.is_dir()),
+                };
+                if ignore.is_ignored(&candidate, is_dir) {
+                    continue;
+                }
+                (is_dir, candidate)
             };
             if is_dir {
                 if seen_dirs.insert(resolved.clone()) {
@@ -159,7 +180,14 @@ pub fn scan(
             if !seen_files.insert(resolved.clone()) {
                 continue;
             }
-            match std::fs::metadata(&resolved) {
+            // One stat per file: the entry's own (not following) for a
+            // plain file, the target's for a followed link.
+            let meta = if link {
+                std::fs::metadata(&resolved)
+            } else {
+                entry.metadata()
+            };
+            match meta {
                 Ok(meta) => out.files.push(ScannedFile {
                     rel_path: rel_posix(&root, &resolved),
                     size: meta.len() as i64,

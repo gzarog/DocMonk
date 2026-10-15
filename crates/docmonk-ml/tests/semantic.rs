@@ -208,7 +208,11 @@ fn warm_queries_reuse_the_cached_index_until_vectors_change() {
     let (engine, _) = run(&fx, &emb, "cancel an order", 5);
     assert_eq!(engine, Engine::Exact, "stale until the next sync");
     let (s, b) = fx.store();
-    ann::sync(&s, &s.project_dir().unwrap(), &b, &fp, emb.spec().dims).unwrap();
+    let st = ann::sync(&s, &s.project_dir().unwrap(), &b, &fp, emb.spec().dims).unwrap();
+    assert!(
+        st.appended && st.written_bytes < 1 << 20,
+        "an incremental sync appends to the delta log: {st:?}"
+    );
     drop(s);
     let (engine, hits) = run(&fx, &emb, "cancel an order", 5);
     assert_eq!(engine, Engine::Hnsw);
