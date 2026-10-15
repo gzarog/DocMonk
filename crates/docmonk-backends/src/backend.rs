@@ -191,7 +191,16 @@ pub struct ServerBackend {
     settings: IndexSettings,
     /// How long a replaced build stays readable after a publish.
     gc_grace: Duration,
+    /// Longest one by-query task may run before it is cancelled.
+    task_budget: Duration,
+    /// Server-side wait of one task poll (below the request timeout).
+    poll_wait: Duration,
 }
+
+/// Default [`ServerBackend::with_task_limits`] budget.
+pub const DEFAULT_TASK_BUDGET: Duration = Duration::from_secs(3600);
+/// Default server-side wait per task poll.
+pub const DEFAULT_POLL_WAIT: Duration = Duration::from_secs(10);
 
 fn ok(resp: Response, method: &str, path: &str) -> Result<Value> {
     if resp.status >= 300 {
@@ -239,12 +248,17 @@ impl ServerBackend {
                 engine.as_str()
             )));
         }
+        let request_timeout = Duration::from_secs_f64(cfg.request_timeout_seconds.max(0.001));
         Ok(Self::with_client(
             client,
             engine,
             &cfg.index_prefix,
             vector,
             BulkLimits::from_config(&cfg.bulk),
+        )
+        .with_task_limits(
+            Duration::from_secs_f64(cfg.task_timeout_seconds.max(1.0)),
+            (request_timeout / 2).min(DEFAULT_POLL_WAIT),
         ))
     }
 
@@ -263,7 +277,17 @@ impl ServerBackend {
             limits,
             settings: IndexSettings::default(),
             gc_grace: Duration::ZERO,
+            task_budget: DEFAULT_TASK_BUDGET,
+            poll_wait: DEFAULT_POLL_WAIT,
         }
+    }
+
+    /// Sets the by-query task budget and the server-side wait per poll
+    /// (keep it below the client request timeout).
+    pub fn with_task_limits(mut self, budget: Duration, poll_wait: Duration) -> Self {
+        self.task_budget = budget;
+        self.poll_wait = poll_wait.max(Duration::from_secs(1));
+        self
     }
 
     /// Keeps replaced builds readable for `grace` after a publish.
@@ -946,6 +970,57 @@ impl ServerBackend {
         })
     }
 
+    /// Runs a `_update_by_query` / `_delete_by_query` as a detached task
+    /// (`wait_for_completion=false`, `slices=auto`) and polls it with
+    /// bounded waits, so a long server-side operation never trips the
+    /// client request timeout. Returns the task's response (the same body
+    /// a synchronous call returns). A task still running after the
+    /// budget is cancelled. A server that answers inline (no task id) is
+    /// accepted as is.
+    pub(crate) fn by_query(&self, path: &str, payload: &Value) -> Result<Value> {
+        let started = std::time::Instant::now();
+        let sep = if path.contains('?') { '&' } else { '?' };
+        let submit = format!("{path}{sep}wait_for_completion=false&slices=auto");
+        let v = self.call_ok(Method::Post, &submit, Some(payload))?;
+        let Some(task) = v["task"].as_str().map(str::to_owned) else {
+            return Ok(v);
+        };
+        let poll = format!(
+            "/_tasks/{}?wait_for_completion=true&timeout={}s",
+            encode_id(&task),
+            self.poll_wait.as_secs().max(1)
+        );
+        loop {
+            let resp = self.call(Method::Get, &poll, None)?;
+            // A wait that times out is not a failure: the task still runs.
+            if resp.status != 408 {
+                let s = ok(resp, "GET", &poll)?;
+                if s["completed"].as_bool() == Some(true) {
+                    if !s["error"].is_null() {
+                        return Err(BackendError::Http {
+                            method: "POST".into(),
+                            path: path.into(),
+                            status: 500,
+                            reason: s["error"].to_string().chars().take(400).collect(),
+                        });
+                    }
+                    return Ok(s["response"].clone());
+                }
+            }
+            if started.elapsed() > self.task_budget {
+                let _ = self.call(
+                    Method::Post,
+                    &format!("/_tasks/{}/_cancel", encode_id(&task)),
+                    None,
+                );
+                return Err(BackendError::Transport(format!(
+                    "server task {task} for {path} did not finish within {} s; it was cancelled",
+                    self.task_budget.as_secs()
+                )));
+            }
+        }
+    }
+
     fn delete_by_query(&self, query: &Value) -> Result<u64> {
         // Delete-by-query only matches refreshed documents; make recent
         // bulk writes visible first so none survive the delete.
@@ -955,10 +1030,10 @@ impl ServerBackend {
             .map(|k| self.index(*k))
             .collect();
         let path = format!(
-            "/{}/_delete_by_query?conflicts=proceed&refresh=true&wait_for_completion=true",
+            "/{}/_delete_by_query?conflicts=proceed&refresh=true",
             names.join(",")
         );
-        let v = self.call_ok(Method::Post, &path, Some(&json!({ "query": query })))?;
+        let v = self.by_query(&path, &json!({ "query": query }))?;
         Ok(v["deleted"].as_u64().unwrap_or(0))
     }
 
@@ -973,19 +1048,18 @@ impl ServerBackend {
             .map(|k| self.index(*k))
             .collect();
         let path = format!(
-            "/{}/_update_by_query?conflicts=proceed&refresh=true&wait_for_completion=true",
+            "/{}/_update_by_query?conflicts=proceed&refresh=true",
             names.join(",")
         );
-        let v = self.call_ok(
-            Method::Post,
+        let v = self.by_query(
             &path,
-            Some(&json!({
+            &json!({
                 "query": { "bool": { "filter": [
                     { "term": { "source_id": source_id } },
                     { "term": { "build_id": build_id } },
                 ] } },
                 "script": { "lang": "painless", "source": DETACH_SCRIPT, "params": { "b": build_id } },
-            })),
+            }),
         )?;
         Ok(v["deleted"].as_u64().unwrap_or(0))
     }
@@ -1516,6 +1590,100 @@ mod tests {
             f["bool"]["should"][0]["bool"]["filter"][1]["term"]["build_id"],
             "b"
         );
+    }
+
+    /// Answers a submitted by-query with a task id, times out one poll,
+    /// reports it running once, then completed.
+    struct Tasks(
+        std::sync::Mutex<Vec<(u16, Value)>>,
+        std::sync::Mutex<Vec<String>>,
+    );
+    impl crate::transport::Transport for Tasks {
+        fn send(
+            &self,
+            method: Method,
+            path: &str,
+            _body: Option<(&[u8], &str)>,
+        ) -> Result<Response> {
+            self.1.lock().unwrap().push(format!("{method:?} {path}"));
+            let (status, v) = self.0.lock().unwrap().remove(0);
+            Ok(Response {
+                status,
+                body: serde_json::to_vec(&v).unwrap(),
+            })
+        }
+    }
+
+    #[test]
+    fn by_query_runs_detached_and_polls_the_task() {
+        let script = vec![
+            (200, json!({"task": "n1:42"})),
+            (408, json!({"error": "timeout"})),
+            (200, json!({"completed": false})),
+            (
+                200,
+                json!({"completed": true, "response": {"updated": 7, "failures": []}}),
+            ),
+        ];
+        let calls = std::sync::Arc::new(Tasks(script.into(), Default::default()));
+        struct Shared(std::sync::Arc<Tasks>);
+        impl crate::transport::Transport for Shared {
+            fn send(&self, m: Method, p: &str, b: Option<(&[u8], &str)>) -> Result<Response> {
+                self.0.send(m, p, b)
+            }
+        }
+        let b = ServerBackend::with_client(
+            Counting::new(Box::new(Shared(calls.clone()))),
+            Engine::OpenSearch,
+            "t",
+            None,
+            BulkLimits::from_config(&docmonk_config::model::BulkConfig::default()),
+        )
+        .with_task_limits(Duration::from_secs(60), Duration::from_secs(2));
+        let v = b
+            .by_query("/t-chunks/_update_by_query?conflicts=proceed", &json!({}))
+            .unwrap();
+        assert_eq!(v["updated"], 7);
+        let log = calls.1.lock().unwrap().clone();
+        assert_eq!(
+            log[0],
+            "Post /t-chunks/_update_by_query?conflicts=proceed&wait_for_completion=false&slices=auto"
+        );
+        assert_eq!(
+            log[1],
+            "Get /_tasks/n1%3A42?wait_for_completion=true&timeout=2s"
+        );
+        assert_eq!(log.len(), 4);
+    }
+
+    #[test]
+    fn by_query_cancels_a_task_past_its_budget() {
+        let script = vec![
+            (200, json!({"task": "n1:7"})),
+            (200, json!({"completed": false})),
+            (200, json!({"acknowledged": true})),
+        ];
+        let calls = std::sync::Arc::new(Tasks(script.into(), Default::default()));
+        struct Shared(std::sync::Arc<Tasks>);
+        impl crate::transport::Transport for Shared {
+            fn send(&self, m: Method, p: &str, b: Option<(&[u8], &str)>) -> Result<Response> {
+                self.0.send(m, p, b)
+            }
+        }
+        let b = ServerBackend::with_client(
+            Counting::new(Box::new(Shared(calls.clone()))),
+            Engine::OpenSearch,
+            "t",
+            None,
+            BulkLimits::from_config(&docmonk_config::model::BulkConfig::default()),
+        )
+        .with_task_limits(Duration::ZERO, Duration::from_secs(1));
+        let err = b
+            .by_query("/t-chunks/_delete_by_query", &json!({}))
+            .unwrap_err();
+        assert!(err.to_string().contains("cancelled"), "{err}");
+        let log = calls.1.lock().unwrap().clone();
+        assert_eq!(log[2], "Post /_tasks/n1%3A7/_cancel");
     }
 
     #[test]

@@ -48,11 +48,6 @@ pub const LOOKUP_BATCH: usize = 500;
 
 /// `metadata` key holding the JSON [`GraphState`] (small: status reads it).
 pub const GRAPH_STATE_KEY: &str = "graph_state";
-/// Legacy `metadata` keys of the JSON manifest (never written any more;
-/// the manifest lives in the `graph_file_keys`, `graph_symbols` and
-/// `graph_symbol_refs` tables).
-pub const GRAPH_FILES_KEY: &str = "graph_files";
-pub const GRAPH_SYMBOLS_KEY: &str = "graph_symbols";
 
 /// Version of the dependency manifest layout ([`GraphState::files`],
 /// [`GraphState::symbols`]). A manifest of another version is not reused.
@@ -252,13 +247,15 @@ pub struct GraphState {
     #[serde(skip)]
     pub manifest_error: Option<&'static str>,
     /// Dependency metadata: `file_id -> semantic file key` ([`GraphFile::key`])
-    /// each file's graph rows were derived from. Stored under [`GRAPH_FILES_KEY`], loaded only by
+    /// each file's graph rows were derived from. Stored in the
+    /// `graph_file_keys` table, loaded only by
     /// [`ProjectStore::graph_state_with_files`]. Empty means "recompute
     /// everything".
     #[serde(skip)]
     pub files: BTreeMap<String, String>,
     /// Dependency metadata: per-file symbol definitions and references
-    /// (stored under [`GRAPH_SYMBOLS_KEY`], loaded with `files`). Empty
+    /// (stored in the `graph_symbols` and `graph_symbol_refs` tables,
+    /// loaded with `files`). Empty
     /// means "re-resolve every reference".
     #[serde(skip)]
     pub symbols: BTreeMap<String, FileSymbols>,

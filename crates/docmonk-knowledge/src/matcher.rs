@@ -44,7 +44,7 @@ fn boundary(c: Option<char>) -> bool {
 
 /// After a needle: like [`boundary`], except that a `.` ends the
 /// identifier too unless a word character follows it (a sentence-final
-/// "calls cancelOrder." matches; "cancelOrder.v2" does not).
+/// "calls cancelOrder." matches; "cancelOrder.next" does not).
 fn trailing_boundary(rest: &str) -> bool {
     let mut it = rest.chars();
     match it.next() {
@@ -161,7 +161,7 @@ mod tests {
             "calls cancelOrder. Then",
             "cancelOrder"
         ));
-        assert!(!contains_identifier("see cancelOrder.v2", "cancelOrder"));
+        assert!(!contains_identifier("see cancelOrder.next", "cancelOrder"));
         assert!(contains_identifier("(Ledger) and [post_entry]", "Ledger"));
         assert!(contains_identifier("Dog.bark here", "Dog.bark"));
         assert!(!contains_identifier("a.Dog.bark here", "Dog.bark"));

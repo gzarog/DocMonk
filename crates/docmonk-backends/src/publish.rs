@@ -243,10 +243,9 @@ impl ServerBackend {
         let mut keep: Vec<String> = keep.to_vec();
         keep.push(to.to_owned());
         for batch in file_ids.chunks(COPY_BATCH) {
-            let v = self.post_json(
-                Method::Post,
+            let v = self.by_query(
                 &format!(
-                    "/{}/_update_by_query?conflicts=proceed&refresh=false&wait_for_completion=true",
+                    "/{}/_update_by_query?conflicts=proceed&refresh=false",
                     names.join(",")
                 ),
                 &json!({

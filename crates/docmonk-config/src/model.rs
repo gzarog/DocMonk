@@ -654,6 +654,12 @@ section! {
         request_timeout_seconds: f64 = 30.0, check = |v| {
             if *v <= 0.0 { Err("must be > 0".into()) } else { Ok(()) }
         };
+        // Budget for one server-side by-query task (copy-forward, build
+        // detach, GC). The task runs detached and is polled, so no single
+        // request waits longer than the request timeout.
+        task_timeout_seconds: f64 = 3600.0, check = |v| {
+            if *v <= 0.0 { Err("must be > 0".into()) } else { Ok(()) }
+        };
         bulk: BulkConfig = BulkConfig::default();
         gc_grace_seconds: f64 = 60.0, check = |v| {
             if (0.0..=86_400.0).contains(v) { Ok(()) } else { Err("must be between 0 and 86400".into()) }
