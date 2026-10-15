@@ -35,9 +35,11 @@ pub const MAX_READ: usize = 10_000;
 pub struct ServerReader {
     backend: Arc<ServerBackend>,
     source_id: String,
-    /// `base build -> visible graph generation`, resolved once per reader
-    /// (one request's snapshot).
-    graph: std::sync::Mutex<std::collections::HashMap<String, Option<String>>>,
+    /// `base build -> (served graph generation, stale)`, resolved once per
+    /// reader (one request's snapshot).
+    graph: std::sync::Mutex<std::collections::HashMap<String, Option<(String, bool)>>>,
+    /// `graph.require_current`.
+    require_current: bool,
     /// While recording ([`ServerReader::prefetch`]), searches are collected
     /// here instead of sent.
     recording: std::sync::Mutex<Option<Vec<(IndexKind, Value)>>>,
@@ -52,22 +54,35 @@ impl ServerReader {
             backend,
             source_id: source_id.to_owned(),
             graph: Default::default(),
+            require_current: false,
             recording: Default::default(),
             prefetched: Default::default(),
         }
     }
 
-    /// The graph generation derived from base build `b`, when it is the
-    /// source's ready graph; `None` (graph queries come back empty) for a
-    /// missing, building, failed, disabled or stale graph.
+    /// `graph.require_current`: serve only a graph derived from the
+    /// current base (never the last one, flagged stale).
+    pub fn require_current_graph(mut self, strict: bool) -> Self {
+        self.require_current = strict;
+        self
+    }
+
+    /// The graph generation graph queries of base build `b` read (see
+    /// [`ServerGraph::served_generation`](crate::graph::ServerGraph::served_generation));
+    /// `None` (graph queries come back empty) for a missing or disabled
+    /// graph, and in strict mode for anything but the current one.
     pub fn graph_generation(&self, b: &str) -> Result<Option<String>> {
+        Ok(self.served_graph(b)?.map(|(g, _)| g))
+    }
+
+    fn served_graph(&self, b: &str) -> Result<Option<(String, bool)>> {
         let mut cache = self.graph.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(g) = cache.get(b) {
             return Ok(g.clone());
         }
         let g = self
             .backend
-            .visible_graph(&self.source_id, b)
+            .served_graph(&self.source_id, b, self.require_current)
             .map_err(Self::err)?;
         cache.insert(b.to_owned(), g.clone());
         Ok(g)
@@ -1029,12 +1044,18 @@ impl KnowledgeRead for ServerReader {
     }
 
     fn graph_freshness(&self, b: &str) -> Result<docmonk_storage::read::GraphFreshness> {
-        let g = self.graph_generation(b)?;
+        let g = self.served_graph(b)?;
+        let stale = g.as_ref().is_some_and(|(_, s)| *s);
         Ok(docmonk_storage::read::GraphFreshness {
-            state: if g.is_some() { "ready" } else { "unavailable" }.into(),
+            state: match &g {
+                None => "unavailable",
+                Some(_) if stale => "stale",
+                Some(_) => "ready",
+            }
+            .into(),
             visible: g.is_some(),
-            generation: g,
-            stale: false,
+            generation: g.map(|(g, _)| g),
+            stale,
         })
     }
     fn source_id(&self) -> &str {

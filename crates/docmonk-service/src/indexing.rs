@@ -244,6 +244,8 @@ enum Outcome {
     Blocked(DocMonkError),
     Failed(DocMonkError),
     Completed(Box<SourceResult>),
+    /// The source's graph stage, run right after its own base publication.
+    Relationships(crate::relationships::RelationshipOutcome),
 }
 
 /// [`index_sources`] with run options: up to `max_parallel_sources`
@@ -328,7 +330,30 @@ pub fn index_sources_with(
                         }
                     }
                 };
+                let published = matches!(
+                    &outcome,
+                    Outcome::Completed(r) if r.offline.is_none() && r.build_id.is_some()
+                );
                 emit.emit(outcome);
+                // Pipelined phase 2: this source's graph is derived as soon as
+                // its own base is published, while other sources still index
+                // (the CPU governor bounds parsing across all of them).
+                if published && cfg.indexing.relationships_enabled {
+                    tracker.source_relationships(&source.id, "pending", None, None);
+                    crate::relationships::run_stage(
+                        home,
+                        &cfg,
+                        &backend,
+                        std::slice::from_ref(source),
+                        operation,
+                        1,
+                        &opts,
+                        Some(tracker),
+                        |_, o| {
+                            emit.emit(Outcome::Relationships(o));
+                        },
+                    );
+                }
             },
             |_| {
                 Outcome::Failed(DocMonkError::new(
@@ -340,6 +365,13 @@ pub fn index_sources_with(
                 let source = &sources[i];
                 match outcome {
                     Outcome::Started => on_event(SourceEvent::Started { source }),
+                    Outcome::Relationships(outcome) => {
+                        summary.relationships.add(&outcome);
+                        on_event(SourceEvent::Relationships {
+                            source,
+                            outcome: &outcome,
+                        });
+                    }
                     Outcome::Blocked(error) => {
                         summary.failed_sources += 1;
                         on_event(SourceEvent::Blocked {
@@ -382,27 +414,9 @@ pub fn index_sources_with(
         let ready: Vec<SourceRecord> = indexed.iter().map(|i| sources[*i].clone()).collect();
         summary.relationships_enabled = cfg.indexing.relationships_enabled;
         if cfg.indexing.relationships_enabled {
-            for s in &ready {
-                tracker.source_relationships(&s.id, "pending", None, None);
-            }
+            // Every graph of this batch was built right after its own base
+            // publication (pipelined above).
             tracker.set_phase("relationships");
-            crate::relationships::run_stage(
-                home,
-                &cfg,
-                &backend,
-                &ready,
-                operation,
-                parallel,
-                &opts,
-                Some(tracker),
-                |source, outcome| {
-                    summary.relationships.add(&outcome);
-                    on_event(SourceEvent::Relationships {
-                        source,
-                        outcome: &outcome,
-                    });
-                },
-            );
             // Stage 3: consumers of this run's sources (selected or not)
             // are updated against their existing published bases.
             match crate::sources::catalog(home).and_then(|c| c.list(false)) {

@@ -140,6 +140,9 @@ pub struct GraphTimings {
     pub linking_seconds: f64,
     /// Recording the graph state and committing the transaction.
     pub commit_seconds: f64,
+    /// How long the build held the knowledge database's write lock (from
+    /// swapping the staged rows in to the commit; parsing never holds it).
+    pub write_lock_seconds: f64,
 }
 
 /// Work counted during one graph build.
@@ -568,6 +571,59 @@ fn build(
     phase("deriving");
     progress(0, total);
 
+    // Derive outside the write transaction: files are read, verified and
+    // parsed batch by batch, and their rows staged in a connection-local
+    // TEMP table, so the knowledge database stays writable for everyone
+    // else meanwhile. The write lock is taken only to swap the rows in,
+    // resolve, link and commit.
+    store.stage_graph_rows_begin().map_err(failed)?;
+    let workers = opts.workers.max(1);
+    let mut done = 0;
+    let mut written = 0;
+    let batch_size = if opts.batch == 0 {
+        GRAPH_BATCH
+    } else {
+        opts.batch
+    };
+    let staged = (|| -> Result<(), GraphError> {
+        for batch in changed.chunks(batch_size) {
+            if opts.cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+                return Err(GraphError::Cancelled);
+            }
+            docmonk_indexing::progress::heartbeat();
+            let code: Vec<&GraphFile> = batch
+                .iter()
+                .copied()
+                .filter(|f| f.kind == "code" && f.status == "indexed")
+                .collect();
+            let derived = derive_batch(root, &code, workers, opts.facts)?;
+            lap(&mut timings.derivation_seconds);
+            for d in derived {
+                counters.files_derived += 1;
+                counters.bytes_read += d.bytes;
+                timings.read_hash_seconds += d.read_hash_seconds;
+                timings.parse_seconds += d.parse_seconds;
+                timings.cache_load_seconds += d.cache_load_seconds;
+                match d.cached {
+                    Some(true) => counters.facts_hits += 1,
+                    Some(false) => counters.facts_misses += 1,
+                    None => {}
+                }
+                written += d.rows.len();
+                store.stage_graph_rows(&d.rows).map_err(failed)?;
+            }
+            lap(&mut timings.sqlite_write_seconds);
+            done += batch.len();
+            progress(done, total);
+        }
+        Ok(())
+    })();
+    if let Err(e) = staged {
+        let _ = store.stage_graph_rows_end();
+        return Err(e);
+    }
+
+    let locked = Instant::now();
     store.begin_session().map_err(failed)?;
     // Fenced against a concurrent publication: the base generation must
     // still be the one this build was planned against.
@@ -582,46 +638,14 @@ fn build(
         for f in &changed {
             store.clear_file_graph(build_id, &f.id).map_err(failed)?;
         }
+        // Rows of removed files and links to vanished entities or
+        // documents (the base update left them for readers).
+        store.clear_orphaned_graph(build_id).map_err(failed)?;
     }
     lap(&mut timings.clear_seconds);
-    let workers = opts.workers.max(1);
-    let mut done = 0;
-    let mut written = 0;
-    let batch_size = if opts.batch == 0 {
-        GRAPH_BATCH
-    } else {
-        opts.batch
-    };
-    for batch in changed.chunks(batch_size) {
-        if opts.cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
-            return Err(GraphError::Cancelled);
-        }
-        docmonk_indexing::progress::heartbeat();
-        let code: Vec<&GraphFile> = batch
-            .iter()
-            .copied()
-            .filter(|f| f.kind == "code" && f.status == "indexed")
-            .collect();
-        let derived = derive_batch(root, &code, workers, opts.facts)?;
-        lap(&mut timings.derivation_seconds);
-        for d in derived {
-            counters.files_derived += 1;
-            counters.bytes_read += d.bytes;
-            timings.read_hash_seconds += d.read_hash_seconds;
-            timings.parse_seconds += d.parse_seconds;
-            timings.cache_load_seconds += d.cache_load_seconds;
-            match d.cached {
-                Some(true) => counters.facts_hits += 1,
-                Some(false) => counters.facts_misses += 1,
-                None => {}
-            }
-            written += d.rows.len();
-            store.put_relationships(build_id, &d.rows).map_err(failed)?;
-        }
-        lap(&mut timings.sqlite_write_seconds);
-        done += batch.len();
-        progress(done, total);
-    }
+    store.publish_staged_graph_rows(build_id).map_err(failed)?;
+    store.stage_graph_rows_end().map_err(failed)?;
+    lap(&mut timings.sqlite_write_seconds);
     phase("resolving");
     let changed_ids: Vec<String> = changed.iter().map(|f| f.id.clone()).collect();
     let (symbols, resolution, files_reresolved) = if full || prev.resolve_all {
@@ -637,27 +661,32 @@ fn build(
         let fresh = store
             .file_symbols(build_id, Some(&changed_ids))
             .map_err(failed)?;
+        // The recorded symbols of only the changed and removed files.
+        let looked_up: Vec<String> = changed_ids
+            .iter()
+            .chain(removed.iter().copied())
+            .cloned()
+            .collect();
+        let before = store.graph_symbols(&looked_up).map_err(failed)?;
         lap(&mut timings.symbol_manifest_seconds);
         let mut keys: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
-        for f in changed_ids.iter().chain(removed.iter().copied()) {
-            keys.extend(FileSymbols::changed_keys(prev.symbols.get(f), fresh.get(f)));
+        for f in &looked_up {
+            keys.extend(FileSymbols::changed_keys(before.get(f), fresh.get(f)));
         }
         // Re-resolve the changed files and every unchanged file with a
-        // reference through one of those symbols.
+        // reference through one of those symbols (an indexed lookup).
         let mut targets: std::collections::BTreeSet<String> = changed_ids.iter().cloned().collect();
-        for (f, s) in &prev.symbols {
-            if current.contains(f.as_str()) && s.refs.iter().any(|k| keys.contains(k.as_str())) {
-                targets.insert(f.clone());
+        let keys: Vec<&str> = keys.into_iter().collect();
+        for f in store.graph_dependents(&keys).map_err(failed)? {
+            if current.contains(f.as_str()) {
+                targets.insert(f);
             }
         }
+        lap(&mut timings.symbol_manifest_seconds);
         let n = resolve_files(store, build_id, &targets).map_err(failed)?;
         lap(&mut timings.resolution_seconds);
-        let mut symbols = prev.symbols.clone();
-        for f in &removed {
-            symbols.remove(*f);
-        }
-        symbols.extend(fresh);
-        (symbols, n, targets.len())
+        // Only the changed files' symbols are written back.
+        (fresh, n, targets.len())
     };
     phase("linking");
     let linking = match opts.linker {
@@ -668,6 +697,7 @@ fn build(
     };
     lap(&mut timings.linking_seconds);
     phase("committing");
+    let whole_manifest = full || prev.resolve_all;
     let state = GraphState {
         state: GraphLifecycle::Ready,
         generation: prev.generation + 1,
@@ -689,9 +719,24 @@ fn build(
         stale_reason: None,
         updated_at: None,
     };
-    store.put_graph_state_with_files(&state).map_err(failed)?;
+    if whole_manifest {
+        store.put_graph_state_with_files(&state).map_err(failed)?;
+    } else {
+        // Proportional to the change: the changed files' keys and symbols,
+        // and the removed files.
+        let keys: std::collections::BTreeMap<String, String> = files
+            .iter()
+            .filter(|f| changed_set.contains(f.id.as_str()))
+            .map(|f| (f.id.clone(), f.key.clone()))
+            .collect();
+        let removed: Vec<String> = removed.iter().map(|f| (*f).clone()).collect();
+        store
+            .put_graph_state_delta(&state, &keys, &state.symbols, &removed)
+            .map_err(failed)?;
+    }
     store.commit_session().map_err(failed)?;
     lap(&mut timings.commit_seconds);
+    timings.write_lock_seconds = locked.elapsed().as_secs_f64();
     if let Some(cache) = opts.facts {
         // Only the current content's facts can be used again.
         let keep: std::collections::HashSet<String> = files

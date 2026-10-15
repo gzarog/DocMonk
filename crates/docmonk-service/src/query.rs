@@ -185,7 +185,7 @@ pub struct Opened {
 pub fn open_sources(home: &Home, only: Option<&str>) -> Result<Vec<Opened>, DocMonkError> {
     match crate::backend::open(home)? {
         Backend::Local => open_local(home, only),
-        Backend::Server(server) => open_server(server, only),
+        Backend::Server(server) => open_server(home, server, only),
     }
 }
 
@@ -205,7 +205,7 @@ fn open_local(home: &Home, only: Option<&str>) -> Result<Vec<Opened>, DocMonkErr
         let Some(build) = cp.state(&source.id).map_err(db)?.active_build_id else {
             continue;
         };
-        let store = PooledStore::take(&source.id, &build, || {
+        let mut store = PooledStore::take(&source.id, &build, || {
             ProjectStore::open(
                 &layout,
                 &project_id_for_canonical(&source.path),
@@ -214,6 +214,7 @@ fn open_local(home: &Home, only: Option<&str>) -> Result<Vec<Opened>, DocMonkErr
             )
             .map_err(db)
         })?;
+        store.require_current_graph(cfg.graph.require_current);
         out.push(Opened {
             source,
             store: Reader::Local(store),
@@ -224,9 +225,11 @@ fn open_local(home: &Home, only: Option<&str>) -> Result<Vec<Opened>, DocMonkErr
 }
 
 fn open_server(
+    home: &Home,
     server: std::sync::Arc<docmonk_backends::ServerBackend>,
     only: Option<&str>,
 ) -> Result<Vec<Opened>, DocMonkError> {
+    let strict = load(home)?.graph.require_current;
     let catalog = crate::sources::Catalog::Server(server.clone());
     let sources = match only {
         Some(id) => vec![catalog.get(id)?],
@@ -238,7 +241,9 @@ fn open_server(
         .filter_map(|source| {
             let build = active.get(&source.id)?.clone();
             Some(Opened {
-                store: Reader::Server(ServerReader::new(server.clone(), &source.id)),
+                store: Reader::Server(
+                    ServerReader::new(server.clone(), &source.id).require_current_graph(strict),
+                ),
                 source,
                 build,
             })

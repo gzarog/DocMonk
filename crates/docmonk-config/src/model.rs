@@ -569,6 +569,17 @@ section! {
 }
 
 section! {
+    /// Relationship-graph reads.
+    GraphConfig {
+        // false: while a new graph is being built after a base update, the
+        // last committed graph of the same base build is served, flagged
+        // stale. true: graph queries return nothing until the graph
+        // matches the published base exactly.
+        require_current: bool = false;
+    }
+}
+
+section! {
     ContextConfig {
         max_chars: i64 = 30000;
         max_files: i64 = 20;
@@ -668,6 +679,7 @@ section! {
         documents: DocumentsConfig = DocumentsConfig::default();
         search: SearchConfig = SearchConfig::default();
         context: ContextConfig = ContextConfig::default();
+        graph: GraphConfig = GraphConfig::default();
         mcp: McpConfig = McpConfig::default();
         privacy: PrivacyConfig = PrivacyConfig::default();
         ai: AiConfig = AiConfig::default();

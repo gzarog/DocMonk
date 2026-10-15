@@ -187,6 +187,10 @@ pub fn fts_query(input: &str) -> Option<String> {
 pub struct ProjectStore {
     pub(crate) conn: Connection,
     source_id: String,
+    /// Graph reads require a graph derived from the current base
+    /// generation (`graph.require_current`); see
+    /// [`ProjectStore::graph_visible`].
+    pub(crate) graph_require_current: bool,
 }
 
 impl ProjectStore {
@@ -203,7 +207,15 @@ impl ProjectStore {
         Ok(Self {
             conn,
             source_id: source_id.to_owned(),
+            graph_require_current: false,
         })
+    }
+
+    /// `graph.require_current`: graph reads return nothing unless the graph
+    /// matches the published base exactly (instead of serving the last
+    /// committed graph, flagged stale, while the next one is derived).
+    pub fn require_current_graph(&mut self, strict: bool) {
+        self.graph_require_current = strict;
     }
 
     /// Directory holding this project's database (derived caches such as
@@ -483,6 +495,12 @@ impl ProjectStore {
     pub fn carry_forward(&mut self, from_build: &str, to_build: &str, file_id: &str) -> Result<()> {
         write_tx(&mut self.conn, |tx| {
             delete_file_rows(tx, to_build, file_id)?;
+            cached(
+                tx,
+                "DELETE FROM relationships WHERE build_id = ?1 AND file_id = ?2",
+                params![to_build, file_id],
+            )
+            .map_err(StorageError::sqlite("carry forward"))?;
             let exec = |sql: &str| {
                 cached(tx, sql, params![to_build, from_build, file_id])
                     .map_err(StorageError::sqlite("carry forward"))
@@ -1048,14 +1066,12 @@ fn delete_file_rows(tx: &Connection, build_id: &str, file_id: &str) -> Result<()
             (SELECT rowid FROM chunks WHERE build_id = ?1 AND file_id = ?2)",
         "DELETE FROM path_fts WHERE rowid IN
             (SELECT rowid FROM files WHERE build_id = ?1 AND id = ?2)",
-        "DELETE FROM cross_links WHERE build_id = ?1 AND document_id IN
-            (SELECT id FROM documents WHERE build_id = ?1 AND file_id = ?2)",
-        "DELETE FROM cross_links WHERE build_id = ?1 AND entity_id IN
-            (SELECT id FROM entities WHERE build_id = ?1 AND file_id = ?2)",
+        // The file's relationships and links are left in place: they belong
+        // to the last committed graph, which stays readable (flagged stale)
+        // until the graph stage replaces them and clears orphans.
         "DELETE FROM embeddings WHERE build_id = ?1 AND file_id = ?2",
         "DELETE FROM chunks WHERE build_id = ?1 AND file_id = ?2",
         "DELETE FROM documents WHERE build_id = ?1 AND file_id = ?2",
-        "DELETE FROM relationships WHERE build_id = ?1 AND file_id = ?2",
         "DELETE FROM entities WHERE build_id = ?1 AND file_id = ?2",
         "DELETE FROM files WHERE build_id = ?1 AND id = ?2",
     ] {
@@ -1110,9 +1126,10 @@ fn insert_knowledge(tx: &Connection, build_id: &str, k: &FileKnowledge) -> Resul
     for r in &k.relationships {
         cached(
             tx,
-            "INSERT INTO relationships (id, build_id, file_id, relationship_type, source_entity_id,
-                target_entity_id, target_symbol, resolver, confidence, source_location, evidence,
-                reference_text)
+            // Replaces the row of the last graph (base updates keep them).
+            "INSERT OR REPLACE INTO relationships (id, build_id, file_id, relationship_type,
+                source_entity_id, target_entity_id, target_symbol, resolver, confidence,
+                source_location, evidence, reference_text)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 r.id,

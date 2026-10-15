@@ -152,6 +152,29 @@ impl ServerGraph {
             .then_some(self.generation.as_deref())
             .flatten()
     }
+
+    /// The generation graph readers of `active` are served and whether it
+    /// is stale. Strict (`graph.require_current`): only the current one
+    /// ([`Self::visible_generation`]). Otherwise the last promoted
+    /// generation stays readable while the next is built (a base was
+    /// republished, a graph build failed or is running), flagged stale; a
+    /// disabled or never-built graph is not served.
+    pub fn served_generation(
+        &self,
+        active: Option<&str>,
+        require_current: bool,
+    ) -> Option<(&str, bool)> {
+        if let Some(g) = self.visible_generation(active) {
+            return Some((g, false));
+        }
+        if require_current
+            || active.is_none()
+            || matches!(self.state.as_str(), "disabled" | "pending")
+        {
+            return None;
+        }
+        self.generation.as_deref().map(|g| (g, true))
+    }
 }
 
 /// What to publish.
@@ -503,6 +526,21 @@ impl ServerBackend {
     }
 
     /// The graph generation readers may use for `base_build_id`.
+    /// [`ServerGraph::served_generation`] of the source's graph against
+    /// `base_build_id`: `(generation, stale)`.
+    pub fn served_graph(
+        &self,
+        source_id: &str,
+        base_build_id: &str,
+        require_current: bool,
+    ) -> Result<Option<(String, bool)>> {
+        Ok(self.source_state(source_id)?.and_then(|s| {
+            ServerGraph::from_state(&s)
+                .served_generation(Some(base_build_id), require_current)
+                .map(|(g, stale)| (g.to_owned(), stale))
+        }))
+    }
+
     pub fn visible_graph(&self, source_id: &str, base_build_id: &str) -> Result<Option<String>> {
         Ok(self.source_state(source_id)?.and_then(|s| {
             ServerGraph::from_state(&s)

@@ -1,10 +1,11 @@
 //! The relationship graph stage of a run (phase 2).
 //!
 //! `docmonk index` (and every automatic daemon pass) is two-staged per
-//! batch of selected sources: phase 1 indexes and publishes every source
-//! ([`crate::indexing`]); only once **all** of them finished does phase 2
-//! derive and publish relationship graphs, for the sources whose base index
-//! is published and whose graph is missing, stale or failed. Phase 2 never
+//! source: phase 1 indexes and publishes the source ([`crate::indexing`]),
+//! and as soon as that source's base index is published phase 2 derives
+//! and publishes its relationship graph (when missing, stale or failed),
+//! while other sources of the batch may still be indexing; the CPU
+//! governor bounds parsing across all of them. Phase 2 never
 //! runs when `indexing.relationships_enabled` is off, never holds back or
 //! rolls back a base publication, and one source's graph failure never
 //! stops another's. `docmonk relationships build` runs phase 2 alone, to

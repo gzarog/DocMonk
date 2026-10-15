@@ -281,6 +281,25 @@ CREATE TABLE embedding_cache (
     PRIMARY KEY (text_hash, model_fingerprint, embedding_text_version)
 );
 
+-- The relationship graph's dependency manifest (see graph.rs), one row per
+-- file so an incremental graph build reads and writes only what changed:
+-- the semantic key each file's graph rows were derived from, its symbol
+-- definitions and references (JSON), and an index from every referenced
+-- symbol key to the files that reference it (dependents lookup).
+CREATE TABLE graph_file_keys (
+    file_id TEXT PRIMARY KEY,
+    key TEXT NOT NULL
+) WITHOUT ROWID;
+CREATE TABLE graph_symbols (
+    file_id TEXT PRIMARY KEY,
+    symbols TEXT NOT NULL
+) WITHOUT ROWID;
+CREATE TABLE graph_symbol_refs (
+    key TEXT NOT NULL,
+    file_id TEXT NOT NULL,
+    PRIMARY KEY (key, file_id)
+) WITHOUT ROWID;
+
 -- Lexical indexes. Rows are written explicitly together with their base
 -- rows, share the base row's rowid (so per-file and per-build deletes are
 -- rowid lookups) and carry build_id so searches filter to the active build.
