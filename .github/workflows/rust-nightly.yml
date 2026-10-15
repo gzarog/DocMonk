@@ -1,8 +1,10 @@
 name: Nightly
 
 # The release-mode status benchmark (ADR 0034: 150 sources in <= 30
-# requests, a watch refresh in < 10) against both engines. Moved out of
-# routine CI (docs/CI.md); it never publishes anything.
+# requests, a watch refresh in < 10) against both engines, and the
+# retrieval eval over this repository with the pinned models (all arms
+# against fixtures/search_quality/repo-eval-gates.json). Moved out of
+# routine CI (docs/CI.md); neither publishes anything.
 on:
   schedule:
     - cron: '0 3 * * *'
@@ -71,4 +73,30 @@ jobs:
         with:
           name: status-benchmark-log
           path: ${{ runner.temp }}/benchmark.log
+          retention-days: 14
+
+  retrieval-eval:
+    name: Retrieval eval (repository, pinned models)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/fetch-models
+        with:
+          dir: ${{ runner.temp }}
+      - name: Repository retrieval eval (lexical, routed, hybrid, hybrid_rerank)
+        run: cargo test --release -p docmonk-service --test repo_eval -- --nocapture
+        env:
+          DOCMONK_REPO_EVAL: "1"
+          DOCMONK_MODELS_DIR: ${{ runner.temp }}/models
+          DOCMONK_REQUIRE_MODELS: "1"
+          DOCMONK_EVAL_OUT: ${{ runner.temp }}/repo-eval.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: repo-eval-report
+          path: ${{ runner.temp }}/repo-eval.json
+          if-no-files-found: ignore
           retention-days: 14

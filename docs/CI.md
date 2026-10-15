@@ -24,6 +24,7 @@ listens to; do not rename them. A failed `CI` push run never releases.
 | Container image (linux/amd64) | – | – | – | ✓ | – | ✓ |
 | CI gate | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | 150-source status benchmark | – | – | – | – | – | – (nightly) |
+| Retrieval eval (repository, pinned models) | – | – | – | – | – | – (nightly) |
 
 The Linux Rust job always requires the pinned OCR, embedding and reranker
 models (`DOCMONK_REQUIRE_OCR=1`, `DOCMONK_REQUIRE_MODELS=1`).
@@ -75,6 +76,16 @@ unique group, so a `main` run is never cancelled.
 runs the ignored release-mode `docmonk-status --test live_server`
 benchmark unchanged. Its log and duration are uploaded as the
 `status-benchmark-log` artifact (14-day retention). It never publishes.
+
+The `retrieval-eval` job runs `docmonk-service --test repo_eval` in
+release mode with `DOCMONK_REPO_EVAL=1` and the pinned models, so every
+arm (lexical, routed, hybrid, hybrid with reranking) is checked against
+`fixtures/search_quality/repo-eval-gates.json`. The report is uploaded as
+the `repo-eval-report` artifact. The smaller quality guards run in every
+PR's Linux job: `p0_eval` (generated corpus), `link_precision` (link and
+call-edge precision floors in `fixtures/linking/precision-gates.json`)
+and `batched_reads` (batched graph reads must equal the one-row reads and
+use at least 10x fewer statements).
 
 ## Required checks (repository settings)
 

@@ -87,7 +87,7 @@ search explores more filtered-out nodes. GC with a short retention keeps
 closed versions below a few percent of live ones. The measurement below
 must confirm a recall@10 and p95 latency change of no more than 5%.
 
-### Migration
+### Schema change
 
 New mappings (`valid_from`, `valid_to`, `closing_at`; no multi-valued
 `build_id`) mean a server schema version bump. Under ADR 0007 an existing
