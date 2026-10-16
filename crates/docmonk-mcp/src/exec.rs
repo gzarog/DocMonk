@@ -166,9 +166,12 @@ impl Executor {
         let spawned = std::thread::Builder::new()
             .name("docmonk-mcp-tool".into())
             .spawn(move || {
-                let _slot = slot;
-                let _deadline = worker_token.enter();
+                let deadline_guard = worker_token.enter();
                 let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(work));
+                drop(deadline_guard);
+                // Free the slot before reporting, so a caller that sees the
+                // result can immediately start another call.
+                drop(slot);
                 // The caller stopped waiting: the late result is discarded.
                 if tx.send(outcome).is_err() {
                     let (lock, _) = &*exec.inner;
