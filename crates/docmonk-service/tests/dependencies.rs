@@ -452,3 +452,83 @@ fn f12_every_manifest_advance_is_a_persisted_revision() {
         first.producers[&b].base_generation
     );
 }
+
+// ---- Audit remediation PH03 (F01) ----
+
+fn edges(
+    env: &Env,
+    only: Option<&str>,
+    name: &str,
+    dir: docmonk_retrieval::graph::Direction,
+) -> Vec<serde_json::Value> {
+    let only = only.map(|k| env.source(k).id);
+    let opened = docmonk_service::query::open_sources(&env.home, only.as_deref()).unwrap();
+    let v = docmonk_service::query::calls_value(&opened, name, dir, 3, 100).unwrap();
+    v["edges"].as_array().unwrap().clone()
+}
+
+fn external(edges: &[serde_json::Value]) -> Vec<&serde_json::Value> {
+    edges.iter().filter(|e| !e["external"].is_null()).collect()
+}
+
+#[test]
+fn f01_bound_references_are_traversed_across_sources() {
+    use docmonk_retrieval::graph::Direction;
+    let env = setup(&[]);
+    env.run(&[]);
+    let b = env.source("b").id;
+    let a = env.source("a").id;
+
+    // Callers of the producer's definition include the consumer's call.
+    let callers = edges(&env, None, "Lib.Shared.Compute", Direction::Incoming);
+    let ext = external(&callers);
+    assert_eq!(ext.len(), 1, "{callers:#?}");
+    assert_eq!(ext[0]["external"]["producer_source_id"], b.as_str());
+    assert_eq!(ext[0]["external"]["consumer_source_id"], a.as_str());
+    assert_eq!(
+        ext[0]["external"]["target_entity_id"].as_str(),
+        env.compute("b").as_deref()
+    );
+
+    // Callees of the consumer's entry point reach into the producer.
+    let callees = edges(&env, None, "App.Program.Main", Direction::Outgoing);
+    let ext = external(&callees);
+    assert_eq!(ext.len(), 1, "{callees:#?}");
+    assert_eq!(ext[0]["external"]["producer_source_id"], b.as_str());
+
+    // A source filter stays a hard restriction: no hop into `b`.
+    let only_a = edges(&env, Some("a"), "App.Program.Main", Direction::Outgoing);
+    assert!(external(&only_a).is_empty(), "{only_a:#?}");
+}
+
+#[test]
+fn f01_stale_or_ambiguous_bindings_are_never_traversed() {
+    use docmonk_retrieval::graph::Direction;
+    // Ambiguous (two producers define it): never traversed.
+    let env = setup(&["a -> c"]);
+    env.run(&[]);
+    let callees = edges(&env, None, "App.Program.Main", Direction::Outgoing);
+    assert!(external(&callees).is_empty(), "{callees:#?}");
+
+    // A producer snapshot that no longer matches the producer's published
+    // build is not served (read-time revalidation, F05).
+    let env = setup(&[]);
+    env.run(&[]);
+    {
+        let (mut s, _) = env.store("a");
+        let mut m = s.external_manifest().unwrap().unwrap();
+        for p in m.producers.values_mut() {
+            p.base_generation = "moved".into();
+        }
+        s.put_external_manifest(&m).unwrap();
+    }
+    let callees = edges(&env, None, "App.Program.Main", Direction::Outgoing);
+    assert!(external(&callees).is_empty(), "{callees:#?}");
+
+    // A manifest that is no longer current is not served.
+    let env = setup(&[]);
+    env.run(&[]);
+    invalidate(&env, "a");
+    let callees = edges(&env, None, "App.Program.Main", Direction::Outgoing);
+    assert!(external(&callees).is_empty(), "{callees:#?}");
+}

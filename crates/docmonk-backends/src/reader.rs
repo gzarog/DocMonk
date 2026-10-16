@@ -1079,6 +1079,24 @@ impl KnowledgeRead for ServerReader {
         Ok(out)
     }
 
+    fn external_manifest(&self) -> Result<Option<docmonk_storage::graph::ExternalManifest>> {
+        let Some(v) = self
+            .backend
+            .graph_external(&self.source_id)
+            .map_err(|e| StorageError::Backend(e.to_string()))?
+        else {
+            return Ok(None);
+        };
+        serde_json::from_value(v)
+            .map(Some)
+            .map_err(|e| StorageError::Invalid(format!("dependency manifest: {e}")))
+    }
+
+    fn dependency_generation(&self, b: &str) -> Result<Option<String>> {
+        // Server builds are immutable: the build id is the generation.
+        Ok(Some(format!("server:{b}")))
+    }
+
     fn graph_freshness(&self, b: &str) -> Result<docmonk_storage::read::GraphFreshness> {
         let g = self.served_graph(b)?;
         let stale = g.as_ref().is_some_and(|(_, s)| *s);

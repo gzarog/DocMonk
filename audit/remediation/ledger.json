@@ -10,8 +10,19 @@
   "findings": {
     "F01": {
       "phase": "PH03",
-      "status": "open",
-      "checks": []
+      "status": "fixed",
+      "checks": [
+        {
+          "test": "crates/docmonk-service/tests/dependencies.rs::f01_bound_references_are_traversed_across_sources",
+          "fails_on_baseline": "yes: baseline traversal never left a source"
+        },
+        {
+          "test": "crates/docmonk-service/tests/dependencies.rs::f01_stale_or_ambiguous_bindings_are_never_traversed"
+        },
+        {
+          "test": "crates/docmonk-service/tests/server_live.rs::*_cross_host_dependencies (server overlay)"
+        }
+      ]
     },
     "F02": {
       "phase": "PH01",
@@ -56,14 +67,17 @@
     },
     "F05": {
       "phase": "PH01",
-      "status": "fixed_publish_time",
+      "status": "fixed",
       "checks": [
         {
           "test": "crates/docmonk-service/tests/dependencies.rs::f05_an_active_build_switch_during_the_update_fences_publication",
           "fails_on_baseline": "not compilable on baseline (uses the new test hook); baseline fence only re-read the old build's base generation, which stays published"
+        },
+        {
+          "test": "crates/docmonk-service/tests/dependencies.rs::f01_stale_or_ambiguous_bindings_are_never_traversed (read-time revalidation)"
         }
       ],
-      "remaining": "Read-time revalidation of external edges lands with the first reader (PH03); server consumer-manifest compare-and-set on expected consumer generation needs live-cluster tests."
+      "remaining": "Server consumer-manifest compare-and-set on expected consumer generation relies on the writer lease (no cross-document atomicity, AD04); readers revalidate generations so a lost race is never served."
     },
     "F06": {
       "phase": "PH04",

@@ -587,6 +587,35 @@ fn cross_host_dependencies(base: &str, engine: &str) {
     let binding = &m.bindings[0];
     assert_eq!(binding.producer.as_deref(), Some(producer.id.as_str()));
     assert!(binding.target_entity_id.is_some() && !binding.ambiguous);
+
+    // F01 (PH03): either host traverses the binding from the producer's
+    // definition to the consumer's call, read from the server.
+    for home in [&host1.home, &home2] {
+        let opened = open_sources(home, None).unwrap();
+        let v = query::calls_value(
+            &opened,
+            "Lib.Shared.Compute",
+            docmonk_retrieval::graph::Direction::Incoming,
+            2,
+            100,
+        )
+        .unwrap();
+        let external: Vec<&Value> = v["edges"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|e| !e["external"].is_null())
+            .collect();
+        assert_eq!(external.len(), 1, "{v:#}");
+        assert_eq!(
+            external[0]["external"]["producer_source_id"],
+            producer.id.as_str()
+        );
+        assert_eq!(
+            external[0]["external"]["consumer_source_id"],
+            consumer.id.as_str()
+        );
+    }
 }
 
 #[test]

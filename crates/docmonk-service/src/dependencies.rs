@@ -836,6 +836,7 @@ fn update_consumer(
                 relationship_id: r.id.clone(),
                 file_id: r.file_id.clone(),
                 reference_text: text.clone(),
+                target_symbol: r.target_symbol.clone(),
                 producer: single.as_ref().map(|(p, _)| p.clone()),
                 target_entity_id: single.map(|(_, e)| e),
                 ambiguous: found.len() > 1,
@@ -882,6 +883,10 @@ fn update_consumer(
         state: "current".into(),
         reason: None,
         consumer_generation: graph_generation,
+        consumer_base_generation: match backend {
+            Backend::Local => view.generation.clone(),
+            Backend::Server(_) => format!("server:{}", view.active),
+        },
         producers: producers
             .iter()
             .map(|(id, (p, via))| {

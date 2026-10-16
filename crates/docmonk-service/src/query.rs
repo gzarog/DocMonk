@@ -399,6 +399,12 @@ pub fn edge_json(e: &TraversalEdge, opened: &[Opened]) -> Value {
             (_, l) => l.clone(),
         },
         "evidence": r.evidence,
+        "external": e.external.as_ref().map(|h| json!({
+            "consumer_source_id": h.consumer_source_id,
+            "producer_source_id": h.producer_source_id,
+            "target_entity_id": h.target_entity_id,
+            "binding_state": "current",
+        })),
     })
 }
 
