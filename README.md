@@ -306,6 +306,7 @@ Every setting is in [the reference](docs/reference.md). Settings live in `~/.doc
 | `indexing.watch` | `true` | Daemon watches folders for changes |
 | `indexing.max_file_size_mb` | `100` | Skip larger files |
 | `indexing.relationships_enabled` | `true` | Build relationships (callers, impact, doc↔code links). `false` keeps search only |
+| `indexing.pipeline_relationships` | `false` | `true`: build each source's relationships right after its own index, instead of after every source is indexed |
 | `graph.require_current` | `false` | `true`: hide links while they are being refreshed, instead of showing the previous ones marked `stale` |
 | `ai.provider` / `ai.model` | `none` | Optional AI answers for `docmonk ask` |
 | `privacy.external_ai_allowed` | `false` | Required for cloud AI providers |

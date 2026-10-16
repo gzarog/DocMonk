@@ -6,7 +6,9 @@
 //! for the sources that published, when `indexing.relationships_enabled`
 //! is on. Search over a newly published base index is available as soon as
 //! its phase-1 pass publishes; a graph failure never rolls it back and is
-//! reported separately from indexing failures.
+//! reported separately from indexing failures. With
+//! `indexing.pipeline_relationships` each source's graph is built right
+//! after its own phase-1 pass instead (no barrier).
 //!
 //! Up to `indexing.max_parallel_sources` independent sources run at once
 //! (ADR 0033). Each source pass holds its own
@@ -335,10 +337,14 @@ pub fn index_sources_with(
                     Outcome::Completed(r) if r.offline.is_none() && r.build_id.is_some()
                 );
                 emit.emit(outcome);
-                // Pipelined phase 2: this source's graph is derived as soon as
-                // its own base is published, while other sources still index
-                // (the CPU governor bounds parsing across all of them).
-                if published && cfg.indexing.relationships_enabled {
+                // Pipelined phase 2 (opt-in): this source's graph is derived
+                // as soon as its own base is published, while other sources
+                // still index (the CPU governor bounds parsing across all of
+                // them).
+                if published
+                    && cfg.indexing.relationships_enabled
+                    && cfg.indexing.pipeline_relationships
+                {
                     tracker.source_relationships(&source.id, "pending", None, None);
                     crate::relationships::run_stage(
                         home,
@@ -414,9 +420,31 @@ pub fn index_sources_with(
         let ready: Vec<SourceRecord> = indexed.iter().map(|i| sources[*i].clone()).collect();
         summary.relationships_enabled = cfg.indexing.relationships_enabled;
         if cfg.indexing.relationships_enabled {
-            // Every graph of this batch was built right after its own base
-            // publication (pipelined above).
             tracker.set_phase("relationships");
+            if !cfg.indexing.pipeline_relationships {
+                // Phase 2 after the barrier: graphs for every source that
+                // published (pipelined runs built them above).
+                for s in &ready {
+                    tracker.source_relationships(&s.id, "pending", None, None);
+                }
+                crate::relationships::run_stage(
+                    home,
+                    &cfg,
+                    &backend,
+                    &ready,
+                    operation,
+                    parallel,
+                    &opts,
+                    Some(tracker),
+                    |source, outcome| {
+                        summary.relationships.add(&outcome);
+                        on_event(SourceEvent::Relationships {
+                            source,
+                            outcome: &outcome,
+                        });
+                    },
+                );
+            }
             // Stage 3: consumers of this run's sources (selected or not)
             // are updated against their existing published bases.
             match crate::sources::catalog(home).and_then(|c| c.list(false)) {
