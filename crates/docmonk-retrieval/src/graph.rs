@@ -268,6 +268,7 @@ pub fn traverse_many(
         .collect();
     let mut depth = 1;
     while depth <= max_depth {
+        crate::check_deadline()?;
         let active = |w: &Walk| !w.frontier.is_empty() && w.out.len() < limit;
         // One batched read per corpus for this level of every walk.
         let mut wanted: HashMap<usize, Vec<String>> = HashMap::new();

@@ -102,6 +102,12 @@ impl<T: Transport> Counting<T> {
         path: &str,
         body: Option<(&[u8], &str)>,
     ) -> Result<Response> {
+        // A request whose deadline passed issues no further calls (F09).
+        if docmonk_core::deadline::expired() {
+            return Err(BackendError::Transport(
+                docmonk_core::deadline::CANCELLED.into(),
+            ));
+        }
         if let Ok(mut s) = self.stats.lock() {
             s.requests += 1;
             s.bytes_sent += body.map_or(0, |(b, _)| b.len() as u64);
@@ -191,6 +197,11 @@ impl Transport for HttpTransport {
             Method::Head => reqwest::Method::HEAD,
         };
         let mut req = self.client.request(m, &url);
+        // Never wait past the calling request's deadline (the client's
+        // configured timeout still applies when it is shorter).
+        if let Some(left) = docmonk_core::deadline::remaining() {
+            req = req.timeout(left.max(std::time::Duration::from_millis(1)));
+        }
         req = match &self.auth {
             Auth::None => req,
             Auth::Basic { username, password } => req.basic_auth(username, Some(password)),
@@ -227,6 +238,28 @@ pub type Client = Counting<Box<dyn Transport>>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct Fake;
+    impl Transport for Fake {
+        fn send(&self, _: Method, _: &str, _: Option<(&[u8], &str)>) -> Result<Response> {
+            Ok(Response {
+                status: 200,
+                body: Vec::new(),
+            })
+        }
+    }
+
+    /// Audit F09: an expired request issues no further backend calls.
+    #[test]
+    fn expired_requests_issue_no_calls() {
+        let client = Counting::new(Box::new(Fake) as Box<dyn Transport>);
+        assert!(client.send(Method::Get, "/x", None).is_ok());
+        let token = docmonk_core::deadline::Token::new(None);
+        token.cancel();
+        let _g = token.enter();
+        let err = client.send(Method::Get, "/x", None).unwrap_err();
+        assert!(err.to_string().contains("deadline"), "{err}");
+    }
 
     #[test]
     fn endpoints_hide_index_names() {

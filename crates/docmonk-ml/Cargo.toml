@@ -17,6 +17,7 @@ rayon = "1"
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+docmonk-core.workspace = true
 thiserror.workspace = true
 tokenizers = { version = "=0.23.2", default-features = false, features = ["fancy-regex"] }
 tracing.workspace = true
@@ -24,7 +25,6 @@ tracing.workspace = true
 [dev-dependencies]
 docmonk-config.workspace = true
 docmonk-convert.workspace = true
-docmonk-core.workspace = true
 tempfile.workspace = true
 
 [lints]

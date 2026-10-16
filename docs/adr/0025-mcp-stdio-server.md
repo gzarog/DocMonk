@@ -53,10 +53,22 @@ Status: accepted
   fields, schema defaults for missing ones. Every result carries
   `schema_version`, `ok` and `error`. The `content` text is the same JSON
   as `structuredContent`.
-- **Errors** become `ok: false` results typed by the error kind
-  (`UsageError`, `ConfigError`, ...), `timeout` (after
-  `mcp.request_timeout_seconds`, on a worker thread that is then
-  abandoned) or `internal_error` (a panic).
+- **Errors** become `ok: false` results with `isError: true`, typed by
+  the error kind (`UsageError`, `ConfigError`, ...), `timeout`,
+  `overloaded` or `internal_error` (a panic; its payload is logged to
+  stderr, never returned). Protocol errors use the JSON-RPC codes:
+  -32700 (unparseable, id null), -32600 (invalid request, or a message
+  over `mcp.max_request_bytes`), -32601 (unknown method), -32602 (bad
+  `tools/call` params).
+- **Arguments** are validated against the tool's input schema before any
+  source is opened: unknown fields, wrong types (including array items
+  and booleans) and integers outside the declared bounds are rejected.
+- **Execution** is bounded (audit F09): at most `mcp.max_concurrent_calls`
+  calls run and `mcp.max_queued_calls` wait; past that a call fails with
+  `overloaded`. Each call carries a deadline (`mcp.request_timeout_seconds`)
+  that retrieval loops, SQLite statements (progress handler), backend HTTP
+  requests and embedding batches check, so a timed-out call stops and frees
+  its slot; its late result is discarded.
 - Each tool call loads the config and opens the sources afresh, like a
   CLI invocation.
 

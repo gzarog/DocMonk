@@ -917,7 +917,9 @@ pub fn run_search(
     };
     let (lexical_out, early_semantic) = match sync {
         Some(stores) if sc.semantic && !sc.lazy_semantic => std::thread::scope(|scope| {
+            let token = docmonk_core::deadline::current();
             let sem = scope.spawn(move || {
+                let _deadline = token.as_ref().map(docmonk_core::deadline::Token::enter);
                 let corp: Vec<Corpus<'_>> = stores
                     .iter()
                     .map(|(store, build_id)| Corpus {

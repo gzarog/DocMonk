@@ -96,13 +96,22 @@
     "F07": {
       "phase": "PH05",
       "status": "fixed",
+      "title": "MCP validator permits wrong types for structured filter fields",
       "checks": [
         {
-          "test": "crates/docmonk-mcp/src/lib.rs::tests::validation_rejects_unknown_out_of_range_and_mistyped_arguments",
-          "fails_on_baseline": "yes: baseline dropped unknown arguments, clamped negatives and ignored mistyped booleans and array items"
+          "test": "crates/docmonk-mcp/tests/protocol.rs::every_tool_failure_sets_is_error_with_a_typed_error",
+          "fails_on_baseline": "yes: baseline accepted source_ids as a string, mixed-type arrays and non-boolean exclude_attachments, silently widening scope"
+        },
+        {
+          "test": "crates/docmonk-mcp/tests/protocol.rs::valid_nullable_filters_pass_validation"
+        },
+        {
+          "test": "crates/docmonk-mcp/tests/protocol.rs::oversized_messages_are_rejected_and_the_stream_stays_in_sync"
+        },
+        {
+          "test": "crates/docmonk-mcp/src/lib.rs::tests::validation_rejects_unknown_out_of_range_and_mistyped_arguments"
         }
-      ],
-      "note": "Re-derived from code as MCP input validation (plan text not in repo)."
+      ]
     },
     "F08": {
       "phase": "PH06",
@@ -112,16 +121,29 @@
     "F09": {
       "phase": "PH05",
       "status": "fixed",
+      "title": "MCP timed-out calls keep running on unbounded spawned threads",
       "checks": [
         {
-          "test": "crates/docmonk-mcp/src/lib.rs::tests::failed_results_set_is_error",
-          "fails_on_baseline": "yes: baseline returned isError=false for ok=false results"
+          "test": "crates/docmonk-mcp/tests/execution.rs::a_hundred_concurrent_timed_out_calls_never_exceed_the_caps",
+          "fails_on_baseline": "yes: baseline spawned one unbounded thread per call and never cancelled them"
         },
         {
-          "test": "crates/docmonk-cli/tests/mcp.rs::mcp_session_is_as_expected (fixture: isError matches ok in every response)"
+          "test": "crates/docmonk-mcp/tests/execution.rs::repeated_retries_reuse_slots_instead_of_piling_up"
+        },
+        {
+          "test": "crates/docmonk-mcp/tests/execution.rs::the_deadline_reaches_sqlite_and_late_results_are_discarded"
+        },
+        {
+          "test": "crates/docmonk-storage/src/db.rs::deadline_tests::expired_requests_interrupt_running_statements"
+        },
+        {
+          "test": "crates/docmonk-backends/src/transport.rs::tests::expired_requests_issue_no_calls"
+        },
+        {
+          "test": "crates/docmonk-core/src/deadline.rs::tests"
         }
       ],
-      "note": "Re-derived from code as MCP error flag."
+      "remaining": "A single model forward pass (one embedding or reranker batch) cannot be interrupted; cancellation takes effect between batches."
     },
     "F10": {
       "phase": "PH08",
@@ -147,14 +169,22 @@
     "F13": {
       "phase": "PH05",
       "status": "fixed",
+      "title": "MCP failed tool response uses isError false",
       "checks": [
         {
-          "test": "crates/docmonk-mcp/src/lib.rs::tests::in_flight_workers_are_capped",
-          "fails_on_baseline": "yes by construction: baseline had no cap, so timed-out workers accumulated without bound"
+          "test": "crates/docmonk-mcp/tests/protocol.rs::malformed_messages_get_standard_json_rpc_errors",
+          "fails_on_baseline": "yes: baseline answered malformed JSON with a log notification and unknown methods with -32602"
+        },
+        {
+          "test": "crates/docmonk-mcp/tests/protocol.rs::notifications_and_client_responses_get_no_reply"
+        },
+        {
+          "test": "crates/docmonk-mcp/src/lib.rs::tests::failed_results_set_is_error"
+        },
+        {
+          "test": "crates/docmonk-cli/tests/mcp.rs::mcp_session_is_as_expected (isError matches ok in every response)"
         }
-      ],
-      "remaining": "A timed-out worker still runs to completion (no cooperative cancellation); it holds one of MAX_IN_FLIGHT=4 slots until then.",
-      "note": "Re-derived from code as MCP timeouts."
+      ]
     },
     "F14": {
       "phase": "PH02",

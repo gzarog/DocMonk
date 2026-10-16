@@ -3749,9 +3749,8 @@
   "response": {
    "jsonrpc": "2.0",
    "error": {
-    "code": -32602,
-    "message": "Invalid request parameters",
-    "data": ""
+    "code": -32601,
+    "message": "Method not found"
    }
   }
  },

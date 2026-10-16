@@ -1,6 +1,7 @@
 //! DocMonk core contracts shared by every other crate: errors,
 //! models, paths, source IDs, server document IDs and security checks.
 
+pub mod deadline;
 pub mod errors;
 pub mod ids;
 pub mod models;

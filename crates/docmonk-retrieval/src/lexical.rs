@@ -636,12 +636,15 @@ pub fn search_with_options(
         corpora.iter().map(|c| c.store.as_sync()).collect();
     let per_corpus: Vec<CorpusOutput> = match sync {
         Some(stores) if corpora.len() > 1 => std::thread::scope(|scope| {
+            let token = docmonk_core::deadline::current();
             let handles: Vec<_> = stores
                 .into_iter()
                 .zip(corpora)
                 .map(|(store, c)| {
                     let build_id = c.build_id;
+                    let token = token.clone();
                     scope.spawn(move || {
+                        let _deadline = token.as_ref().map(docmonk_core::deadline::Token::enter);
                         corpus_search(
                             Corpus {
                                 store: store as &dyn docmonk_storage::read::KnowledgeRead,
@@ -701,6 +704,7 @@ fn corpus_search(
                      all: &mut Vec<SearchResult>,
                      run: &dyn Fn() -> Result<Vec<SearchResult>, SearchError>|
      -> Result<(), SearchError> {
+        crate::check_deadline()?;
         let t = std::time::Instant::now();
         let hits = run()?;
         timings.push(StageTiming {

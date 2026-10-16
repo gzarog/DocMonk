@@ -596,7 +596,22 @@ section! {
 section! {
     McpConfig {
         enabled: bool = true;
-        request_timeout_seconds: f64 = 30.0;
+        request_timeout_seconds: f64 = 30.0, check = |v| {
+            if *v > 0.0 && *v <= 3600.0 { Ok(()) } else { Err("must be > 0 and at most 3600".into()) }
+        };
+        // Tool calls running at once (a timed-out call holds its slot
+        // until its cancelled work has stopped).
+        max_concurrent_calls: i64 = 4, check = |v| {
+            if (1..=64).contains(v) { Ok(()) } else { Err("must be between 1 and 64".into()) }
+        };
+        // Calls waiting for a free slot; past it, calls fail with `overloaded`.
+        max_queued_calls: i64 = 16, check = |v| {
+            if (0..=1024).contains(v) { Ok(()) } else { Err("must be between 0 and 1024".into()) }
+        };
+        // Largest JSON-RPC message accepted (bytes).
+        max_request_bytes: i64 = 1_048_576, check = |v| {
+            if (1024..=67_108_864).contains(v) { Ok(()) } else { Err("must be between 1024 and 67108864".into()) }
+        };
     }
 }
 

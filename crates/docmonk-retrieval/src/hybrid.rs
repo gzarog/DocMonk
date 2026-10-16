@@ -159,6 +159,7 @@ pub fn filtered_candidates<E>(
 ) -> Result<(Option<Vec<SemanticHit>>, bool), E> {
     let mut k = base_k.max(limit).max(1);
     loop {
+        // `fetch` itself checks the deadline before each widening read.
         let Some(raw) = fetch(k)? else {
             return Ok((None, false));
         };
@@ -207,6 +208,7 @@ pub fn semantic_search_filtered(
             .as_project_store()
             .and_then(|s| s.project_dir())
             .unwrap_or_else(|| Path::new(".").to_path_buf());
+        crate::check_deadline()?;
         let sid = c.store.source_id().to_owned();
         if !filter.allows_source(&sid) {
             continue;
