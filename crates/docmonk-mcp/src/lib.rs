@@ -12,6 +12,7 @@
 //! kind, `timeout` or `internal_error`.
 
 use std::io::{BufRead, Write};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -180,11 +181,19 @@ fn call_tool(params: &Value) -> Value {
         &spec["outputSchema"],
         &spec["outputSchema"],
     );
+    tool_result(output)
+}
+
+/// The `tools/call` result for a tool's (projected) output.
+fn tool_result(output: Value) -> Value {
     let text = serde_json::to_string_pretty(&output).unwrap_or_default();
+    // A failed call (`ok: false`) is a tool error to the client, not a
+    // successful result that happens to describe one.
+    let is_error = output["ok"] != true;
     json!({
         "content": [{"type": "text", "text": text}],
         "structuredContent": output,
-        "isError": false,
+        "isError": is_error,
     })
 }
 
@@ -192,7 +201,7 @@ fn call_tool(params: &Value) -> Value {
 
 struct Issue {
     field: String,
-    message: &'static str,
+    message: String,
 }
 
 /// Integer arguments also accept integral floats and numeric strings.
@@ -209,6 +218,53 @@ fn as_int(v: &Value) -> Result<Value, &'static str> {
             .map(|i| json!(i))
             .map_err(|_| "expected an integer"),
         _ => Err("expected an integer"),
+    }
+}
+
+/// The non-null branch of a property (`anyOf: [T, null]`), or the
+/// property itself.
+fn branch(prop: &Value) -> &Value {
+    prop["anyOf"]
+        .as_array()
+        .and_then(|a| a.iter().find(|t| t["type"] != "null"))
+        .unwrap_or(prop)
+}
+
+/// Checks one present, non-null argument against its schema branch.
+fn check(value: &Value, schema: &Value) -> Result<Value, String> {
+    match schema["type"].as_str() {
+        Some("string") => match value {
+            Value::String(_) => Ok(value.clone()),
+            _ => Err("expected a string".into()),
+        },
+        Some("boolean") => match value {
+            Value::Bool(_) => Ok(value.clone()),
+            _ => Err("expected a boolean".into()),
+        },
+        Some("integer") => {
+            let v = as_int(value)?;
+            let n = v.as_i64().unwrap_or(i64::MAX);
+            let min = schema["minimum"].as_i64();
+            let max = schema["maximum"].as_i64();
+            if min.is_some_and(|m| n < m) || max.is_some_and(|m| n > m) {
+                return Err(format!(
+                    "must be between {} and {}",
+                    min.map_or("-inf".into(), |m| m.to_string()),
+                    max.map_or("inf".into(), |m| m.to_string())
+                ));
+            }
+            Ok(v)
+        }
+        Some("array") => {
+            let Value::Array(items) = value else {
+                return Err("expected an array".into());
+            };
+            for (i, item) in items.iter().enumerate() {
+                check(item, &schema["items"]).map_err(|m| format!("item {i}: {m}"))?;
+            }
+            Ok(value.clone())
+        }
+        _ => Ok(value.clone()),
     }
 }
 
@@ -231,7 +287,7 @@ fn validate(tool: &str, schema: &Value, args: &Value) -> Result<Map<String, Valu
             if required.contains(&field.as_str()) {
                 issues.push(Issue {
                     field: field.clone(),
-                    message: "required",
+                    message: "required".into(),
                 });
             }
             continue;
@@ -239,27 +295,11 @@ fn validate(tool: &str, schema: &Value, args: &Value) -> Result<Map<String, Valu
         let nullable = prop["anyOf"]
             .as_array()
             .is_some_and(|a| a.iter().any(|t| t["type"] == "null"));
-        let ty = prop["type"].as_str().or_else(|| {
-            prop["anyOf"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|t| t["type"].as_str())
-                .find(|t| *t != "null")
-        });
         if value.is_null() && nullable {
             out.insert(field.clone(), Value::Null);
             continue;
         }
-        let checked = match ty {
-            Some("string") => match value {
-                Value::String(_) => Ok(value.clone()),
-                _ => Err("expected a string"),
-            },
-            Some("integer") => as_int(value),
-            _ => Ok(value.clone()),
-        };
-        match checked {
+        match check(value, branch(prop)) {
             Ok(v) => {
                 out.insert(field.clone(), v);
             }
@@ -267,6 +307,22 @@ fn validate(tool: &str, schema: &Value, args: &Value) -> Result<Map<String, Valu
                 field: field.clone(),
                 message,
             }),
+        }
+    }
+    // Unknown arguments are rejected, not silently ignored: a misspelled
+    // filter must never widen a query.
+    if schema["additionalProperties"] == false {
+        let known = schema["properties"].as_object();
+        let mut extra: Vec<&String> = given
+            .keys()
+            .filter(|k| known.is_none_or(|p| !p.contains_key(*k)))
+            .collect();
+        extra.sort();
+        for field in extra {
+            issues.push(Issue {
+                field: field.clone(),
+                message: "unknown argument".into(),
+            });
         }
     }
     if issues.is_empty() {
@@ -365,7 +421,44 @@ fn failure(kind: &str, message: impl Into<String>) -> Value {
     })
 }
 
+/// Most tool workers alive at once, including ones whose call already
+/// timed out (they cannot be interrupted and run to completion): past it,
+/// new calls fail fast with `busy` instead of piling up threads.
+pub const MAX_IN_FLIGHT: usize = 4;
+
+static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
+
+/// Releases one in-flight slot when dropped (also on panic).
+struct Slot;
+
+impl Slot {
+    fn acquire() -> Option<Slot> {
+        IN_FLIGHT
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+                (n < MAX_IN_FLIGHT).then_some(n + 1)
+            })
+            .ok()
+            .map(|_| Slot)
+    }
+}
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        IN_FLIGHT.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
 fn run_tool(name: &str, args: Map<String, Value>) -> Value {
+    // Checked first: a saturated server answers without touching disk.
+    let Some(slot) = Slot::acquire() else {
+        return failure(
+            "busy",
+            format!(
+                "{MAX_IN_FLIGHT} tool calls are still running (earlier calls may have \
+                 timed out); retry shortly"
+            ),
+        );
+    };
     let home = match prepared_home() {
         Ok(h) => h,
         Err(e) => return failure(error_type(&e), e.message()),
@@ -380,6 +473,7 @@ fn run_tool(name: &str, args: Map<String, Value>) -> Value {
     // An abandoned worker runs to completion in the background; the
     // timeout only stops waiting for it.
     std::thread::spawn(move || {
+        let _slot = slot;
         let outcome = std::panic::catch_unwind(|| work(&home, &name, &args));
         let _ = tx.send(outcome);
     });
@@ -417,12 +511,12 @@ fn required(args: &Map<String, Value>, field: &str) -> Result<String, DocMonkErr
     Ok(value.to_owned())
 }
 
-/// An optional positive integer argument; `None`/0 mean the default.
+/// An optional integer argument (range-checked by [`validate`]); absent
+/// or null means the default.
 fn optional(args: &Map<String, Value>, field: &str, default: usize) -> usize {
-    match args.get(field).and_then(Value::as_i64) {
-        Some(v) if v != 0 => v.max(0) as usize,
-        _ => default,
-    }
+    args.get(field)
+        .and_then(Value::as_u64)
+        .map_or(default, |v| v as usize)
 }
 
 fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, DocMonkError> {
@@ -432,8 +526,8 @@ fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, Doc
             let query = required(args, "query")?;
             let mut budget = query_cmd::config_budget(&cfg);
             let set = |field: &str, slot: &mut usize| {
-                if let Some(v) = args.get(field).and_then(Value::as_i64) {
-                    *slot = v.max(0) as usize;
+                if let Some(v) = args.get(field).and_then(Value::as_u64) {
+                    *slot = v as usize;
                 }
             };
             set("max_chars", &mut budget.max_chars);
@@ -501,7 +595,7 @@ fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, Doc
                             .and_then(Value::as_bool)
                             .unwrap_or(false),
                     },
-                    limit: optional(args, "limit", 10).min(100),
+                    limit: optional(args, "limit", 10),
                 },
             )
         }
@@ -609,11 +703,100 @@ mod tests {
         let ok = validate(
             "docmonk_search",
             schema,
-            &json!({"query": "q", "limit": "3", "extra": 1}),
+            &json!({"query": "q", "limit": "3"}),
         )
         .unwrap();
         assert_eq!(ok["limit"], 3);
-        assert!(!ok.contains_key("extra"));
+    }
+
+    /// Audit PH05: unknown arguments, out-of-range numbers, wrong booleans
+    /// and wrongly typed array items are rejected (before, they were
+    /// dropped, clamped or ignored, silently widening a query).
+    #[test]
+    fn validation_rejects_unknown_out_of_range_and_mistyped_arguments() {
+        let search = &tool("docmonk_search").unwrap()["inputSchema"];
+        let err = validate(
+            "docmonk_search",
+            search,
+            &json!({"query": "q", "limit": -5, "sourceids": ["a"]}),
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "invalid arguments for docmonk_search: limit: must be between 1 and 1000; \
+             sourceids: unknown argument"
+        );
+        let calls = &tool("docmonk_callers").unwrap()["inputSchema"];
+        assert!(validate(
+            "docmonk_callers",
+            calls,
+            &json!({"name": "f", "max_depth": 1_000_000})
+        )
+        .unwrap_err()
+        .contains("max_depth: must be between 1 and 10"));
+        let evidence = &tool("docmonk_evidence").unwrap()["inputSchema"];
+        let err = validate(
+            "docmonk_evidence",
+            evidence,
+            &json!({
+                "query": "q",
+                "exclude_attachments": "yes",
+                "path_prefixes": ["docs/", 7],
+                "limit": 500,
+            }),
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("exclude_attachments: expected a boolean"),
+            "{err}"
+        );
+        assert!(
+            err.contains("path_prefixes: item 1: expected a string"),
+            "{err}"
+        );
+        assert!(err.contains("limit: must be between 1 and 100"), "{err}");
+        // Every bounded integer in the catalog declares both bounds.
+        for t in tools() {
+            for (field, prop) in t["inputSchema"]["properties"].as_object().unwrap() {
+                let b = branch(prop);
+                if b["type"] == "integer" {
+                    assert!(
+                        b["minimum"].is_i64() && b["maximum"].is_i64(),
+                        "{}.{field}",
+                        t["name"]
+                    );
+                }
+            }
+            assert_eq!(
+                t["inputSchema"]["additionalProperties"], false,
+                "{}",
+                t["name"]
+            );
+        }
+    }
+
+    /// Audit PH05: a failed call is flagged `isError`.
+    #[test]
+    fn failed_results_set_is_error() {
+        let failed = tool_result(failure("timeout", "too slow"));
+        assert_eq!(failed["isError"], true);
+        assert_eq!(failed["structuredContent"]["error"]["type"], "timeout");
+        let ok = tool_result(json!({"schema_version": "1", "ok": true, "error": null}));
+        assert_eq!(ok["isError"], false);
+    }
+
+    /// Audit PH05: timed-out workers keep their slot until they finish,
+    /// and calls past the cap fail fast instead of piling up threads.
+    #[test]
+    fn in_flight_workers_are_capped() {
+        let held: Vec<Slot> = std::iter::from_fn(Slot::acquire).collect();
+        assert_eq!(held.len(), MAX_IN_FLIGHT);
+        assert!(Slot::acquire().is_none());
+        let busy = run_tool("docmonk_status", Map::new());
+        assert_eq!(busy["ok"], false);
+        assert_eq!(busy["error"]["type"], "busy");
+        drop(held);
+        assert!(Slot::acquire().is_some());
     }
 
     #[test]

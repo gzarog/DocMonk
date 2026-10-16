@@ -95,8 +95,14 @@
     },
     "F07": {
       "phase": "PH05",
-      "status": "open",
-      "checks": []
+      "status": "fixed",
+      "checks": [
+        {
+          "test": "crates/docmonk-mcp/src/lib.rs::tests::validation_rejects_unknown_out_of_range_and_mistyped_arguments",
+          "fails_on_baseline": "yes: baseline dropped unknown arguments, clamped negatives and ignored mistyped booleans and array items"
+        }
+      ],
+      "note": "Re-derived from code as MCP input validation (plan text not in repo)."
     },
     "F08": {
       "phase": "PH06",
@@ -105,8 +111,17 @@
     },
     "F09": {
       "phase": "PH05",
-      "status": "open",
-      "checks": []
+      "status": "fixed",
+      "checks": [
+        {
+          "test": "crates/docmonk-mcp/src/lib.rs::tests::failed_results_set_is_error",
+          "fails_on_baseline": "yes: baseline returned isError=false for ok=false results"
+        },
+        {
+          "test": "crates/docmonk-cli/tests/mcp.rs::mcp_session_is_as_expected (fixture: isError matches ok in every response)"
+        }
+      ],
+      "note": "Re-derived from code as MCP error flag."
     },
     "F10": {
       "phase": "PH08",
@@ -131,8 +146,15 @@
     },
     "F13": {
       "phase": "PH05",
-      "status": "open",
-      "checks": []
+      "status": "fixed",
+      "checks": [
+        {
+          "test": "crates/docmonk-mcp/src/lib.rs::tests::in_flight_workers_are_capped",
+          "fails_on_baseline": "yes by construction: baseline had no cap, so timed-out workers accumulated without bound"
+        }
+      ],
+      "remaining": "A timed-out worker still runs to completion (no cooperative cancellation); it holds one of MAX_IN_FLIGHT=4 slots until then.",
+      "note": "Re-derived from code as MCP timeouts."
     },
     "F14": {
       "phase": "PH02",

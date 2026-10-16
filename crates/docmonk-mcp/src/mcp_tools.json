@@ -11,7 +11,9 @@
     "max_chars": {
      "anyOf": [
       {
-       "type": "integer"
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 1000000
       },
       {
        "type": "null"
@@ -23,7 +25,9 @@
     "max_files": {
      "anyOf": [
       {
-       "type": "integer"
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 1000
       },
       {
        "type": "null"
@@ -35,7 +39,9 @@
     "max_graph_nodes": {
      "anyOf": [
       {
-       "type": "integer"
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 10000
       },
       {
        "type": "null"
@@ -49,7 +55,8 @@
     "query"
    ],
    "title": "docmonk_exploreArguments",
-   "type": "object"
+   "type": "object",
+   "additionalProperties": false
   },
   "outputSchema": {
    "$defs": {
@@ -371,7 +378,9 @@
     "limit": {
      "anyOf": [
       {
-       "type": "integer"
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 1000
       },
       {
        "type": "null"
@@ -385,7 +394,8 @@
     "query"
    ],
    "title": "docmonk_searchArguments",
-   "type": "object"
+   "type": "object",
+   "additionalProperties": false
   },
   "outputSchema": {
    "$defs": {
@@ -611,7 +621,9 @@
     "limit": {
      "anyOf": [
       {
-       "type": "integer"
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 100
       },
       {
        "type": "null"
@@ -625,7 +637,8 @@
     "query"
    ],
    "title": "docmonk_evidenceArguments",
-   "type": "object"
+   "type": "object",
+   "additionalProperties": false
   },
   "outputSchema": {
    "additionalProperties": true,
@@ -691,7 +704,8 @@
     "name"
    ],
    "title": "docmonk_symbolArguments",
-   "type": "object"
+   "type": "object",
+   "additionalProperties": false
   },
   "outputSchema": {
    "$defs": {
@@ -866,7 +880,9 @@
     "max_depth": {
      "anyOf": [
       {
-       "type": "integer"
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 10
       },
       {
        "type": "null"
@@ -878,7 +894,9 @@
     "limit": {
      "anyOf": [
       {
-       "type": "integer"
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 1000
       },
       {
        "type": "null"
@@ -892,7 +910,8 @@
     "name"
    ],
    "title": "docmonk_callersArguments",
-   "type": "object"
+   "type": "object",
+   "additionalProperties": false
   },
   "outputSchema": {
    "$defs": {
@@ -1156,7 +1175,9 @@
     "max_depth": {
      "anyOf": [
       {
-       "type": "integer"
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 10
       },
       {
        "type": "null"
@@ -1168,7 +1189,9 @@
     "limit": {
      "anyOf": [
       {
-       "type": "integer"
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 1000
       },
       {
        "type": "null"
@@ -1182,7 +1205,8 @@
     "name"
    ],
    "title": "docmonk_calleesArguments",
-   "type": "object"
+   "type": "object",
+   "additionalProperties": false
   },
   "outputSchema": {
    "$defs": {
@@ -1446,7 +1470,9 @@
     "max_depth": {
      "anyOf": [
       {
-       "type": "integer"
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 10
       },
       {
        "type": "null"
@@ -1458,7 +1484,9 @@
     "limit": {
      "anyOf": [
       {
-       "type": "integer"
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 1000
       },
       {
        "type": "null"
@@ -1472,7 +1500,8 @@
     "name"
    ],
    "title": "docmonk_impactArguments",
-   "type": "object"
+   "type": "object",
+   "additionalProperties": false
   },
   "outputSchema": {
    "$defs": {
@@ -1745,7 +1774,8 @@
     }
    },
    "title": "docmonk_documentsArguments",
-   "type": "object"
+   "type": "object",
+   "additionalProperties": false
   },
   "outputSchema": {
    "$defs": {
@@ -1916,7 +1946,9 @@
     "error_limit": {
      "anyOf": [
       {
-       "type": "integer"
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 200
       },
       {
        "type": "null"
@@ -1928,7 +1960,8 @@
     }
    },
    "title": "docmonk_statusArguments",
-   "type": "object"
+   "type": "object",
+   "additionalProperties": false
   },
   "outputSchema": {
    "$defs": {
@@ -3387,7 +3420,8 @@
     "question"
    ],
    "title": "docmonk_askArguments",
-   "type": "object"
+   "type": "object",
+   "additionalProperties": false
   },
   "outputSchema": {
    "$defs": {
