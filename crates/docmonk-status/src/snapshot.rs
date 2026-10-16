@@ -62,6 +62,8 @@ pub struct SourceFacts {
     pub lease: Option<LeaseFacts>,
     /// The relationship graph (`None` when unknown).
     pub relationships: Option<RelationshipStatus>,
+    /// Cross-source dependencies as a consumer (`None` when none/unknown).
+    pub dependencies: Option<crate::model::DependencyStatus>,
 }
 
 /// A source's server writer lease as stored in its state document.
@@ -123,6 +125,8 @@ pub fn assemble(
                 access: f.access,
                 index_state,
                 relationship_state: f.relationships.clone(),
+                dependency_state: f.dependencies.clone(),
+                readiness: health::readiness(f),
                 build: SourceBuild {
                     active_id: f.active_build_id.clone(),
                     pending_id: f.pending_build_id.clone(),
@@ -327,6 +331,50 @@ pub fn age_seconds(then: Option<&str>, now: DateTime<Utc>) -> Option<f64> {
     let t = parse_time(then?)?;
     let secs = (now - t).num_milliseconds().max(0) as f64 / 1000.0;
     Some((secs * 10.0).round() / 10.0)
+}
+
+/// A source's dependency status from its stored manifest (`None` when it
+/// never had dependencies).
+pub fn dependency_status(
+    state: Option<&str>,
+    reason: Option<&str>,
+    updated_at: Option<&str>,
+    producers: Vec<String>,
+) -> Option<DependencyStatus> {
+    let state = state.filter(|s| !s.is_empty());
+    if state.is_none() && producers.is_empty() {
+        return None;
+    }
+    Some(DependencyStatus {
+        state: state.unwrap_or("pending").to_owned(),
+        reason: reason.map(crate::errors::redact_text),
+        updated_at: normalize_time(updated_at),
+        producers,
+        retry: None,
+    })
+}
+
+/// Adds this host's scheduled dependency retries (the retry book of
+/// `home`) to the report's sources.
+pub fn attach_dependency_retries(report: &mut StatusReport, home: &docmonk_core::paths::Home) {
+    let book = docmonk_storage::dependency_retry::RetryBook::load(home);
+    for (id, e) in book.consumers {
+        let Some(s) = report.sources.iter_mut().find(|s| s.source_id == id) else {
+            continue;
+        };
+        let d = s.dependency_state.get_or_insert_with(|| DependencyStatus {
+            state: "stale".into(),
+            reason: Some(crate::errors::redact_text(&e.last_error)),
+            ..DependencyStatus::default()
+        });
+        d.retry = Some(DependencyRetry {
+            code: e.code,
+            last_error: crate::errors::redact_text(&e.last_error),
+            attempts: e.attempts,
+            last_attempt_at: normalize_time(Some(&e.last_attempt_at)),
+            next_attempt_at: normalize_time(Some(&e.next_attempt_at)),
+        });
+    }
 }
 
 #[cfg(test)]

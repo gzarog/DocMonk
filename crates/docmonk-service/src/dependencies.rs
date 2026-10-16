@@ -47,6 +47,7 @@ use docmonk_core::errors::DocMonkError;
 use docmonk_core::paths::{project_id_for_canonical, Home};
 use docmonk_indexing::lock::RunLock;
 use docmonk_storage::control::SourceRecord;
+use docmonk_storage::dependency_retry::RetryBook;
 use docmonk_storage::graph::{
     candidates_fingerprint, qualified_key, ExternalBinding, ExternalManifest, ProducerSnapshot,
 };
@@ -485,10 +486,25 @@ pub enum DependencyOutcome {
         /// The producers that triggered the update.
         triggered_by: Vec<String>,
     },
-    /// Not current; retried by the next run.
-    Stale { reason: String },
+    /// Not current; retried by the next run (or a targeted retry).
+    Stale { code: &'static str, reason: String },
     /// Cannot be computed now (consumer disabled or not published yet).
-    Pending { reason: String },
+    Pending { code: &'static str, reason: String },
+}
+
+/// Reason codes of a non-current dependency outcome.
+pub mod reason {
+    pub const CONSUMER_DISABLED: &str = "consumer_disabled";
+    pub const CONSUMER_UNPUBLISHED: &str = "consumer_unpublished";
+    pub const CONSUMER_GRAPH_STALE: &str = "consumer_graph_stale";
+    pub const CONSUMER_LOCKED: &str = "consumer_locked";
+    pub const PRODUCER_DISABLED: &str = "producer_disabled";
+    pub const PRODUCER_UNPUBLISHED: &str = "producer_unpublished";
+    pub const PRODUCER_LOOKUP_FAILED: &str = "producer_lookup_failed";
+    pub const DISCOVERY_INCOMPLETE: &str = "discovery_incomplete";
+    pub const REPUBLISHED_DURING_UPDATE: &str = "republished_during_update";
+    pub const UPDATE_FAILED: &str = "update_failed";
+    pub const CATALOG_UNREADABLE: &str = "catalog_unreadable";
 }
 
 impl DependencyOutcome {
@@ -500,6 +516,31 @@ impl DependencyOutcome {
             DependencyOutcome::Pending { .. } => "pending",
         }
     }
+
+    /// The reason code of a non-current outcome.
+    pub fn code(&self) -> Option<&'static str> {
+        match self {
+            DependencyOutcome::Stale { code, .. } | DependencyOutcome::Pending { code, .. } => {
+                Some(code)
+            }
+            _ => None,
+        }
+    }
+
+    pub fn reason(&self) -> Option<&str> {
+        match self {
+            DependencyOutcome::Stale { reason, .. } | DependencyOutcome::Pending { reason, .. } => {
+                Some(reason)
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether this outcome leaves a required dependency unresolved. A
+    /// disabled consumer is not searched, so its bindings are not required.
+    pub fn unresolved(&self) -> bool {
+        self.code().is_some_and(|c| c != reason::CONSUMER_DISABLED)
+    }
 }
 
 /// Totals of one dependency stage.
@@ -510,6 +551,14 @@ pub struct DependencySummary {
     pub updated: usize,
     pub stale: usize,
     pub pending: usize,
+    /// Consumers whose required dependencies are not current after the
+    /// stage (stale, or pending for a reason other than being disabled).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unresolved: Vec<crate::indexing::StageIssue>,
+    /// The stage could not run at all (the source catalog was unreadable):
+    /// nothing is known about any consumer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skipped_discovery: Option<crate::indexing::StageIssue>,
 }
 
 impl DependencySummary {
@@ -522,6 +571,32 @@ impl DependencySummary {
             DependencyOutcome::Pending { .. } => self.pending += 1,
         }
     }
+
+    /// [`Self::add`], remembering which consumer is unresolved and why.
+    pub fn record(&mut self, consumer: &str, o: &DependencyOutcome) {
+        self.add(o);
+        if o.unresolved() {
+            self.unresolved.push(crate::indexing::StageIssue::new(
+                consumer,
+                o.code().unwrap_or(reason::UPDATE_FAILED),
+                o.reason().unwrap_or_default(),
+            ));
+        }
+    }
+
+    /// The stage was skipped: dependency discovery could not run.
+    pub fn skip(&mut self, why: &str) {
+        self.skipped_discovery = Some(crate::indexing::StageIssue::new(
+            "",
+            reason::CATALOG_UNREADABLE,
+            why,
+        ));
+    }
+
+    /// Consumers left unresolved, plus one when the stage was skipped.
+    pub fn not_current(&self) -> usize {
+        self.unresolved.len() + usize::from(self.skipped_discovery.is_some())
+    }
 }
 
 /// Why a producer lookup failed (the storage error, never "no candidate").
@@ -529,8 +604,9 @@ fn lookup_failed(producer: &str, e: &impl std::fmt::Display) -> String {
     format!("lookup in producer {producer} failed (retryable): {e}")
 }
 
-fn stale(reason: impl Into<String>) -> DependencyOutcome {
+fn stale(code: &'static str, reason: impl Into<String>) -> DependencyOutcome {
     DependencyOutcome::Stale {
+        code,
         reason: reason.into(),
     }
 }
@@ -623,11 +699,13 @@ fn update_consumer(
 ) -> Result<DependencyOutcome, DocMonkError> {
     if !consumer.enabled {
         return Ok(DependencyOutcome::Pending {
+            code: reason::CONSUMER_DISABLED,
             reason: "consumer source is disabled".into(),
         });
     }
     let Some(mut view) = open_view(home, cfg, backend, consumer)? else {
         return Ok(DependencyOutcome::Pending {
+            code: reason::CONSUMER_UNPUBLISHED,
             reason: "consumer has no published index on this host".into(),
         });
     };
@@ -646,7 +724,10 @@ fn update_consumer(
             manifest.reason = Some("the consumer's own graph is not current".into());
             persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
         }
-        return Ok(stale("the consumer's own graph is not current"));
+        return Ok(stale(
+            reason::CONSUMER_GRAPH_STALE,
+            "the consumer's own graph is not current",
+        ));
     }
     let graph_generation = view.store.graph_state().map_err(db)?.generation;
 
@@ -658,21 +739,24 @@ fn update_consumer(
             continue;
         };
         let reason = if !p.enabled {
-            Some(unavailable("is disabled"))
+            Some((reason::PRODUCER_DISABLED, unavailable("is disabled")))
         } else {
             match open_producer(home, cfg, backend, p)? {
                 Some(v) => {
                     producers.insert(p.id.clone(), (v, d.via));
                     None
                 }
-                None => Some(unavailable("has no published index")),
+                None => Some((
+                    reason::PRODUCER_UNPUBLISHED,
+                    unavailable("has no published index"),
+                )),
             }
         };
-        if let Some(reason) = reason {
+        if let Some((code, reason)) = reason {
             manifest.state = "stale".into();
             manifest.reason = Some(reason.clone());
             persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
-            return Ok(stale(reason));
+            return Ok(stale(code, reason));
         }
     }
 
@@ -688,7 +772,7 @@ fn update_consumer(
             manifest.state = "stale".into();
             manifest.reason = Some(reason.clone());
             persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
-            return Ok(stale(reason));
+            return Ok(stale(reason::DISCOVERY_INCOMPLETE, reason));
         }
     }
 
@@ -719,7 +803,7 @@ fn update_consumer(
                     manifest.state = "stale".into();
                     manifest.reason = Some(reason.clone());
                     persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
-                    return Ok(stale(reason));
+                    return Ok(stale(reason::PRODUCER_LOOKUP_FAILED, reason));
                 }
             };
             for (key, fp) in &keys {
@@ -807,7 +891,7 @@ fn update_consumer(
                 tracing::warn!(component = "relationships", event = "producer_lookup_failed", source_id = %consumer.id, producer = %id, retryable = true, error = %e);
                 manifest.reason = Some(reason.clone());
                 persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
-                return Ok(stale(reason));
+                return Ok(stale(reason::PRODUCER_LOOKUP_FAILED, reason));
             }
         }
     }
@@ -873,7 +957,7 @@ fn update_consumer(
     if let Some(reason) = moved {
         manifest.reason = Some(reason.clone());
         persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
-        return Ok(stale(reason));
+        return Ok(stale(reason::REPUBLISHED_DURING_UPDATE, reason));
     }
     let bound = bindings
         .values()
@@ -938,19 +1022,55 @@ pub fn run_stage_holding(
     sources: &[SourceRecord],
     lock_timeout: std::time::Duration,
     held: Option<&str>,
+    on_outcome: impl FnMut(&SourceRecord, DependencyOutcome),
+) {
+    run_stage_for(
+        home,
+        cfg,
+        backend,
+        sources,
+        lock_timeout,
+        held,
+        None,
+        on_outcome,
+    )
+}
+
+/// The dependency stage, limited to the consumers in `only` when given (a
+/// targeted retry). Every outcome is recorded in the retry book.
+#[allow(clippy::too_many_arguments)]
+fn run_stage_for(
+    home: &Home,
+    cfg: &docmonk_config::DocMonkConfig,
+    backend: &Backend,
+    sources: &[SourceRecord],
+    lock_timeout: std::time::Duration,
+    held: Option<&str>,
+    only: Option<&BTreeSet<String>>,
     mut on_outcome: impl FnMut(&SourceRecord, DependencyOutcome),
 ) {
     let reg = discover(home, cfg, backend, sources);
     for d in &reg.invalid {
         tracing::warn!(component = "relationships", event = "dependency_ignored", declaration = %d);
     }
-    for consumer_id in reg.refresh_candidates() {
+    let mut book = RetryBook::load(home);
+    let now = chrono::Utc::now();
+    let candidates = reg.refresh_candidates();
+    if only.is_none() {
+        // A consumer with no dependency left has nothing to retry.
+        book.retain(|id| candidates.contains(id));
+    }
+    for consumer_id in candidates {
+        if only.is_some_and(|o| !o.contains(consumer_id)) {
+            continue;
+        }
         let Some(consumer) = sources.iter().find(|s| s.id == consumer_id) else {
+            book.clear(consumer_id);
             continue;
         };
         let update = || {
             update_consumer(home, cfg, backend, &reg, sources, consumer)
-                .unwrap_or_else(|e| stale(e.message().to_owned()))
+                .unwrap_or_else(|e| stale(reason::UPDATE_FAILED, e.message().to_owned()))
         };
         let outcome = if held == Some(consumer.id.as_str()) {
             update()
@@ -961,7 +1081,10 @@ pub fn run_stage_holding(
                 Some(&consumer.id),
                 lock_timeout,
             ) {
-                Err(e) => stale(format!("consumer is locked: {}", e.message())),
+                Err(e) => stale(
+                    reason::CONSUMER_LOCKED,
+                    format!("consumer is locked: {}", e.message()),
+                ),
                 Ok(lock) => {
                     let o = update();
                     lock.release();
@@ -973,10 +1096,56 @@ pub fn run_stage_holding(
             outcome,
             DependencyOutcome::Stale { .. } | DependencyOutcome::Pending { .. }
         ) {
-            tracing::warn!(component = "relationships", event = "dependencies_not_current", source_id = %consumer.id, state = outcome.state());
+            tracing::warn!(component = "relationships", event = "dependencies_not_current", source_id = %consumer.id, state = outcome.state(), reason_code = outcome.code().unwrap_or_default());
+        }
+        if outcome.unresolved() {
+            book.failed(
+                &consumer.id,
+                outcome.code().unwrap_or(reason::UPDATE_FAILED),
+                outcome.reason().unwrap_or_default(),
+                now,
+            );
+        } else {
+            book.clear(&consumer.id);
         }
         on_outcome(consumer, outcome);
     }
+    if let Err(e) = book.save(home) {
+        tracing::warn!(component = "relationships", event = "dependency_retries_not_saved", error = %e);
+    }
+}
+
+/// Retries the consumers whose retry is due (targeted: no base index or
+/// source graph is rebuilt). `None` when nothing was due.
+pub fn retry_due(
+    home: &Home,
+    cfg: &docmonk_config::DocMonkConfig,
+    backend: &Backend,
+    lock_timeout: std::time::Duration,
+    mut on_outcome: impl FnMut(&SourceRecord, &DependencyOutcome),
+) -> Option<DependencySummary> {
+    let due = RetryBook::load(home).due(chrono::Utc::now());
+    if due.is_empty() {
+        return None;
+    }
+    let mut summary = DependencySummary::default();
+    match crate::sources::catalog(home).and_then(|c| c.list(false)) {
+        Ok(all) => run_stage_for(
+            home,
+            cfg,
+            backend,
+            &all,
+            lock_timeout,
+            None,
+            Some(&due),
+            |s, o| {
+                summary.record(&s.id, &o);
+                on_outcome(s, &o);
+            },
+        ),
+        Err(e) => summary.skip(e.message()),
+    }
+    Some(summary)
 }
 
 /// `docmonk`-level helper: the dependency stage over the whole catalog.
@@ -990,7 +1159,7 @@ pub fn refresh(
     let opts = docmonk_indexing::coordinator::Options::from_config(&cfg);
     let mut summary = DependencySummary::default();
     run_stage(home, &cfg, &backend, &sources, opts.lock_timeout, |s, o| {
-        summary.add(&o);
+        summary.record(&s.id, &o);
         on_outcome(s, &o);
     });
     Ok(summary)

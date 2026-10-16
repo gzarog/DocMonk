@@ -115,8 +115,38 @@
     },
     "F08": {
       "phase": "PH06",
-      "status": "open",
-      "checks": []
+      "status": "fixed",
+      "checks": [
+        {
+          "test": "crates/docmonk-service/tests/dependencies.rs::f08_a_stale_dependency_is_never_reported_as_success",
+          "fails_on_baseline": "yes: baseline outcome() only counted relationship graphs and returned success"
+        },
+        {
+          "test": "crates/docmonk-service/tests/dependencies.rs::f08_a_failed_producer_lookup_makes_the_run_partial",
+          "fails_on_baseline": "yes: same as above"
+        },
+        {
+          "test": "crates/docmonk-service/tests/dependencies.rs::f08_a_disabled_consumer_is_not_a_required_dependency",
+          "fails_on_baseline": false,
+          "note": "guard: a disabled consumer is not required"
+        },
+        {
+          "test": "crates/docmonk-service/tests/dependencies.rs::f08_a_manual_relationships_build_reports_unresolved_dependencies",
+          "fails_on_baseline": "not compilable on baseline (no dependency issues or incomplete())"
+        },
+        {
+          "test": "crates/docmonk-service/tests/dependencies.rs::f08_status_separates_index_ready_from_complete_graph_ready",
+          "fails_on_baseline": "not compilable on baseline (status had no dependency_state or readiness)"
+        },
+        {
+          "test": "crates/docmonk-service/tests/dependencies.rs::f08_targeted_retries_converge_without_reindexing",
+          "fails_on_baseline": "not compilable on baseline (no retry book or targeted retry)"
+        },
+        {
+          "test": "crates/docmonk-storage/src/dependency_retry.rs::tests::*"
+        }
+      ],
+      "remaining": "Retry state is host-local (state/dependency-retries.json): server-mode status shows the authoritative dependency state from every host but retry timing only for the host it runs on. Server lease-conflict and transient-outage retry cases are covered by the lock-contention and producer-unavailable tests locally; no live-cluster test added yet."
     },
     "F09": {
       "phase": "PH05",

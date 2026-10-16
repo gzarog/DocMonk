@@ -87,6 +87,7 @@ pub fn collect_facts(
             published_missing: false,
             lease: None,
             relationships: None,
+            dependencies: None,
         };
         let project = project_id_for_canonical(&s.path);
         let db = layout.project_db(&project);
@@ -101,8 +102,9 @@ pub fn collect_facts(
                 wanted,
                 i.cache_size_mb,
             ) {
-                Ok((summary, recent, graph, n)) => {
+                Ok((summary, recent, graph, deps, n)) => {
                     statements += n;
+                    facts.dependencies = deps;
                     let visible = graph.as_ref().is_some_and(|g| g.state == "ready");
                     facts.relationships = graph;
                     if let Some(mut b) = summary {
@@ -177,6 +179,7 @@ type ProjectRead = (
     Option<docmonk_storage::status::BuildSummary>,
     Vec<ErrorEvent>,
     Option<RelationshipStatus>,
+    Option<crate::model::DependencyStatus>,
     u64,
 );
 
@@ -230,7 +233,17 @@ fn read_project(
         }
         _ => None,
     };
-    Ok((summary, recent, relationships, n))
+    // The consumer's dependency manifest (one metadata row).
+    n += 1;
+    let dependencies = store.external_manifest().map_err(db_err)?.and_then(|m| {
+        crate::snapshot::dependency_status(
+            Some(m.state.as_str()),
+            m.reason.as_deref(),
+            m.updated_at.as_deref(),
+            m.producers.keys().cloned().collect(),
+        )
+    });
+    Ok((summary, recent, relationships, dependencies, n))
 }
 
 /// A complete local report.

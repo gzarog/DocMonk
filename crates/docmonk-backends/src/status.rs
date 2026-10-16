@@ -177,9 +177,17 @@ impl ServerBackend {
         ]}})
     }
 
-    /// Every source-state document, paged (the catalog of a snapshot).
+    /// Every source-state document, paged (the catalog of a snapshot),
+    /// without the dependency manifest's bindings and lookups (status needs
+    /// its state, never the per-reference data).
     pub fn status_states(&self) -> Result<Vec<Value>> {
-        self.scan_state_docs(json!({ "match_all": {} }), None)
+        self.scan_state_docs_with(
+            json!({ "match_all": {} }),
+            Some(json!({ "excludes": [
+                format!("versions.{}.bindings", crate::graph::EXTERNAL_KEY),
+                format!("versions.{}.lookups", crate::graph::EXTERNAL_KEY),
+            ] })),
+        )
     }
 
     pub(crate) fn scan_state_docs(
@@ -187,6 +195,10 @@ impl ServerBackend {
         query: Value,
         fields: Option<&[&str]>,
     ) -> Result<Vec<Value>> {
+        self.scan_state_docs_with(query, fields.map(|f| json!(f)))
+    }
+
+    fn scan_state_docs_with(&self, query: Value, source: Option<Value>) -> Result<Vec<Value>> {
         let path = format!("/{}/_search", self.index(IndexKind::SourceState));
         let mut out = Vec::new();
         let mut after: Option<Value> = None;
@@ -197,8 +209,8 @@ impl ServerBackend {
                 "sort": [ { "source_id": "asc" } ],
                 "track_total_hits": false,
             });
-            if let Some(f) = fields {
-                body["_source"] = json!(f);
+            if let Some(f) = &source {
+                body["_source"] = f.clone();
             }
             if let Some(a) = &after {
                 body["search_after"] = a.clone();

@@ -396,6 +396,12 @@ impl StageSummary {
     pub fn not_current(&self) -> usize {
         self.failed + self.stale
     }
+
+    /// Graphs not current plus unresolved (or unchecked) dependencies: what
+    /// keeps a `relationships build` from `success`.
+    pub fn incomplete(&self) -> usize {
+        self.not_current() + self.dependencies.not_current()
+    }
 }
 
 /// `docmonk relationships build [--source ID]`: phase 2 alone, under
@@ -444,10 +450,11 @@ pub fn build(
                     &backend,
                     &all,
                     opts.lock_timeout,
-                    |_, o| summary.dependencies.add(&o),
+                    |s, o| summary.dependencies.record(&s.id, &o),
                 ),
                 Err(e) => {
-                    tracing::warn!(component = "relationships", event = "dependencies_skipped", error = %e.message())
+                    tracing::warn!(component = "relationships", event = "dependencies_skipped", error = %e.message());
+                    summary.dependencies.skip(e.message());
                 }
             }
             tracker.set_phase("done");
