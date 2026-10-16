@@ -72,6 +72,7 @@ clap = { version = "4.5", features = ["derive"] }
 flate2 = "1"
 notify = "8.2"
 regex = "1"
+roxmltree = "0.20"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "rustls-tls-native-roots", "json"] }
 rusqlite = { version = "0.32", features = ["bundled", "trace"] }
 serde = { version = "1", features = ["derive"] }

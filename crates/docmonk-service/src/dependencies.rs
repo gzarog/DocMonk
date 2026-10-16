@@ -182,6 +182,80 @@ pub(crate) fn open_view(
     }))
 }
 
+/// Where a producer's published definitions are read from.
+enum Definitions {
+    /// The local store (local mode).
+    Store(ProjectStore),
+    /// The authoritative server index at the pinned active build (server
+    /// mode): no staging copy of the producer is needed on this host.
+    Server(docmonk_backends::reader::ServerReader),
+}
+
+/// A producer pinned at its active build for one update.
+pub(crate) struct Producer {
+    defs: Definitions,
+    build: String,
+    pub generation: String,
+    pub active: String,
+}
+
+type Candidates = std::collections::HashMap<String, Vec<docmonk_storage::knowledge::EntityRow>>;
+
+impl Producer {
+    /// Exact qualified-name candidates of `names`, batched. An error is a
+    /// failed read, never "no candidate".
+    fn lookup(&self, names: &[&str]) -> Result<Candidates, String> {
+        match &self.defs {
+            Definitions::Store(s) => s
+                .entities_by_qualified_names(&self.build, names)
+                .map_err(|e| e.to_string()),
+            Definitions::Server(r) => r
+                .entities_by_qualified_names(&self.build, names)
+                .map_err(|e| e.to_string()),
+        }
+    }
+
+    /// The pinned build's base generation now (`None`: no longer published).
+    fn generation_now(&self) -> Result<Option<String>, DocMonkError> {
+        match &self.defs {
+            Definitions::Store(s) => s.base_generation(&self.build).map_err(db),
+            // Server builds are immutable; republication changes the active
+            // build id, which the fence compares.
+            Definitions::Server(_) => Ok(Some(self.generation.clone())),
+        }
+    }
+}
+
+fn open_producer(
+    home: &Home,
+    cfg: &docmonk_config::DocMonkConfig,
+    backend: &Backend,
+    source: &SourceRecord,
+) -> Result<Option<Producer>, DocMonkError> {
+    match backend {
+        Backend::Local => Ok(open_view(home, cfg, backend, source)?.map(|v| Producer {
+            defs: Definitions::Store(v.store),
+            build: v.build,
+            generation: v.generation,
+            active: v.active,
+        })),
+        Backend::Server(server) => {
+            let Some(active) = active_build(home, backend, source)? else {
+                return Ok(None);
+            };
+            Ok(Some(Producer {
+                defs: Definitions::Server(docmonk_backends::reader::ServerReader::new(
+                    server.clone(),
+                    &source.id,
+                )),
+                build: active.clone(),
+                generation: format!("server:{active}"),
+                active,
+            }))
+        }
+    }
+}
+
 fn find<'a>(sources: &'a [SourceRecord], r: &str) -> Option<&'a SourceRecord> {
     let resolved = docmonk_core::paths::resolve(Path::new(r)).ok();
     sources.iter().find(|s| {
@@ -204,25 +278,80 @@ fn normalize(p: &Path) -> PathBuf {
     out
 }
 
-/// `(project references, package references)` of a `.csproj` document.
-pub fn csproj_references(text: &str) -> (Vec<String>, Vec<String>) {
-    let attr = |tag: &str| -> Vec<String> {
-        let mut out = Vec::new();
-        let mut rest = text;
-        while let Some(i) = rest.find(tag) {
-            rest = &rest[i + tag.len()..];
-            let end = rest.find('>').unwrap_or(rest.len());
-            let item = &rest[..end];
-            if let Some(j) = item.find("Include=\"") {
-                let v = &item[j + 9..];
-                if let Some(k) = v.find('"') {
-                    out.push(v[..k].to_owned());
+/// References of one `.csproj` document. MSBuild is never evaluated:
+/// anything whose meaning depends on evaluation (conditions, properties,
+/// wildcards, imports) is reported in `unsupported`, never guessed.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct CsprojReferences {
+    pub projects: Vec<String>,
+    pub packages: Vec<String>,
+    pub unsupported: Vec<String>,
+}
+
+/// Parses a `.csproj` document as XML (either quote style, namespaces,
+/// comments and child elements are handled by the parser).
+pub fn csproj_references(text: &str) -> CsprojReferences {
+    let mut out = CsprojReferences::default();
+    let doc = match roxmltree::Document::parse(text) {
+        Ok(d) => d,
+        Err(e) => {
+            out.unsupported.push(format!("not well-formed XML: {e}"));
+            return out;
+        }
+    };
+    for node in doc.descendants().filter(|n| n.is_element()) {
+        let tag = node.tag_name().name();
+        match tag {
+            "Import" => {
+                if let Some(p) = node.attribute("Project") {
+                    out.unsupported.push(format!("import {p} is not evaluated"));
                 }
+                continue;
+            }
+            "ProjectReference" | "PackageReference" => {}
+            _ => continue,
+        }
+        let Some(include) = node.attribute("Include") else {
+            continue;
+        };
+        let conditional = node
+            .ancestors()
+            .filter(|a| a.is_element())
+            .any(|a| a.attribute("Condition").is_some());
+        for item in include.split(';').map(str::trim).filter(|i| !i.is_empty()) {
+            let why = if conditional {
+                Some("is conditional")
+            } else if item.contains("$(") || item.contains("@(") || item.contains("%(") {
+                Some("uses an unevaluated property")
+            } else if item.contains('*') || item.contains('?') {
+                Some("uses a wildcard")
+            } else {
+                None
+            };
+            let kind = if tag == "ProjectReference" {
+                "project"
+            } else {
+                "package"
+            };
+            match why {
+                Some(why) => out
+                    .unsupported
+                    .push(format!("{kind} reference {item} {why}")),
+                None if tag == "ProjectReference" => out.projects.push(item.to_owned()),
+                None => out.packages.push(item.to_owned()),
             }
         }
-        out
-    };
-    (attr("<ProjectReference"), attr("<PackageReference"))
+    }
+    out
+}
+
+/// The registered source whose root most specifically contains `target`
+/// (nested source roots resolve to the innermost).
+fn containing_source<'a>(sources: &'a [SourceRecord], target: &Path) -> Option<&'a SourceRecord> {
+    sources
+        .iter()
+        .filter(|s| target.starts_with(Path::new(&s.path)))
+        .max_by_key(|s| Path::new(&s.path).components().count())
 }
 
 /// Collects the declared and discovered dependencies of `sources`.
@@ -297,14 +426,19 @@ pub fn discover(
                     continue;
                 }
             };
-            let (projects, packages) = csproj_references(&text);
+            let refs = csproj_references(&text);
             let dir = path.parent().unwrap_or(Path::new(&source.path));
-            for r in projects {
+            for u in refs.unsupported {
+                reg.unsupported
+                    .entry(source.id.clone())
+                    .or_default()
+                    .push(format!("{rel_path}: {u}"));
+            }
+            let packages = refs.packages;
+            for r in refs.projects {
                 let target = normalize(&dir.join(r.replace('\\', "/")));
-                let producer = sources
-                    .iter()
-                    .find(|s| s.id != source.id && target.starts_with(Path::new(&s.path)));
-                match producer {
+                match containing_source(sources, &target) {
+                    Some(p) if p.id == source.id => {}
                     Some(p) => {
                         reg.edges.insert(Dependency {
                             consumer: source.id.clone(),
@@ -312,7 +446,6 @@ pub fn discover(
                             via: "project_reference",
                         });
                     }
-                    None if target.starts_with(Path::new(&source.path)) => {}
                     None => reg
                         .unsupported
                         .entry(source.id.clone())
@@ -518,7 +651,7 @@ fn update_consumer(
     let graph_generation = view.store.graph_state().map_err(db)?.generation;
 
     // Producers in scope, each opened at its current published base.
-    let mut producers: BTreeMap<String, (View, &'static str)> = BTreeMap::new();
+    let mut producers: BTreeMap<String, (Producer, &'static str)> = BTreeMap::new();
     for d in reg.producers_of(&consumer.id) {
         let unavailable = |why: &str| format!("producer {} {why}", d.producer);
         let Some(p) = sources.iter().find(|s| s.id == d.producer) else {
@@ -527,12 +660,12 @@ fn update_consumer(
         let reason = if !p.enabled {
             Some(unavailable("is disabled"))
         } else {
-            match open_view(home, cfg, backend, p)? {
+            match open_producer(home, cfg, backend, p)? {
                 Some(v) => {
                     producers.insert(p.id.clone(), (v, d.via));
                     None
                 }
-                None => Some(unavailable("has no published index on this host")),
+                None => Some(unavailable("has no published index")),
             }
         };
         if let Some(reason) = reason {
@@ -574,19 +707,25 @@ fn update_consumer(
             if manifest.producers[id].base_generation == p.generation {
                 continue;
             }
-            for (key, fp) in manifest.lookups.get(id).into_iter().flatten() {
+            let keys = manifest.lookups.get(id).cloned().unwrap_or_default();
+            let names: Vec<&str> = keys
+                .keys()
+                .map(|k| k.strip_prefix("q:").unwrap_or(k))
+                .collect();
+            let found = match p.lookup(&names) {
+                Ok(found) => found,
+                Err(e) => {
+                    let reason = lookup_failed(id, &e);
+                    manifest.state = "stale".into();
+                    manifest.reason = Some(reason.clone());
+                    persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+                    return Ok(stale(reason));
+                }
+            };
+            for (key, fp) in &keys {
                 let qn = key.strip_prefix("q:").unwrap_or(key);
-                let rows = match p.store.entities_by_qualified_name(&p.build, qn) {
-                    Ok(rows) => rows,
-                    Err(e) => {
-                        let reason = lookup_failed(id, &e);
-                        manifest.state = "stale".into();
-                        manifest.reason = Some(reason.clone());
-                        persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
-                        return Ok(stale(reason));
-                    }
-                };
-                if candidates_fingerprint(&rows) != *fp {
+                let rows = found.get(qn).map(Vec::as_slice).unwrap_or_default();
+                if candidates_fingerprint(rows) != *fp {
                     changed.insert(key.clone());
                     triggered_by.insert(id.clone());
                 }
@@ -648,30 +787,38 @@ fn update_consumer(
             .map(|b| (b.relationship_id.clone(), b.clone()))
             .collect()
     };
-    let mut cache: BTreeMap<(String, String), Vec<docmonk_storage::knowledge::EntityRow>> =
-        BTreeMap::new();
+    // One batched lookup per producer over every distinct name. A failed
+    // lookup is never "no candidate": the consumer keeps its last bindings
+    // (persisted above), marked stale.
+    let names: Vec<&str> = refs
+        .iter()
+        .map(|(t, _)| t.as_str())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let mut candidates: BTreeMap<&str, Candidates> = BTreeMap::new();
+    for (id, (p, _)) in &producers {
+        match p.lookup(&names) {
+            Ok(found) => {
+                candidates.insert(id.as_str(), found);
+            }
+            Err(e) => {
+                let reason = lookup_failed(id, &e);
+                tracing::warn!(component = "relationships", event = "producer_lookup_failed", source_id = %consumer.id, producer = %id, retryable = true, error = %e);
+                manifest.reason = Some(reason.clone());
+                persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+                return Ok(stale(reason));
+            }
+        }
+    }
     for (text, r) in &refs {
         let key = qualified_key(text);
         let mut found: Vec<(String, String)> = Vec::new();
-        for (id, (p, _)) in &producers {
-            let slot = (id.clone(), text.clone());
-            if !cache.contains_key(&slot) {
-                // A failed lookup is never "no candidate": the consumer keeps
-                // its last bindings (persisted above), marked stale.
-                match p.store.entities_by_qualified_name(&p.build, text) {
-                    Ok(rows) => {
-                        cache.insert(slot.clone(), rows);
-                    }
-                    Err(e) => {
-                        let reason = lookup_failed(id, &e);
-                        tracing::warn!(component = "relationships", event = "producer_lookup_failed", source_id = %consumer.id, producer = %id, retryable = true, error = %e);
-                        manifest.reason = Some(reason.clone());
-                        persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
-                        return Ok(stale(reason));
-                    }
-                }
-            }
-            let rows = &cache[&slot];
+        for id in producers.keys() {
+            let rows = candidates[id.as_str()]
+                .get(text.as_str())
+                .map(Vec::as_slice)
+                .unwrap_or_default();
             lookups
                 .entry(id.clone())
                 .or_default()
@@ -715,7 +862,7 @@ fn update_consumer(
             Some(s) => active_build(home, backend, s)?,
             None => None,
         };
-        let now = p.store.base_generation(&p.build).map_err(db)?;
+        let now = p.generation_now()?;
         if active.as_deref() != Some(p.active.as_str())
             || now.as_deref() != Some(p.generation.as_str())
         {
@@ -850,17 +997,83 @@ mod tests {
 
     #[test]
     fn csproj_project_and_package_references_are_parsed() {
-        let (p, k) = csproj_references(
+        let r = csproj_references(
             r#"<Project><ItemGroup>
                 <ProjectReference Include="..\Lib\Lib.csproj" />
                 <PackageReference Include="Newtonsoft.Json" Version="13" />
             </ItemGroup></Project>"#,
         );
-        assert_eq!(p, vec![r"..\Lib\Lib.csproj".to_owned()]);
-        assert_eq!(k, vec!["Newtonsoft.Json".to_owned()]);
+        assert_eq!(r.projects, vec![r"..\Lib\Lib.csproj".to_owned()]);
+        assert_eq!(r.packages, vec!["Newtonsoft.Json".to_owned()]);
+        assert!(r.unsupported.is_empty());
         assert_eq!(
             normalize(Path::new("/r/a/../b/./c.csproj")),
             PathBuf::from("/r/b/c.csproj")
+        );
+    }
+
+    #[test]
+    fn f14_csproj_parsing_is_xml_aware_and_never_guesses() {
+        let r = csproj_references(
+            r#"<?xml version="1.0"?>
+<Project Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- <ProjectReference Include="..\Commented\Out.csproj" /> -->
+  <Import Project="$(MSBuildThisFileDirectory)shared.props" />
+  <ItemGroup>
+    <ProjectReference Include='..\Single\Single.csproj' />
+    <ProjectReference
+        Include="..\Multi\Multi.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\A\A.csproj;..\B\B.csproj" />
+    <ProjectReference Include="$(Root)\Prop.csproj" />
+    <ProjectReference Include="..\Glob\*.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <ProjectReference Include="..\Debug\Debug.csproj" />
+  </ItemGroup>
+</Project>"#,
+        );
+        assert_eq!(
+            r.projects,
+            [
+                r"..\Single\Single.csproj",
+                r"..\Multi\Multi.csproj",
+                r"..\A\A.csproj",
+                r"..\B\B.csproj"
+            ]
+        );
+        assert!(!r.projects.iter().any(|p| p.contains("Commented")));
+        let u = r.unsupported.join("\n");
+        for want in [
+            "shared.props",
+            "Prop.csproj",
+            "Glob",
+            "Debug.csproj is conditional",
+        ] {
+            assert!(u.contains(want), "{want}: {u}");
+        }
+        assert_eq!(csproj_references("<Project").unsupported.len(), 1);
+    }
+
+    #[test]
+    fn nested_source_roots_resolve_to_the_innermost() {
+        let rec = |id: &str, path: &str| SourceRecord {
+            id: id.into(),
+            path: path.into(),
+            source_type: docmonk_core::models::SourceType::Local,
+            enabled: true,
+            include_patterns: vec![],
+            exclude_patterns: vec![],
+            created_at: String::new(),
+            updated_at: String::new(),
+        };
+        let sources = [rec("outer", "/r"), rec("inner", "/r/lib")];
+        let hit = containing_source(&sources, Path::new("/r/lib/L.csproj")).unwrap();
+        assert_eq!(hit.id, "inner");
+        assert_eq!(
+            containing_source(&sources, Path::new("/x/y")).map(|s| &s.id),
+            None
         );
     }
 }

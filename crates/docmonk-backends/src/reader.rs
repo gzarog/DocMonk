@@ -538,6 +538,41 @@ impl ServerReader {
     }
 
     /// Entities whose short name is exactly `name`.
+    /// Entities of build `b` whose qualified name is exactly one of
+    /// `names`, by name, in resolution order (`file_id`, `start_line`,
+    /// `entity_id`, as the local store). Requests are batched and bounded;
+    /// a batch reaching the read cap is an error, never a silent truncation.
+    pub fn entities_by_qualified_names(
+        &self,
+        b: &str,
+        names: &[&str],
+    ) -> Result<std::collections::HashMap<String, Vec<EntityRow>>> {
+        const BATCH: usize = 256;
+        let mut out: std::collections::HashMap<String, Vec<EntityRow>> =
+            std::collections::HashMap::new();
+        for chunk in names.chunks(BATCH) {
+            let hits = self.find(
+                IndexKind::Code,
+                b,
+                vec![json!({ "terms": { "qualified_name.raw": chunk } })],
+                None,
+                json!([{ "file_id": "asc" }, { "start_line": "asc" }, { "entity_id": "asc" }]),
+                MAX_READ,
+            )?;
+            if hits.len() >= MAX_READ {
+                return Err(StorageError::Backend(format!(
+                    "qualified-name lookup of {} name(s) reached the {MAX_READ} read cap",
+                    chunk.len()
+                )));
+            }
+            for h in &hits {
+                let e = entity_row(&h["_source"]);
+                out.entry(e.qualified_name.clone()).or_default().push(e);
+            }
+        }
+        Ok(out)
+    }
+
     pub fn entities_named(&self, b: &str, name: &str) -> Result<Vec<EntityRow>> {
         Ok(self
             .find(

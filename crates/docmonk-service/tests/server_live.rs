@@ -507,3 +507,98 @@ fn elasticsearch_end_to_end() {
         scenario(&u, "elasticsearch");
     }
 }
+
+/// F04 (audit PH02): a consumer resolves a producer published by another
+/// host, without any staging copy of the producer on its own host.
+fn cross_host_dependencies(base: &str, engine: &str) {
+    use docmonk_service::dependencies::DependencyOutcome;
+    let host1 = setup(base, engine, "xh");
+    // A second host: its own home, same server and prefix.
+    let home2 = Home::new(host1._dir.path().join("home2"));
+    home2.ensure_layout().unwrap();
+    let cfg = docmonk_service::load(&host1.home).unwrap();
+    docmonk_config::write_user_config(&cfg, &home2).unwrap();
+
+    let root = host1._dir.path();
+    let write = |rel: &str, body: &str| {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, body).unwrap();
+    };
+    write(
+        "producer/Lib/Shared.cs",
+        "namespace Lib {\n  public class Shared {\n    public static int Compute() { return 1; }\n  }\n}\n",
+    );
+    write("producer/Lib/Lib.csproj", "<Project></Project>\n");
+    write(
+        "consumer/App/Program.cs",
+        "namespace App {\n  public class Program {\n    public static int Main() { return Lib.Shared.Compute(); }\n  }\n}\n",
+    );
+    write(
+        "consumer/App/App.csproj",
+        "<Project><ItemGroup>\n  <ProjectReference Include=\"../../producer/Lib/Lib.csproj\" />\n</ItemGroup></Project>\n",
+    );
+    let mut c = catalog(&host1.home).unwrap();
+    let producer = c
+        .add(root.join("producer").to_str().unwrap(), vec![], vec![])
+        .unwrap();
+    let consumer = c
+        .add(root.join("consumer").to_str().unwrap(), vec![], vec![])
+        .unwrap();
+
+    // Host 1 indexes the producer only.
+    docmonk_service::indexing::index_sources(
+        &host1.home,
+        std::slice::from_ref(&producer),
+        "index",
+        |_| {},
+    )
+    .unwrap();
+    // Host 2 indexes the consumer only: it has no staging copy of the
+    // producer.
+    let mut outcome = None;
+    docmonk_service::indexing::index_sources(
+        &home2,
+        std::slice::from_ref(&consumer),
+        "index",
+        |e| {
+            if let SourceEvent::Dependencies { source, outcome: o } = e {
+                if source.id == consumer.id {
+                    outcome = Some(o.clone());
+                }
+            }
+        },
+    )
+    .unwrap();
+    let outcome = outcome.expect("consumer visited");
+    assert!(
+        matches!(outcome, DependencyOutcome::Updated { bound: 1, .. }),
+        "{outcome:?}"
+    );
+    let m: docmonk_storage::graph::ExternalManifest = serde_json::from_value(
+        server(&host1)
+            .graph_external(&consumer.id)
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(m.state, "current");
+    assert!(m.revision > 0);
+    let binding = &m.bindings[0];
+    assert_eq!(binding.producer.as_deref(), Some(producer.id.as_str()));
+    assert!(binding.target_entity_id.is_some() && !binding.ambiguous);
+}
+
+#[test]
+fn opensearch_cross_host_dependencies() {
+    if let Some(u) = url("DOCMONK_TEST_OPENSEARCH_URL") {
+        cross_host_dependencies(&u, "opensearch");
+    }
+}
+
+#[test]
+fn elasticsearch_cross_host_dependencies() {
+    if let Some(u) = url("DOCMONK_TEST_ELASTICSEARCH_URL") {
+        cross_host_dependencies(&u, "elasticsearch");
+    }
+}
