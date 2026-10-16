@@ -882,13 +882,16 @@ pub fn run_search(
             let lazy = lazy_embedder(home, cfg);
             let embedder = lazy.get().ok().map(|a| a.as_ref());
             let model_load_ms = started.elapsed().as_secs_f64() * 1000.0;
-            let s = hybrid::semantic_search_with(
+            // Hard filters restrict candidate generation (F06): in-scope
+            // hits are never truncated away by out-of-scope ones.
+            let s = hybrid::semantic_search_filtered(
                 corp,
                 embedder,
                 req.query,
                 req.limit,
                 Some(sc.semantic_top_k.max(1) as usize),
                 ann_params(cfg),
+                f,
             )
             .map_err(search_err)?;
             Ok((s, model_load_ms, started.elapsed().as_secs_f64() * 1000.0))

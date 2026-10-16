@@ -81,8 +81,17 @@
     },
     "F06": {
       "phase": "PH04",
-      "status": "open",
-      "checks": []
+      "status": "fixed",
+      "checks": [
+        {
+          "test": "crates/docmonk-retrieval/src/hybrid.rs::tests::f06_hard_filters_apply_before_top_k_truncation",
+          "fails_on_baseline": "yes: the baseline post-filter of the top 10 returns none of the 3 in-scope hits"
+        },
+        {
+          "test": "crates/docmonk-retrieval/tests/attachments.rs::f06_filtered_semantic_search_finds_low_ranked_in_scope_hits (real embeddings; runs in CI with models)"
+        }
+      ],
+      "remaining": "Native kNN prefilters (server) are not yet pushed down; bounded adaptive expansion (cap 4096 per corpus, reported in degraded when reached) is used for both backends."
     },
     "F07": {
       "phase": "PH05",
