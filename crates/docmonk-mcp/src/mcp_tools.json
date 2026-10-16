@@ -2752,6 +2752,125 @@
        ],
        "default": null
       },
+      "dependency_state": {
+       "description": "The cross-source dependency stage of this source as a consumer (null when it has none or they are unknown); the published index is searchable whatever this says.",
+       "anyOf": [
+        {
+         "type": "object",
+         "properties": {
+          "state": {
+           "type": "string",
+           "enum": [
+            "current",
+            "stale",
+            "pending"
+           ]
+          },
+          "reason": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null
+          },
+          "updated_at": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null
+          },
+          "producers": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "retry": {
+           "anyOf": [
+            {
+             "type": "object",
+             "properties": {
+              "code": {
+               "type": "string"
+              },
+              "last_error": {
+               "type": "string"
+              },
+              "attempts": {
+               "type": "integer"
+              },
+              "last_attempt_at": {
+               "anyOf": [
+                {
+                 "type": "string"
+                },
+                {
+                 "type": "null"
+                }
+               ],
+               "default": null
+              },
+              "next_attempt_at": {
+               "anyOf": [
+                {
+                 "type": "string"
+                },
+                {
+                 "type": "null"
+                }
+               ],
+               "default": null
+              }
+             },
+             "required": [
+              "code",
+              "last_error",
+              "attempts"
+             ]
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null
+          }
+         },
+         "required": [
+          "state",
+          "producers"
+         ]
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null
+      },
+      "readiness": {
+       "description": "Index readiness and complete-graph readiness, reported independently: complete_graph_ready requires a ready source graph and current cross-source dependencies.",
+       "type": "object",
+       "properties": {
+        "index_ready": {
+         "type": "boolean"
+        },
+        "complete_graph_ready": {
+         "type": "boolean"
+        }
+       },
+       "required": [
+        "index_ready",
+        "complete_graph_ready"
+       ]
+      },
       "build": {
        "type": "object",
        "properties": {
