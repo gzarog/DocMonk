@@ -752,7 +752,7 @@ impl ServerBackend {
     }
 
     /// Source-state documents matching `query`, every page.
-    fn scan_states(&self, query: Value) -> Result<Vec<Value>> {
+    pub(crate) fn scan_states(&self, query: Value) -> Result<Vec<Value>> {
         self.scan_state_docs(query, None)
     }
 

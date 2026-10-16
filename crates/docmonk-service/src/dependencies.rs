@@ -24,9 +24,16 @@
 //!   Bindings depend on producers' published definitions, never on other
 //!   bindings, so the work is one pass over direct consumers: each consumer
 //!   is visited at most once per run, and dependency cycles terminate.
-//! * Fencing: before the manifest is promoted, every producer's base
-//!   generation is re-read; a producer republished meanwhile leaves the
-//!   consumer `stale`. A consumer is marked `stale` before it is updated, so
+//! * Removal: a source whose stored manifest still records producers or
+//!   bindings is reconciled even when it no longer depends on anything, so
+//!   removed dependencies drop their bindings; a consumer whose discovery
+//!   could not complete keeps its last bindings, marked `stale`.
+//! * Lookup failures are never read as "no candidate": the consumer keeps
+//!   its last bindings, marked `stale`.
+//! * Fencing: before the manifest is promoted, the authoritative active
+//!   build and base generation of every producer, and the consumer's
+//!   active build and graph generation, are re-read; any change meanwhile
+//!   leaves the consumer `stale`. A consumer is marked `stale` before it is updated, so
 //!   an interrupted run is picked up by the next one; unavailable producers
 //!   or consumers are reported `stale`/`pending`, never silently current.
 //! * Runs indexing only some sources still update their impacted consumers
@@ -69,6 +76,12 @@ pub struct Registry {
     pub unsupported: BTreeMap<String, Vec<String>>,
     /// Declarations naming no registered source.
     pub invalid: Vec<String>,
+    /// Sources whose stored manifest records producers or bindings: they
+    /// are reconciled even when no edge names them any more.
+    pub manifest_owners: BTreeSet<String>,
+    /// `source -> why` its dependencies could not be fully discovered: a
+    /// missing edge there is unknown, never a removal.
+    pub incomplete: BTreeMap<String, String>,
 }
 
 impl Registry {
@@ -82,6 +95,14 @@ impl Registry {
     pub fn consumers(&self) -> BTreeSet<&str> {
         self.edges.iter().map(|d| d.consumer.as_str()).collect()
     }
+
+    /// Every source to reconcile: current consumers and previous manifest
+    /// owners (whose dependencies may have been removed).
+    pub fn refresh_candidates(&self) -> BTreeSet<&str> {
+        let mut out = self.consumers();
+        out.extend(self.manifest_owners.iter().map(String::as_str));
+        out
+    }
 }
 
 /// A source's published build, opened for reading.
@@ -89,6 +110,29 @@ pub(crate) struct View {
     pub store: ProjectStore,
     pub build: String,
     pub generation: String,
+    /// The authoritative active build id when the view was opened (the
+    /// control plane locally, the server's state in server mode).
+    pub active: String,
+}
+
+/// The authoritative active build id of `source` right now.
+fn active_build(
+    home: &Home,
+    backend: &Backend,
+    source: &SourceRecord,
+) -> Result<Option<String>, DocMonkError> {
+    Ok(match backend {
+        Backend::Local => {
+            control_plane(home)?
+                .state(&source.id)
+                .map_err(db)?
+                .active_build_id
+        }
+        Backend::Server(server) => server
+            .source_state(&source.id)
+            .map_err(server_err)?
+            .and_then(|s| s.active_build_id),
+    })
 }
 
 pub(crate) fn open_view(
@@ -97,7 +141,7 @@ pub(crate) fn open_view(
     backend: &Backend,
     source: &SourceRecord,
 ) -> Result<Option<View>, DocMonkError> {
-    let (store, build) = match backend {
+    let (store, build, active) = match backend {
         Backend::Local => {
             let Some(build) = control_plane(home)?
                 .state(&source.id)
@@ -118,7 +162,7 @@ pub(crate) fn open_view(
                 cfg.runtime.sqlite_cache_size_mb,
             )
             .map_err(db)?;
-            (store, build)
+            (store, build.clone(), build)
         }
         Backend::Server(server) => {
             match crate::server_index::synced_staging_store(home, cfg, server, source)? {
@@ -134,6 +178,7 @@ pub(crate) fn open_view(
         store,
         build,
         generation,
+        active,
     }))
 }
 
@@ -204,17 +249,53 @@ pub fn discover(
             _ => reg.invalid.push(d.clone()),
         }
     }
+    if let Backend::Server(server) = backend {
+        // The authoritative manifests, in one scan (a lost staging cache
+        // must not hide a consumer whose dependencies were removed).
+        match server.graph_external_owners() {
+            Ok(owners) => reg.manifest_owners.extend(owners),
+            Err(e) => {
+                for s in sources {
+                    reg.incomplete
+                        .insert(s.id.clone(), format!("manifest owners unreadable: {e}"));
+                }
+            }
+        }
+    }
     for source in sources {
-        let Ok(Some(view)) = open_view(home, cfg, backend, source) else {
-            continue;
+        let mut incomplete = |why: String| {
+            reg.incomplete.entry(source.id.clone()).or_insert(why);
         };
-        let Ok(projects) = view.store.file_paths_with_suffix(&view.build, ".csproj") else {
-            continue;
+        let view = match open_view(home, cfg, backend, source) {
+            Ok(Some(v)) => v,
+            Ok(None) => continue,
+            Err(e) => {
+                incomplete(format!("published index unreadable: {}", e.message()));
+                continue;
+            }
+        };
+        match view.store.external_manifest() {
+            Ok(Some(m)) if !m.producers.is_empty() || !m.bindings.is_empty() => {
+                reg.manifest_owners.insert(source.id.clone());
+            }
+            Ok(_) => {}
+            Err(e) => incomplete(format!("manifest unreadable: {e}")),
+        }
+        let projects = match view.store.file_paths_with_suffix(&view.build, ".csproj") {
+            Ok(p) => p,
+            Err(e) => {
+                incomplete(format!("project files unreadable: {e}"));
+                continue;
+            }
         };
         for rel_path in &projects {
             let path = Path::new(&source.path).join(rel_path);
-            let Ok(text) = std::fs::read_to_string(&path) else {
-                continue;
+            let text = match std::fs::read_to_string(&path) {
+                Ok(t) => t,
+                Err(e) => {
+                    incomplete(format!("{rel_path} unreadable: {e}"));
+                    continue;
+                }
             };
             let (projects, packages) = csproj_references(&text);
             let dir = path.parent().unwrap_or(Path::new(&source.path));
@@ -310,34 +391,92 @@ impl DependencySummary {
     }
 }
 
+/// Why a producer lookup failed (the storage error, never "no candidate").
+fn lookup_failed(producer: &str, e: &impl std::fmt::Display) -> String {
+    format!("lookup in producer {producer} failed (retryable): {e}")
+}
+
 fn stale(reason: impl Into<String>) -> DependencyOutcome {
     DependencyOutcome::Stale {
         reason: reason.into(),
     }
 }
 
-/// Records `m` on the consumer (and on the server, the authoritative copy).
+/// Records `m` as the next revision: in server mode on the authoritative
+/// copy first, then on the consumer's staging cache (derived; repaired from
+/// the server whenever it lags).
 fn persist(
     cfg: &docmonk_config::DocMonkConfig,
     backend: &Backend,
     consumer: &SourceRecord,
     store: &mut ProjectStore,
-    m: &ExternalManifest,
+    m: &mut ExternalManifest,
 ) -> Result<(), DocMonkError> {
-    store.put_external_manifest(m).map_err(db)?;
+    m.revision += 1;
+    m.updated_at = Some(docmonk_storage::db::now_iso());
     if let Backend::Server(server) = backend {
         let ttl = std::time::Duration::from_secs_f64(cfg.storage.server.lease_seconds);
         let lease = server
             .acquire_lease(&consumer.id, &lease_owner(), ttl)
             .map_err(server_err)?;
-        let value = serde_json::to_value(m).map_err(crate::generic)?;
+        let value = serde_json::to_value(&*m).map_err(crate::generic)?;
         let r = server
             .set_graph_external(&consumer.id, Some(&lease), &value)
             .map_err(server_err);
         let _ = server.release_lease(&lease);
         r?;
     }
+    store.put_external_manifest(m).map_err(db)?;
     Ok(())
+}
+
+/// The consumer's manifest: in server mode the authoritative copy, unless
+/// the staging cache is at least as recent (a lagging or lost cache is
+/// repaired from it).
+fn load_manifest(
+    backend: &Backend,
+    consumer: &SourceRecord,
+    store: &mut ProjectStore,
+) -> Result<ExternalManifest, DocMonkError> {
+    let cached = store.external_manifest().map_err(db)?;
+    let Backend::Server(server) = backend else {
+        return Ok(cached.unwrap_or_default());
+    };
+    let authoritative: Option<ExternalManifest> = server
+        .graph_external(&consumer.id)
+        .map_err(server_err)?
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(crate::generic)?;
+    Ok(match (cached, authoritative) {
+        (Some(c), Some(a)) if c.revision >= a.revision && a.revision > 0 => c,
+        (_, Some(a)) => {
+            store.put_external_manifest(&a).map_err(db)?;
+            a
+        }
+        (c, None) => c.unwrap_or_default(),
+    })
+}
+
+/// Test hooks for deterministic race reproductions. Not part of the API.
+#[doc(hidden)]
+pub mod test_hooks {
+    use std::sync::Mutex;
+
+    type Hook = Box<dyn Fn(&str) + Send>;
+    static BEFORE_FENCE: Mutex<Option<Hook>> = Mutex::new(None);
+
+    /// Runs `hook(consumer_id)` after bindings are computed and before the
+    /// publication fence (`None` clears it).
+    pub fn set_before_fence(hook: Option<Hook>) {
+        *BEFORE_FENCE.lock().unwrap_or_else(|e| e.into_inner()) = hook;
+    }
+
+    pub(crate) fn before_fence(consumer: &str) {
+        if let Some(h) = &*BEFORE_FENCE.lock().unwrap_or_else(|e| e.into_inner()) {
+            h(consumer);
+        }
+    }
 }
 
 /// Updates one consumer's bindings. The caller holds its lock.
@@ -359,18 +498,7 @@ fn update_consumer(
             reason: "consumer has no published index on this host".into(),
         });
     };
-    let mut manifest = match view.store.external_manifest().map_err(db)? {
-        Some(m) => m,
-        None => match backend {
-            // The authoritative copy survives a lost staging cache.
-            Backend::Server(server) => server
-                .graph_external(&consumer.id)
-                .map_err(server_err)?
-                .and_then(|v| serde_json::from_value(v).ok())
-                .unwrap_or_default(),
-            Backend::Local => ExternalManifest::default(),
-        },
-    };
+    let mut manifest = load_manifest(backend, consumer, &mut view.store)?;
     manifest.unsupported = reg
         .unsupported
         .get(&consumer.id)
@@ -383,7 +511,7 @@ fn update_consumer(
         if manifest.state != "stale" {
             manifest.state = "stale".into();
             manifest.reason = Some("the consumer's own graph is not current".into());
-            persist(cfg, backend, consumer, &mut view.store, &manifest)?;
+            persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
         }
         return Ok(stale("the consumer's own graph is not current"));
     }
@@ -410,7 +538,23 @@ fn update_consumer(
         if let Some(reason) = reason {
             manifest.state = "stale".into();
             manifest.reason = Some(reason.clone());
-            persist(cfg, backend, consumer, &mut view.store, &manifest)?;
+            persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+            return Ok(stale(reason));
+        }
+    }
+
+    // A dependency missing because discovery could not complete is
+    // unknown, not removed: keep the last bindings.
+    if let Some(why) = reg.incomplete.get(&consumer.id) {
+        if manifest
+            .producers
+            .keys()
+            .any(|p| !producers.contains_key(p))
+        {
+            let reason = format!("dependency discovery incomplete: {why}");
+            manifest.state = "stale".into();
+            manifest.reason = Some(reason.clone());
+            persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
             return Ok(stale(reason));
         }
     }
@@ -432,10 +576,16 @@ fn update_consumer(
             }
             for (key, fp) in manifest.lookups.get(id).into_iter().flatten() {
                 let qn = key.strip_prefix("q:").unwrap_or(key);
-                let rows = p
-                    .store
-                    .entities_by_qualified_name(&p.build, qn)
-                    .map_err(db)?;
+                let rows = match p.store.entities_by_qualified_name(&p.build, qn) {
+                    Ok(rows) => rows,
+                    Err(e) => {
+                        let reason = lookup_failed(id, &e);
+                        manifest.state = "stale".into();
+                        manifest.reason = Some(reason.clone());
+                        persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+                        return Ok(stale(reason));
+                    }
+                };
                 if candidates_fingerprint(&rows) != *fp {
                     changed.insert(key.clone());
                     triggered_by.insert(id.clone());
@@ -455,7 +605,9 @@ fn update_consumer(
                 }
             }
             if moved {
-                view.store.put_external_manifest(&manifest).map_err(db)?;
+                // Through the authoritative path: the server must never lag
+                // the staging cache.
+                persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
             }
             return Ok(DependencyOutcome::Current);
         }
@@ -470,7 +622,7 @@ fn update_consumer(
         "dependency inputs changed ({})",
         triggered_by.iter().cloned().collect::<Vec<_>>().join(", ")
     ));
-    persist(cfg, backend, consumer, &mut view.store, &manifest)?;
+    persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
 
     let refs: Vec<_> = view
         .store
@@ -502,11 +654,24 @@ fn update_consumer(
         let key = qualified_key(text);
         let mut found: Vec<(String, String)> = Vec::new();
         for (id, (p, _)) in &producers {
-            let rows = cache.entry((id.clone(), text.clone())).or_insert_with(|| {
-                p.store
-                    .entities_by_qualified_name(&p.build, text)
-                    .unwrap_or_default()
-            });
+            let slot = (id.clone(), text.clone());
+            if !cache.contains_key(&slot) {
+                // A failed lookup is never "no candidate": the consumer keeps
+                // its last bindings (persisted above), marked stale.
+                match p.store.entities_by_qualified_name(&p.build, text) {
+                    Ok(rows) => {
+                        cache.insert(slot.clone(), rows);
+                    }
+                    Err(e) => {
+                        let reason = lookup_failed(id, &e);
+                        tracing::warn!(component = "relationships", event = "producer_lookup_failed", source_id = %consumer.id, producer = %id, retryable = true, error = %e);
+                        manifest.reason = Some(reason.clone());
+                        persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+                        return Ok(stale(reason));
+                    }
+                }
+            }
+            let rows = &cache[&slot];
             lookups
                 .entry(id.clone())
                 .or_default()
@@ -531,15 +696,36 @@ fn update_consumer(
         );
     }
 
-    // Fence: every producer must still be at the snapshot read above.
+    test_hooks::before_fence(&consumer.id);
+    // Fence: the consumer and every producer must still be at the snapshot
+    // read above, judged by the authoritative active build (an old build
+    // that is still stored is not enough).
+    let mut moved = None;
+    if active_build(home, backend, consumer)?.as_deref() != Some(view.active.as_str())
+        || view.store.graph_state().map_err(db)?.generation != graph_generation
+    {
+        moved = Some("the consumer was reindexed during the update".to_owned());
+    }
     for (id, (p, _)) in &producers {
-        let now = p.store.base_generation(&p.build).map_err(db)?;
-        if now.as_deref() != Some(p.generation.as_str()) {
-            let reason = format!("producer {id} was republished during the update");
-            manifest.reason = Some(reason.clone());
-            persist(cfg, backend, consumer, &mut view.store, &manifest)?;
-            return Ok(stale(reason));
+        if moved.is_some() {
+            break;
         }
+        let source = sources.iter().find(|s| &s.id == id);
+        let active = match source {
+            Some(s) => active_build(home, backend, s)?,
+            None => None,
+        };
+        let now = p.store.base_generation(&p.build).map_err(db)?;
+        if active.as_deref() != Some(p.active.as_str())
+            || now.as_deref() != Some(p.generation.as_str())
+        {
+            moved = Some(format!("producer {id} was republished during the update"));
+        }
+    }
+    if let Some(reason) = moved {
+        manifest.reason = Some(reason.clone());
+        persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+        return Ok(stale(reason));
     }
     let bound = bindings
         .values()
@@ -565,8 +751,9 @@ fn update_consumer(
         bindings: bindings.into_values().collect(),
         unsupported: manifest.unsupported,
         updated_at: None,
+        revision: manifest.revision,
     };
-    persist(cfg, backend, consumer, &mut view.store, &manifest)?;
+    persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
     Ok(DependencyOutcome::Updated {
         full,
         keys_changed: changed.len(),
@@ -605,7 +792,7 @@ pub fn run_stage_holding(
     for d in &reg.invalid {
         tracing::warn!(component = "relationships", event = "dependency_ignored", declaration = %d);
     }
-    for consumer_id in reg.consumers() {
+    for consumer_id in reg.refresh_candidates() {
         let Some(consumer) = sources.iter().find(|s| s.id == consumer_id) else {
             continue;
         };

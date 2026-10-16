@@ -116,6 +116,11 @@ pub struct ExternalManifest {
     pub unsupported: Vec<String>,
     #[serde(default)]
     pub updated_at: Option<String>,
+    /// Monotonic revision, advanced by every persisted change: the copy
+    /// with the higher revision wins (in server mode the authoritative
+    /// copy is written first, so a lagging staging cache is repaired).
+    #[serde(default)]
+    pub revision: u64,
 }
 
 /// Candidate fingerprint of a qualified lookup: the candidates' entity ids

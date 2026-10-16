@@ -461,15 +461,15 @@ fn staged_pass(
     Ok(result)
 }
 
-/// The source's staging store and staged build, when the staging copy
-/// describes the server's active build (`None` otherwise: another host
-/// published, or the cache was deleted).
+/// The source's staging store, staged build and the server's active build
+/// id, when the staging copy describes that active build (`None`
+/// otherwise: another host published, or the cache was deleted).
 pub fn synced_staging_store(
     home: &Home,
     cfg: &DocMonkConfig,
     server: &ServerBackend,
     source: &SourceRecord,
-) -> Result<Option<(ProjectStore, String)>, DocMonkError> {
+) -> Result<Option<(ProjectStore, String, String)>, DocMonkError> {
     let active = server
         .source_state(&source.id)
         .map_err(server_err)?
@@ -478,9 +478,9 @@ pub fn synced_staging_store(
     let synced = std::fs::read_to_string(marker(&root, &source.id))
         .ok()
         .map(|s| s.trim().to_owned());
-    if active.is_none() || synced != active {
+    let Some(active) = active.filter(|a| synced.as_ref() == Some(a)) else {
         return Ok(None);
-    }
+    };
     let layout = StorageLayout::at(&root);
     let cp = open_staging(&layout, cfg)?;
     let Some(local) = cp.state(&source.id).map_err(db)?.active_build_id else {
@@ -493,7 +493,7 @@ pub fn synced_staging_store(
         cfg.runtime.sqlite_cache_size_mb,
     )
     .map_err(db)?;
-    Ok(Some((store, local)))
+    Ok(Some((store, local, active)))
 }
 
 /// What a server-mode graph stage did.

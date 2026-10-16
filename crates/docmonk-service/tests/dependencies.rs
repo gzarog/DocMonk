@@ -300,3 +300,155 @@ fn unavailable_consumers_and_producers_are_reported_not_current() {
     let outcomes = env.run(&["b"]);
     assert_eq!(outcomes["a"].state(), "pending");
 }
+
+// ---- Audit remediation PH01 (F02, F03, F05, F12) ----
+
+/// Forces the next run to recompute `k`'s bindings from scratch.
+fn invalidate(env: &Env, k: &str) {
+    let (mut s, _) = env.store(k);
+    let mut m = s.external_manifest().unwrap().unwrap();
+    m.state = "stale".into();
+    s.put_external_manifest(&m).unwrap();
+}
+
+#[test]
+fn f02_removing_the_last_dependency_clears_bindings() {
+    let env = setup(&[]);
+    env.run(&[]);
+    assert_eq!(env.manifest("a").bindings.len(), 1);
+    // The consumer drops its only project reference.
+    write(
+        &env.roots["a"],
+        "App/App.csproj",
+        "<Project><ItemGroup></ItemGroup></Project>\n",
+    );
+    let outcomes = env.run(&["a"]);
+    assert!(updated(&outcomes["a"]), "{outcomes:?}");
+    let m = env.manifest("a");
+    assert_eq!(m.state, "current");
+    assert!(m.producers.is_empty(), "{:?}", m.producers);
+    assert!(m.lookups.is_empty());
+    assert!(m.bindings.is_empty(), "{:?}", m.bindings);
+    // An empty manifest is not reconciled again.
+    let outcomes = env.run(&[]);
+    assert!(!outcomes.contains_key("a"), "{outcomes:?}");
+}
+
+#[test]
+fn f02_removing_one_of_two_producers_rebinds_to_the_remaining_one() {
+    let env = setup(&["a -> c"]);
+    env.run(&[]);
+    assert!(env.manifest("a").bindings[0].ambiguous);
+    let mut cfg = docmonk_service::load(&env.home).unwrap();
+    cfg.indexing.relationship_dependencies.clear();
+    docmonk_config::write_user_config(&cfg, &env.home).unwrap();
+    let outcomes = env.run(&["a"]);
+    assert!(updated(&outcomes["a"]), "{outcomes:?}");
+    let m = env.manifest("a");
+    assert_eq!(m.producers.len(), 1);
+    assert!(!m.bindings[0].ambiguous);
+    assert_eq!(m.bindings[0].target_entity_id, env.compute("b"));
+}
+
+#[test]
+fn f02_incomplete_discovery_keeps_the_last_bindings_stale() {
+    let env = setup(&[]);
+    env.run(&[]);
+    // The indexed project file can no longer be read: its references are
+    // unknown, not removed.
+    std::fs::remove_file(env.roots["a"].join("App/App.csproj")).unwrap();
+    std::fs::create_dir(env.roots["a"].join("App/App.csproj")).unwrap();
+    let outcomes = env.run(&["b"]);
+    assert_eq!(outcomes["a"].state(), "stale", "{outcomes:?}");
+    let m = env.manifest("a");
+    assert_eq!(m.state, "stale");
+    assert!(m.reason.unwrap().contains("discovery incomplete"));
+    assert_eq!(m.bindings.len(), 1, "last bindings kept");
+}
+
+#[test]
+fn f03_a_failed_producer_lookup_is_never_read_as_no_candidate() {
+    let env = setup(&[]);
+    env.run(&[]);
+    let before = env.manifest("a");
+    assert_eq!(before.bindings.len(), 1);
+    invalidate(&env, "a");
+    // Every qualified lookup in the producer now fails in SQLite.
+    let (b, _) = env.store("b");
+    b.connection()
+        .execute_batch("DROP INDEX idx_entities_qname")
+        .unwrap();
+    drop(b);
+    let outcomes = env.run(&["a"]);
+    match &outcomes["a"] {
+        DependencyOutcome::Stale { reason } => {
+            assert!(reason.contains("lookup in producer"), "{reason}")
+        }
+        o => panic!("a failed lookup was reported {o:?}"),
+    }
+    let m = env.manifest("a");
+    assert_eq!(m.state, "stale");
+    assert_eq!(m.bindings, before.bindings, "last bindings kept");
+}
+
+#[test]
+fn f05_an_active_build_switch_during_the_update_fences_publication() {
+    use docmonk_service::dependencies::test_hooks;
+    let env = setup(&[]);
+    env.run(&[]);
+    invalidate(&env, "a");
+    let a = env.source("a").id;
+    let b = env.source("b").id;
+    let home = env.home.clone();
+    // The producer publishes another build (the old one stays stored)
+    // between the lookups and the fence.
+    test_hooks::set_before_fence(Some(Box::new(move |consumer| {
+        if consumer == a {
+            docmonk_service::sources::control_plane(&home)
+                .unwrap()
+                .connection()
+                .execute(
+                    "UPDATE source_state SET active_build_id = 'republished' WHERE source_id = ?1",
+                    [&b],
+                )
+                .unwrap();
+        }
+    })));
+    let outcomes = env.run(&["a"]);
+    test_hooks::set_before_fence(None);
+    match &outcomes["a"] {
+        DependencyOutcome::Stale { reason } => assert!(reason.contains("republished"), "{reason}"),
+        o => panic!("a fenced update was reported {o:?}"),
+    }
+    assert_eq!(env.manifest("a").state, "stale");
+}
+
+#[test]
+fn f12_every_manifest_advance_is_a_persisted_revision() {
+    let env = setup(&[]);
+    env.run(&[]);
+    let first = env.manifest("a");
+    assert!(first.revision > 0);
+    assert!(first.updated_at.is_some());
+    // Implementation-only producer edit: the fast path advances the
+    // producer snapshot through the same persistence path.
+    write(
+        &env.roots["b"],
+        "Lib/Shared.cs",
+        &PRODUCER.replace("return 1;", "return 2;"),
+    );
+    let outcomes = env.run(&["b"]);
+    assert_eq!(outcomes["a"], DependencyOutcome::Current);
+    let next = env.manifest("a");
+    assert!(
+        next.revision > first.revision,
+        "{} > {}",
+        next.revision,
+        first.revision
+    );
+    let b = env.source("b").id;
+    assert_ne!(
+        next.producers[&b].base_generation,
+        first.producers[&b].base_generation
+    );
+}

@@ -34,7 +34,7 @@
 //! writes graph records, and graph publication never touches the base build
 //! pointer or base records.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Instant;
 
 use serde::Serialize;
@@ -627,6 +627,29 @@ impl ServerBackend {
                 .filter(|v| !v.is_null())
                 .cloned()
         }))
+    }
+
+    /// Every source whose authoritative dependency manifest still records
+    /// producers or bindings, in one scan of the state index (never one
+    /// round trip per source): a consumer whose last dependency was removed
+    /// is found here and reconciled.
+    pub fn graph_external_owners(&self) -> Result<BTreeSet<String>> {
+        let mut out = BTreeSet::new();
+        for doc in self.scan_states(json!({ "match_all": {} }))? {
+            let m = &doc["versions"][EXTERNAL_KEY];
+            let non_empty = |k: &str| match &m[k] {
+                Value::Object(o) => !o.is_empty(),
+                Value::Array(a) => !a.is_empty(),
+                _ => false,
+            };
+            if let (Some(id), true) = (
+                doc["source_id"].as_str(),
+                non_empty("producers") || non_empty("bindings"),
+            ) {
+                out.insert(id.to_owned());
+            }
+        }
+        Ok(out)
     }
 
     /// Persists the source's cross-source dependency manifest on the

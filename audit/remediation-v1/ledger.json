@@ -1,0 +1,54 @@
+{
+  "plan_id": "DOCMONK-AUDIT-REMEDIATION-V1",
+  "baseline": {
+    "branch": "main",
+    "commit_sha": "09cada7b4873c024bfb8d140fdad83dd643c77f2",
+    "rustc": "1.90.0 (1159e78c4 2025-09-14)",
+    "local_mode": "SQLite (bundled)",
+    "server_mode": "not measured: no OpenSearch/Elasticsearch cluster in the remediation environment"
+  },
+  "findings": {
+    "F01": { "phase": "PH03", "status": "open", "checks": [] },
+    "F02": {
+      "phase": "PH01",
+      "status": "fixed",
+      "checks": [
+        { "test": "crates/docmonk-service/tests/dependencies.rs::f02_removing_the_last_dependency_clears_bindings", "fails_on_baseline": true },
+        { "test": "crates/docmonk-service/tests/dependencies.rs::f02_incomplete_discovery_keeps_the_last_bindings_stale", "fails_on_baseline": true },
+        { "test": "crates/docmonk-service/tests/dependencies.rs::f02_removing_one_of_two_producers_rebinds_to_the_remaining_one", "fails_on_baseline": false, "note": "guard: already correct on baseline" }
+      ]
+    },
+    "F03": {
+      "phase": "PH01",
+      "status": "fixed",
+      "checks": [
+        { "test": "crates/docmonk-service/tests/dependencies.rs::f03_a_failed_producer_lookup_is_never_read_as_no_candidate", "fails_on_baseline": true, "note": "real SQLite failure injected by dropping the index the lookup forces" }
+      ]
+    },
+    "F04": { "phase": "PH02", "status": "open", "checks": [] },
+    "F05": {
+      "phase": "PH01",
+      "status": "fixed_publish_time",
+      "checks": [
+        { "test": "crates/docmonk-service/tests/dependencies.rs::f05_an_active_build_switch_during_the_update_fences_publication", "fails_on_baseline": "not compilable on baseline (uses the new test hook); baseline fence only re-read the old build's base generation, which stays published" }
+      ],
+      "remaining": "Read-time revalidation of external edges lands with the first reader (PH03); server consumer-manifest compare-and-set on expected consumer generation needs live-cluster tests."
+    },
+    "F06": { "phase": "PH04", "status": "open", "checks": [] },
+    "F07": { "phase": "PH05", "status": "open", "checks": [] },
+    "F08": { "phase": "PH06", "status": "open", "checks": [] },
+    "F09": { "phase": "PH05", "status": "open", "checks": [] },
+    "F10": { "phase": "PH08", "status": "open", "checks": [] },
+    "F11": { "phase": "PH07", "status": "open", "checks": [] },
+    "F12": {
+      "phase": "PH01",
+      "status": "fixed_local_verified_server_unverified",
+      "checks": [
+        { "test": "crates/docmonk-service/tests/dependencies.rs::f12_every_manifest_advance_is_a_persisted_revision", "fails_on_baseline": "not compilable on baseline (revision field is new)" }
+      ],
+      "remaining": "Server cache-loss and two-host alternating-writer scenarios need a server_live test against a real cluster."
+    },
+    "F13": { "phase": "PH05", "status": "open", "checks": [] },
+    "F14": { "phase": "PH02", "status": "open", "checks": [] }
+  }
+}
