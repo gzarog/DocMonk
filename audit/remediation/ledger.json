@@ -182,8 +182,35 @@
     },
     "F11": {
       "phase": "PH07",
-      "status": "open",
-      "checks": []
+      "status": "fixed",
+      "checks": [
+        {
+          "test": "crates/docmonk-cli/tests/ui.rs::a_network_bind_without_authenticated_remote_access_is_refused",
+          "fails_on_baseline": "yes: baseline served 0.0.0.0 unauthenticated after printing a warning"
+        },
+        {
+          "test": "crates/docmonk-ui/src/access.rs::tests::remote_bind_fails_closed_until_fully_configured"
+        },
+        {
+          "test": "crates/docmonk-ui/tests/security.rs::unauthenticated_and_spoofed_remote_requests_are_denied",
+          "fails_on_baseline": "not compilable on baseline (no remote mode); baseline served every route to any client"
+        },
+        {
+          "test": "crates/docmonk-ui/tests/security.rs::direct_connections_cannot_spoof_the_proxy"
+        },
+        {
+          "test": "crates/docmonk-ui/tests/security.rs::viewers_read_and_admins_administer"
+        },
+        {
+          "test": "crates/docmonk-ui/tests/security.rs::cookies_csrf_and_origin_are_enforced_remotely",
+          "fails_on_baseline": "yes in part: baseline accepted cross-origin POSTs with a token, tokens in the query string and unconfirmed destructive POSTs"
+        },
+        {
+          "test": "crates/docmonk-ui/tests/security.rs::local_loopback_stays_usable_without_an_identity_provider"
+        }
+      ],
+      "design": "Identity via an authenticating TLS reverse proxy (trusted proxy IPs + shared secret from the environment + X-Forwarded-Proto https); admin and viewer roles. No built-in OIDC.",
+      "remaining": "No rate limiting: DocMonk has no login endpoint (the proxy authenticates). docker --host 0.0.0.0 without remote mode is now refused (documented in docs/ui.md)."
     },
     "F12": {
       "phase": "PH01",

@@ -586,7 +586,7 @@ fn admin_ui_actions() {
         "POST",
         "/backups/restore",
         &auth,
-        &format!("name={}", urlencode(&name)),
+        &format!("name={}&confirm=yes", urlencode(&name)),
     );
     assert_eq!(
         r.header("hx-redirect"),
@@ -601,7 +601,7 @@ fn admin_ui_actions() {
         "POST",
         &format!("/sources/{source_id}/remove"),
         &auth,
-        "",
+        "confirm=yes",
     );
     assert_eq!(r.header("hx-redirect"), Some("/sources"));
     let page = request(port, "GET", "/sources", &auth[..1], "").body;
@@ -706,4 +706,37 @@ fn status_api_matches_cli_and_readiness_tracks_the_backend() {
     assert_eq!(ready["ready"], false);
     assert_eq!(ready["error"]["type"], "BackendUnavailableError");
     assert_eq!(request(port, "GET", "/api/status", &[], "").status, 503);
+}
+
+#[test]
+fn a_network_bind_without_authenticated_remote_access_is_refused() {
+    let d = tempfile::tempdir().unwrap();
+    let home = d.path().join("home");
+    for host in ["0.0.0.0", "::"] {
+        let out = docmonk(&home)
+            .args(["ui", "--host", host, "--port", "0", "--no-browser"])
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(!out.status.success(), "{host} must not be served");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(err.contains("refusing to serve the Admin UI"), "{err}");
+        assert!(
+            !String::from_utf8_lossy(&out.stdout).contains("URL:"),
+            "nothing is announced before refusing"
+        );
+    }
+    // Enabled but without the proxy secret in the environment: refused.
+    let out = docmonk(&home)
+        .args(["ui", "--host", "0.0.0.0", "--port", "0", "--no-browser"])
+        .env("DOCMONK_UI__REMOTE_ENABLED", "true")
+        .env("DOCMONK_UI__ALLOWED_HOSTS", "docmonk.example.com")
+        .env("DOCMONK_UI__TRUSTED_PROXIES", "10.0.0.5")
+        .env("DOCMONK_UI__ADMIN_GROUPS", "ops")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("DOCMONK_UI_PROXY_SECRET"), "{err}");
 }

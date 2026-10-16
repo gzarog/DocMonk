@@ -49,6 +49,7 @@
           {% endif %}
           <button class="btn small danger"
                   hx-post="/sources/{{ s.id }}/remove" hx-swap="none"
+                  hx-vals='{"confirm": "yes"}'
                   hx-confirm="Remove this source? Original files are NOT deleted, but the indexed DocMonk data for this source WILL be removed.">
             Remove
           </button>

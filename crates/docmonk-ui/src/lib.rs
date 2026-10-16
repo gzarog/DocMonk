@@ -1,23 +1,28 @@
-//! The local Admin UI (`docmonk ui`).
+//! The Admin UI (`docmonk ui`).
 //!
 //! An axum server rendering embedded Jinja templates (see [`templates`])
-//! from the same services the CLI uses. It binds to localhost by default
-//! and has no authentication; it validates the `Host` header
-//! (DNS-rebinding defense) and requires a double-submit CSRF token on
-//! every unsafe request. Database work runs on blocking threads,
-//! serialized by one lock; daemon controls and the progress stream never
-//! take that lock.
+//! from the same services the CLI uses. By default it binds to loopback
+//! only and needs no identity provider. Remote access is served only
+//! behind an authenticating TLS reverse proxy (see [`access`]); a
+//! non-loopback bind without it is refused at startup. Every request
+//! validates the `Host` header (DNS-rebinding defense); every unsafe one
+//! needs a double-submit CSRF token in a header and a same-origin
+//! `Origin`/`Referer`. Database work runs on blocking threads, serialized
+//! by one lock; daemon controls and the progress stream never take that
+//! lock.
 
+pub mod access;
 mod config_form;
 mod data;
 mod indexer;
 pub mod templates;
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::net::SocketAddr;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use axum::body::Body;
-use axum::extract::{Path, Query, Request, State};
+use axum::extract::{ConnectInfo, DefaultBodyLimit, Path, Query, Request, State};
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -27,11 +32,18 @@ use docmonk_core::errors::{DocMonkError, ErrorKind};
 use docmonk_core::paths::Home;
 use serde_json::{json, Value};
 
+use access::{Access, Denied, Identity, Role};
 use indexer::Indexer;
 
 type Params = HashMap<String, String>;
 
 const CSRF_COOKIE: &str = "docmonk_csrf";
+/// Remote mode: a `__Host-` cookie (Secure, host-only, path `/`).
+const CSRF_COOKIE_REMOTE: &str = "__Host-docmonk_csrf";
+/// CSRF cookie lifetime; a new token is minted after it.
+const CSRF_MAX_AGE_SECONDS: u64 = 12 * 3600;
+/// Largest request body accepted.
+const MAX_BODY_BYTES: usize = 1 << 20;
 const CSRF_HEADER: &str = "x-csrf-token";
 const CSRF_FIELD: &str = "csrf_token";
 
@@ -59,6 +71,7 @@ pub(crate) fn plain_json(v: &Value) -> String {
 #[derive(Clone)]
 struct AppState {
     home: Home,
+    access: Arc<Access>,
     allowed_hosts: Arc<Vec<String>>,
     indexer: Indexer,
     db: Arc<Mutex<()>>,
@@ -70,7 +83,18 @@ struct CsrfToken(String);
 
 // ------------------------------------------------------------ security ---
 
-fn allowed_hosts(host: &str, port: u16) -> Vec<String> {
+/// Set once a remote-mode server starts: internal error detail is then
+/// logged, never returned.
+static REMOTE: OnceLock<bool> = OnceLock::new();
+
+fn remote() -> bool {
+    REMOTE.get().copied().unwrap_or(false)
+}
+
+fn allowed_hosts(host: &str, port: u16, access: &Access) -> Vec<String> {
+    if let Access::Remote(r) = access {
+        return r.allowed_hosts.clone();
+    }
     let mut out = Vec::new();
     for name in ["localhost", "127.0.0.1", "[::1]", "::1", host] {
         if name.is_empty() {
@@ -123,14 +147,6 @@ fn cookie(headers: &HeaderMap, name: &str) -> Option<String> {
         .map(|(_, v)| v.trim_matches('"').to_owned())
 }
 
-fn query_param(uri: &axum::http::Uri, name: &str) -> Option<String> {
-    let q = uri.query()?;
-    serde_urlencoded_pairs(q)
-        .into_iter()
-        .find(|(k, _)| k == name)
-        .map(|(_, v)| v)
-}
-
 fn serde_urlencoded_pairs(q: &str) -> Vec<(String, String)> {
     let decode = |s: &str| -> String {
         let bytes = s.as_bytes();
@@ -181,19 +197,88 @@ async fn host_guard(State(st): State<AppState>, req: Request, next: Next) -> Res
     next.run(req).await
 }
 
-async fn csrf_guard(mut req: Request, next: Next) -> Response {
-    let existing = cookie(req.headers(), CSRF_COOKIE);
+/// Authenticates the caller: the local administrator in local mode, the
+/// proxy-asserted user in remote mode (see [`access`]).
+async fn auth_guard(State(st): State<AppState>, mut req: Request, next: Next) -> Response {
+    let identity = match &*st.access {
+        Access::Local => Some(Identity {
+            user: "local".into(),
+            role: Role::Admin,
+        }),
+        Access::Remote(r) => {
+            let peer = req
+                .extensions()
+                .get::<ConnectInfo<SocketAddr>>()
+                .map(|c| c.0.ip());
+            let path = req.uri().path().to_owned();
+            match r.check(peer, req.headers(), req.method(), &path) {
+                Ok(id) => id,
+                Err(denied) => {
+                    let (status, why) = match denied {
+                        Denied::Untrusted(why) => (StatusCode::FORBIDDEN, why),
+                        Denied::Unauthenticated => {
+                            (StatusCode::UNAUTHORIZED, "authentication required")
+                        }
+                        Denied::Forbidden => (StatusCode::FORBIDDEN, "not authorized"),
+                    };
+                    let user = req
+                        .headers()
+                        .get(r.user_header.as_str())
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or_default();
+                    tracing::warn!(component = "ui", event = "access_denied", method = %req.method(), path = %path, peer = ?peer, user = %user, reason = why);
+                    return plain(status, format!("Access denied: {why}."));
+                }
+            }
+        }
+    };
+    // The secret never reaches a handler or a log.
+    req.headers_mut().remove(access::PROXY_SECRET_HEADER);
+    if let Some(id) = &identity {
+        if !matches!(*req.method(), Method::GET | Method::HEAD) {
+            tracing::info!(component = "ui", event = "authorized_action", method = %req.method(), path = %req.uri().path(), user = %id.user, role = id.role.as_str());
+        }
+        req.extensions_mut().insert(id.clone());
+    }
+    next.run(req).await
+}
+
+/// The `host[:port]` of an `Origin` or `Referer` value.
+fn origin_host(v: &str) -> Option<&str> {
+    let rest = v.split_once("://")?.1;
+    Some(rest.split(['/', '?', '#']).next().unwrap_or_default())
+}
+
+async fn csrf_guard(State(st): State<AppState>, mut req: Request, next: Next) -> Response {
+    let cookie_name = if st.access.is_remote() {
+        CSRF_COOKIE_REMOTE
+    } else {
+        CSRF_COOKIE
+    };
+    let existing = cookie(req.headers(), cookie_name);
     let safe = matches!(
         *req.method(),
         Method::GET | Method::HEAD | Method::OPTIONS | Method::TRACE
     );
     if !safe {
+        // Same-origin check: a present Origin (or Referer) must name an
+        // allowed host; behind the proxy (browsers only) one is required.
+        let source = [header::ORIGIN, header::REFERER]
+            .iter()
+            .find_map(|h| req.headers().get(h).and_then(|v| v.to_str().ok()));
+        let same_origin = match source {
+            Some(v) => origin_host(v).is_some_and(|h| st.allowed_hosts.iter().any(|a| a == h)),
+            None => !st.access.is_remote(),
+        };
+        if !same_origin {
+            return plain(StatusCode::FORBIDDEN, "Cross-origin request refused.");
+        }
+        // The token travels in a header only (never in a URL).
         let submitted = req
             .headers()
             .get(CSRF_HEADER)
             .and_then(|v| v.to_str().ok())
-            .map(str::to_owned)
-            .or_else(|| query_param(req.uri(), CSRF_FIELD));
+            .map(str::to_owned);
         let ok = matches!((&existing, &submitted), (Some(c), Some(s)) if constant_eq(c, s));
         if !ok {
             return plain(StatusCode::FORBIDDEN, "CSRF validation failed.");
@@ -207,20 +292,46 @@ async fn csrf_guard(mut req: Request, next: Next) -> Response {
     req.extensions_mut().insert(CsrfToken(token));
     let mut resp = next.run(req).await;
     if let Some(t) = minted {
-        if let Ok(v) = HeaderValue::from_str(&format!("{CSRF_COOKIE}={t}; Path=/; SameSite=strict"))
-        {
+        let secure = if st.access.is_remote() {
+            "; Secure"
+        } else {
+            ""
+        };
+        if let Ok(v) = HeaderValue::from_str(&format!(
+            "{cookie_name}={t}; Path=/; Max-Age={CSRF_MAX_AGE_SECONDS}; HttpOnly; SameSite=Strict{secure}"
+        )) {
             resp.headers_mut().append(header::SET_COOKIE, v);
         }
     }
     resp
 }
 
-fn constant_eq(a: &str, b: &str) -> bool {
-    a.len() == b.len()
-        && a.bytes()
-            .zip(b.bytes())
-            .fold(0u8, |acc, (x, y)| acc | (x ^ y))
-            == 0
+/// Response headers that keep the UI out of frames and stop sniffing.
+async fn security_headers(req: Request, next: Next) -> Response {
+    let mut resp = next.run(req).await;
+    let h = resp.headers_mut();
+    h.insert("x-frame-options", HeaderValue::from_static("DENY"));
+    h.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
+    h.insert("referrer-policy", HeaderValue::from_static("same-origin"));
+    if remote() {
+        h.insert(
+            "strict-transport-security",
+            HeaderValue::from_static("max-age=31536000"),
+        );
+    }
+    resp
+}
+
+use access::constant_eq;
+
+/// Destructive actions need an explicit `confirm=yes` field (the page's
+/// confirmation dialog sends it): a replayed or forged bare POST does
+/// nothing.
+fn confirmed(f: &Params) -> bool {
+    f.get("confirm").is_some_and(|v| v == "yes")
 }
 
 // ----------------------------------------------------------- responses ---
@@ -234,6 +345,10 @@ fn error_response(e: &DocMonkError) -> Response {
     } else {
         StatusCode::INTERNAL_SERVER_ERROR
     };
+    if remote() {
+        tracing::error!(component = "ui", event = "request_failed", error = %docmonk_telemetry::redact::redact_urls_in_text(e.message()));
+        return plain(status, "Internal error; see the DocMonk log for details.");
+    }
     plain(status, e.message())
 }
 
@@ -430,7 +545,11 @@ async fn add_source(State(st): State<AppState>, Form(f): Form<Params>) -> Respon
 async fn source_action(
     State(st): State<AppState>,
     Path((id, action)): Path<(String, String)>,
+    Form(f): Form<Params>,
 ) -> Response {
+    if action == "remove" && !confirmed(&f) {
+        return hx_redirect("/sources?error=removal+not+confirmed");
+    }
     let r = locked(&st, move |home| -> Result<(), DocMonkError> {
         match action.as_str() {
             "enable" | "disable" => {
@@ -493,6 +612,9 @@ async fn start_indexing(State(st): State<AppState>, Form(f): Form<Params>) -> Re
 }
 
 async fn rebuild(State(st): State<AppState>, Form(f): Form<Params>) -> Response {
+    if !confirmed(&f) {
+        return hx_redirect("/indexing?error=rebuild+not+confirmed");
+    }
     let source = param(&f, "source_id").map(str::to_owned);
     let fresh = param(&f, "fresh").is_some();
     if !st.indexer.start(st.home.clone(), source, true, fresh) {
@@ -843,6 +965,9 @@ async fn create_backup(State(st): State<AppState>) -> Response {
 }
 
 async fn restore_backup(State(st): State<AppState>, Form(f): Form<Params>) -> Response {
+    if !confirmed(&f) {
+        return hx_redirect("/backups?error=restore+not+confirmed");
+    }
     let name = f.get("name").cloned().unwrap_or_default();
     let r = locked(&st, move |home| -> Result<(), String> {
         let archive = data::backup_path(home, &name)?;
@@ -873,7 +998,7 @@ async fn download_backup(State(st): State<AppState>, Path(name): Path<String>) -
                 bytes,
             )
                 .into_response(),
-            Err(e) => plain(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+            Err(e) => error_response(&DocMonkError::new(ErrorKind::Generic, e.to_string())),
         },
         Err(e) => hx_redirect(&format!("/backups?error={e}")),
     }
@@ -981,9 +1106,30 @@ fn router(state: AppState) -> Router {
         .route("/system", get(system_page))
         .route("/static/{*path}", get(static_file))
         .fallback(not_found)
-        .layer(middleware::from_fn(csrf_guard))
+        .layer(middleware::from_fn_with_state(state.clone(), csrf_guard))
+        .layer(middleware::from_fn_with_state(state.clone(), auth_guard))
         .layer(middleware::from_fn_with_state(state.clone(), host_guard))
+        .layer(middleware::from_fn(security_headers))
+        .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .with_state(state)
+}
+
+/// The Admin UI application for `home`, served on `host:port` under
+/// `access` (the router `serve` runs; tests bind it themselves). Serve it
+/// with `into_make_service_with_connect_info::<SocketAddr>()`: remote mode
+/// needs the peer address.
+pub fn app(home: Home, access: Access, host: &str, port: u16) -> Router {
+    if access.is_remote() {
+        let _ = REMOTE.set(true);
+    }
+    let state = AppState {
+        home,
+        allowed_hosts: Arc::new(allowed_hosts(host, port, &access)),
+        access: Arc::new(access),
+        indexer: Indexer::default(),
+        db: Arc::new(Mutex::new(())),
+    };
+    router(state)
 }
 
 fn open_browser(url: &str) {
@@ -1013,7 +1159,6 @@ fn open_browser(url: &str) {
 /// Ctrl+C.
 pub fn serve(host: &str, port: u16, no_browser: bool) -> Result<(), DocMonkError> {
     let home = docmonk_service::prepared_home()?;
-    docmonk_service::load(&home)?;
     docmonk_service::query::enable_store_pool();
     let display_host = if host.contains(':') && !host.starts_with('[') {
         format!("[{host}]")
@@ -1021,20 +1166,25 @@ pub fn serve(host: &str, port: u16, no_browser: bool) -> Result<(), DocMonkError
         host.to_owned()
     };
     let url = format!("http://{display_host}:{port}");
+    // Refuse before listening: a network-reachable UI without a trusted
+    // authenticating proxy is never served.
+    let cfg = docmonk_service::load(&home)?;
+    let access = Access::for_bind(host, &cfg.ui, &|k| std::env::var(k).ok())?;
     println!("DocMonk Admin UI");
     println!("URL: {url}");
-    if !matches!(host, "127.0.0.1" | "localhost" | "::1") {
+    if let Access::Remote(r) = &access {
         println!(
-            "Warning: binding to a non-localhost address exposes the admin interface on the \
-             network. It has no authentication; only do this on a trusted network."
+            "Remote mode: accepting authenticated requests only from {} for {}.",
+            r.trusted_proxies
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", "),
+            r.allowed_hosts.join(", ")
         );
     }
-    let state = AppState {
-        home,
-        allowed_hosts: Arc::new(allowed_hosts(host, port)),
-        indexer: Indexer::default(),
-        db: Arc::new(Mutex::new(())),
-    };
+    let no_browser = no_browser || access.is_remote();
+    let app = app(home, access, host, port);
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -1052,11 +1202,14 @@ pub fn serve(host: &str, port: u16, no_browser: bool) -> Result<(), DocMonkError
         println!("Press Ctrl+C to stop.");
         use std::io::Write;
         let _ = std::io::stdout().flush();
-        axum::serve(listener, router(state))
-            .with_graceful_shutdown(async {
-                let _ = tokio::signal::ctrl_c().await;
-            })
-            .await
-            .map_err(|e| DocMonkError::new(ErrorKind::Generic, e.to_string()))
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(async {
+            let _ = tokio::signal::ctrl_c().await;
+        })
+        .await
+        .map_err(|e| DocMonkError::new(ErrorKind::Generic, e.to_string()))
     })
 }
