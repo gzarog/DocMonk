@@ -1,5 +1,5 @@
 {
-  "plan_id": "DOCMONK-AUDIT-REMEDIATION-V1",
+  "plan_id": "DOCMONK-AUDIT-REMEDIATION",
   "baseline": {
     "branch": "main",
     "commit_sha": "09cada7b4873c024bfb8d140fdad83dd643c77f2",
