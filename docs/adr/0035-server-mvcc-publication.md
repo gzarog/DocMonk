@@ -104,12 +104,12 @@ before GC make the HNSW search explore more filtered-out nodes; GC with a
 short grace keeps them a small fraction of live records. The measurement
 below must confirm a recall@10 and p95 change of no more than 5%.
 
-### Schema change and cutover
+### Schema change and switching over
 
 New mappings (`valid_from`, `valid_to`, `mvcc`) bump the server schema to
 version 5. Under ADR 0007 an existing prefix is never modified in place:
 `docmonk server init` refuses indexes of another schema version, and
-nothing is migrated or deleted automatically. Operators create the new
+nothing is converted or deleted automatically. Operators create the new
 indexes under a fresh prefix (keeping the old prefix for rollback until
 they cut over), or delete the old prefix explicitly, and run a full
 index. Manual links live in the old indexes and must be listed

@@ -205,7 +205,7 @@
           "test": "crates/docmonk-backends/tests/live.rs, crates/docmonk-service/tests/server_live.rs, crates/docmonk-status/tests/live_server.rs (CI live OpenSearch/Elasticsearch)"
         }
       ],
-      "design": "docs/adr/0035-server-mvcc-publication.md: immutable records with valid_from/valid_to per lineage (base, graph); a fresh generation per attempt; aborted attempts' writes and closes ignored by readers; the fenced state CAS is the only visibility switch; GC by numeric range. Schema version 5 (fresh indexes, no migration).",
+      "design": "docs/adr/0035-server-mvcc-publication.md: immutable records with valid_from/valid_to per lineage (base, graph); a fresh generation per attempt; aborted attempts' writes and closes ignored by readers; the fenced state CAS is the only visibility switch; GC by numeric range. Schema version 5 (fresh indexes; existing ones are refused, never converted).",
       "remaining": "The live 8k/50k performance gate (write amplification, recall@10 and p95 within 5%, CPU) is not measured yet; verified on the in-process engine only. No nightly benchmark gate added yet (T08.3)."
     },
     "F11": {
