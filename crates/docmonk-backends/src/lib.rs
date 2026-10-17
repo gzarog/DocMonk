@@ -17,7 +17,10 @@ pub mod backend;
 pub mod bulk;
 pub mod engine;
 pub mod error;
+pub mod generations;
 pub mod graph;
+#[doc(hidden)]
+pub mod memory;
 pub mod publish;
 pub mod reader;
 pub mod schema;

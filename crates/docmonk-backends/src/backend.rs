@@ -21,6 +21,7 @@ use serde_json::{json, Map, Value};
 use crate::bulk::{Action, BulkLimits, BulkReport, BulkWriter};
 use crate::engine::{Engine, VectorSpec};
 use crate::error::{BackendError, Result};
+use crate::generations::{Line, Lineage, OPEN, SET_VALID_TO};
 use crate::schema::{self, IndexKind, IndexSettings};
 use crate::transport::{Auth, Client, Counting, HttpTransport, Method, RequestStats, Response};
 
@@ -106,25 +107,16 @@ pub struct Lease {
     pub ttl: Duration,
 }
 
-/// Painless: drop build `params.b` from a record; delete the record when
-/// no build is left.
-pub(crate) const DETACH_SCRIPT: &str = "def v = ctx._source.build_id; List l = new ArrayList(); \
-    if (v instanceof List) { l.addAll(v) } else if (v != null) { l.add(v) } \
-    l.removeIf(x -> x == params.b); \
-    if (l.isEmpty()) { ctx.op = 'delete' } else { ctx._source.build_id = l }";
-
-/// Painless: add build `params.b` to a record (copy-forward), keeping only
-/// build ids still in `params.keep`.
-pub(crate) const ATTACH_SCRIPT: &str = "def v = ctx._source.build_id; List l = new ArrayList(); \
-    if (v instanceof List) { l.addAll(v) } else if (v != null) { l.add(v) } \
-    l.removeIf(x -> !params.keep.contains(x)); \
-    if (!l.contains(params.b)) { l.add(params.b) } \
-    ctx._source.build_id = l";
-
 /// `record_kind` of manual knowledge links: not build-scoped.
 pub const MANUAL_LINK: &str = "manual_link";
 /// `build_id` stored on manual links.
 pub const MANUAL_BUILD: &str = "manual";
+
+/// Most file ids per close request.
+const CLOSE_BATCH: usize = 5_000;
+/// How long an aborted attempt is remembered at least, so a superseded
+/// writer still running cannot make its records visible.
+const ABORT_SETTLE: Duration = Duration::from_secs(600);
 
 /// Page size of every scan over the source-state index.
 pub const SCAN_PAGE: usize = 1000;
@@ -760,42 +752,101 @@ impl ServerBackend {
 
     /// Starts a build. Leftovers of a previous abandoned pending build are
     /// deleted first; the active build stays visible throughout.
-    pub fn begin_build(&self, source_id: &str, path: &str, build_id: &str) -> Result<()> {
+    pub fn begin_build(&self, source_id: &str, path: &str, build_id: &str) -> Result<i64> {
         self.begin_build_with(None, source_id, path, build_id)
     }
 
-    /// [`Self::begin_build`] fenced by `lease`.
+    /// [`Self::begin_build`] fenced by `lease`. Allocates the attempt's
+    /// generation; an abandoned pending attempt is aborted (its records
+    /// stay invisible and are swept up later).
     pub fn begin_build_with(
         &self,
         lease: Option<&Lease>,
         source_id: &str,
         path: &str,
         build_id: &str,
-    ) -> Result<()> {
-        if let Some(prev) = self.source_state(source_id)? {
-            check_lease(&prev, lease)?;
-            if let Some(old) = prev.pending_build_id.clone() {
-                if old != build_id {
-                    self.delete_build_docs(source_id, &old)?;
-                }
-            }
-        }
+    ) -> Result<i64> {
+        let mut generation = 0;
+        let mut abandoned = None;
         self.patch_state(source_id, lease, Some(path), |doc, _| {
+            let mut l = Lineage::of(&Value::Object(doc.clone()), Line::Base);
+            generation = match l.generation_of(build_id).filter(|g| l.pending == Some(*g)) {
+                Some(g) => g,
+                None => {
+                    abandoned = l.pending;
+                    l.begin(build_id, now_millis())
+                }
+            };
+            l.put(doc, Line::Base);
             doc.insert("path".into(), json!(path));
             doc.insert("state".into(), json!("building"));
             doc.insert("pending_build_id".into(), json!(build_id));
             Ok(())
-        })
+        })?;
+        // Housekeeping: the abandoned attempt is already invisible.
+        if let Some(g) = abandoned {
+            let _ = self.sweep_generation(Line::Base, source_id, g);
+        }
+        Ok(generation)
     }
 
-    /// Writer for records of one build.
-    pub fn build_writer(&self, source_id: &str, build_id: &str) -> BuildWriter<'_> {
+    /// Writer for the records of build `build_id`, written as generation
+    /// `generation` of their lineage (invisible until it is published).
+    pub fn build_writer(
+        &self,
+        source_id: &str,
+        build_id: &str,
+        generation: i64,
+    ) -> BuildWriter<'_> {
         BuildWriter {
             backend: self,
             source_id: source_id.to_owned(),
             build_id: build_id.to_owned(),
+            generation,
             bulk: BulkWriter::new(&self.client, self.limits),
         }
+    }
+
+    /// The generation the pending attempt `build_id` writes as.
+    pub fn pending_generation(&self, line: Line, source_id: &str, build_id: &str) -> Result<i64> {
+        let st = self
+            .source_state(source_id)?
+            .ok_or_else(|| BackendError::Invalid(format!("no build started for {source_id}")))?;
+        let l = Lineage::of(&st.doc, line);
+        l.generation_of(build_id)
+            .filter(|g| l.pending == Some(*g))
+            .ok_or_else(|| {
+                BackendError::Conflict(format!(
+                    "{build_id} is not the pending attempt of {source_id}"
+                ))
+            })
+    }
+
+    /// Makes recent writes searchable (tests and diagnostics).
+    pub fn refresh_all(&self) -> Result<()> {
+        self.refresh_build_indexes()
+    }
+
+    /// [`Self::close_files`] of the base lineage, exposed for failure
+    /// injection tests (a writer that closed records and then died).
+    #[doc(hidden)]
+    pub fn close_files_for_test(&self, source_id: &str, files: &[String], to: i64) -> Result<u64> {
+        self.close_files(Line::Base, source_id, Some(files), to, &[])
+    }
+
+    /// Records `id` as the published generation of the source's graph
+    /// lineage without writing records (tests that seed a graph by hand).
+    #[doc(hidden)]
+    pub fn publish_graph_generation_for_test(&self, source_id: &str, id: &str) -> Result<i64> {
+        let mut g = 0;
+        self.patch_state(source_id, None, None, |doc, _| {
+            let mut l = Lineage::of(&Value::Object(doc.clone()), Line::Graph);
+            g = l.begin(id, now_millis());
+            l.publish(id);
+            l.put(doc, Line::Graph);
+            Ok(())
+        })?;
+        Ok(g)
     }
 
     pub(crate) fn refresh_build_indexes(&self) -> Result<()> {
@@ -826,6 +877,10 @@ impl ServerBackend {
 
     /// [`Self::publish_build`] fenced by `lease`: a superseded or expired
     /// lease cannot publish.
+    /// The build is a complete set of the source's records: everything
+    /// earlier generations wrote is closed as of this one before it is
+    /// published. (Incremental publication, which closes only the replaced
+    /// files' records, is [`Self::publish_from_store`].)
     pub fn publish_build_with(
         &self,
         lease: Option<&Lease>,
@@ -834,6 +889,21 @@ impl ServerBackend {
         versions: &Value,
         full: bool,
     ) -> Result<()> {
+        let st = self
+            .source_state(source_id)?
+            .ok_or_else(|| BackendError::Invalid(format!("no build started for {source_id}")))?;
+        let l = Lineage::of(&st.doc, Line::Base);
+        let g = l
+            .generation_of(build_id)
+            .filter(|g| l.pending == Some(*g))
+            .ok_or_else(|| {
+                BackendError::Conflict(format!(
+                    "build {build_id} is not the pending build of {source_id}"
+                ))
+            })?;
+        check_lease(&st, lease)?;
+        self.refresh_build_indexes()?;
+        self.close_files(Line::Base, source_id, None, g, &l.aborted_generations())?;
         self.publish_build_ext(lease, source_id, build_id, versions, full, &[])
     }
 
@@ -859,15 +929,35 @@ impl ServerBackend {
         check_lease(&prev, lease)?;
         self.refresh_build_indexes()?;
         let now_ms = now_millis();
-        let mut retired = retired_builds(&prev.doc);
-        if let Some(old) = prev.active_build_id.as_ref().filter(|b| *b != build_id) {
-            retired.push((old.clone(), now_ms));
-        }
         let grace = self.gc_grace.as_millis();
-        let (keep, expired): (Vec<_>, Vec<_>) = retired
-            .into_iter()
-            .partition(|(_, at)| grace > 0 && now_ms.saturating_sub(*at) < grace);
-        self.patch_state(source_id, lease, None, |doc, _| {
+        let mut lineage = Lineage::default();
+        // The only visibility switch: a compare-and-swap fenced by the
+        // lease, the pending build and the lineage's pending generation.
+        self.patch_state(source_id, lease, None, |doc, p| {
+            if p.and_then(|p| p.pending_build_id.as_deref()) != Some(build_id) {
+                return Err(BackendError::Conflict(format!(
+                    "build {build_id} is not the pending build of {source_id}"
+                )));
+            }
+            let mut l = Lineage::of(&Value::Object(doc.clone()), Line::Base);
+            if l.publish(build_id).is_none() {
+                return Err(BackendError::Conflict(format!(
+                    "build {build_id} of {source_id} is not the pending generation"
+                )));
+            }
+            let mut retired = retired_builds(&Value::Object(doc.clone()));
+            let old = doc
+                .get("active_build_id")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            if let Some(old) = old.filter(|b| b != build_id) {
+                retired.push((old, now_ms));
+            }
+            retired.retain(|(_, at)| grace > 0 && now_ms.saturating_sub(*at) < grace);
+            let keep: Vec<&str> = retired.iter().map(|(b, _)| b.as_str()).collect();
+            l.retain_ids(&keep);
+            l.put(doc, Line::Base);
+            lineage = l;
             doc.insert("state".into(), json!("ready"));
             doc.insert("active_build_id".into(), json!(build_id));
             doc.insert("pending_build_id".into(), Value::Null);
@@ -893,17 +983,154 @@ impl ServerBackend {
             }
             doc.insert(
                 "retired_builds".into(),
-                json!(keep
+                json!(retired
                     .iter()
                     .map(|(b, at)| json!({ "build_id": b, "retired_at": at.to_string() }))
                     .collect::<Vec<_>>()),
             );
             Ok(())
         })?;
-        let _ = expired;
-        let mut keep_ids: Vec<String> = keep.into_iter().map(|(b, _)| b).collect();
-        keep_ids.push(build_id.to_owned());
-        self.gc_source(source_id, &keep_ids)
+        self.collect_garbage(Line::Base, source_id, lease, &lineage)
+    }
+
+    /// Deletes the records no readable generation of `line` can see: closed
+    /// at or before the oldest generation still readable (published or
+    /// retired within the grace window). Aborted attempts old enough that
+    /// no superseded writer can still be adding to them are swept and
+    /// forgotten. Best effort: what is left is invisible and the next
+    /// publication collects it.
+    pub(crate) fn collect_garbage(
+        &self,
+        line: Line,
+        source_id: &str,
+        lease: Option<&Lease>,
+        lineage: &Lineage,
+    ) -> Result<()> {
+        let oldest = lineage
+            .ids
+            .values()
+            .copied()
+            .filter(|g| Some(*g) != lineage.pending)
+            .chain([lineage.published])
+            .min()
+            .unwrap_or(lineage.published);
+        let aborted = lineage.aborted_generations();
+        let mut must_not = Vec::new();
+        if !aborted.is_empty() {
+            must_not.push(json!({ "terms": { "valid_to": aborted } }));
+        }
+        let mut filter = vec![
+            json!({ "term": { "source_id": source_id } }),
+            json!({ "range": { "valid_to": { "lte": oldest } } }),
+        ];
+        filter.extend(line.record_filter());
+        self.delete_by_query_in(
+            line.kinds(),
+            &json!({ "bool": { "filter": filter, "must_not": must_not } }),
+        )?;
+        // Aborted attempts: sweep the ones past the settle window, then
+        // drop them once swept and old enough.
+        let now_ms = now_millis();
+        let settle = self.gc_grace.as_millis().max(ABORT_SETTLE.as_millis());
+        let due: Vec<i64> = lineage
+            .aborted
+            .iter()
+            .filter(|a| now_ms.saturating_sub(a.at) >= settle)
+            .map(|a| a.generation)
+            .collect();
+        if due.is_empty() {
+            return Ok(());
+        }
+        for g in &due {
+            self.sweep_generation(line, source_id, *g)?;
+        }
+        self.patch_state(source_id, lease, None, |doc, _| {
+            let mut l = Lineage::of(&Value::Object(doc.clone()), line);
+            l.aborted.retain(|a| !due.contains(&a.generation));
+            l.put(doc, line);
+            Ok(())
+        })
+    }
+
+    /// Removes what attempt `g` of `line` wrote and reopens what it closed.
+    pub(crate) fn sweep_generation(&self, line: Line, source_id: &str, g: i64) -> Result<()> {
+        self.refresh_build_indexes()?;
+        let mut written = vec![
+            json!({ "term": { "source_id": source_id } }),
+            json!({ "term": { "valid_from": g } }),
+        ];
+        written.extend(line.record_filter());
+        self.delete_by_query_in(line.kinds(), &json!({ "bool": { "filter": written } }))?;
+        let mut closed = vec![
+            json!({ "term": { "source_id": source_id } }),
+            json!({ "term": { "valid_to": g } }),
+        ];
+        closed.extend(line.record_filter());
+        self.set_valid_to(line, &json!({ "bool": { "filter": closed } }), OPEN)?;
+        Ok(())
+    }
+
+    /// Sets `valid_to = to` on the records of `line` matching `query`
+    /// (closing replaced records, or reopening an aborted attempt's
+    /// closes). Never touches other records.
+    pub(crate) fn set_valid_to(&self, line: Line, query: &Value, to: i64) -> Result<u64> {
+        let names: Vec<String> = line.kinds().iter().map(|k| self.index(*k)).collect();
+        let v = self.by_query(
+            &format!(
+                "/{}/_update_by_query?conflicts=proceed&refresh=false",
+                names.join(",")
+            ),
+            &json!({
+                "query": query,
+                "script": { "lang": "painless", "source": SET_VALID_TO, "params": { "v": to } },
+            }),
+        )?;
+        if let Some(f) = v["failures"].as_array().filter(|f| !f.is_empty()) {
+            return Err(BackendError::Bulk {
+                failed: f.len(),
+                total: v["total"].as_u64().unwrap_or(0) as usize,
+                first_error: f[0].to_string().chars().take(400).collect(),
+            });
+        }
+        Ok(v["updated"].as_u64().unwrap_or(0))
+    }
+
+    /// Closes, as of the pending generation `to`, the open records of
+    /// `line` of the given files (`None`: of every file, a full rebuild).
+    /// Only the replaced files' records are touched. Returns the number of
+    /// records closed.
+    pub(crate) fn close_files(
+        &self,
+        line: Line,
+        source_id: &str,
+        files: Option<&[String]>,
+        to: i64,
+        aborted: &[i64],
+    ) -> Result<u64> {
+        let base = |extra: Option<Value>| {
+            let mut f = vec![
+                json!({ "term": { "source_id": source_id } }),
+                json!({ "range": { "valid_from": { "lt": to } } }),
+                crate::generations::open_filter(aborted),
+            ];
+            f.extend(line.record_filter());
+            f.extend(extra);
+            json!({ "bool": { "filter": f } })
+        };
+        match files {
+            None => self.set_valid_to(line, &base(None), to),
+            Some(files) => {
+                let mut closed = 0;
+                for batch in files.chunks(CLOSE_BATCH) {
+                    closed += self.set_valid_to(
+                        line,
+                        &base(Some(json!({ "terms": { "file_id": batch } }))),
+                        to,
+                    )?;
+                }
+                Ok(closed)
+            }
+        }
     }
 
     /// Discards a pending build. The previously active build (if any)
@@ -930,33 +1157,38 @@ impl ServerBackend {
                 "build {build_id} is the published build of {source_id}; refusing to abort it"
             )));
         }
-        if let Err(e) = check_lease(&prev, lease) {
-            // Superseded: the build is someone else's pending build (never
-            // touch it) or an orphan of this holder (safe to delete).
-            if prev.pending_build_id.as_deref() == Some(build_id) {
-                return Err(e);
-            }
-            self.delete_build_docs(source_id, build_id)?;
+        // A superseded holder's attempt was already aborted by its
+        // successor's begin: its records are invisible; nothing to do.
+        check_lease(&prev, lease)?;
+        if prev.pending_build_id.as_deref() != Some(build_id) {
             return Ok(());
         }
-        self.delete_build_docs(source_id, build_id)?;
-        if prev.pending_build_id.as_deref() == Some(build_id) {
-            self.patch_state(source_id, lease, None, |doc, p| {
-                let has_active = p.is_some_and(|p| p.active_build_id.is_some());
-                doc.insert(
-                    "state".into(),
-                    json!(if has_active {
-                        "failed"
-                    } else {
-                        "needs_full_rebuild"
-                    }),
-                );
-                doc.insert("pending_build_id".into(), Value::Null);
-                if let Some(e) = error {
-                    doc.insert("last_error".into(), json!(e));
-                }
-                Ok(())
-            })?;
+        let mut generation = None;
+        self.patch_state(source_id, lease, None, |doc, p| {
+            let has_active = p.is_some_and(|p| p.active_build_id.is_some());
+            let mut l = Lineage::of(&Value::Object(doc.clone()), Line::Base);
+            if let Some(g) = l.generation_of(build_id).filter(|g| l.pending == Some(*g)) {
+                l.abort_pending(g, now_millis());
+                generation = Some(g);
+            }
+            l.put(doc, Line::Base);
+            doc.insert(
+                "state".into(),
+                json!(if has_active {
+                    "failed"
+                } else {
+                    "needs_full_rebuild"
+                }),
+            );
+            doc.insert("pending_build_id".into(), Value::Null);
+            if let Some(e) = error {
+                doc.insert("last_error".into(), json!(e));
+            }
+            Ok(())
+        })?;
+        // Housekeeping only (the attempt is already invisible).
+        if let Some(g) = generation {
+            let _ = self.sweep_generation(Line::Base, source_id, g);
         }
         Ok(())
     }
@@ -1022,61 +1254,20 @@ impl ServerBackend {
     }
 
     fn delete_by_query(&self, query: &Value) -> Result<u64> {
+        self.delete_by_query_in(&IndexKind::BUILD_SCOPED, query)
+    }
+
+    pub(crate) fn delete_by_query_in(&self, kinds: &[IndexKind], query: &Value) -> Result<u64> {
         // Delete-by-query only matches refreshed documents; make recent
         // bulk writes visible first so none survive the delete.
         self.refresh_build_indexes()?;
-        let names: Vec<String> = IndexKind::BUILD_SCOPED
-            .iter()
-            .map(|k| self.index(*k))
-            .collect();
+        let names: Vec<String> = kinds.iter().map(|k| self.index(*k)).collect();
         let path = format!(
             "/{}/_delete_by_query?conflicts=proceed&refresh=true",
             names.join(",")
         );
         let v = self.by_query(&path, &json!({ "query": query }))?;
         Ok(v["deleted"].as_u64().unwrap_or(0))
-    }
-
-    /// Removes `build_id` from every record of the source: a record that
-    /// belongs to other builds too (copied forward) just loses this build
-    /// id; a record that belonged only to this build is deleted. Shared
-    /// records of other builds are never deleted.
-    pub(crate) fn delete_build_docs(&self, source_id: &str, build_id: &str) -> Result<u64> {
-        self.refresh_build_indexes()?;
-        let names: Vec<String> = IndexKind::BUILD_SCOPED
-            .iter()
-            .map(|k| self.index(*k))
-            .collect();
-        let path = format!(
-            "/{}/_update_by_query?conflicts=proceed&refresh=true",
-            names.join(",")
-        );
-        let v = self.by_query(
-            &path,
-            &json!({
-                "query": { "bool": { "filter": [
-                    { "term": { "source_id": source_id } },
-                    { "term": { "build_id": build_id } },
-                ] } },
-                "script": { "lang": "painless", "source": DETACH_SCRIPT, "params": { "b": build_id } },
-            }),
-        )?;
-        Ok(v["deleted"].as_u64().unwrap_or(0))
-    }
-
-    /// Deletes every record of the source that belongs to none of the
-    /// `keep` builds (manual links are not build-scoped and survive). Ids of
-    /// dropped builds left on shared records are pruned by the next
-    /// copy-forward.
-    fn gc_source(&self, source_id: &str, keep: &[String]) -> Result<()> {
-        self.delete_by_query(&json!({ "bool": {
-            "filter": [ { "term": { "source_id": source_id } } ],
-            "must_not": [
-                { "terms": { "build_id": keep } },
-                { "term": { "record_kind": MANUAL_LINK } },
-            ],
-        }}))
-        .map(|_| ())
     }
 
     /// Deletes every record and the state of a source.
@@ -1115,21 +1306,52 @@ impl ServerBackend {
         Ok(out)
     }
 
-    /// Filter that only matches records of each source's active build.
-    pub fn visibility_filter(active: &BTreeMap<String, String>) -> Value {
-        if active.is_empty() {
+    /// `source_id -> filter of the records visible at its published base
+    /// generation`, for every published source (one paged scan: a
+    /// request's snapshot).
+    pub fn active_scopes(&self) -> Result<BTreeMap<String, Value>> {
+        let mut out = BTreeMap::new();
+        for doc in self.scan_states(json!({ "exists": { "field": "active_build_id" } }))? {
+            let l = Lineage::of(&doc, Line::Base);
+            if let (Some(s), true) = (doc["source_id"].as_str(), l.published > 0) {
+                out.insert(s.to_owned(), l.visible_at(l.published));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Filter that only matches records each source's snapshot sees.
+    pub fn visibility_filter(scopes: &BTreeMap<String, Value>) -> Value {
+        if scopes.is_empty() {
             return json!({ "match_none": {} });
         }
-        let should: Vec<Value> = active
+        let should: Vec<Value> = scopes
             .iter()
-            .map(|(s, b)| {
+            .map(|(s, scope)| {
                 json!({ "bool": { "filter": [
                     { "term": { "source_id": s } },
-                    { "term": { "build_id": b } },
+                    scope,
                 ]}})
             })
             .collect();
         json!({ "bool": { "should": should, "minimum_should_match": 1 } })
+    }
+
+    /// The filter of the records build or graph generation `id` of
+    /// `source_id` sees (`match_none` once it is no longer readable).
+    pub fn scope_of(&self, source_id: &str, id: &str) -> Result<Value> {
+        let Some(st) = self.source_state(source_id)? else {
+            return Ok(json!({ "match_none": {} }));
+        };
+        for line in [Line::Base, Line::Graph] {
+            let l = Lineage::of(&st.doc, line);
+            if let Some(g) = l.generation_of(id) {
+                let mut f = vec![l.visible_at(g)];
+                f.extend(line.record_filter());
+                return Ok(json!({ "bool": { "filter": f } }));
+            }
+        }
+        Ok(json!({ "match_none": {} }))
     }
 
     fn search(
@@ -1139,7 +1361,7 @@ impl ServerBackend {
         query: Value,
         limit: usize,
     ) -> Result<Vec<SearchHit>> {
-        let active = self.active_builds()?;
+        let active = self.active_scopes()?;
         let path = format!("/{}/_search", self.index(kind));
         let v = self.call_ok(
             Method::Post,
@@ -1197,7 +1419,7 @@ impl ServerBackend {
 
     /// Visible record count of one index (optionally one source).
     pub fn count(&self, kind: IndexKind, source_id: Option<&str>) -> Result<u64> {
-        let active = self.active_builds()?;
+        let active = self.active_scopes()?;
         let mut filter = vec![Self::visibility_filter(&active)];
         if let Some(s) = source_id {
             filter.push(json!({ "term": { "source_id": s } }));
@@ -1216,7 +1438,8 @@ impl ServerBackend {
         Ok(v["status"].as_str().unwrap_or("unknown").to_owned())
     }
 
-    /// Raw record count including invisible builds (diagnostics/tests).
+    /// Raw count of the records build `build_id` wrote, visible or not
+    /// (diagnostics/tests).
     pub fn raw_count(&self, kind: IndexKind, source_id: &str, build_id: &str) -> Result<u64> {
         let v = self.call_ok(
             Method::Post,
@@ -1469,6 +1692,7 @@ pub struct BuildWriter<'a> {
     backend: &'a ServerBackend,
     source_id: String,
     build_id: String,
+    generation: i64,
     bulk: BulkWriter<'a>,
 }
 
@@ -1484,6 +1708,8 @@ impl BuildWriter<'_> {
         if let Some(obj) = v.as_object_mut() {
             obj.insert("source_id".into(), Value::String(self.source_id.clone()));
             obj.insert("build_id".into(), Value::String(self.build_id.clone()));
+            obj.insert("valid_from".into(), json!(self.generation));
+            obj.insert("valid_to".into(), json!(OPEN));
             for (k, val) in extra {
                 obj.insert((*k).into(), Value::String((*val).into()));
             }
@@ -1583,12 +1809,12 @@ mod tests {
             json!({"match_none": {}})
         );
         let mut m = BTreeMap::new();
-        m.insert("s".to_string(), "b".to_string());
+        m.insert("s".to_string(), crate::generations::visible_at(3, &[]));
         let f = ServerBackend::visibility_filter(&m);
         assert_eq!(f["bool"]["minimum_should_match"], 1);
         assert_eq!(
-            f["bool"]["should"][0]["bool"]["filter"][1]["term"]["build_id"],
-            "b"
+            f["bool"]["should"][0]["bool"]["filter"][1],
+            crate::generations::visible_at(3, &[])
         );
     }
 

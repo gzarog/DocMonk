@@ -347,7 +347,7 @@ pub struct LiveRun {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RelationshipProgress {
     /// `deriving`, `resolving`, `linking`, `committing`; on a server also
-    /// `staging`, `copying`, `writing`, `promoting`.
+    /// `staging`, `writing`, `closing`, `promoting`.
     pub phase: Option<String>,
     /// Files derived so far, of `planned`.
     pub processed: Option<u64>,

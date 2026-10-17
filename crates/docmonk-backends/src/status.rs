@@ -164,17 +164,54 @@ impl ServerBackend {
         self.stats().requests
     }
 
-    /// Filter matching only the records of the given pairs' builds.
-    fn pairs_filter(pairs: &[(&String, &String)]) -> Value {
-        if pairs.is_empty() {
+    /// Filter matching only the records each source's scope sees.
+    fn pairs_filter(scopes: &[(&String, &Value)]) -> Value {
+        if scopes.is_empty() {
             return json!({ "match_none": {} });
         }
-        let sources: Vec<&String> = pairs.iter().map(|p| p.0).collect();
-        let builds: Vec<&String> = pairs.iter().map(|p| p.1).collect();
-        json!({ "bool": { "filter": [
-            { "terms": { "source_id": sources } },
-            { "terms": { "build_id": builds } },
-        ]}})
+        let should: Vec<Value> = scopes
+            .iter()
+            .map(|(s, scope)| {
+                json!({ "bool": { "filter": [ { "term": { "source_id": s } }, scope ] } })
+            })
+            .collect();
+        json!({ "bool": { "should": should, "minimum_should_match": 1 } })
+    }
+
+    /// `source -> filter of the records of its base build in pairs`, from
+    /// the state documents' base lineage.
+    pub fn base_scopes_of(
+        states: &[Value],
+        pairs: &BTreeMap<String, String>,
+    ) -> BTreeMap<String, Value> {
+        Self::scopes_of(states, pairs, crate::generations::Line::Base)
+    }
+
+    fn scopes_of(
+        states: &[Value],
+        pins: &BTreeMap<String, String>,
+        line: crate::generations::Line,
+    ) -> BTreeMap<String, Value> {
+        let mut out = BTreeMap::new();
+        for d in states {
+            let Some(source) = d["source_id"].as_str() else {
+                continue;
+            };
+            let Some(id) = pins.get(source) else {
+                continue;
+            };
+            let l = crate::generations::Lineage::of(d, line);
+            let scope = match l.generation_of(id) {
+                Some(g) => {
+                    let mut f = vec![l.visible_at(g)];
+                    f.extend(line.record_filter());
+                    json!({ "bool": { "filter": f } })
+                }
+                None => json!({ "match_none": {} }),
+            };
+            out.insert(source.to_owned(), scope);
+        }
+        out
     }
 
     /// Every source-state document, paged (the catalog of a snapshot),
@@ -266,9 +303,9 @@ impl ServerBackend {
     /// `(edges, links)` of every graph generation pair.
     pub fn graph_aggregates(
         &self,
-        graphs: &BTreeMap<String, String>,
+        graphs: &BTreeMap<String, Value>,
     ) -> Result<BTreeMap<String, (u64, u64)>> {
-        let all: Vec<(&String, &String)> = graphs.iter().collect();
+        let all: Vec<(&String, &Value)> = graphs.iter().collect();
         let mut out = BTreeMap::new();
         for chunk in all.chunks(PAIR_BATCH) {
             let v = self.post_json(
@@ -306,9 +343,9 @@ impl ServerBackend {
     /// request pair (files + records).
     pub fn published_aggregates(
         &self,
-        pairs: &BTreeMap<String, String>,
+        pairs: &BTreeMap<String, Value>,
     ) -> Result<BTreeMap<String, PublishedAgg>> {
-        let all: Vec<(&String, &String)> = pairs.iter().collect();
+        let all: Vec<(&String, &Value)> = pairs.iter().collect();
         let mut out: BTreeMap<String, PublishedAgg> = pairs
             .keys()
             .map(|k| (k.clone(), PublishedAgg::default()))
@@ -411,12 +448,12 @@ impl ServerBackend {
     /// `last_error_at` (newest first), then source id and path.
     pub fn recent_file_errors(
         &self,
-        pairs: &BTreeMap<String, String>,
+        pairs: &BTreeMap<String, Value>,
         limit: usize,
         source: Option<&str>,
     ) -> Result<Vec<FileErrorEvent>> {
         let limit = limit.min(MAX_ERRORS);
-        let all: Vec<(&String, &String)> = pairs
+        let all: Vec<(&String, &Value)> = pairs
             .iter()
             .filter(|(s, _)| source.is_none_or(|f| f == s.as_str()))
             .collect();
@@ -541,19 +578,23 @@ impl ServerBackend {
         let states = self.status_states()?;
         let latency_ms = started.elapsed().as_millis() as u64;
         let mut pairs = Self::pairs_of(&states);
+        let scopes = Self::base_scopes_of(&states, &pairs);
         let mut retried = Vec::new();
         let mut inconsistent = Vec::new();
         let (published, errors) = if q.published {
-            let mut published = self.published_aggregates(&pairs).map_err(|e| e.to_string());
+            let mut published = self
+                .published_aggregates(&scopes)
+                .map_err(|e| e.to_string());
             let mut errors = self
-                .recent_file_errors(&pairs, q.error_limit, q.error_source.as_deref())
+                .recent_file_errors(&scopes, q.error_limit, q.error_source.as_deref())
                 .map_err(|e| e.to_string());
             // A publication while reading: re-read the changed sources once.
             if published.is_ok() {
-                let now_pairs = Self::pairs_of(&self.scan_state_docs(
+                let now_states = self.scan_state_docs(
                     json!({ "exists": { "field": "active_build_id" } }),
-                    Some(&["source_id", "active_build_id"]),
-                )?);
+                    Some(&["source_id", "active_build_id", "mvcc"]),
+                )?;
+                let now_pairs = Self::pairs_of(&now_states);
                 let changed: BTreeSet<String> = now_pairs
                     .iter()
                     .filter(|(s, b)| pairs.get(*s).is_some_and(|old| old != *b))
@@ -565,9 +606,13 @@ impl ServerBackend {
                         .filter(|(s, _)| changed.contains(*s))
                         .map(|(s, b)| (s.clone(), b.clone()))
                         .collect();
-                    let again = self.published_aggregates(&sub);
-                    let errs =
-                        self.recent_file_errors(&sub, q.error_limit, q.error_source.as_deref());
+                    let sub_scopes = Self::base_scopes_of(&now_states, &sub);
+                    let again = self.published_aggregates(&sub_scopes);
+                    let errs = self.recent_file_errors(
+                        &sub_scopes,
+                        q.error_limit,
+                        q.error_source.as_deref(),
+                    );
                     let confirm = Self::pairs_of(&self.scan_state_docs(
                         json!({ "terms": { "source_id": changed.iter().collect::<Vec<_>>() } }),
                         Some(&["source_id", "active_build_id"]),
@@ -601,7 +646,11 @@ impl ServerBackend {
             // generation, never from a base build (graph records are not
             // base-scoped); a missing or stale graph counts zero.
             if let Ok(p) = &mut published {
-                let graphs = Self::graph_pairs_of(&states, &pairs);
+                let graphs = Self::scopes_of(
+                    &states,
+                    &Self::graph_pairs_of(&states, &pairs),
+                    crate::generations::Line::Graph,
+                );
                 for agg in p.values_mut() {
                     agg.relationships = 0;
                     agg.links = 0;

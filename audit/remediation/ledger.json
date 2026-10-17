@@ -177,8 +177,36 @@
     },
     "F10": {
       "phase": "PH08",
-      "status": "open",
-      "checks": []
+      "status": "fixed_pending_live_measurement",
+      "checks": [
+        {
+          "test": "crates/docmonk-backends/tests/publication.rs::a_one_file_edit_rewrites_no_unchanged_record",
+          "fails_on_baseline": "yes: baseline copy-forward updated every unchanged file's records"
+        },
+        {
+          "test": "crates/docmonk-backends/tests/publication.rs::a_failed_or_killed_attempt_is_never_visible"
+        },
+        {
+          "test": "crates/docmonk-backends/tests/publication.rs::a_superseded_writer_cannot_change_what_readers_see"
+        },
+        {
+          "test": "crates/docmonk-backends/tests/publication.rs::deleted_files_disappear_and_new_files_appear"
+        },
+        {
+          "test": "crates/docmonk-backends/tests/publication.rs::a_reader_pinned_to_a_retired_build_keeps_its_snapshot_until_the_grace_ends"
+        },
+        {
+          "test": "crates/docmonk-backends/tests/graph_mock.rs::unchanged_files_are_never_rewritten_and_only_changed_files_are_written"
+        },
+        {
+          "test": "crates/docmonk-backends/src/generations.rs::tests::*"
+        },
+        {
+          "test": "crates/docmonk-backends/tests/live.rs, crates/docmonk-service/tests/server_live.rs, crates/docmonk-status/tests/live_server.rs (CI live OpenSearch/Elasticsearch)"
+        }
+      ],
+      "design": "docs/adr/0035-server-mvcc-publication.md: immutable records with valid_from/valid_to per lineage (base, graph); a fresh generation per attempt; aborted attempts' writes and closes ignored by readers; the fenced state CAS is the only visibility switch; GC by numeric range. Schema version 5 (fresh indexes, no migration).",
+      "remaining": "The live 8k/50k performance gate (write amplification, recall@10 and p95 within 5%, CPU) is not measured yet; verified on the in-process engine only. No nightly benchmark gate added yet (T08.3)."
     },
     "F11": {
       "phase": "PH07",

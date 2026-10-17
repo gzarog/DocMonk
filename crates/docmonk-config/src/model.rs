@@ -706,8 +706,8 @@ section! {
         request_timeout_seconds: f64 = 30.0, check = |v| {
             if *v <= 0.0 { Err("must be > 0".into()) } else { Ok(()) }
         };
-        // Budget for one server-side by-query task (copy-forward, build
-        // detach, GC). The task runs detached and is polled, so no single
+        // Budget for one server-side by-query task (closing replaced
+        // records, sweeping an aborted attempt, GC). The task runs detached and is polled, so no single
         // request waits longer than the request timeout.
         task_timeout_seconds: f64 = 3600.0, check = |v| {
             if *v <= 0.0 { Err("must be > 0".into()) } else { Ok(()) }

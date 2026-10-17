@@ -86,7 +86,10 @@ fn delete_index(c: &Client, name: &str) {
 /// Writes a synthetic source with `files` code files and one email with an
 /// attachment child document. Returns the number of chunks written.
 fn write_corpus(b: &ServerBackend, source: &str, build: &str, files: usize, marker: &str) -> usize {
-    let mut w = b.build_writer(source, build);
+    let g = b
+        .pending_generation(docmonk_backends::generations::Line::Base, source, build)
+        .unwrap();
+    let mut w = b.build_writer(source, build, g);
     let mut chunks = 0;
     for i in 0..files {
         let rel = format!("pkg/mod_{i}.py");
@@ -588,8 +591,8 @@ fn vectors(base: &str, engine: Engine) {
     let b = std::sync::Arc::new(p0_backend(base, engine, &prefix));
     b.init().unwrap();
     let src = "src_vec";
-    b.begin_build(src, "/repo", "vecb1").unwrap();
-    let mut w = b.build_writer(src, "vecb1");
+    let g = b.begin_build(src, "/repo", "vecb1").unwrap();
+    let mut w = b.build_writer(src, "vecb1", g);
     let file_id = record::file_id(src, "a.md");
     let doc = record::document_id(&file_id, None);
     for (i, v) in [

@@ -94,7 +94,7 @@ pub struct SourceProgress {
     pub relationships_processed: i64,
     /// Phase of a `building` graph: `deriving` (what
     /// `relationships_processed` counts), then `resolving`, `linking`,
-    /// `committing` and, on a server, `staging`, `copying`, `writing` and
+    /// `committing` and, on a server, `staging`, `writing`, `closing` and
     /// `promoting`. Cleared once the build ends.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relationships_phase: Option<String>,

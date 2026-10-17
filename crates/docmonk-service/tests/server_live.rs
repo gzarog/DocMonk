@@ -340,7 +340,7 @@ fn scenario(base: &str, engine: &str) {
     assert!(done.iter().all(|d| d["published"] == false), "{done:?}");
     assert_eq!(srv.active_builds().unwrap(), active);
 
-    // --- edit one file: copy-forward + rewrite ------------------------------
+    // --- edit one file: only its records are written and closed ---------------
     std::fs::write(
         env.code.join("docs/settlement_guide.md"),
         "# Settlement guide\n\nThe zanzibarquartz reconciliation runs nightly.\n",
@@ -351,8 +351,9 @@ fn scenario(base: &str, engine: &str) {
     let da = done.iter().find(|d| d["id"] == a.id.as_str()).unwrap();
     assert_eq!(da["published"], true, "{da}");
     let p = &da["publish"];
-    assert!(p["files_copied"].as_u64().unwrap() >= 4, "{p}");
+    assert!(p["files_kept"].as_u64().unwrap() >= 4, "{p}");
     assert_eq!(p["files_written"].as_u64().unwrap(), 1, "{p}");
+    assert_eq!(p["files_closed"].as_u64().unwrap(), 1, "{p}");
     let new_active = srv.active_builds().unwrap();
     assert_ne!(new_active[&a.id], active[&a.id]);
     assert_eq!(new_active[&b.id], active[&b.id], "other source untouched");
@@ -365,16 +366,16 @@ fn scenario(base: &str, engine: &str) {
     )
     .unwrap();
     assert_eq!(hit["results"].as_array().unwrap().len(), 1, "{hit}");
-    // Grace 0: the replaced build's own record of the edited file is gone;
-    // only records shared with the new build (copied forward) still carry
-    // its id until the next copy-forward prunes it.
+    // Grace 0: the replaced version of the edited file was collected;
+    // every unchanged file's record is still the one the first build
+    // wrote (never rewritten).
     assert_eq!(
         srv.raw_count(IndexKind::Files, &a.id, &active[&a.id])
             .unwrap(),
-        p["files_copied"].as_u64().unwrap()
+        p["files_kept"].as_u64().unwrap()
     );
 
-    // --- staging cache loss: rebuild locally, still copy forward --------------
+    // --- staging cache loss: rebuild locally, still incremental ---------------
     std::fs::remove_dir_all(env.home.cache_dir().join("server-staging")).unwrap();
     std::fs::write(
         env.code.join("docs/health_notes.md"),
@@ -384,7 +385,7 @@ fn scenario(base: &str, engine: &str) {
     let (done, bad) = index(&env, false);
     assert!(bad.is_empty(), "{bad:?}");
     let da = done.iter().find(|d| d["id"] == a.id.as_str()).unwrap();
-    assert!(da["publish"]["files_copied"].as_u64().unwrap() >= 4, "{da}");
+    assert!(da["publish"]["files_kept"].as_u64().unwrap() >= 4, "{da}");
     assert_eq!(da["publish"]["files_written"].as_u64().unwrap(), 1, "{da}");
     let db = done.iter().find(|d| d["id"] == b.id.as_str()).unwrap();
     assert_eq!(

@@ -34,22 +34,24 @@
 //! their mutation, index and build the graph, unmeasured and without a
 //! server publication); `--server none` skips server publication.
 //!
-//! The server side runs against an in-process engine that implements only
-//! the requests graph publication sends: it yields request, record and
-//! copy-forward **counts**, never cluster timings. The report records the
+//! The server side runs against the in-process engine of
+//! `docmonk_backends::memory` (the requests graph publication sends,
+//! evaluated like an engine would): it yields request, written and closed
+//! record **counts**, never cluster timings. The report records the
 //! graph fingerprint per scenario, so runs are compared for equivalence as
 //! well as speed. CPU time and peak RSS are read from `/proc` (Linux only;
 //! `null` elsewhere).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
 
 use docmonk_backends::bulk::BulkLimits;
 use docmonk_backends::engine::Engine;
 use docmonk_backends::graph::{GraphManifest, GraphPublishInput, GraphPublishReport};
-use docmonk_backends::transport::{Counting, Method, Response, Transport};
+use docmonk_backends::memory::Memory;
+use docmonk_backends::transport::Counting;
 use docmonk_backends::ServerBackend;
 use docmonk_code::graph_stage::{GraphOutcome, GraphReport};
 use docmonk_core::models::SourceType;
@@ -62,118 +64,6 @@ use serde_json::{json, Value};
 use sha2::Digest;
 
 use docmonk_service::bench::corpus::{emit, note, service, write, FIND_BODY};
-
-// ------------------------------------------------------ server engine ---
-
-/// The graph-publication subset of a search engine, in memory.
-#[derive(Default)]
-struct Engine0 {
-    state: Value,
-    seq: i64,
-    /// `(generations, file_id)` of every graph record.
-    records: Vec<(Vec<String>, String)>,
-}
-
-#[derive(Clone, Default)]
-struct Memory(Arc<Mutex<Engine0>>);
-
-fn reply(v: Value) -> docmonk_backends::error::Result<Response> {
-    Ok(Response {
-        status: 200,
-        body: serde_json::to_vec(&v).expect("json"),
-    })
-}
-
-impl Transport for Memory {
-    fn send(
-        &self,
-        method: Method,
-        path: &str,
-        body: Option<(&[u8], &str)>,
-    ) -> docmonk_backends::error::Result<Response> {
-        let mut e = self.0.lock().expect("engine");
-        let base = path.split('?').next().unwrap_or(path);
-        let doc = || -> Value {
-            body.and_then(|(b, _)| serde_json::from_slice(b).ok())
-                .unwrap_or(Value::Null)
-        };
-        if base.starts_with("/bench-source-state/_doc/") {
-            if method == Method::Get {
-                return reply(json!({"_source": e.state, "_seq_no": e.seq, "_primary_term": 1}));
-            }
-            if !path.contains(&format!("if_seq_no={}", e.seq)) {
-                return Ok(Response {
-                    status: 409,
-                    body: b"conflict".to_vec(),
-                });
-            }
-            e.state = doc();
-            e.seq += 1;
-            return reply(json!({"result": "updated"}));
-        }
-        if base == "/_bulk" {
-            let text = body
-                .map(|(b, _)| String::from_utf8_lossy(b).into_owned())
-                .unwrap_or_default();
-            for line in text.lines().filter(|l| !l.is_empty()) {
-                let v: Value = serde_json::from_str(line).unwrap_or(Value::Null);
-                if let Some(b) = v["build_id"].as_str() {
-                    let f = v["file_id"].as_str().unwrap_or_default().to_owned();
-                    e.records.push((vec![b.to_owned()], f));
-                }
-            }
-            return reply(json!({"errors": false, "items": []}));
-        }
-        if base.ends_with("/_refresh") {
-            return reply(json!({}));
-        }
-        if base.ends_with("/_update_by_query") {
-            let v = doc();
-            let to = v["script"]["params"]["b"]
-                .as_str()
-                .unwrap_or_default()
-                .to_owned();
-            let filter = v["query"]["bool"]["filter"].clone();
-            let from = filter[1]["term"]["build_id"]
-                .as_str()
-                .unwrap_or_default()
-                .to_owned();
-            if let Some(keep) = v["script"]["params"]["keep"].as_array() {
-                let keep: Vec<String> = keep
-                    .iter()
-                    .filter_map(|k| k.as_str().map(str::to_owned))
-                    .collect();
-                let files: std::collections::HashSet<&str> = filter[2]["terms"]["file_id"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(Value::as_str)
-                    .collect();
-                let mut updated = 0;
-                for (builds, f) in &mut e.records {
-                    if builds.contains(&from) && files.contains(f.as_str()) {
-                        builds.retain(|x| keep.contains(x));
-                        if !builds.contains(&to) {
-                            builds.push(to.clone());
-                        }
-                        updated += 1;
-                    }
-                }
-                return reply(json!({"updated": updated, "failures": []}));
-            }
-            let before = e.records.len();
-            for (builds, _) in &mut e.records {
-                builds.retain(|x| *x != to);
-            }
-            e.records.retain(|(builds, _)| !builds.is_empty());
-            return reply(json!({"deleted": before - e.records.len(), "failures": []}));
-        }
-        Ok(Response {
-            status: 400,
-            body: format!("unsupported request {method:?} {base}").into_bytes(),
-        })
-    }
-}
 
 use docmonk_service::bench::{cpu_seconds, peak_rss_mb, percentile, reset_peak_rss};
 
@@ -232,7 +122,7 @@ impl Bench {
         );
         let mut opts = Options::from_config(&cfg);
         opts.workers = workers;
-        let memory = Memory::default();
+        let memory = Memory::new();
         let server = ServerBackend::with_client(
             Counting::new(Box::new(memory.clone())),
             Engine::OpenSearch,
@@ -294,11 +184,19 @@ impl Bench {
     /// graph (server mode stages into exactly this kind of store).
     fn publish(&self, store: &ProjectStore, build: &str, graph: &GraphReport) -> Value {
         {
-            let mut e = self.memory.0.lock().expect("engine");
-            if e.state.is_null() {
-                e.state = json!({"source_id": self.src.id, "state": "ready", "versions": {}});
+            let mut st = self
+                .memory
+                .docs("bench-source-state")
+                .into_iter()
+                .find(|d| d["source_id"] == self.src.id.as_str())
+                .unwrap_or_else(
+                    || json!({"source_id": self.src.id, "state": "ready", "versions": {}}),
+                );
+            if let Some(o) = st.as_object_mut() {
+                o.remove("_id");
             }
-            e.state["active_build_id"] = json!(build);
+            st["active_build_id"] = json!(build);
+            self.memory.put_doc("bench-source-state", &self.src.id, st);
         }
         let started = Instant::now();
         let before = self.server.stats().requests;
@@ -380,7 +278,7 @@ impl Bench {
             (true, false) => "publish",
             _ => "unchanged",
         });
-        v["records_live"] = json!(self.memory.0.lock().expect("engine").records.len());
+        v["records_live"] = json!(self.memory.docs("bench-relationships").len());
         v
     }
 

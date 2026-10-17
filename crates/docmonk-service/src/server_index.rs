@@ -15,12 +15,13 @@
 //!   build (recorded in `synced/<source_id>`). If it does not (another host
 //!   published, the cache was deleted, or the server was reset), the
 //!   staging copy of that source is discarded and rebuilt from the
-//!   original files; copy-forward on the server still skips every file
-//!   whose derived knowledge did not change.
+//!   original files; the server publication still leaves every file
+//!   whose derived knowledge did not change untouched.
 //! * The staged build is published with [`ServerBackend::publish_from_store`]:
-//!   unchanged files are copied forward server-side, changed files are
-//!   bulk-written, the swap is an atomic compare-and-swap, and any error
-//!   aborts the pending build while the previous one stays searchable.
+//!   unchanged files' records are not touched, changed files are
+//!   bulk-written as a new generation and their previous records closed,
+//!   the switch is an atomic compare-and-swap, and any error aborts the
+//!   pending generation while the previous one stays searchable.
 //! * An offline source is recorded as offline on the server and nothing is
 //!   published, so its previously published knowledge is never deleted.
 
@@ -451,9 +452,10 @@ fn staged_pass(
         source_id = %source.id,
         published = report.published,
         files = report.files,
-        files_copied = report.files_copied,
+        files_kept = report.files_kept,
         files_written = report.files_written,
-        records_copied = report.records_copied,
+        files_closed = report.files_closed,
+        records_closed = report.records_closed,
         records_written = report.records_written,
         seconds = report.seconds,
     );
@@ -806,9 +808,9 @@ fn graph_pass(
         published = publish.published,
         edges = publish.edges_written,
         links = publish.links_written,
-        files_copied = publish.files_copied,
+        files_kept = publish.files_kept,
         files_written = publish.files_written,
-        records_copied = publish.records_copied,
+        records_closed = publish.records_closed,
         seconds = publish.seconds,
     );
     Ok(ServerGraphRun { graph, publish })
