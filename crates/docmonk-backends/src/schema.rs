@@ -13,7 +13,7 @@ use crate::engine::{Engine, VectorSpec};
 /// Mapping identity, bumped on any mapping change. Existing indexes with
 /// another identity are refused: the operator uses a fresh prefix/cluster or
 /// resets the current indexes; nothing is ever mutated in place.
-pub const SCHEMA_VERSION: u64 = 4;
+pub const SCHEMA_VERSION: u64 = 5;
 pub const SCHEMA_TAG: &str = "docmonk";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
@@ -140,11 +140,16 @@ fn props(pairs: &[(&str, Value)]) -> Map<String, Value> {
         .collect()
 }
 
-/// Fields every build-scoped record carries.
+/// Fields every build-scoped record carries. A record is immutable once
+/// written and visible to the generations `[valid_from, valid_to)` of its
+/// lineage (see [`crate::generations`]); `build_id` names the build that
+/// wrote it (diagnostics only, never a visibility filter).
 fn scoped() -> Vec<(&'static str, Value)> {
     vec![
         ("source_id", kw()),
         ("build_id", kw()),
+        ("valid_from", long()),
+        ("valid_to", long()),
         ("file_id", kw()),
         ("rel_path", kw()),
     ]
@@ -177,6 +182,9 @@ fn properties(kind: IndexKind, engine: Engine, vector: Option<&VectorSpec>) -> M
             ("lease_token", long()),
             ("lease_expires_at", date()),
             ("retired_builds", opaque()),
+            // Generation lineages of the base and the graph (counters,
+            // published/pending generation, aborted attempts).
+            ("mvcc", opaque()),
             ("content_digest", kw()),
             ("published_at", date()),
             ("updated_at", date()),

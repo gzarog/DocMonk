@@ -46,6 +46,13 @@ impl std::fmt::Debug for Corpus<'_> {
 #[error("search failed: {0}")]
 pub struct SearchError(pub String);
 
+/// `Err` once the calling request's deadline has passed (F09): retrieval
+/// loops call this between units of work so cancelled requests stop
+/// scheduling further reads.
+pub fn check_deadline() -> Result<(), SearchError> {
+    docmonk_core::deadline::check().map_err(|m| SearchError(m.into()))
+}
+
 impl From<docmonk_storage::error::StorageError> for SearchError {
     fn from(e: docmonk_storage::error::StorageError) -> Self {
         Self(e.to_string())

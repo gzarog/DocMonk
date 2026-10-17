@@ -24,6 +24,7 @@ use docmonk_ml::reranker::CrossEncoder;
 use docmonk_ml::semantic::{self, AnnParams, SemanticHit, SemanticStages};
 
 use crate::lexical::{LexicalTier, Location, RankTier, SearchResult};
+use crate::route::SearchFilters;
 use crate::{Corpus, SearchError};
 
 /// A semantic hit tagged with the source it came from.
@@ -111,6 +112,77 @@ pub fn semantic_search_with(
     candidate_k: Option<usize>,
     ann: AnnParams,
 ) -> Result<SemanticOutcome, SearchError> {
+    semantic_search_filtered(
+        corpora,
+        embedder,
+        query,
+        limit,
+        candidate_k,
+        ann,
+        &SearchFilters::default(),
+    )
+}
+
+/// Most candidates one corpus is asked for while widening a filtered
+/// search (AD05: bounded adaptive expansion, never a silent widening of
+/// the requested scope).
+pub const MAX_FILTERED_CANDIDATES: usize = 4096;
+
+/// Whether a semantic hit of `source_id` is inside `filter`.
+pub fn semantic_hit_allowed(filter: &SearchFilters, source_id: &str, h: &SemanticHit) -> bool {
+    let kind = if h.kind == "entity" {
+        "entity"
+    } else {
+        "document"
+    };
+    filter.allows(
+        source_id,
+        &h.path,
+        kind,
+        h.document_id.as_deref(),
+        h.attachment_index.is_some(),
+    )
+}
+
+/// Asks `fetch(k)` for the top `k` candidates, keeping those `keep`
+/// accepts, and widens `k` (x4, up to `cap`) until `limit` are kept or the
+/// candidates are exhausted: hard filters apply at candidate generation, so
+/// out-of-scope hits never crowd in-scope ones out of the top-k. Returns
+/// the kept hits (`None`: unavailable) and whether the cap stopped it
+/// short.
+pub fn filtered_candidates<E>(
+    limit: usize,
+    base_k: usize,
+    cap: usize,
+    mut fetch: impl FnMut(usize) -> Result<Option<Vec<SemanticHit>>, E>,
+    keep: impl Fn(&SemanticHit) -> bool,
+) -> Result<(Option<Vec<SemanticHit>>, bool), E> {
+    let mut k = base_k.max(limit).max(1);
+    loop {
+        // `fetch` itself checks the deadline before each widening read.
+        let Some(raw) = fetch(k)? else {
+            return Ok((None, false));
+        };
+        let exhausted = raw.len() < k;
+        let kept: Vec<SemanticHit> = raw.into_iter().filter(|h| keep(h)).collect();
+        if kept.len() >= limit || exhausted || k >= cap {
+            let capped = kept.len() < limit && !exhausted;
+            return Ok((Some(kept), capped));
+        }
+        k = (k * 4).min(cap);
+    }
+}
+
+/// [`semantic_search_with`] restricted to `filter` at candidate generation.
+pub fn semantic_search_filtered(
+    corpora: &[Corpus<'_>],
+    embedder: Option<&Embedder>,
+    query: &str,
+    limit: usize,
+    candidate_k: Option<usize>,
+    ann: AnnParams,
+    filter: &SearchFilters,
+) -> Result<SemanticOutcome, SearchError> {
     let Some(embedder) = embedder else {
         return Ok(SemanticOutcome::unavailable("embedding model unavailable"));
     };
@@ -136,25 +208,66 @@ pub fn semantic_search_with(
             .as_project_store()
             .and_then(|s| s.project_dir())
             .unwrap_or_else(|| Path::new(".").to_path_buf());
-        let r = semantic::search_vector(c.store, &dir, c.build_id, &qv, limit, candidate_k, ann)
-            .map_err(SearchError)?;
-        stages.add(&r.stages);
-        if !r.available {
-            degraded.push(format!("{}: {}", c.store.source_id(), r.reason));
-            first_reason.get_or_insert(r.reason);
+        crate::check_deadline()?;
+        let sid = c.store.source_id().to_owned();
+        if !filter.allows_source(&sid) {
             continue;
         }
+        let base_k = candidate_k.unwrap_or(limit).max(limit);
+        let mut unavailable = None;
+        let (kept, capped) = if filter.is_empty() {
+            let r =
+                semantic::search_vector(c.store, &dir, c.build_id, &qv, limit, candidate_k, ann)
+                    .map_err(SearchError)?;
+            stages.add(&r.stages);
+            if r.available {
+                (Some(r.hits), false)
+            } else {
+                unavailable = Some(r.reason);
+                (None, false)
+            }
+        } else {
+            filtered_candidates::<SearchError>(
+                limit,
+                base_k,
+                MAX_FILTERED_CANDIDATES,
+                |k| {
+                    let r =
+                        semantic::search_vector(c.store, &dir, c.build_id, &qv, k, Some(k), ann)
+                            .map_err(SearchError)?;
+                    stages.add(&r.stages);
+                    if r.available {
+                        Ok(Some(r.hits))
+                    } else {
+                        unavailable = Some(r.reason);
+                        Ok(None)
+                    }
+                },
+                |h| semantic_hit_allowed(filter, &sid, h),
+            )?
+        };
+        if capped {
+            degraded.push(format!(
+                "{sid}: filtered semantic search stopped at {MAX_FILTERED_CANDIDATES} candidates"
+            ));
+        }
+        let Some(raw_hits) = kept else {
+            let reason = unavailable.unwrap_or_default();
+            degraded.push(format!("{sid}: {reason}"));
+            first_reason.get_or_insert(reason);
+            continue;
+        };
+
         answered += 1;
         let t = std::time::Instant::now();
-        let docs: Vec<String> = r
-            .hits
+        let docs: Vec<String> = raw_hits
             .iter()
             .filter(|h| h.attachment_index.is_some())
             .filter_map(|h| h.document_id.clone())
             .collect();
         let attachments = c.store.document_attachments(c.build_id, &docs)?;
         attachments_ms += t.elapsed().as_secs_f64() * 1000.0;
-        for hit in r.hits {
+        for hit in raw_hits {
             let attachment = match (&hit.document_id, hit.attachment_index) {
                 (Some(doc), Some(_)) => attachments.get(doc).cloned().flatten(),
                 _ => None,
@@ -544,6 +657,84 @@ pub fn hybrid_search(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sem(id: usize, path: &str) -> SemanticHit {
+        SemanticHit {
+            kind: "document".into(),
+            subject_type: "chunk".into(),
+            id: format!("h{id}"),
+            title: String::new(),
+            path: path.into(),
+            score: 1.0 - id as f32 / 1000.0,
+            snippet: String::new(),
+            section: None,
+            position: 0,
+            end_line: None,
+            attachment_index: None,
+            document_id: None,
+        }
+    }
+
+    /// F06: 40 out-of-scope hits rank above 3 in-scope ones. A post-filter
+    /// of the top 10 finds none; candidate generation under the filter
+    /// finds all 3.
+    #[test]
+    fn f06_hard_filters_apply_before_top_k_truncation() {
+        let corpus: Vec<SemanticHit> = (0..43)
+            .map(|i| sem(i, if i < 40 { "vendor/x.md" } else { "docs/a.md" }))
+            .collect();
+        let filter = SearchFilters {
+            path_prefixes: vec!["docs/".into()],
+            ..Default::default()
+        };
+        let keep = |h: &SemanticHit| semantic_hit_allowed(&filter, "s", h);
+        // The old behavior: truncate, then filter.
+        let post: Vec<_> = corpus.iter().take(10).filter(|h| keep(h)).collect();
+        assert!(post.is_empty());
+
+        let mut asked = Vec::new();
+        let (kept, capped) = filtered_candidates::<()>(
+            3,
+            10,
+            MAX_FILTERED_CANDIDATES,
+            |k| {
+                asked.push(k);
+                Ok(Some(corpus.iter().take(k).cloned().collect()))
+            },
+            keep,
+        )
+        .unwrap();
+        let kept = kept.unwrap();
+        assert_eq!(kept.len(), 3);
+        assert!(kept.iter().all(|h| h.path.starts_with("docs/")));
+        assert!(!capped);
+        assert_eq!(asked, [10, 40, 160], "bounded geometric widening");
+
+        // A cap that stops short is reported, never silent.
+        let (kept, capped) = filtered_candidates::<()>(
+            3,
+            10,
+            20,
+            |k| Ok(Some(corpus.iter().take(k).cloned().collect())),
+            keep,
+        )
+        .unwrap();
+        assert!(kept.unwrap().is_empty() && capped);
+        // Unfiltered requests keep their single read.
+        let mut n = 0;
+        filtered_candidates::<()>(
+            3,
+            10,
+            4096,
+            |k| {
+                n += 1;
+                Ok(Some(corpus.iter().take(k).cloned().collect()))
+            },
+            |_| true,
+        )
+        .unwrap();
+        assert_eq!(n, 1);
+    }
 
     fn hit(id: &str, exact: bool) -> RankedHit {
         RankedHit {

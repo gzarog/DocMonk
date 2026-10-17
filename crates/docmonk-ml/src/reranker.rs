@@ -106,6 +106,7 @@ impl CrossEncoder {
         order.sort_by_key(|&i| passages[i].len());
         let mut out = vec![0f32; passages.len()];
         for idx in order.chunks(BATCH_SIZE) {
+            docmonk_core::deadline::check().map_err(crate::embedder::inference)?;
             let batch: Vec<&str> = idx.iter().map(|&i| passages[i]).collect();
             for (&i, s) in idx.iter().zip(self.score_batch(query, &batch)?) {
                 out[i] = s;

@@ -24,9 +24,16 @@
 //!   Bindings depend on producers' published definitions, never on other
 //!   bindings, so the work is one pass over direct consumers: each consumer
 //!   is visited at most once per run, and dependency cycles terminate.
-//! * Fencing: before the manifest is promoted, every producer's base
-//!   generation is re-read; a producer republished meanwhile leaves the
-//!   consumer `stale`. A consumer is marked `stale` before it is updated, so
+//! * Removal: a source whose stored manifest still records producers or
+//!   bindings is reconciled even when it no longer depends on anything, so
+//!   removed dependencies drop their bindings; a consumer whose discovery
+//!   could not complete keeps its last bindings, marked `stale`.
+//! * Lookup failures are never read as "no candidate": the consumer keeps
+//!   its last bindings, marked `stale`.
+//! * Fencing: before the manifest is promoted, the authoritative active
+//!   build and base generation of every producer, and the consumer's
+//!   active build and graph generation, are re-read; any change meanwhile
+//!   leaves the consumer `stale`. A consumer is marked `stale` before it is updated, so
 //!   an interrupted run is picked up by the next one; unavailable producers
 //!   or consumers are reported `stale`/`pending`, never silently current.
 //! * Runs indexing only some sources still update their impacted consumers
@@ -40,6 +47,7 @@ use docmonk_core::errors::DocMonkError;
 use docmonk_core::paths::{project_id_for_canonical, Home};
 use docmonk_indexing::lock::RunLock;
 use docmonk_storage::control::SourceRecord;
+use docmonk_storage::dependency_retry::RetryBook;
 use docmonk_storage::graph::{
     candidates_fingerprint, qualified_key, ExternalBinding, ExternalManifest, ProducerSnapshot,
 };
@@ -69,6 +77,12 @@ pub struct Registry {
     pub unsupported: BTreeMap<String, Vec<String>>,
     /// Declarations naming no registered source.
     pub invalid: Vec<String>,
+    /// Sources whose stored manifest records producers or bindings: they
+    /// are reconciled even when no edge names them any more.
+    pub manifest_owners: BTreeSet<String>,
+    /// `source -> why` its dependencies could not be fully discovered: a
+    /// missing edge there is unknown, never a removal.
+    pub incomplete: BTreeMap<String, String>,
 }
 
 impl Registry {
@@ -82,6 +96,14 @@ impl Registry {
     pub fn consumers(&self) -> BTreeSet<&str> {
         self.edges.iter().map(|d| d.consumer.as_str()).collect()
     }
+
+    /// Every source to reconcile: current consumers and previous manifest
+    /// owners (whose dependencies may have been removed).
+    pub fn refresh_candidates(&self) -> BTreeSet<&str> {
+        let mut out = self.consumers();
+        out.extend(self.manifest_owners.iter().map(String::as_str));
+        out
+    }
 }
 
 /// A source's published build, opened for reading.
@@ -89,6 +111,29 @@ pub(crate) struct View {
     pub store: ProjectStore,
     pub build: String,
     pub generation: String,
+    /// The authoritative active build id when the view was opened (the
+    /// control plane locally, the server's state in server mode).
+    pub active: String,
+}
+
+/// The authoritative active build id of `source` right now.
+fn active_build(
+    home: &Home,
+    backend: &Backend,
+    source: &SourceRecord,
+) -> Result<Option<String>, DocMonkError> {
+    Ok(match backend {
+        Backend::Local => {
+            control_plane(home)?
+                .state(&source.id)
+                .map_err(db)?
+                .active_build_id
+        }
+        Backend::Server(server) => server
+            .source_state(&source.id)
+            .map_err(server_err)?
+            .and_then(|s| s.active_build_id),
+    })
 }
 
 pub(crate) fn open_view(
@@ -97,7 +142,7 @@ pub(crate) fn open_view(
     backend: &Backend,
     source: &SourceRecord,
 ) -> Result<Option<View>, DocMonkError> {
-    let (store, build) = match backend {
+    let (store, build, active) = match backend {
         Backend::Local => {
             let Some(build) = control_plane(home)?
                 .state(&source.id)
@@ -118,7 +163,7 @@ pub(crate) fn open_view(
                 cfg.runtime.sqlite_cache_size_mb,
             )
             .map_err(db)?;
-            (store, build)
+            (store, build.clone(), build)
         }
         Backend::Server(server) => {
             match crate::server_index::synced_staging_store(home, cfg, server, source)? {
@@ -134,7 +179,82 @@ pub(crate) fn open_view(
         store,
         build,
         generation,
+        active,
     }))
+}
+
+/// Where a producer's published definitions are read from.
+enum Definitions {
+    /// The local store (local mode).
+    Store(ProjectStore),
+    /// The authoritative server index at the pinned active build (server
+    /// mode): no staging copy of the producer is needed on this host.
+    Server(docmonk_backends::reader::ServerReader),
+}
+
+/// A producer pinned at its active build for one update.
+pub(crate) struct Producer {
+    defs: Definitions,
+    build: String,
+    pub generation: String,
+    pub active: String,
+}
+
+type Candidates = std::collections::HashMap<String, Vec<docmonk_storage::knowledge::EntityRow>>;
+
+impl Producer {
+    /// Exact qualified-name candidates of `names`, batched. An error is a
+    /// failed read, never "no candidate".
+    fn lookup(&self, names: &[&str]) -> Result<Candidates, String> {
+        match &self.defs {
+            Definitions::Store(s) => s
+                .entities_by_qualified_names(&self.build, names)
+                .map_err(|e| e.to_string()),
+            Definitions::Server(r) => r
+                .entities_by_qualified_names(&self.build, names)
+                .map_err(|e| e.to_string()),
+        }
+    }
+
+    /// The pinned build's base generation now (`None`: no longer published).
+    fn generation_now(&self) -> Result<Option<String>, DocMonkError> {
+        match &self.defs {
+            Definitions::Store(s) => s.base_generation(&self.build).map_err(db),
+            // Server builds are immutable; republication changes the active
+            // build id, which the fence compares.
+            Definitions::Server(_) => Ok(Some(self.generation.clone())),
+        }
+    }
+}
+
+fn open_producer(
+    home: &Home,
+    cfg: &docmonk_config::DocMonkConfig,
+    backend: &Backend,
+    source: &SourceRecord,
+) -> Result<Option<Producer>, DocMonkError> {
+    match backend {
+        Backend::Local => Ok(open_view(home, cfg, backend, source)?.map(|v| Producer {
+            defs: Definitions::Store(v.store),
+            build: v.build,
+            generation: v.generation,
+            active: v.active,
+        })),
+        Backend::Server(server) => {
+            let Some(active) = active_build(home, backend, source)? else {
+                return Ok(None);
+            };
+            Ok(Some(Producer {
+                defs: Definitions::Server(docmonk_backends::reader::ServerReader::new(
+                    server.clone(),
+                    &source.id,
+                )),
+                build: active.clone(),
+                generation: format!("server:{active}"),
+                active,
+            }))
+        }
+    }
 }
 
 fn find<'a>(sources: &'a [SourceRecord], r: &str) -> Option<&'a SourceRecord> {
@@ -159,25 +279,80 @@ fn normalize(p: &Path) -> PathBuf {
     out
 }
 
-/// `(project references, package references)` of a `.csproj` document.
-pub fn csproj_references(text: &str) -> (Vec<String>, Vec<String>) {
-    let attr = |tag: &str| -> Vec<String> {
-        let mut out = Vec::new();
-        let mut rest = text;
-        while let Some(i) = rest.find(tag) {
-            rest = &rest[i + tag.len()..];
-            let end = rest.find('>').unwrap_or(rest.len());
-            let item = &rest[..end];
-            if let Some(j) = item.find("Include=\"") {
-                let v = &item[j + 9..];
-                if let Some(k) = v.find('"') {
-                    out.push(v[..k].to_owned());
+/// References of one `.csproj` document. MSBuild is never evaluated:
+/// anything whose meaning depends on evaluation (conditions, properties,
+/// wildcards, imports) is reported in `unsupported`, never guessed.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct CsprojReferences {
+    pub projects: Vec<String>,
+    pub packages: Vec<String>,
+    pub unsupported: Vec<String>,
+}
+
+/// Parses a `.csproj` document as XML (either quote style, namespaces,
+/// comments and child elements are handled by the parser).
+pub fn csproj_references(text: &str) -> CsprojReferences {
+    let mut out = CsprojReferences::default();
+    let doc = match roxmltree::Document::parse(text) {
+        Ok(d) => d,
+        Err(e) => {
+            out.unsupported.push(format!("not well-formed XML: {e}"));
+            return out;
+        }
+    };
+    for node in doc.descendants().filter(|n| n.is_element()) {
+        let tag = node.tag_name().name();
+        match tag {
+            "Import" => {
+                if let Some(p) = node.attribute("Project") {
+                    out.unsupported.push(format!("import {p} is not evaluated"));
                 }
+                continue;
+            }
+            "ProjectReference" | "PackageReference" => {}
+            _ => continue,
+        }
+        let Some(include) = node.attribute("Include") else {
+            continue;
+        };
+        let conditional = node
+            .ancestors()
+            .filter(|a| a.is_element())
+            .any(|a| a.attribute("Condition").is_some());
+        for item in include.split(';').map(str::trim).filter(|i| !i.is_empty()) {
+            let why = if conditional {
+                Some("is conditional")
+            } else if item.contains("$(") || item.contains("@(") || item.contains("%(") {
+                Some("uses an unevaluated property")
+            } else if item.contains('*') || item.contains('?') {
+                Some("uses a wildcard")
+            } else {
+                None
+            };
+            let kind = if tag == "ProjectReference" {
+                "project"
+            } else {
+                "package"
+            };
+            match why {
+                Some(why) => out
+                    .unsupported
+                    .push(format!("{kind} reference {item} {why}")),
+                None if tag == "ProjectReference" => out.projects.push(item.to_owned()),
+                None => out.packages.push(item.to_owned()),
             }
         }
-        out
-    };
-    (attr("<ProjectReference"), attr("<PackageReference"))
+    }
+    out
+}
+
+/// The registered source whose root most specifically contains `target`
+/// (nested source roots resolve to the innermost).
+fn containing_source<'a>(sources: &'a [SourceRecord], target: &Path) -> Option<&'a SourceRecord> {
+    sources
+        .iter()
+        .filter(|s| target.starts_with(Path::new(&s.path)))
+        .max_by_key(|s| Path::new(&s.path).components().count())
 }
 
 /// Collects the declared and discovered dependencies of `sources`.
@@ -204,26 +379,67 @@ pub fn discover(
             _ => reg.invalid.push(d.clone()),
         }
     }
+    if let Backend::Server(server) = backend {
+        // The authoritative manifests, in one scan (a lost staging cache
+        // must not hide a consumer whose dependencies were removed).
+        match server.graph_external_owners() {
+            Ok(owners) => reg.manifest_owners.extend(owners),
+            Err(e) => {
+                for s in sources {
+                    reg.incomplete
+                        .insert(s.id.clone(), format!("manifest owners unreadable: {e}"));
+                }
+            }
+        }
+    }
     for source in sources {
-        let Ok(Some(view)) = open_view(home, cfg, backend, source) else {
-            continue;
+        let mut incomplete = |why: String| {
+            reg.incomplete.entry(source.id.clone()).or_insert(why);
         };
-        let Ok(projects) = view.store.file_paths_with_suffix(&view.build, ".csproj") else {
-            continue;
+        let view = match open_view(home, cfg, backend, source) {
+            Ok(Some(v)) => v,
+            Ok(None) => continue,
+            Err(e) => {
+                incomplete(format!("published index unreadable: {}", e.message()));
+                continue;
+            }
+        };
+        match view.store.external_manifest() {
+            Ok(Some(m)) if !m.producers.is_empty() || !m.bindings.is_empty() => {
+                reg.manifest_owners.insert(source.id.clone());
+            }
+            Ok(_) => {}
+            Err(e) => incomplete(format!("manifest unreadable: {e}")),
+        }
+        let projects = match view.store.file_paths_with_suffix(&view.build, ".csproj") {
+            Ok(p) => p,
+            Err(e) => {
+                incomplete(format!("project files unreadable: {e}"));
+                continue;
+            }
         };
         for rel_path in &projects {
             let path = Path::new(&source.path).join(rel_path);
-            let Ok(text) = std::fs::read_to_string(&path) else {
-                continue;
+            let text = match std::fs::read_to_string(&path) {
+                Ok(t) => t,
+                Err(e) => {
+                    incomplete(format!("{rel_path} unreadable: {e}"));
+                    continue;
+                }
             };
-            let (projects, packages) = csproj_references(&text);
+            let refs = csproj_references(&text);
             let dir = path.parent().unwrap_or(Path::new(&source.path));
-            for r in projects {
+            for u in refs.unsupported {
+                reg.unsupported
+                    .entry(source.id.clone())
+                    .or_default()
+                    .push(format!("{rel_path}: {u}"));
+            }
+            let packages = refs.packages;
+            for r in refs.projects {
                 let target = normalize(&dir.join(r.replace('\\', "/")));
-                let producer = sources
-                    .iter()
-                    .find(|s| s.id != source.id && target.starts_with(Path::new(&s.path)));
-                match producer {
+                match containing_source(sources, &target) {
+                    Some(p) if p.id == source.id => {}
                     Some(p) => {
                         reg.edges.insert(Dependency {
                             consumer: source.id.clone(),
@@ -231,7 +447,6 @@ pub fn discover(
                             via: "project_reference",
                         });
                     }
-                    None if target.starts_with(Path::new(&source.path)) => {}
                     None => reg
                         .unsupported
                         .entry(source.id.clone())
@@ -271,10 +486,25 @@ pub enum DependencyOutcome {
         /// The producers that triggered the update.
         triggered_by: Vec<String>,
     },
-    /// Not current; retried by the next run.
-    Stale { reason: String },
+    /// Not current; retried by the next run (or a targeted retry).
+    Stale { code: &'static str, reason: String },
     /// Cannot be computed now (consumer disabled or not published yet).
-    Pending { reason: String },
+    Pending { code: &'static str, reason: String },
+}
+
+/// Reason codes of a non-current dependency outcome.
+pub mod reason {
+    pub const CONSUMER_DISABLED: &str = "consumer_disabled";
+    pub const CONSUMER_UNPUBLISHED: &str = "consumer_unpublished";
+    pub const CONSUMER_GRAPH_STALE: &str = "consumer_graph_stale";
+    pub const CONSUMER_LOCKED: &str = "consumer_locked";
+    pub const PRODUCER_DISABLED: &str = "producer_disabled";
+    pub const PRODUCER_UNPUBLISHED: &str = "producer_unpublished";
+    pub const PRODUCER_LOOKUP_FAILED: &str = "producer_lookup_failed";
+    pub const DISCOVERY_INCOMPLETE: &str = "discovery_incomplete";
+    pub const REPUBLISHED_DURING_UPDATE: &str = "republished_during_update";
+    pub const UPDATE_FAILED: &str = "update_failed";
+    pub const CATALOG_UNREADABLE: &str = "catalog_unreadable";
 }
 
 impl DependencyOutcome {
@@ -286,6 +516,31 @@ impl DependencyOutcome {
             DependencyOutcome::Pending { .. } => "pending",
         }
     }
+
+    /// The reason code of a non-current outcome.
+    pub fn code(&self) -> Option<&'static str> {
+        match self {
+            DependencyOutcome::Stale { code, .. } | DependencyOutcome::Pending { code, .. } => {
+                Some(code)
+            }
+            _ => None,
+        }
+    }
+
+    pub fn reason(&self) -> Option<&str> {
+        match self {
+            DependencyOutcome::Stale { reason, .. } | DependencyOutcome::Pending { reason, .. } => {
+                Some(reason)
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether this outcome leaves a required dependency unresolved. A
+    /// disabled consumer is not searched, so its bindings are not required.
+    pub fn unresolved(&self) -> bool {
+        self.code().is_some_and(|c| c != reason::CONSUMER_DISABLED)
+    }
 }
 
 /// Totals of one dependency stage.
@@ -296,6 +551,14 @@ pub struct DependencySummary {
     pub updated: usize,
     pub stale: usize,
     pub pending: usize,
+    /// Consumers whose required dependencies are not current after the
+    /// stage (stale, or pending for a reason other than being disabled).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unresolved: Vec<crate::indexing::StageIssue>,
+    /// The stage could not run at all (the source catalog was unreadable):
+    /// nothing is known about any consumer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skipped_discovery: Option<crate::indexing::StageIssue>,
 }
 
 impl DependencySummary {
@@ -308,36 +571,121 @@ impl DependencySummary {
             DependencyOutcome::Pending { .. } => self.pending += 1,
         }
     }
+
+    /// [`Self::add`], remembering which consumer is unresolved and why.
+    pub fn record(&mut self, consumer: &str, o: &DependencyOutcome) {
+        self.add(o);
+        if o.unresolved() {
+            self.unresolved.push(crate::indexing::StageIssue::new(
+                consumer,
+                o.code().unwrap_or(reason::UPDATE_FAILED),
+                o.reason().unwrap_or_default(),
+            ));
+        }
+    }
+
+    /// The stage was skipped: dependency discovery could not run.
+    pub fn skip(&mut self, why: &str) {
+        self.skipped_discovery = Some(crate::indexing::StageIssue::new(
+            "",
+            reason::CATALOG_UNREADABLE,
+            why,
+        ));
+    }
+
+    /// Consumers left unresolved, plus one when the stage was skipped.
+    pub fn not_current(&self) -> usize {
+        self.unresolved.len() + usize::from(self.skipped_discovery.is_some())
+    }
 }
 
-fn stale(reason: impl Into<String>) -> DependencyOutcome {
+/// Why a producer lookup failed (the storage error, never "no candidate").
+fn lookup_failed(producer: &str, e: &impl std::fmt::Display) -> String {
+    format!("lookup in producer {producer} failed (retryable): {e}")
+}
+
+fn stale(code: &'static str, reason: impl Into<String>) -> DependencyOutcome {
     DependencyOutcome::Stale {
+        code,
         reason: reason.into(),
     }
 }
 
-/// Records `m` on the consumer (and on the server, the authoritative copy).
+/// Records `m` as the next revision: in server mode on the authoritative
+/// copy first, then on the consumer's staging cache (derived; repaired from
+/// the server whenever it lags).
 fn persist(
     cfg: &docmonk_config::DocMonkConfig,
     backend: &Backend,
     consumer: &SourceRecord,
     store: &mut ProjectStore,
-    m: &ExternalManifest,
+    m: &mut ExternalManifest,
 ) -> Result<(), DocMonkError> {
-    store.put_external_manifest(m).map_err(db)?;
+    m.revision += 1;
+    m.updated_at = Some(docmonk_storage::db::now_iso());
     if let Backend::Server(server) = backend {
         let ttl = std::time::Duration::from_secs_f64(cfg.storage.server.lease_seconds);
         let lease = server
             .acquire_lease(&consumer.id, &lease_owner(), ttl)
             .map_err(server_err)?;
-        let value = serde_json::to_value(m).map_err(crate::generic)?;
+        let value = serde_json::to_value(&*m).map_err(crate::generic)?;
         let r = server
             .set_graph_external(&consumer.id, Some(&lease), &value)
             .map_err(server_err);
         let _ = server.release_lease(&lease);
         r?;
     }
+    store.put_external_manifest(m).map_err(db)?;
     Ok(())
+}
+
+/// The consumer's manifest: in server mode the authoritative copy, unless
+/// the staging cache is at least as recent (a lagging or lost cache is
+/// repaired from it).
+fn load_manifest(
+    backend: &Backend,
+    consumer: &SourceRecord,
+    store: &mut ProjectStore,
+) -> Result<ExternalManifest, DocMonkError> {
+    let cached = store.external_manifest().map_err(db)?;
+    let Backend::Server(server) = backend else {
+        return Ok(cached.unwrap_or_default());
+    };
+    let authoritative: Option<ExternalManifest> = server
+        .graph_external(&consumer.id)
+        .map_err(server_err)?
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(crate::generic)?;
+    Ok(match (cached, authoritative) {
+        (Some(c), Some(a)) if c.revision >= a.revision && a.revision > 0 => c,
+        (_, Some(a)) => {
+            store.put_external_manifest(&a).map_err(db)?;
+            a
+        }
+        (c, None) => c.unwrap_or_default(),
+    })
+}
+
+/// Test hooks for deterministic race reproductions. Not part of the API.
+#[doc(hidden)]
+pub mod test_hooks {
+    use std::sync::Mutex;
+
+    type Hook = Box<dyn Fn(&str) + Send>;
+    static BEFORE_FENCE: Mutex<Option<Hook>> = Mutex::new(None);
+
+    /// Runs `hook(consumer_id)` after bindings are computed and before the
+    /// publication fence (`None` clears it).
+    pub fn set_before_fence(hook: Option<Hook>) {
+        *BEFORE_FENCE.lock().unwrap_or_else(|e| e.into_inner()) = hook;
+    }
+
+    pub(crate) fn before_fence(consumer: &str) {
+        if let Some(h) = &*BEFORE_FENCE.lock().unwrap_or_else(|e| e.into_inner()) {
+            h(consumer);
+        }
+    }
 }
 
 /// Updates one consumer's bindings. The caller holds its lock.
@@ -351,26 +699,17 @@ fn update_consumer(
 ) -> Result<DependencyOutcome, DocMonkError> {
     if !consumer.enabled {
         return Ok(DependencyOutcome::Pending {
+            code: reason::CONSUMER_DISABLED,
             reason: "consumer source is disabled".into(),
         });
     }
     let Some(mut view) = open_view(home, cfg, backend, consumer)? else {
         return Ok(DependencyOutcome::Pending {
+            code: reason::CONSUMER_UNPUBLISHED,
             reason: "consumer has no published index on this host".into(),
         });
     };
-    let mut manifest = match view.store.external_manifest().map_err(db)? {
-        Some(m) => m,
-        None => match backend {
-            // The authoritative copy survives a lost staging cache.
-            Backend::Server(server) => server
-                .graph_external(&consumer.id)
-                .map_err(server_err)?
-                .and_then(|v| serde_json::from_value(v).ok())
-                .unwrap_or_default(),
-            Backend::Local => ExternalManifest::default(),
-        },
-    };
+    let mut manifest = load_manifest(backend, consumer, &mut view.store)?;
     manifest.unsupported = reg
         .unsupported
         .get(&consumer.id)
@@ -383,35 +722,57 @@ fn update_consumer(
         if manifest.state != "stale" {
             manifest.state = "stale".into();
             manifest.reason = Some("the consumer's own graph is not current".into());
-            persist(cfg, backend, consumer, &mut view.store, &manifest)?;
+            persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
         }
-        return Ok(stale("the consumer's own graph is not current"));
+        return Ok(stale(
+            reason::CONSUMER_GRAPH_STALE,
+            "the consumer's own graph is not current",
+        ));
     }
     let graph_generation = view.store.graph_state().map_err(db)?.generation;
 
     // Producers in scope, each opened at its current published base.
-    let mut producers: BTreeMap<String, (View, &'static str)> = BTreeMap::new();
+    let mut producers: BTreeMap<String, (Producer, &'static str)> = BTreeMap::new();
     for d in reg.producers_of(&consumer.id) {
         let unavailable = |why: &str| format!("producer {} {why}", d.producer);
         let Some(p) = sources.iter().find(|s| s.id == d.producer) else {
             continue;
         };
         let reason = if !p.enabled {
-            Some(unavailable("is disabled"))
+            Some((reason::PRODUCER_DISABLED, unavailable("is disabled")))
         } else {
-            match open_view(home, cfg, backend, p)? {
+            match open_producer(home, cfg, backend, p)? {
                 Some(v) => {
                     producers.insert(p.id.clone(), (v, d.via));
                     None
                 }
-                None => Some(unavailable("has no published index on this host")),
+                None => Some((
+                    reason::PRODUCER_UNPUBLISHED,
+                    unavailable("has no published index"),
+                )),
             }
         };
-        if let Some(reason) = reason {
+        if let Some((code, reason)) = reason {
             manifest.state = "stale".into();
             manifest.reason = Some(reason.clone());
-            persist(cfg, backend, consumer, &mut view.store, &manifest)?;
-            return Ok(stale(reason));
+            persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+            return Ok(stale(code, reason));
+        }
+    }
+
+    // A dependency missing because discovery could not complete is
+    // unknown, not removed: keep the last bindings.
+    if let Some(why) = reg.incomplete.get(&consumer.id) {
+        if manifest
+            .producers
+            .keys()
+            .any(|p| !producers.contains_key(p))
+        {
+            let reason = format!("dependency discovery incomplete: {why}");
+            manifest.state = "stale".into();
+            manifest.reason = Some(reason.clone());
+            persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+            return Ok(stale(reason::DISCOVERY_INCOMPLETE, reason));
         }
     }
 
@@ -430,13 +791,25 @@ fn update_consumer(
             if manifest.producers[id].base_generation == p.generation {
                 continue;
             }
-            for (key, fp) in manifest.lookups.get(id).into_iter().flatten() {
+            let keys = manifest.lookups.get(id).cloned().unwrap_or_default();
+            let names: Vec<&str> = keys
+                .keys()
+                .map(|k| k.strip_prefix("q:").unwrap_or(k))
+                .collect();
+            let found = match p.lookup(&names) {
+                Ok(found) => found,
+                Err(e) => {
+                    let reason = lookup_failed(id, &e);
+                    manifest.state = "stale".into();
+                    manifest.reason = Some(reason.clone());
+                    persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+                    return Ok(stale(reason::PRODUCER_LOOKUP_FAILED, reason));
+                }
+            };
+            for (key, fp) in &keys {
                 let qn = key.strip_prefix("q:").unwrap_or(key);
-                let rows = p
-                    .store
-                    .entities_by_qualified_name(&p.build, qn)
-                    .map_err(db)?;
-                if candidates_fingerprint(&rows) != *fp {
+                let rows = found.get(qn).map(Vec::as_slice).unwrap_or_default();
+                if candidates_fingerprint(rows) != *fp {
                     changed.insert(key.clone());
                     triggered_by.insert(id.clone());
                 }
@@ -455,7 +828,9 @@ fn update_consumer(
                 }
             }
             if moved {
-                view.store.put_external_manifest(&manifest).map_err(db)?;
+                // Through the authoritative path: the server must never lag
+                // the staging cache.
+                persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
             }
             return Ok(DependencyOutcome::Current);
         }
@@ -470,7 +845,7 @@ fn update_consumer(
         "dependency inputs changed ({})",
         triggered_by.iter().cloned().collect::<Vec<_>>().join(", ")
     ));
-    persist(cfg, backend, consumer, &mut view.store, &manifest)?;
+    persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
 
     let refs: Vec<_> = view
         .store
@@ -496,17 +871,38 @@ fn update_consumer(
             .map(|b| (b.relationship_id.clone(), b.clone()))
             .collect()
     };
-    let mut cache: BTreeMap<(String, String), Vec<docmonk_storage::knowledge::EntityRow>> =
-        BTreeMap::new();
+    // One batched lookup per producer over every distinct name. A failed
+    // lookup is never "no candidate": the consumer keeps its last bindings
+    // (persisted above), marked stale.
+    let names: Vec<&str> = refs
+        .iter()
+        .map(|(t, _)| t.as_str())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let mut candidates: BTreeMap<&str, Candidates> = BTreeMap::new();
+    for (id, (p, _)) in &producers {
+        match p.lookup(&names) {
+            Ok(found) => {
+                candidates.insert(id.as_str(), found);
+            }
+            Err(e) => {
+                let reason = lookup_failed(id, &e);
+                tracing::warn!(component = "relationships", event = "producer_lookup_failed", source_id = %consumer.id, producer = %id, retryable = true, error = %e);
+                manifest.reason = Some(reason.clone());
+                persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+                return Ok(stale(reason::PRODUCER_LOOKUP_FAILED, reason));
+            }
+        }
+    }
     for (text, r) in &refs {
         let key = qualified_key(text);
         let mut found: Vec<(String, String)> = Vec::new();
-        for (id, (p, _)) in &producers {
-            let rows = cache.entry((id.clone(), text.clone())).or_insert_with(|| {
-                p.store
-                    .entities_by_qualified_name(&p.build, text)
-                    .unwrap_or_default()
-            });
+        for id in producers.keys() {
+            let rows = candidates[id.as_str()]
+                .get(text.as_str())
+                .map(Vec::as_slice)
+                .unwrap_or_default();
             lookups
                 .entry(id.clone())
                 .or_default()
@@ -524,6 +920,7 @@ fn update_consumer(
                 relationship_id: r.id.clone(),
                 file_id: r.file_id.clone(),
                 reference_text: text.clone(),
+                target_symbol: r.target_symbol.clone(),
                 producer: single.as_ref().map(|(p, _)| p.clone()),
                 target_entity_id: single.map(|(_, e)| e),
                 ambiguous: found.len() > 1,
@@ -531,15 +928,36 @@ fn update_consumer(
         );
     }
 
-    // Fence: every producer must still be at the snapshot read above.
+    test_hooks::before_fence(&consumer.id);
+    // Fence: the consumer and every producer must still be at the snapshot
+    // read above, judged by the authoritative active build (an old build
+    // that is still stored is not enough).
+    let mut moved = None;
+    if active_build(home, backend, consumer)?.as_deref() != Some(view.active.as_str())
+        || view.store.graph_state().map_err(db)?.generation != graph_generation
+    {
+        moved = Some("the consumer was reindexed during the update".to_owned());
+    }
     for (id, (p, _)) in &producers {
-        let now = p.store.base_generation(&p.build).map_err(db)?;
-        if now.as_deref() != Some(p.generation.as_str()) {
-            let reason = format!("producer {id} was republished during the update");
-            manifest.reason = Some(reason.clone());
-            persist(cfg, backend, consumer, &mut view.store, &manifest)?;
-            return Ok(stale(reason));
+        if moved.is_some() {
+            break;
         }
+        let source = sources.iter().find(|s| &s.id == id);
+        let active = match source {
+            Some(s) => active_build(home, backend, s)?,
+            None => None,
+        };
+        let now = p.generation_now()?;
+        if active.as_deref() != Some(p.active.as_str())
+            || now.as_deref() != Some(p.generation.as_str())
+        {
+            moved = Some(format!("producer {id} was republished during the update"));
+        }
+    }
+    if let Some(reason) = moved {
+        manifest.reason = Some(reason.clone());
+        persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+        return Ok(stale(reason::REPUBLISHED_DURING_UPDATE, reason));
     }
     let bound = bindings
         .values()
@@ -549,6 +967,10 @@ fn update_consumer(
         state: "current".into(),
         reason: None,
         consumer_generation: graph_generation,
+        consumer_base_generation: match backend {
+            Backend::Local => view.generation.clone(),
+            Backend::Server(_) => format!("server:{}", view.active),
+        },
         producers: producers
             .iter()
             .map(|(id, (p, via))| {
@@ -565,8 +987,9 @@ fn update_consumer(
         bindings: bindings.into_values().collect(),
         unsupported: manifest.unsupported,
         updated_at: None,
+        revision: manifest.revision,
     };
-    persist(cfg, backend, consumer, &mut view.store, &manifest)?;
+    persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
     Ok(DependencyOutcome::Updated {
         full,
         keys_changed: changed.len(),
@@ -599,19 +1022,55 @@ pub fn run_stage_holding(
     sources: &[SourceRecord],
     lock_timeout: std::time::Duration,
     held: Option<&str>,
+    on_outcome: impl FnMut(&SourceRecord, DependencyOutcome),
+) {
+    run_stage_for(
+        home,
+        cfg,
+        backend,
+        sources,
+        lock_timeout,
+        held,
+        None,
+        on_outcome,
+    )
+}
+
+/// The dependency stage, limited to the consumers in `only` when given (a
+/// targeted retry). Every outcome is recorded in the retry book.
+#[allow(clippy::too_many_arguments)]
+fn run_stage_for(
+    home: &Home,
+    cfg: &docmonk_config::DocMonkConfig,
+    backend: &Backend,
+    sources: &[SourceRecord],
+    lock_timeout: std::time::Duration,
+    held: Option<&str>,
+    only: Option<&BTreeSet<String>>,
     mut on_outcome: impl FnMut(&SourceRecord, DependencyOutcome),
 ) {
     let reg = discover(home, cfg, backend, sources);
     for d in &reg.invalid {
         tracing::warn!(component = "relationships", event = "dependency_ignored", declaration = %d);
     }
-    for consumer_id in reg.consumers() {
+    let mut book = RetryBook::load(home);
+    let now = chrono::Utc::now();
+    let candidates = reg.refresh_candidates();
+    if only.is_none() {
+        // A consumer with no dependency left has nothing to retry.
+        book.retain(|id| candidates.contains(id));
+    }
+    for consumer_id in candidates {
+        if only.is_some_and(|o| !o.contains(consumer_id)) {
+            continue;
+        }
         let Some(consumer) = sources.iter().find(|s| s.id == consumer_id) else {
+            book.clear(consumer_id);
             continue;
         };
         let update = || {
             update_consumer(home, cfg, backend, &reg, sources, consumer)
-                .unwrap_or_else(|e| stale(e.message().to_owned()))
+                .unwrap_or_else(|e| stale(reason::UPDATE_FAILED, e.message().to_owned()))
         };
         let outcome = if held == Some(consumer.id.as_str()) {
             update()
@@ -622,7 +1081,10 @@ pub fn run_stage_holding(
                 Some(&consumer.id),
                 lock_timeout,
             ) {
-                Err(e) => stale(format!("consumer is locked: {}", e.message())),
+                Err(e) => stale(
+                    reason::CONSUMER_LOCKED,
+                    format!("consumer is locked: {}", e.message()),
+                ),
                 Ok(lock) => {
                     let o = update();
                     lock.release();
@@ -634,10 +1096,56 @@ pub fn run_stage_holding(
             outcome,
             DependencyOutcome::Stale { .. } | DependencyOutcome::Pending { .. }
         ) {
-            tracing::warn!(component = "relationships", event = "dependencies_not_current", source_id = %consumer.id, state = outcome.state());
+            tracing::warn!(component = "relationships", event = "dependencies_not_current", source_id = %consumer.id, state = outcome.state(), reason_code = outcome.code().unwrap_or_default());
+        }
+        if outcome.unresolved() {
+            book.failed(
+                &consumer.id,
+                outcome.code().unwrap_or(reason::UPDATE_FAILED),
+                outcome.reason().unwrap_or_default(),
+                now,
+            );
+        } else {
+            book.clear(&consumer.id);
         }
         on_outcome(consumer, outcome);
     }
+    if let Err(e) = book.save(home) {
+        tracing::warn!(component = "relationships", event = "dependency_retries_not_saved", error = %e);
+    }
+}
+
+/// Retries the consumers whose retry is due (targeted: no base index or
+/// source graph is rebuilt). `None` when nothing was due.
+pub fn retry_due(
+    home: &Home,
+    cfg: &docmonk_config::DocMonkConfig,
+    backend: &Backend,
+    lock_timeout: std::time::Duration,
+    mut on_outcome: impl FnMut(&SourceRecord, &DependencyOutcome),
+) -> Option<DependencySummary> {
+    let due = RetryBook::load(home).due(chrono::Utc::now());
+    if due.is_empty() {
+        return None;
+    }
+    let mut summary = DependencySummary::default();
+    match crate::sources::catalog(home).and_then(|c| c.list(false)) {
+        Ok(all) => run_stage_for(
+            home,
+            cfg,
+            backend,
+            &all,
+            lock_timeout,
+            None,
+            Some(&due),
+            |s, o| {
+                summary.record(&s.id, &o);
+                on_outcome(s, &o);
+            },
+        ),
+        Err(e) => summary.skip(e.message()),
+    }
+    Some(summary)
 }
 
 /// `docmonk`-level helper: the dependency stage over the whole catalog.
@@ -651,7 +1159,7 @@ pub fn refresh(
     let opts = docmonk_indexing::coordinator::Options::from_config(&cfg);
     let mut summary = DependencySummary::default();
     run_stage(home, &cfg, &backend, &sources, opts.lock_timeout, |s, o| {
-        summary.add(&o);
+        summary.record(&s.id, &o);
         on_outcome(s, &o);
     });
     Ok(summary)
@@ -663,17 +1171,83 @@ mod tests {
 
     #[test]
     fn csproj_project_and_package_references_are_parsed() {
-        let (p, k) = csproj_references(
+        let r = csproj_references(
             r#"<Project><ItemGroup>
                 <ProjectReference Include="..\Lib\Lib.csproj" />
                 <PackageReference Include="Newtonsoft.Json" Version="13" />
             </ItemGroup></Project>"#,
         );
-        assert_eq!(p, vec![r"..\Lib\Lib.csproj".to_owned()]);
-        assert_eq!(k, vec!["Newtonsoft.Json".to_owned()]);
+        assert_eq!(r.projects, vec![r"..\Lib\Lib.csproj".to_owned()]);
+        assert_eq!(r.packages, vec!["Newtonsoft.Json".to_owned()]);
+        assert!(r.unsupported.is_empty());
         assert_eq!(
             normalize(Path::new("/r/a/../b/./c.csproj")),
             PathBuf::from("/r/b/c.csproj")
+        );
+    }
+
+    #[test]
+    fn f14_csproj_parsing_is_xml_aware_and_never_guesses() {
+        let r = csproj_references(
+            r#"<?xml version="1.0"?>
+<Project Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- <ProjectReference Include="..\Commented\Out.csproj" /> -->
+  <Import Project="$(MSBuildThisFileDirectory)shared.props" />
+  <ItemGroup>
+    <ProjectReference Include='..\Single\Single.csproj' />
+    <ProjectReference
+        Include="..\Multi\Multi.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\A\A.csproj;..\B\B.csproj" />
+    <ProjectReference Include="$(Root)\Prop.csproj" />
+    <ProjectReference Include="..\Glob\*.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <ProjectReference Include="..\Debug\Debug.csproj" />
+  </ItemGroup>
+</Project>"#,
+        );
+        assert_eq!(
+            r.projects,
+            [
+                r"..\Single\Single.csproj",
+                r"..\Multi\Multi.csproj",
+                r"..\A\A.csproj",
+                r"..\B\B.csproj"
+            ]
+        );
+        assert!(!r.projects.iter().any(|p| p.contains("Commented")));
+        let u = r.unsupported.join("\n");
+        for want in [
+            "shared.props",
+            "Prop.csproj",
+            "Glob",
+            "Debug.csproj is conditional",
+        ] {
+            assert!(u.contains(want), "{want}: {u}");
+        }
+        assert_eq!(csproj_references("<Project").unsupported.len(), 1);
+    }
+
+    #[test]
+    fn nested_source_roots_resolve_to_the_innermost() {
+        let rec = |id: &str, path: &str| SourceRecord {
+            id: id.into(),
+            path: path.into(),
+            source_type: docmonk_core::models::SourceType::Local,
+            enabled: true,
+            include_patterns: vec![],
+            exclude_patterns: vec![],
+            created_at: String::new(),
+            updated_at: String::new(),
+        };
+        let sources = [rec("outer", "/r"), rec("inner", "/r/lib")];
+        let hit = containing_source(&sources, Path::new("/r/lib/L.csproj")).unwrap();
+        assert_eq!(hit.id, "inner");
+        assert_eq!(
+            containing_source(&sources, Path::new("/x/y")).map(|s| &s.id),
+            None
         );
     }
 }

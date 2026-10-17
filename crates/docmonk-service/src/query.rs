@@ -399,6 +399,12 @@ pub fn edge_json(e: &TraversalEdge, opened: &[Opened]) -> Value {
             (_, l) => l.clone(),
         },
         "evidence": r.evidence,
+        "external": e.external.as_ref().map(|h| json!({
+            "consumer_source_id": h.consumer_source_id,
+            "producer_source_id": h.producer_source_id,
+            "target_entity_id": h.target_entity_id,
+            "binding_state": "current",
+        })),
     })
 }
 
@@ -876,13 +882,16 @@ pub fn run_search(
             let lazy = lazy_embedder(home, cfg);
             let embedder = lazy.get().ok().map(|a| a.as_ref());
             let model_load_ms = started.elapsed().as_secs_f64() * 1000.0;
-            let s = hybrid::semantic_search_with(
+            // Hard filters restrict candidate generation (F06): in-scope
+            // hits are never truncated away by out-of-scope ones.
+            let s = hybrid::semantic_search_filtered(
                 corp,
                 embedder,
                 req.query,
                 req.limit,
                 Some(sc.semantic_top_k.max(1) as usize),
                 ann_params(cfg),
+                f,
             )
             .map_err(search_err)?;
             Ok((s, model_load_ms, started.elapsed().as_secs_f64() * 1000.0))
@@ -908,7 +917,9 @@ pub fn run_search(
     };
     let (lexical_out, early_semantic) = match sync {
         Some(stores) if sc.semantic && !sc.lazy_semantic => std::thread::scope(|scope| {
+            let token = docmonk_core::deadline::current();
             let sem = scope.spawn(move || {
+                let _deadline = token.as_ref().map(docmonk_core::deadline::Token::enter);
                 let corp: Vec<Corpus<'_>> = stores
                     .iter()
                     .map(|(store, build_id)| Corpus {

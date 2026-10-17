@@ -23,6 +23,7 @@ docmonk-retrieval.workspace = true
 docmonk-status.workspace = true
 docmonk-storage.workspace = true
 docmonk-telemetry.workspace = true
+roxmltree.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

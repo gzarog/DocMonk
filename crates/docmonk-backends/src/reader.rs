@@ -38,6 +38,9 @@ pub struct ServerReader {
     /// `base build -> (served graph generation, stale)`, resolved once per
     /// reader (one request's snapshot).
     graph: std::sync::Mutex<std::collections::HashMap<String, Option<(String, bool)>>>,
+    /// `build or graph generation id -> visibility filter`, resolved once
+    /// per reader (one request's snapshot).
+    scopes: std::sync::Mutex<std::collections::HashMap<String, Value>>,
     /// `graph.require_current`.
     require_current: bool,
     /// While recording ([`ServerReader::prefetch`]), searches are collected
@@ -54,6 +57,7 @@ impl ServerReader {
             backend,
             source_id: source_id.to_owned(),
             graph: Default::default(),
+            scopes: Default::default(),
             require_current: false,
             recording: Default::default(),
             prefetched: Default::default(),
@@ -98,11 +102,25 @@ impl ServerReader {
         ))
     }
 
-    fn scope(&self, build_id: &str) -> Vec<Value> {
-        vec![
+    /// The records build (or graph generation) `id` sees: its
+    /// generation's visibility filter ([`crate::generations`]).
+    fn scope(&self, id: &str) -> Result<Vec<Value>> {
+        let mut cache = self.scopes.lock().unwrap_or_else(|p| p.into_inner());
+        let scope = match cache.get(id) {
+            Some(s) => s.clone(),
+            None => {
+                let s = self
+                    .backend
+                    .scope_of(&self.source_id, id)
+                    .map_err(Self::err)?;
+                cache.insert(id.to_owned(), s.clone());
+                s
+            }
+        };
+        Ok(vec![
             json!({ "term": { "source_id": self.source_id } }),
-            json!({ "term": { "build_id": build_id } }),
-        ]
+            scope,
+        ])
     }
 
     /// Runs `calls` against this reader in recording mode, then answers
@@ -189,7 +207,7 @@ impl ServerReader {
         sort: Value,
         size: usize,
     ) -> Result<Vec<Value>> {
-        let mut f = self.scope(build_id);
+        let mut f = self.scope(build_id)?;
         f.append(&mut filter);
         let mut query = json!({ "bool": { "filter": f } });
         if let Some(m) = must {
@@ -503,14 +521,16 @@ impl ServerReader {
     /// Automatic links of build `b` and the source's manual links.
     pub fn links(&self, b: &str) -> Result<Vec<ServerLink>> {
         // Without a visible graph only manual links are listed.
-        let g = self.graph_generation(b)?.unwrap_or_default();
-        let b = g.as_str();
+        let auto = match self.graph_generation(b)? {
+            Some(g) => self.scope(&g)?.pop().unwrap_or(json!({ "match_none": {} })),
+            None => json!({ "match_none": {} }),
+        };
         let body = json!({
             "size": MAX_READ,
             "query": { "bool": { "filter": [
                 { "term": { "source_id": self.source_id } },
                 { "bool": { "should": [
-                    { "bool": { "filter": [ { "term": { "build_id": b } }, { "term": { "record_kind": "link" } } ] } },
+                    { "bool": { "filter": [ auto, { "term": { "record_kind": "link" } } ] } },
                     { "bool": { "filter": [ { "term": { "build_id": MANUAL_BUILD } }, { "term": { "record_kind": MANUAL_LINK } } ] } },
                 ], "minimum_should_match": 1 } },
             ] } },
@@ -538,6 +558,41 @@ impl ServerReader {
     }
 
     /// Entities whose short name is exactly `name`.
+    /// Entities of build `b` whose qualified name is exactly one of
+    /// `names`, by name, in resolution order (`file_id`, `start_line`,
+    /// `entity_id`, as the local store). Requests are batched and bounded;
+    /// a batch reaching the read cap is an error, never a silent truncation.
+    pub fn entities_by_qualified_names(
+        &self,
+        b: &str,
+        names: &[&str],
+    ) -> Result<std::collections::HashMap<String, Vec<EntityRow>>> {
+        const BATCH: usize = 256;
+        let mut out: std::collections::HashMap<String, Vec<EntityRow>> =
+            std::collections::HashMap::new();
+        for chunk in names.chunks(BATCH) {
+            let hits = self.find(
+                IndexKind::Code,
+                b,
+                vec![json!({ "terms": { "qualified_name.raw": chunk } })],
+                None,
+                json!([{ "file_id": "asc" }, { "start_line": "asc" }, { "entity_id": "asc" }]),
+                MAX_READ,
+            )?;
+            if hits.len() >= MAX_READ {
+                return Err(StorageError::Backend(format!(
+                    "qualified-name lookup of {} name(s) reached the {MAX_READ} read cap",
+                    chunk.len()
+                )));
+            }
+            for h in &hits {
+                let e = entity_row(&h["_source"]);
+                out.entry(e.qualified_name.clone()).or_default().push(e);
+            }
+        }
+        Ok(out)
+    }
+
     pub fn entities_named(&self, b: &str, name: &str) -> Result<Vec<EntityRow>> {
         Ok(self
             .find(
@@ -614,7 +669,7 @@ impl ServerReader {
         filter: Vec<Value>,
         id_field: &str,
     ) -> Result<Vec<Value>> {
-        let mut f = self.scope(b);
+        let mut f = self.scope(b)?;
         f.extend(filter);
         let mut out = Vec::new();
         let mut after: Option<Value> = None;
@@ -755,7 +810,7 @@ impl ServerReader {
                     &format!("/{}/_search", self.backend.index(IndexKind::Chunks)),
                     &json!({
                         "size": 0,
-                        "query": { "bool": { "filter": self.scope(b) } },
+                        "query": { "bool": { "filter": self.scope(b)? } },
                         "aggs": { "c": { "composite": composite } },
                     }),
                 )
@@ -1044,6 +1099,24 @@ impl KnowledgeRead for ServerReader {
         Ok(out)
     }
 
+    fn external_manifest(&self) -> Result<Option<docmonk_storage::graph::ExternalManifest>> {
+        let Some(v) = self
+            .backend
+            .graph_external(&self.source_id)
+            .map_err(|e| StorageError::Backend(e.to_string()))?
+        else {
+            return Ok(None);
+        };
+        serde_json::from_value(v)
+            .map(Some)
+            .map_err(|e| StorageError::Invalid(format!("dependency manifest: {e}")))
+    }
+
+    fn dependency_generation(&self, b: &str) -> Result<Option<String>> {
+        // Server builds are immutable: the build id is the generation.
+        Ok(Some(format!("server:{b}")))
+    }
+
     fn graph_freshness(&self, b: &str) -> Result<docmonk_storage::read::GraphFreshness> {
         let g = self.served_graph(b)?;
         let stale = g.as_ref().is_some_and(|(_, s)| *s);
@@ -1205,7 +1278,7 @@ impl KnowledgeRead for ServerReader {
         else {
             return Ok(Vec::new());
         };
-        let mut f = self.scope(b);
+        let mut f = self.scope(b)?;
         f.extend(path_filter(filter));
         if !filter.document_ids.is_empty() {
             f.push(json!({ "terms": { "document_id": filter.document_ids } }));
@@ -1404,6 +1477,10 @@ impl KnowledgeRead for ServerReader {
         let Some(graph) = self.graph_generation(b)? else {
             return Ok(Vec::new());
         };
+        let auto = self
+            .scope(&graph)?
+            .pop()
+            .unwrap_or(json!({ "match_none": {} }));
         let path = format!("/{}/_search", self.backend.index(IndexKind::Relationships));
         let body = json!({
             "size": MAX_READ,
@@ -1411,7 +1488,7 @@ impl KnowledgeRead for ServerReader {
                 { "term": { "source_id": self.source_id } },
                 { "term": { "entity_id": entity_id } },
                 { "bool": { "should": [
-                    { "bool": { "filter": [ { "term": { "build_id": graph } }, { "term": { "record_kind": "link" } } ] } },
+                    { "bool": { "filter": [ auto, { "term": { "record_kind": "link" } } ] } },
                     { "bool": { "filter": [ { "term": { "build_id": MANUAL_BUILD } }, { "term": { "record_kind": MANUAL_LINK } } ] } },
                 ], "minimum_should_match": 1 } },
             ] } },
@@ -1583,7 +1660,7 @@ impl KnowledgeRead for ServerReader {
         if k == 0 {
             return Ok(Some(Vec::new()));
         }
-        let mut filter = self.scope(b);
+        let mut filter = self.scope(b)?;
         filter.push(json!({ "term": { "embedding_fingerprint": fingerprint } }));
         let mut out = Vec::new();
         for (kind, subject, id_field) in [

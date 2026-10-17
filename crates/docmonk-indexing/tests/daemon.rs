@@ -392,22 +392,25 @@ fn check_watched(network: bool, reason: &str) {
     // Let the watcher settle before changing the tree.
     std::thread::sleep(Duration::from_millis(300));
     common::write(&root, "b.py", "B = 2\n");
+    // Some platforms (macOS FSEvents) deliver events late and coalesced, so
+    // an earlier write (the initial a.py) may trigger a watcher pass of its
+    // own first: wait for the pass that carries b.py.
+    let has_b =
+        |r: &ScanRequest| r.reason == reason && r.changed_paths.iter().any(|p| p.ends_with("b.py"));
     assert!(
-        wait_until(|| log.lock().unwrap().iter().any(|r| r.reason == reason)),
+        wait_until(|| log.lock().unwrap().iter().any(has_b)),
         "{reason}: {:?}",
         log.lock().unwrap()
     );
     assert!(d.wait_idle(Duration::from_secs(10)));
     d.stop();
-    let req = log
-        .lock()
-        .unwrap()
-        .iter()
-        .find(|r| r.reason == reason)
-        .cloned()
-        .unwrap();
-    assert!(!req.full, "a watcher pass is targeted");
-    assert!(req.changed_paths.iter().any(|p| p.ends_with("b.py")));
+    {
+        let log = log.lock().unwrap();
+        assert!(
+            log.iter().filter(|r| r.reason == reason).all(|r| !r.full),
+            "every watcher pass is targeted: {log:?}"
+        );
+    }
     let cp = common::control(&home);
     let active = cp.state(&src.id).unwrap().active_build_id.unwrap();
     let store = docmonk_storage::knowledge::ProjectStore::open(

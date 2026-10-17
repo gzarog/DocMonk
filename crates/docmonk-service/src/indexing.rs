@@ -96,26 +96,125 @@ pub struct RunSummary {
     pub relationships: crate::relationships::StageSummary,
     /// Cross-source dependency stage totals.
     pub dependencies: crate::dependencies::DependencySummary,
+    /// Sources whose index pass failed or was blocked.
+    pub index_issues: Vec<StageIssue>,
+    /// Sources whose relationship graph is not current after the run.
+    pub graph_issues: Vec<StageIssue>,
+}
+
+/// Why one source did not complete a stage.
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StageIssue {
+    /// Empty for a stage-wide issue (e.g. discovery could not run).
+    pub source_id: String,
+    /// Stable reason code (`blocked`, `failed`, `stale`, `consumer_locked`...).
+    pub code: String,
+    pub reason: String,
+    /// When it was observed (RFC 3339, UTC).
+    pub at: String,
+}
+
+impl StageIssue {
+    pub fn new(source_id: &str, code: &str, reason: &str) -> Self {
+        StageIssue {
+            source_id: source_id.to_owned(),
+            code: code.to_owned(),
+            reason: docmonk_telemetry::redact::redact_urls_in_text(reason),
+            at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        }
+    }
+}
+
+/// One stage of a run: `current`, `not_current`, `failed`, `skipped` or
+/// `disabled`, with the sources that did not complete it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct StageReport {
+    pub stage: &'static str,
+    pub state: &'static str,
+    /// Whether the run's `success` requires this stage to be current.
+    pub required: bool,
+    pub issues: Vec<StageIssue>,
 }
 
 impl RunSummary {
-    /// `success`, `partial_success` (every index published, some
-    /// relationship graph not) or `failed` (an indexing failure).
+    /// `success` (every required stage current), `partial_success` (every
+    /// index published and searchable, but a source graph or a required
+    /// cross-source dependency is stale, pending, blocked, or dependency
+    /// discovery was skipped) or `failed` (an indexing failure).
     pub fn outcome(&self) -> &'static str {
         if self.failed_sources > 0 || self.failed_files > 0 {
             "failed"
-        } else if self.relationships.not_current() > 0 {
+        } else if self.relationships.not_current() > 0 || self.dependencies.not_current() > 0 {
             "partial_success"
         } else {
             "success"
         }
     }
 
-    /// An `IndexingPartialFailure` error when anything failed. Indexing
-    /// failures and relationship failures are reported separately.
+    /// The run's stages, in order: `indexed`, `source_graphs`,
+    /// `cross_source_dependencies`, `dependency_discovery`.
+    pub fn stages(&self) -> Vec<StageReport> {
+        let enabled = self.relationships_enabled;
+        let derived = |issues: &[StageIssue]| {
+            if !enabled {
+                "disabled"
+            } else if issues.is_empty() {
+                "current"
+            } else {
+                "not_current"
+            }
+        };
+        let skipped = self.dependencies.skipped_discovery.clone();
+        vec![
+            StageReport {
+                stage: "indexed",
+                state: if self.failed_sources > 0 || self.failed_files > 0 {
+                    "failed"
+                } else {
+                    "current"
+                },
+                required: true,
+                issues: self.index_issues.clone(),
+            },
+            StageReport {
+                stage: "source_graphs",
+                state: derived(&self.graph_issues),
+                required: enabled,
+                issues: self.graph_issues.clone(),
+            },
+            StageReport {
+                stage: "cross_source_dependencies",
+                state: if skipped.is_some() && enabled {
+                    "skipped"
+                } else {
+                    derived(&self.dependencies.unresolved)
+                },
+                required: enabled,
+                issues: self.dependencies.unresolved.clone(),
+            },
+            StageReport {
+                stage: "dependency_discovery",
+                state: match (&skipped, enabled) {
+                    (_, false) => "disabled",
+                    (Some(_), true) => "skipped",
+                    (None, true) => "current",
+                },
+                required: enabled,
+                issues: skipped.into_iter().collect(),
+            },
+        ]
+    }
+
+    /// An `IndexingPartialFailure` error when anything is not current.
+    /// A fatal indexing failure and a retryable derived-stage failure keep
+    /// their root cause apart: the latter is classed
+    /// `DerivedStagesIncomplete` (the index is published and searchable).
     pub fn into_result(self) -> Result<Self, DocMonkError> {
         let graph = self.relationships.not_current();
-        if self.failed_sources == 0 && self.failed_files == 0 && graph == 0 {
+        let deps = self.dependencies.unresolved.len();
+        let skipped = self.dependencies.skipped_discovery.as_ref();
+        let indexing = self.failed_sources > 0 || self.failed_files > 0;
+        if !indexing && graph == 0 && deps == 0 && skipped.is_none() {
             return Ok(self);
         }
         let mut parts = Vec::new();
@@ -130,10 +229,33 @@ impl RunSummary {
                 "relationships were not published for {graph} source(s) (their index is published and searchable; retry with 'docmonk relationships build')"
             ));
         }
-        Err(DocMonkError::new(
+        if deps > 0 {
+            let ids: Vec<&str> = self
+                .dependencies
+                .unresolved
+                .iter()
+                .map(|i| i.source_id.as_str())
+                .collect();
+            parts.push(format!(
+                "cross-source dependencies are not current for {deps} source(s) ({}); they are retried automatically, or run 'docmonk relationships build'",
+                ids.join(", ")
+            ));
+        }
+        if let Some(s) = skipped {
+            parts.push(format!(
+                "dependency discovery was skipped ({}); cross-source dependencies were not checked",
+                s.reason
+            ));
+        }
+        let err = DocMonkError::new(
             ErrorKind::IndexingPartialFailure,
-            format!("{}; see 'docmonk doctor' for details", parts.join("; ")),
-        ))
+            format!("{}; see 'docmonk status' for details", parts.join("; ")),
+        );
+        Err(if indexing {
+            err
+        } else {
+            err.with_class("DerivedStagesIncomplete")
+        })
     }
 }
 
@@ -373,6 +495,9 @@ pub fn index_sources_with(
                     Outcome::Started => on_event(SourceEvent::Started { source }),
                     Outcome::Relationships(outcome) => {
                         summary.relationships.add(&outcome);
+                        if let Some(issue) = graph_issue(&source.id, &outcome) {
+                            summary.graph_issues.push(issue);
+                        }
                         on_event(SourceEvent::Relationships {
                             source,
                             outcome: &outcome,
@@ -380,6 +505,11 @@ pub fn index_sources_with(
                     }
                     Outcome::Blocked(error) => {
                         summary.failed_sources += 1;
+                        summary.index_issues.push(StageIssue::new(
+                            &source.id,
+                            "blocked",
+                            error.message(),
+                        ));
                         on_event(SourceEvent::Blocked {
                             source,
                             error: &error,
@@ -387,6 +517,11 @@ pub fn index_sources_with(
                     }
                     Outcome::Failed(error) => {
                         summary.failed_sources += 1;
+                        summary.index_issues.push(StageIssue::new(
+                            &source.id,
+                            "failed",
+                            error.message(),
+                        ));
                         tracing::warn!(component = "indexing", event = "source_failed", run_id = %summary.run_id, source_id = %source.id, error = %docmonk_telemetry::redact::redact_urls_in_text(error.message()));
                         on_event(SourceEvent::Failed {
                             source,
@@ -438,6 +573,9 @@ pub fn index_sources_with(
                     Some(tracker),
                     |source, outcome| {
                         summary.relationships.add(&outcome);
+                        if let Some(issue) = graph_issue(&source.id, &outcome) {
+                            summary.graph_issues.push(issue);
+                        }
                         on_event(SourceEvent::Relationships {
                             source,
                             outcome: &outcome,
@@ -447,6 +585,7 @@ pub fn index_sources_with(
             }
             // Stage 3: consumers of this run's sources (selected or not)
             // are updated against their existing published bases.
+            tracker.set_phase("dependencies");
             match crate::sources::catalog(home).and_then(|c| c.list(false)) {
                 Ok(all) => crate::dependencies::run_stage(
                     home,
@@ -455,7 +594,7 @@ pub fn index_sources_with(
                     &all,
                     opts.lock_timeout,
                     |source, outcome| {
-                        summary.dependencies.add(&outcome);
+                        summary.dependencies.record(&source.id, &outcome);
                         on_event(SourceEvent::Dependencies {
                             source,
                             outcome: &outcome,
@@ -463,7 +602,8 @@ pub fn index_sources_with(
                     },
                 ),
                 Err(e) => {
-                    tracing::warn!(component = "relationships", event = "dependencies_skipped", error = %e.message())
+                    tracing::warn!(component = "relationships", event = "dependencies_skipped", error = %e.message());
+                    summary.dependencies.skip(e.message());
                 }
             }
         } else {
@@ -480,6 +620,23 @@ pub fn index_sources_with(
         Ok::<(), DocMonkError>(())
     })?;
     Ok(summary)
+}
+
+/// The issue of a source graph left not current (`None` when current or
+/// deliberately skipped).
+pub fn graph_issue(
+    source_id: &str,
+    outcome: &crate::relationships::RelationshipOutcome,
+) -> Option<StageIssue> {
+    use crate::relationships::RelationshipOutcome as O;
+    match outcome {
+        O::Stale(_) | O::Failed(_) | O::Blocked(_) => Some(StageIssue::new(
+            source_id,
+            outcome.state(),
+            &outcome.error().unwrap_or_default(),
+        )),
+        _ => None,
+    }
 }
 
 /// One source pass against the configured backend. The caller holds the

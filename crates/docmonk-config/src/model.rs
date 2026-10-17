@@ -596,7 +596,53 @@ section! {
 section! {
     McpConfig {
         enabled: bool = true;
-        request_timeout_seconds: f64 = 30.0;
+        request_timeout_seconds: f64 = 30.0, check = |v| {
+            if *v > 0.0 && *v <= 3600.0 { Ok(()) } else { Err("must be > 0 and at most 3600".into()) }
+        };
+        // Tool calls running at once (a timed-out call holds its slot
+        // until its cancelled work has stopped).
+        max_concurrent_calls: i64 = 4, check = |v| {
+            if (1..=64).contains(v) { Ok(()) } else { Err("must be between 1 and 64".into()) }
+        };
+        // Calls waiting for a free slot; past it, calls fail with `overloaded`.
+        max_queued_calls: i64 = 16, check = |v| {
+            if (0..=1024).contains(v) { Ok(()) } else { Err("must be between 0 and 1024".into()) }
+        };
+        // Largest JSON-RPC message accepted (bytes).
+        max_request_bytes: i64 = 1_048_576, check = |v| {
+            if (1024..=67_108_864).contains(v) { Ok(()) } else { Err("must be between 1024 and 67108864".into()) }
+        };
+    }
+}
+
+section! {
+    /// Remote access to the Admin UI. Identity always comes from an
+    /// authenticating reverse proxy that terminates TLS; DocMonk stores no
+    /// credentials (the proxy's shared secret is read from the environment
+    /// variable named by `proxy_secret_env`).
+    UiConfig {
+        // Serve authenticated remote access through the proxy. Required for
+        // any non-loopback bind; without it such a bind is refused.
+        remote_enabled: bool = false;
+        // Public host names (optionally `host:port`) the proxy forwards;
+        // every other Host, Origin or Referer is refused.
+        allowed_hosts: Vec<String> = Vec::new();
+        // IP addresses of the proxies; direct connections from anywhere
+        // else are refused, so identity headers cannot be spoofed.
+        trusted_proxies: Vec<String> = Vec::new(), check = |v| {
+            match v.iter().find(|a| a.trim().parse::<std::net::IpAddr>().is_err()) {
+                Some(bad) => Err(format!("not an IP address: {bad}")),
+                None => Ok(()),
+            }
+        };
+        proxy_secret_env: String = "DOCMONK_UI_PROXY_SECRET".into();
+        user_header: String = "x-forwarded-user".into();
+        groups_header: String = "x-forwarded-groups".into();
+        // Admins may change anything; viewers get read-only pages.
+        admin_users: Vec<String> = Vec::new();
+        admin_groups: Vec<String> = Vec::new();
+        viewer_users: Vec<String> = Vec::new();
+        viewer_groups: Vec<String> = Vec::new();
     }
 }
 
@@ -660,8 +706,8 @@ section! {
         request_timeout_seconds: f64 = 30.0, check = |v| {
             if *v <= 0.0 { Err("must be > 0".into()) } else { Ok(()) }
         };
-        // Budget for one server-side by-query task (copy-forward, build
-        // detach, GC). The task runs detached and is polled, so no single
+        // Budget for one server-side by-query task (closing replaced
+        // records, sweeping an aborted attempt, GC). The task runs detached and is polled, so no single
         // request waits longer than the request timeout.
         task_timeout_seconds: f64 = 3600.0, check = |v| {
             if *v <= 0.0 { Err("must be > 0".into()) } else { Ok(()) }
@@ -693,6 +739,7 @@ section! {
         context: ContextConfig = ContextConfig::default();
         graph: GraphConfig = GraphConfig::default();
         mcp: McpConfig = McpConfig::default();
+        ui: UiConfig = UiConfig::default();
         privacy: PrivacyConfig = PrivacyConfig::default();
         ai: AiConfig = AiConfig::default();
         updates: UpdatesConfig = UpdatesConfig::default();
@@ -708,6 +755,7 @@ pub const KNOWN_SECTIONS: &[&str] = &[
     "search",
     "context",
     "mcp",
+    "ui",
     "privacy",
     "ai",
     "updates",

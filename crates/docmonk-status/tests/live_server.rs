@@ -105,8 +105,8 @@ fn seed(b: &ServerBackend) {
     for i in 0..SOURCES {
         let src = id(i);
         let build = format!("bld_{src}_1");
-        b.begin_build(&src, &format!("/srv/{src}"), &build).unwrap();
-        let mut w = b.build_writer(&src, &build);
+        let g = b.begin_build(&src, &format!("/srv/{src}"), &build).unwrap();
+        let mut w = b.build_writer(&src, &build, g);
         for k in 0..(2 + i % 3) {
             w.file(&FileDoc {
                 file_id: format!("{src}_ok{k}"),
@@ -169,7 +169,8 @@ fn seed(b: &ServerBackend) {
         .unwrap();
         // Edges and links belong to the base's graph generation, written
         // after the base publication (which collects foreign records).
-        let mut w = b.build_writer(&src, &graph);
+        let gg = b.publish_graph_generation_for_test(&src, &graph).unwrap();
+        let mut w = b.build_writer(&src, &graph, gg);
         w.edge(&EdgeDoc {
             relationship_id: format!("{src}_r"),
             file_id: format!("{src}_ok0"),
@@ -199,9 +200,10 @@ fn seed(b: &ServerBackend) {
     }
     // A pending second build of source 0 with many records: invisible.
     let src = id(0);
-    b.begin_build(&src, "/srv/src_000", "bld_src_000_2")
+    let g = b
+        .begin_build(&src, "/srv/src_000", "bld_src_000_2")
         .unwrap();
-    let mut w = b.build_writer(&src, "bld_src_000_2");
+    let mut w = b.build_writer(&src, "bld_src_000_2", g);
     for k in 0..40 {
         w.file(&FileDoc {
             file_id: format!("pending{k}"),

@@ -368,3 +368,50 @@ fn one_embedding_per_query_and_per_corpus_availability() {
         alone.hits.iter().map(|h| &h.hit.id).collect::<Vec<_>>()[..1]
     );
 }
+
+/// F06 (audit PH04): with real embeddings, a document filter whose only hits
+/// rank below the requested top-k still returns them (filters restrict
+/// candidate generation; they are not applied after truncation).
+#[test]
+fn f06_filtered_semantic_search_finds_low_ranked_in_scope_hits() {
+    let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+    let Some(models) = models_root(DEFAULT_EMBEDDING_MODEL.slug) else {
+        return;
+    };
+    let ix = index("fixtures/attachments", Some(&models));
+    let emb = Embedder::load(
+        &models.join(DEFAULT_EMBEDDING_MODEL.slug),
+        DEFAULT_EMBEDDING_MODEL,
+    )
+    .unwrap();
+    let corpora = [Corpus {
+        store: &ix.store,
+        build_id: &ix.build,
+    }];
+    let all = hybrid::semantic_search(&corpora, Some(&emb), "invoice", 200, Some(200)).unwrap();
+    let top = all.hits.first().expect("hits").hit.document_id.clone();
+    // The email and each attachment are separate documents.
+    let low = all
+        .hits
+        .iter()
+        .rev()
+        .find(|h| h.hit.document_id.is_some() && h.hit.document_id != top)
+        .expect("fixture has hits in two documents");
+    let doc = low.hit.document_id.clone().unwrap();
+    let filter = docmonk_retrieval::route::SearchFilters {
+        document_ids: vec![doc.clone()],
+        ..Default::default()
+    };
+    let s = hybrid::semantic_search_filtered(
+        &corpora,
+        Some(&emb),
+        "invoice",
+        1,
+        Some(1),
+        Default::default(),
+        &filter,
+    )
+    .unwrap();
+    assert_eq!(s.hits.len(), 1, "{:?}", s.degraded);
+    assert_eq!(s.hits[0].hit.document_id.as_deref(), Some(doc.as_str()));
+}

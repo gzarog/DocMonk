@@ -89,7 +89,9 @@ enum Command {
     },
     /// Start the local administration web interface.
     Ui {
-        /// Interface to bind. Defaults to localhost.
+        /// Interface to bind. Defaults to localhost. A non-loopback address
+        /// is refused unless remote access through an authenticating TLS
+        /// reverse proxy is configured (`ui.remote_enabled`).
         #[arg(long, default_value = "127.0.0.1")]
         host: String,
         /// Port to listen on.

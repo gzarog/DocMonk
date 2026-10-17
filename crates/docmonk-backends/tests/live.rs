@@ -86,7 +86,22 @@ fn delete_index(c: &Client, name: &str) {
 /// Writes a synthetic source with `files` code files and one email with an
 /// attachment child document. Returns the number of chunks written.
 fn write_corpus(b: &ServerBackend, source: &str, build: &str, files: usize, marker: &str) -> usize {
-    let mut w = b.build_writer(source, build);
+    let g = b
+        .pending_generation(docmonk_backends::generations::Line::Base, source, build)
+        .unwrap();
+    write_corpus_at(b, source, build, g, files, marker)
+}
+
+/// [`write_corpus`] as generation `g` (record writes only: no state read).
+fn write_corpus_at(
+    b: &ServerBackend,
+    source: &str,
+    build: &str,
+    g: i64,
+    files: usize,
+    marker: &str,
+) -> usize {
+    let mut w = b.build_writer(source, build, g);
     let mut chunks = 0;
     for i in 0..files {
         let rel = format!("pkg/mod_{i}.py");
@@ -262,9 +277,9 @@ fn scenario(base: &str, engine: Engine) {
     // ---- full rebuild, invisible until published -------------------------
     let src = "src_live";
     let versions = json!({"schema_version": 1, "parser_version": "p"});
-    b.begin_build(src, "/repo", "b1").unwrap();
+    let g1 = b.begin_build(src, "/repo", "b1").unwrap();
     let before = b.stats();
-    let chunks = write_corpus(&b, src, "b1", 120, "alpha");
+    let chunks = write_corpus_at(&b, src, "b1", g1, 120, "alpha");
     let after = b.stats();
     let actions = after.bulk_actions - before.bulk_actions;
     // 4 records per code file, 2 documents, the chunks and 1 link.
@@ -588,8 +603,8 @@ fn vectors(base: &str, engine: Engine) {
     let b = std::sync::Arc::new(p0_backend(base, engine, &prefix));
     b.init().unwrap();
     let src = "src_vec";
-    b.begin_build(src, "/repo", "vecb1").unwrap();
-    let mut w = b.build_writer(src, "vecb1");
+    let g = b.begin_build(src, "/repo", "vecb1").unwrap();
+    let mut w = b.build_writer(src, "vecb1", g);
     let file_id = record::file_id(src, "a.md");
     let doc = record::document_id(&file_id, None);
     for (i, v) in [

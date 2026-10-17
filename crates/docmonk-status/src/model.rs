@@ -222,6 +222,9 @@ pub enum ProblemCode {
     /// The relationship graph failed or is stale; the index itself is
     /// published and searchable.
     RelationshipsNotCurrent,
+    /// The source's cross-source dependencies are stale or pending; the
+    /// index itself is published and searchable.
+    DependenciesNotCurrent,
 }
 
 impl ProblemCode {
@@ -247,6 +250,7 @@ impl ProblemCode {
             ProblemCode::FilesRetrying => "files_retrying",
             ProblemCode::PendingWithoutIndexer => "pending_without_indexer",
             ProblemCode::RelationshipsNotCurrent => "relationships_not_current",
+            ProblemCode::DependenciesNotCurrent => "dependencies_not_current",
         }
     }
 }
@@ -343,7 +347,7 @@ pub struct LiveRun {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RelationshipProgress {
     /// `deriving`, `resolving`, `linking`, `committing`; on a server also
-    /// `staging`, `copying`, `writing`, `promoting`.
+    /// `staging`, `writing`, `closing`, `promoting`.
     pub phase: Option<String>,
     /// Files derived so far, of `planned`.
     pub processed: Option<u64>,
@@ -472,6 +476,40 @@ pub struct RelationshipStatus {
     pub stale_reason: Option<String>,
 }
 
+/// A source's cross-source dependencies as a consumer (bindings to the
+/// producers it references).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DependencyStatus {
+    /// `current`, `stale` or `pending`.
+    pub state: String,
+    pub reason: Option<String>,
+    pub updated_at: Option<String>,
+    /// The producers the bindings were computed against.
+    pub producers: Vec<String>,
+    /// The targeted retry scheduled on this host, if any.
+    pub retry: Option<DependencyRetry>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DependencyRetry {
+    pub code: String,
+    pub last_error: String,
+    pub attempts: u32,
+    pub last_attempt_at: Option<String>,
+    pub next_attempt_at: Option<String>,
+}
+
+/// Index readiness and complete-graph readiness, reported independently:
+/// a searchable index is never presented as a complete graph.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Readiness {
+    /// A published build is searchable.
+    pub index_ready: bool,
+    /// The source graph is ready for the published build and every
+    /// required cross-source dependency is current.
+    pub complete_graph_ready: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SourceStatus {
     pub source_id: String,
@@ -483,6 +521,12 @@ pub struct SourceStatus {
     /// The relationship graph stage (`null` when unknown).
     #[serde(default)]
     pub relationship_state: Option<RelationshipStatus>,
+    /// The cross-source dependency stage (`null` when the source has no
+    /// dependencies or they are unknown).
+    #[serde(default)]
+    pub dependency_state: Option<DependencyStatus>,
+    #[serde(default)]
+    pub readiness: Readiness,
     pub build: SourceBuild,
     /// `null`: the source has no published build, or the published
     /// section could not be read (see diagnostics).

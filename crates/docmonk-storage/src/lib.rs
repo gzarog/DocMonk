@@ -14,6 +14,7 @@
 
 pub mod control;
 pub mod db;
+pub mod dependency_retry;
 pub mod error;
 pub mod facts;
 pub mod graph;

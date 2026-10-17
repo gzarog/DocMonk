@@ -61,6 +61,17 @@ pub fn source_index_state(f: &SourceFacts, live: Option<&LiveRun>) -> SourceInde
 }
 
 /// Short per-source notes shown next to the state.
+/// Index readiness and complete-graph readiness of one source.
+pub fn readiness(f: &SourceFacts) -> Readiness {
+    let index_ready = f.enabled && f.active_build_id.is_some() && !f.published_missing;
+    let graph_ready = f.relationships.as_ref().is_some_and(|r| r.state == "ready");
+    let deps_current = f.dependencies.as_ref().is_none_or(|d| d.state == "current");
+    Readiness {
+        index_ready,
+        complete_graph_ready: index_ready && graph_ready && deps_current,
+    }
+}
+
 pub fn source_warnings(f: &SourceFacts, live: Option<&LiveRun>) -> Vec<String> {
     let mut w = Vec::new();
     let running = live.is_some_and(|r| r.liveness == Liveness::Live);
@@ -376,6 +387,29 @@ pub fn problems(i: &ProblemInput<'_>) -> Vec<Problem> {
                 format!(
                     "relationship graph is {}{why}; the index is published and searchable",
                     r.state
+                ),
+                Some("docmonk relationships build"),
+            );
+        }
+        if let Some(d) = f.dependencies.as_ref().filter(|d| {
+            f.enabled
+                && f.active_build_id.is_some()
+                && matches!(d.state.as_str(), "stale" | "pending")
+        }) {
+            let why = d
+                .reason
+                .as_deref()
+                .map(|w| format!(": {}", crate::errors::redact_text(w)))
+                .unwrap_or_default();
+            b.add(
+                C::DependenciesNotCurrent,
+                Warning,
+                Sc::Source,
+                id,
+                None,
+                format!(
+                    "cross-source dependencies are {}{why}; the index is published and searchable",
+                    d.state
                 ),
                 Some("docmonk relationships build"),
             );

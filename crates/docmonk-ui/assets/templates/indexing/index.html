@@ -43,6 +43,7 @@
     <form class="inline" hx-post="/indexing/rebuild" hx-swap="none"
           hx-confirm="Rebuild ALL sources? Derived indexes will be deleted and regenerated from source files.">
       <input type="hidden" name="fresh" value="1">
+      <input type="hidden" name="confirm" value="yes">
       <button class="btn danger" type="submit" {{ 'disabled' if o.running else '' }}>Rebuild all (fresh)</button>
     </form>
     <a href="/indexing/failed" class="btn">View failed files</a>

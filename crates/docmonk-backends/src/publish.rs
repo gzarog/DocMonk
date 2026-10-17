@@ -8,17 +8,18 @@
 //!
 //! 1. Every staged file gets a *knowledge digest* over its file row, its
 //!    entities, documents, chunks and vector keys.
-//! 2. A new, immutable pending build is begun on the server (fenced by the
-//!    writer lease).
-//! 3. Files whose digest equals the one recorded in the server's active
-//!    build are **copied forward server-side**: an in-place
-//!    `_update_by_query` adds the new build id to their records'
-//!    multi-valued `build_id` (no reconversion, no client round trip, no
-//!    duplicated record).
-//! 4. Every other file's records (and vectors) are bulk-written. No
+//! 2. A new pending build is begun on the server (fenced by the writer
+//!    lease); it allocates the attempt's generation `g` of the source's
+//!    base lineage ([`crate::generations`]).
+//! 3. Files whose digest equals the one visible at the published
+//!    generation `G` are **not touched**: their records stay valid.
+//! 4. Changed and new files' records (and vectors) are bulk-written with
+//!    `valid_from = g`, invisible at `G`. The replaced and deleted files'
+//!    records are closed with `valid_to = g`, still visible at `G`. No
 //!    relationship or link is written: graph generations are independent.
-//! 5. The build is published with an atomic compare-and-swap; any error
-//!    aborts it and the previous build stays visible.
+//! 5. The build is published with an atomic compare-and-swap of the
+//!    source state (`G -> g`); any error aborts the attempt and the
+//!    previous generation stays visible.
 //!
 //! When the staged build's overall digest equals the server's, nothing is
 //! written and no generation is created (a warm pass).
@@ -36,11 +37,9 @@ use docmonk_storage::vectors::SUBJECT_ENTITY;
 use crate::backend::{ChunkDoc, DocumentDoc, EntityDoc, FileDoc, Lease, ServerBackend};
 use crate::bulk::BulkReport;
 use crate::error::{BackendError, Result};
+use crate::generations::{Line, Lineage};
 use crate::schema::IndexKind;
 use crate::transport::Method;
-
-/// Most file ids per server-side copy request.
-const COPY_BATCH: usize = 5_000;
 
 /// What to publish.
 pub struct PublishInput<'a> {
@@ -52,24 +51,28 @@ pub struct PublishInput<'a> {
     pub local_build: &'a str,
     /// Index versions recorded with the build.
     pub versions: Value,
-    /// Rewrite everything (no copy-forward), e.g. for a full rebuild.
+    /// Rewrite everything (no unchanged file is kept), e.g. a full rebuild.
     pub full: bool,
     pub lease: Option<&'a Lease>,
     /// The new server build id.
     pub build_id: &'a str,
 }
 
-/// What a publication did (the copy-forward amplification is
-/// `records_copied` against `records_written`).
+/// What a publication did. Write amplification is `records_written +
+/// records_closed` against the changed files' records; unchanged files'
+/// records are never rewritten (`files_kept`).
 #[derive(Debug, Clone, Default, Serialize, PartialEq)]
 pub struct PublishReport {
     pub build_id: Option<String>,
     /// `false` when the server already had exactly this content.
     pub published: bool,
     pub files: usize,
-    pub files_copied: usize,
+    /// Unchanged files whose records were left as they are.
+    pub files_kept: usize,
     pub files_written: usize,
-    pub records_copied: u64,
+    /// Changed or deleted files whose previous records were closed.
+    pub files_closed: usize,
+    pub records_closed: u64,
     pub records_written: usize,
     pub vectors_written: usize,
     pub bulk: BulkReport,
@@ -156,11 +159,12 @@ fn digests(
 }
 
 impl ServerBackend {
-    /// `file_id -> knowledge_digest` of one build (paged).
-    fn build_file_digests(
+    /// `file_id -> knowledge_digest` of the files visible in `scope`
+    /// (paged).
+    fn visible_file_digests(
         &self,
         source_id: &str,
-        build_id: &str,
+        scope: &Value,
     ) -> Result<HashMap<String, String>> {
         let path = format!("/{}/_search", self.index(IndexKind::Files));
         let mut out = HashMap::new();
@@ -171,7 +175,7 @@ impl ServerBackend {
                 "_source": ["file_id", "knowledge_digest"],
                 "query": { "bool": { "filter": [
                     { "term": { "source_id": source_id } },
-                    { "term": { "build_id": build_id } },
+                    scope,
                 ] } },
                 "sort": [ { "file_id": "asc" } ],
                 "track_total_hits": false,
@@ -200,79 +204,6 @@ impl ServerBackend {
         }
     }
 
-    /// Copies the records of `file_ids` from build `from` into build `to`
-    /// server-side and in place: each record gains `to` in its
-    /// (multi-valued) `build_id` and drops ids not in `keep`. No payload
-    /// leaves the cluster and no record is duplicated. Returns the number
-    /// of records attached.
-    pub fn copy_forward(
-        &self,
-        source_id: &str,
-        from: &str,
-        to: &str,
-        file_ids: &[String],
-        keep: &[String],
-    ) -> Result<u64> {
-        self.copy_forward_in(
-            &[
-                IndexKind::Files,
-                IndexKind::Code,
-                IndexKind::Documents,
-                IndexKind::Chunks,
-            ],
-            source_id,
-            from,
-            to,
-            file_ids,
-            keep,
-        )
-    }
-
-    /// [`Self::copy_forward`] over the records of `kinds` only.
-    pub fn copy_forward_in(
-        &self,
-        kinds: &[IndexKind],
-        source_id: &str,
-        from: &str,
-        to: &str,
-        file_ids: &[String],
-        keep: &[String],
-    ) -> Result<u64> {
-        let mut copied = 0;
-        let names: Vec<String> = kinds.iter().map(|k| self.index(*k)).collect();
-        let mut keep: Vec<String> = keep.to_vec();
-        keep.push(to.to_owned());
-        for batch in file_ids.chunks(COPY_BATCH) {
-            let v = self.by_query(
-                &format!(
-                    "/{}/_update_by_query?conflicts=proceed&refresh=false",
-                    names.join(",")
-                ),
-                &json!({
-                    "query": { "bool": { "filter": [
-                        { "term": { "source_id": source_id } },
-                        { "term": { "build_id": from } },
-                        { "terms": { "file_id": batch } },
-                    ] } },
-                    "script": {
-                        "lang": "painless",
-                        "source": crate::backend::ATTACH_SCRIPT,
-                        "params": { "b": to, "keep": keep },
-                    },
-                }),
-            )?;
-            if let Some(f) = v["failures"].as_array().filter(|f| !f.is_empty()) {
-                return Err(BackendError::Bulk {
-                    failed: f.len(),
-                    total: v["total"].as_u64().unwrap_or(0) as usize,
-                    first_error: f[0].to_string().chars().take(400).collect(),
-                });
-            }
-            copied += v["updated"].as_u64().unwrap_or(0);
-        }
-        Ok(copied)
-    }
-
     /// Publishes a staged build (see the module docs).
     pub fn publish_from_store(&self, input: &PublishInput<'_>) -> Result<PublishReport> {
         let started = Instant::now();
@@ -297,16 +228,23 @@ impl ServerBackend {
             report.seconds = started.elapsed().as_secs_f64();
             return Ok(report);
         }
-        let server_digests = match (&active, input.full) {
-            (Some(a), false) => self.build_file_digests(input.source_id, a)?,
-            _ => HashMap::new(),
+        let lineage = state
+            .as_ref()
+            .map(|s| Lineage::of(&s.doc, Line::Base))
+            .unwrap_or_default();
+        let published = (active.is_some() && lineage.published > 0).then_some(lineage.published);
+        let server_digests = match published {
+            Some(g) => self.visible_file_digests(input.source_id, &lineage.visible_at(g))?,
+            None => HashMap::new(),
         };
-        self.begin_build_with(input.lease, input.source_id, input.path, input.build_id)?;
+        let generation =
+            self.begin_build_with(input.lease, input.source_id, input.path, input.build_id)?;
         let outcome = self.write_build(
             input,
             &staged,
             &server_digests,
-            active.as_deref(),
+            published.is_some(),
+            generation,
             fingerprint.as_deref(),
             &mut report,
         );
@@ -316,7 +254,7 @@ impl ServerBackend {
                 input.source_id,
                 input.build_id,
                 &input.versions,
-                input.full || active.is_none(),
+                input.full || published.is_none(),
                 &[("content_digest", json!(overall))],
             )
         });
@@ -337,44 +275,31 @@ impl ServerBackend {
         Ok(report)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn write_build(
         &self,
         input: &PublishInput<'_>,
         staged: &[Staged],
         server_digests: &HashMap<String, String>,
-        active: Option<&str>,
+        has_published: bool,
+        generation: i64,
         fingerprint: Option<&str>,
         report: &mut PublishReport,
     ) -> Result<()> {
         let store = input.store;
         let build = input.local_build;
-        let (copy, write): (Vec<&Staged>, Vec<&Staged>) = staged
+        let full = input.full || !has_published;
+        let (keep, write): (Vec<&Staged>, Vec<&Staged>) = staged
             .iter()
-            .partition(|s| server_digests.get(&s.row.id) == Some(&s.digest));
-        if let (Some(from), false) = (active, copy.is_empty()) {
-            let ids: Vec<String> = copy.iter().map(|s| s.row.id.clone()).collect();
-            // Builds a reader may still be pinned to keep their ids.
-            let mut keep = vec![from.to_owned()];
-            if let Some(st) = self.source_state(input.source_id)? {
-                keep.extend(
-                    st.doc["retired_builds"]
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .filter_map(|r| r["build_id"].as_str().map(str::to_owned)),
-                );
-            }
-            report.records_copied =
-                self.copy_forward(input.source_id, from, input.build_id, &ids, &keep)?;
-        }
-        report.files_copied = copy.len();
+            .partition(|s| !full && server_digests.get(&s.row.id) == Some(&s.digest));
+        report.files_kept = keep.len();
         report.files_written = write.len();
         let docs = store.documents(build).map_err(storage)?;
         let docs_by_id: BTreeMap<&str, &DocumentRow> =
             docs.iter().map(|d| (d.id.as_str(), d)).collect();
         // When each failing file last failed (its newest error event).
         let error_times = store.file_error_times(build).map_err(storage)?;
-        let mut w = self.build_writer(input.source_id, input.build_id);
+        let mut w = self.build_writer(input.source_id, input.build_id, generation);
         for s in &write {
             let f = &s.row;
             w.file(&FileDoc {
@@ -518,6 +443,42 @@ impl ServerBackend {
             }
         }
         report.bulk = w.finish()?;
+        // Close the replaced versions: changed files and files no longer
+        // staged. Unchanged files' records are never touched.
+        let aborted = self
+            .source_state(input.source_id)?
+            .map(|s| Lineage::of(&s.doc, Line::Base).aborted_generations())
+            .unwrap_or_default();
+        if full {
+            report.records_closed =
+                self.close_files(Line::Base, input.source_id, None, generation, &aborted)?;
+            report.files_closed = server_digests.len();
+        } else {
+            let staged_ids: std::collections::HashSet<&str> =
+                staged.iter().map(|s| s.row.id.as_str()).collect();
+            let mut replaced: Vec<String> = write
+                .iter()
+                .map(|s| s.row.id.clone())
+                .filter(|id| server_digests.contains_key(id))
+                .collect();
+            replaced.extend(
+                server_digests
+                    .keys()
+                    .filter(|id| !staged_ids.contains(id.as_str()))
+                    .cloned(),
+            );
+            replaced.sort();
+            report.files_closed = replaced.len();
+            if !replaced.is_empty() {
+                report.records_closed = self.close_files(
+                    Line::Base,
+                    input.source_id,
+                    Some(&replaced),
+                    generation,
+                    &aborted,
+                )?;
+            }
+        }
         Ok(())
     }
 }
@@ -550,6 +511,6 @@ mod tests {
         let (mut a, mut b) = (Sha256::new(), Sha256::new());
         feed(&mut a, &row);
         feed(&mut b, &restaged);
-        assert_eq!(hex(a), hex(b), "a restaged file must still copy forward");
+        assert_eq!(hex(a), hex(b), "a restaged file must still be kept");
     }
 }

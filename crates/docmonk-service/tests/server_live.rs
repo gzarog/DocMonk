@@ -340,7 +340,7 @@ fn scenario(base: &str, engine: &str) {
     assert!(done.iter().all(|d| d["published"] == false), "{done:?}");
     assert_eq!(srv.active_builds().unwrap(), active);
 
-    // --- edit one file: copy-forward + rewrite ------------------------------
+    // --- edit one file: only its records are written and closed ---------------
     std::fs::write(
         env.code.join("docs/settlement_guide.md"),
         "# Settlement guide\n\nThe zanzibarquartz reconciliation runs nightly.\n",
@@ -351,8 +351,9 @@ fn scenario(base: &str, engine: &str) {
     let da = done.iter().find(|d| d["id"] == a.id.as_str()).unwrap();
     assert_eq!(da["published"], true, "{da}");
     let p = &da["publish"];
-    assert!(p["files_copied"].as_u64().unwrap() >= 4, "{p}");
+    assert!(p["files_kept"].as_u64().unwrap() >= 4, "{p}");
     assert_eq!(p["files_written"].as_u64().unwrap(), 1, "{p}");
+    assert_eq!(p["files_closed"].as_u64().unwrap(), 1, "{p}");
     let new_active = srv.active_builds().unwrap();
     assert_ne!(new_active[&a.id], active[&a.id]);
     assert_eq!(new_active[&b.id], active[&b.id], "other source untouched");
@@ -365,16 +366,16 @@ fn scenario(base: &str, engine: &str) {
     )
     .unwrap();
     assert_eq!(hit["results"].as_array().unwrap().len(), 1, "{hit}");
-    // Grace 0: the replaced build's own record of the edited file is gone;
-    // only records shared with the new build (copied forward) still carry
-    // its id until the next copy-forward prunes it.
+    // Grace 0: the replaced version of the edited file was collected;
+    // every unchanged file's record is still the one the first build
+    // wrote (never rewritten).
     assert_eq!(
         srv.raw_count(IndexKind::Files, &a.id, &active[&a.id])
             .unwrap(),
-        p["files_copied"].as_u64().unwrap()
+        p["files_kept"].as_u64().unwrap()
     );
 
-    // --- staging cache loss: rebuild locally, still copy forward --------------
+    // --- staging cache loss: rebuild locally, still incremental ---------------
     std::fs::remove_dir_all(env.home.cache_dir().join("server-staging")).unwrap();
     std::fs::write(
         env.code.join("docs/health_notes.md"),
@@ -384,7 +385,7 @@ fn scenario(base: &str, engine: &str) {
     let (done, bad) = index(&env, false);
     assert!(bad.is_empty(), "{bad:?}");
     let da = done.iter().find(|d| d["id"] == a.id.as_str()).unwrap();
-    assert!(da["publish"]["files_copied"].as_u64().unwrap() >= 4, "{da}");
+    assert!(da["publish"]["files_kept"].as_u64().unwrap() >= 4, "{da}");
     assert_eq!(da["publish"]["files_written"].as_u64().unwrap(), 1, "{da}");
     let db = done.iter().find(|d| d["id"] == b.id.as_str()).unwrap();
     assert_eq!(
@@ -505,5 +506,129 @@ fn opensearch_end_to_end() {
 fn elasticsearch_end_to_end() {
     if let Some(u) = url("DOCMONK_TEST_ELASTICSEARCH_URL") {
         scenario(&u, "elasticsearch");
+    }
+}
+
+/// F04 (audit PH02): a consumer resolves a producer published by another
+/// host, without any staging copy of the producer on its own host.
+fn cross_host_dependencies(base: &str, engine: &str) {
+    use docmonk_service::dependencies::DependencyOutcome;
+    let host1 = setup(base, engine, "xh");
+    // A second host: its own home, same server and prefix.
+    let home2 = Home::new(host1._dir.path().join("home2"));
+    home2.ensure_layout().unwrap();
+    let cfg = docmonk_service::load(&host1.home).unwrap();
+    docmonk_config::write_user_config(&cfg, &home2).unwrap();
+
+    let root = host1._dir.path();
+    let write = |rel: &str, body: &str| {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, body).unwrap();
+    };
+    write(
+        "producer/Lib/Shared.cs",
+        "namespace Lib {\n  public class Shared {\n    public static int Compute() { return 1; }\n  }\n}\n",
+    );
+    write("producer/Lib/Lib.csproj", "<Project></Project>\n");
+    write(
+        "consumer/App/Program.cs",
+        "namespace App {\n  public class Program {\n    public static int Main() { return Lib.Shared.Compute(); }\n  }\n}\n",
+    );
+    write(
+        "consumer/App/App.csproj",
+        "<Project><ItemGroup>\n  <ProjectReference Include=\"../../producer/Lib/Lib.csproj\" />\n</ItemGroup></Project>\n",
+    );
+    let mut c = catalog(&host1.home).unwrap();
+    let producer = c
+        .add(root.join("producer").to_str().unwrap(), vec![], vec![])
+        .unwrap();
+    let consumer = c
+        .add(root.join("consumer").to_str().unwrap(), vec![], vec![])
+        .unwrap();
+
+    // Host 1 indexes the producer only.
+    docmonk_service::indexing::index_sources(
+        &host1.home,
+        std::slice::from_ref(&producer),
+        "index",
+        |_| {},
+    )
+    .unwrap();
+    // Host 2 indexes the consumer only: it has no staging copy of the
+    // producer.
+    let mut outcome = None;
+    docmonk_service::indexing::index_sources(
+        &home2,
+        std::slice::from_ref(&consumer),
+        "index",
+        |e| {
+            if let SourceEvent::Dependencies { source, outcome: o } = e {
+                if source.id == consumer.id {
+                    outcome = Some(o.clone());
+                }
+            }
+        },
+    )
+    .unwrap();
+    let outcome = outcome.expect("consumer visited");
+    assert!(
+        matches!(outcome, DependencyOutcome::Updated { bound: 1, .. }),
+        "{outcome:?}"
+    );
+    let m: docmonk_storage::graph::ExternalManifest = serde_json::from_value(
+        server(&host1)
+            .graph_external(&consumer.id)
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(m.state, "current");
+    assert!(m.revision > 0);
+    let binding = &m.bindings[0];
+    assert_eq!(binding.producer.as_deref(), Some(producer.id.as_str()));
+    assert!(binding.target_entity_id.is_some() && !binding.ambiguous);
+
+    // F01 (PH03): either host traverses the binding from the producer's
+    // definition to the consumer's call, read from the server.
+    for home in [&host1.home, &home2] {
+        let opened = open_sources(home, None).unwrap();
+        let v = query::calls_value(
+            &opened,
+            "Lib.Shared.Compute",
+            docmonk_retrieval::graph::Direction::Incoming,
+            2,
+            100,
+        )
+        .unwrap();
+        let external: Vec<&Value> = v["edges"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|e| !e["external"].is_null())
+            .collect();
+        assert_eq!(external.len(), 1, "{v:#}");
+        assert_eq!(
+            external[0]["external"]["producer_source_id"],
+            producer.id.as_str()
+        );
+        assert_eq!(
+            external[0]["external"]["consumer_source_id"],
+            consumer.id.as_str()
+        );
+    }
+}
+
+#[test]
+fn opensearch_cross_host_dependencies() {
+    if let Some(u) = url("DOCMONK_TEST_OPENSEARCH_URL") {
+        cross_host_dependencies(&u, "opensearch");
+    }
+}
+
+#[test]
+fn elasticsearch_cross_host_dependencies() {
+    if let Some(u) = url("DOCMONK_TEST_ELASTICSEARCH_URL") {
+        cross_host_dependencies(&u, "elasticsearch");
     }
 }

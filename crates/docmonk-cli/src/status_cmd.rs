@@ -332,7 +332,10 @@ fn wants(s: &SourceStatus, errors_only: bool) -> bool {
         || !s.warnings.is_empty()
         || s.relationship_state
             .as_ref()
-            .is_some_and(|r| matches!(r.state.as_str(), "failed" | "stale"));
+            .is_some_and(|r| matches!(r.state.as_str(), "failed" | "stale"))
+        || s.dependency_state
+            .as_ref()
+            .is_some_and(|d| d.state != "current");
     !errors_only || troubled
 }
 
@@ -358,6 +361,29 @@ fn relationship_note(s: &SourceStatus, verbose: bool) -> Option<String> {
     }
     if let Some(why) = r.last_error.as_deref().or(r.stale_reason.as_deref()) {
         note += &format!(": {}", clip(&ascii(why), if verbose { 400 } else { 100 }));
+    }
+    Some(note)
+}
+
+/// The cross-source dependency note of a source row: always in verbose
+/// mode, otherwise only while they are not current (with the retry).
+fn dependency_note(s: &SourceStatus, verbose: bool) -> Option<String> {
+    let d = s.dependency_state.as_ref()?;
+    if !verbose && d.state == "current" {
+        return None;
+    }
+    let mut note = format!("dependencies: {}", d.state);
+    if verbose && !d.producers.is_empty() {
+        note += &format!(" (producers {})", clip(&d.producers.join(", "), 200));
+    }
+    if let Some(why) = d.reason.as_deref().filter(|_| d.state != "current") {
+        note += &format!(": {}", clip(&ascii(why), if verbose { 400 } else { 100 }));
+    }
+    if let Some(r) = &d.retry {
+        note += &format!("; retry {} attempt(s) [{}]", r.attempts, r.code);
+        if let Some(t) = &r.next_attempt_at {
+            note += &format!(", next {t}");
+        }
     }
     Some(note)
 }
@@ -416,6 +442,7 @@ fn sources(r: &StatusReport, errors_only: bool, verbose: bool) -> String {
                     }),
             )
             .chain(relationship_note(s, verbose))
+            .chain(dependency_note(s, verbose))
             .collect();
         for n in notes {
             rows.push(vec![String::new(), format!("  {n}")]);

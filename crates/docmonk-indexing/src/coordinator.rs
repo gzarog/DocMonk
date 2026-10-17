@@ -269,8 +269,8 @@ pub struct SourceResult {
     pub resumed_build: Option<String>,
     /// Segments a full build committed before its last one.
     pub segments: usize,
-    /// Server mode: what the publication to the server did (copy-forward
-    /// and written record counts, timings).
+    /// Server mode: what the publication to the server did (kept, written
+    /// and closed record counts, timings).
     pub server_publish: Option<serde_json::Value>,
 }
 
