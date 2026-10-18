@@ -219,8 +219,9 @@ fn hundred_fifty_sources_are_read_with_bounded_statements() {
     assert_eq!(r.sources.len(), 150);
     assert_eq!(r.summary.files.discovered, Some(want_files));
     assert_eq!(r.summary.files.failed, Some(15));
-    // Catalog + states + two statements per published source.
-    assert!(r.diagnostics.request_count.unwrap() <= 2 + 2 * 150);
+    // Catalog + states + three statements per published source (build
+    // summary, errors, dependency manifest).
+    assert!(r.diagnostics.request_count.unwrap() <= 2 + 3 * 150);
     assert_eq!(r.recent_errors.len(), DEFAULT_ERROR_LIMIT.min(15));
     eprintln!(
         "local 150-source snapshot: {:?}, {} statements",

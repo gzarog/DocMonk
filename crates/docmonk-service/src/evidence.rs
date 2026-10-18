@@ -117,13 +117,14 @@ fn run_part(
     if plan.strategies.contains(&RouteStrategy::Semantic) {
         let lazy = lazy_embedder(home, cfg);
         let embedder = lazy.get().ok().map(|a| a.as_ref());
-        let s = hybrid::semantic_search_with(
+        let s = hybrid::semantic_search_filtered(
             corp,
             embedder,
             text,
             fetch,
             Some(cfg.search.semantic_top_k.max(1) as usize),
             crate::query::ann_params(cfg),
+            filters,
         )
         .map_err(search_err)?;
         if !s.available {

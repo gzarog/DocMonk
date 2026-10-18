@@ -97,7 +97,7 @@ pub trait GraphLinker: Sync {
 }
 
 /// Phase names reported while a graph is built (`deriving`, `resolving`,
-/// `linking`, `committing`; server mode adds `staging`, `copying`,
+/// `linking`, `committing`; server mode adds `staging`, `closing`,
 /// `writing` and `promoting`).
 pub type GraphPhaseFn<'a> = dyn Fn(&'static str) + 'a;
 

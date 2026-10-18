@@ -13,5 +13,9 @@ docmonk-retrieval.workspace = true
 docmonk-service.workspace = true
 serde_json.workspace = true
 
+[dev-dependencies]
+docmonk-storage.workspace = true
+tempfile.workspace = true
+
 [lints]
 workspace = true

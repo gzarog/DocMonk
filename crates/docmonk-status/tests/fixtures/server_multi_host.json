@@ -107,6 +107,11 @@
         "last_error": null,
         "stale_reason": "the base index was republished"
       },
+      "dependency_state": null,
+      "readiness": {
+        "index_ready": false,
+        "complete_graph_ready": false
+      },
       "build": {
         "active_id": "bld_a1",
         "pending_id": "bld_a2",

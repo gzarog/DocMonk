@@ -164,6 +164,8 @@ impl Embedder {
         order.sort_by_key(|&i| texts[i].len());
         let mut out: Vec<Vec<f32>> = vec![Vec::new(); texts.len()];
         for idx in order.chunks(self.batch_size) {
+            // A cancelled request stops before the next forward pass.
+            docmonk_core::deadline::check().map_err(inference)?;
             let batch: Vec<&str> = idx.iter().map(|&i| texts[i]).collect();
             for (&i, v) in idx.iter().zip(self.embed_batch(&batch)?) {
                 out[i] = v;

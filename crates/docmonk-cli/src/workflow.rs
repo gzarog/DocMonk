@@ -353,7 +353,32 @@ pub fn index(source_id: Option<String>) -> Result<(), DocMonkError> {
         );
     }
     print_relationship_totals(&summary);
+    print_stages(&summary);
     summary.into_result().map(drop)
+}
+
+/// The run outcome and every stage that is not current, so a searchable
+/// index is never reported as complete while its graph or dependencies
+/// are not.
+fn print_stages(summary: &docmonk_service::indexing::RunSummary) {
+    if summary.outcome() == "success" {
+        return;
+    }
+    println!("Outcome: {}", summary.outcome());
+    for stage in summary.stages() {
+        if matches!(stage.state, "current" | "disabled") {
+            continue;
+        }
+        println!("  {}: {}", stage.stage, stage.state);
+        for i in &stage.issues {
+            let who = if i.source_id.is_empty() {
+                String::new()
+            } else {
+                format!("{}: ", i.source_id)
+            };
+            println!("    {who}[{}] {}", i.code, i.reason);
+        }
+    }
 }
 
 /// One source's phase-2 line (`relationships: ...`), separate from its
@@ -371,8 +396,8 @@ fn print_dependencies(source_id: &str, outcome: &docmonk_service::dependencies::
             "{source_id}: cross-source dependencies updated ({references} reference(s) looked up, {bound} bound; triggered by {})",
             triggered_by.join(", ")
         ),
-        O::Stale { reason } | O::Pending { reason } => println!(
-            "{source_id}: cross-source dependencies {}: {reason}",
+        O::Stale { code, reason } | O::Pending { code, reason } => println!(
+            "{source_id}: cross-source dependencies {} [{code}]: {reason}",
             outcome.state()
         ),
     }
@@ -421,7 +446,16 @@ fn print_relationship_totals(summary: &docmonk_service::indexing::RunSummary) {
         r.attempted, r.built, r.up_to_date, r.stale, r.failed
     );
     println!("  {}", graph_work(r));
-    let d = &summary.dependencies;
+    print_dependency_totals(&summary.dependencies);
+}
+
+fn print_dependency_totals(d: &docmonk_service::dependencies::DependencySummary) {
+    if let Some(s) = &d.skipped_discovery {
+        println!(
+            "  Cross-source dependencies: not checked; discovery was skipped [{}]: {}",
+            s.code, s.reason
+        );
+    }
     if d.consumers > 0 {
         println!(
             "  Cross-source dependencies: {} consumer(s), {} current, {} updated, {} stale, {} pending.",
@@ -470,7 +504,7 @@ pub fn relationships_build(
     })?;
     if json_output {
         crate::print_json(&serde_json::json!({
-            "outcome": if summary.not_current() == 0 { "success" } else { "partial_success" },
+            "outcome": if summary.incomplete() == 0 { "success" } else { "partial_success" },
             "summary": summary,
             "sources": rows,
         }))?;
@@ -485,15 +519,31 @@ pub fn relationships_build(
             summary.skipped
         );
         println!("  {}", graph_work(&summary));
+        print_dependency_totals(&summary.dependencies);
     }
-    if summary.not_current() > 0 {
+    if summary.incomplete() > 0 {
+        let mut parts = Vec::new();
+        if summary.not_current() > 0 {
+            parts.push(format!(
+                "relationships were not published for {} source(s)",
+                summary.not_current()
+            ));
+        }
+        let d = &summary.dependencies;
+        if !d.unresolved.is_empty() {
+            parts.push(format!(
+                "cross-source dependencies are not current for {} source(s)",
+                d.unresolved.len()
+            ));
+        }
+        if d.skipped_discovery.is_some() {
+            parts.push("dependency discovery was skipped".to_owned());
+        }
         return Err(DocMonkError::new(
             docmonk_core::errors::ErrorKind::IndexingPartialFailure,
-            format!(
-                "relationships were not published for {} source(s); see 'docmonk status' for details",
-                summary.not_current()
-            ),
-        ));
+            format!("{}; see 'docmonk status' for details", parts.join("; ")),
+        )
+        .with_class("DerivedStagesIncomplete"));
     }
     Ok(())
 }

@@ -1,9 +1,10 @@
 //! Server-side relationship graph generations.
 //!
 //! The base index and the relationship graph are published independently.
-//! A graph generation is a set of `edge`/`link` records in the
-//! relationships index whose `build_id` is the generation id (never a base
-//! build id), plus a record in the source-state document under
+//! A graph generation is a generation of the source's graph lineage
+//! ([`crate::generations`]): the `edge`/`link` records of the
+//! relationships index visible at it (`build_id` names the generation id
+//! that wrote a record), plus a record in the source-state document under
 //! `versions.graph` (the opaque `versions` object, so the strict mappings
 //! are unchanged):
 //!
@@ -24,8 +25,8 @@
 //!
 //! [`ServerBackend::publish_graph`] writes a generation invisibly (files
 //! whose graph records did not change since the previous generation are
-//! copied forward server-side, in place: the records gain the new
-//! generation id; only changed files' records are bulk-written), then
+//! not touched; only changed files' records are bulk-written and the
+//! records they replace are closed), then
 //! promotes it with one compare-and-swap of the state document that is
 //! fenced by the writer lease **and** by the expected active base build: a
 //! graph derived from a superseded base is never promoted. Readers
@@ -34,7 +35,7 @@
 //! writes graph records, and graph publication never touches the base build
 //! pointer or base records.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Instant;
 
 use serde::Serialize;
@@ -45,7 +46,15 @@ use docmonk_storage::knowledge::ProjectStore;
 
 use crate::backend::{check_lease, EdgeDoc, Lease, LinkDoc, ServerBackend, SourceState};
 use crate::error::{BackendError, Result};
+use crate::generations::{Line, Lineage};
 use crate::schema::IndexKind;
+
+fn now_millis() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
+}
 
 /// Key of the graph record inside the state document's `versions`.
 pub const GRAPH_KEY: &str = "graph";
@@ -193,7 +202,7 @@ pub struct GraphPublishInput<'a> {
     pub input_digest: Option<&'a str>,
     /// The staged graph's dependency manifest (see [`ServerGraph::file_keys`]).
     pub manifest: Option<GraphManifest<'a>>,
-    /// Called when publication enters a phase (`staging`, `copying`,
+    /// Called when publication enters a phase (`staging`, `closing`,
     /// `writing`, `promoting`).
     pub phase: Option<&'a (dyn Fn(&'static str) + 'a)>,
 }
@@ -226,13 +235,13 @@ pub struct GraphPublishReport {
     pub records_hydrated: usize,
     pub edges_written: usize,
     pub links_written: usize,
-    /// Files whose graph records were copied forward server-side (the
-    /// previous generation had exactly these records).
-    pub files_copied: usize,
+    /// Files whose graph records were left untouched (the previous
+    /// generation had exactly these records).
+    pub files_kept: usize,
     /// Files whose graph records were written.
     pub files_written: usize,
-    /// Records copied forward (gained the new generation id in place).
-    pub records_copied: u64,
+    /// Previous records closed (changed or removed files only).
+    pub records_closed: u64,
     pub seconds: f64,
     /// Per-phase wall-clock seconds and request counts.
     pub timings: PublishTimings,
@@ -244,8 +253,8 @@ pub struct GraphPublishReport {
 pub struct PublishTimings {
     /// Reading the staged graph from the staging store and digesting it.
     pub staging_seconds: f64,
-    /// Server-side copy-forward of unchanged files' records.
-    pub copy_seconds: f64,
+    /// Closing the replaced files' previous records.
+    pub close_seconds: f64,
     /// Bulk-writing changed files' records.
     pub bulk_seconds: f64,
     pub refresh_seconds: f64,
@@ -261,8 +270,8 @@ pub struct PublishCounters {
     /// HTTP requests this publication sent (and their payload bytes).
     pub http_requests: u64,
     pub http_bytes_sent: u64,
-    /// `_update_by_query` requests of the copy-forward.
-    pub copy_requests: u64,
+    /// `_update_by_query` requests closing replaced records.
+    pub close_requests: u64,
     pub bulk_requests: u64,
     pub staged_files: usize,
     pub staged_edges: usize,
@@ -489,7 +498,7 @@ fn records_identical(current: &ServerGraph, staged: &StagedGraph) -> bool {
 }
 
 /// Whether a staged file's records equal the visible generation's, so they
-/// are copied forward server-side instead of written.
+/// are kept as they are instead of written.
 fn copies_forward(current: &ServerGraph, file_id: &str, digest: &str) -> bool {
     current.generation.is_some()
         && current.file_digests.get(file_id).map(String::as_str) == Some(digest)
@@ -629,6 +638,29 @@ impl ServerBackend {
         }))
     }
 
+    /// Every source whose authoritative dependency manifest still records
+    /// producers or bindings, in one scan of the state index (never one
+    /// round trip per source): a consumer whose last dependency was removed
+    /// is found here and reconciled.
+    pub fn graph_external_owners(&self) -> Result<BTreeSet<String>> {
+        let mut out = BTreeSet::new();
+        for doc in self.scan_states(json!({ "match_all": {} }))? {
+            let m = &doc["versions"][EXTERNAL_KEY];
+            let non_empty = |k: &str| match &m[k] {
+                Value::Object(o) => !o.is_empty(),
+                Value::Array(a) => !a.is_empty(),
+                _ => false,
+            };
+            if let (Some(id), true) = (
+                doc["source_id"].as_str(),
+                non_empty("producers") || non_empty("bindings"),
+            ) {
+                out.insert(id.to_owned());
+            }
+        }
+        Ok(out)
+    }
+
     /// Persists the source's cross-source dependency manifest on the
     /// authoritative backend (fenced by the writer lease).
     pub fn set_graph_external(
@@ -652,6 +684,7 @@ impl ServerBackend {
     /// Every edge and link record of a graph generation of `source_id`.
     pub fn graph_records(&self, source_id: &str, generation: &str) -> Result<GraphRecords> {
         let path = format!("/{}/_search", self.index(IndexKind::Relationships));
+        let scope = self.scope_of(source_id, generation)?;
         let mut out = GraphRecords::default();
         let mut after: Option<Value> = None;
         let s = |d: &Value, k: &str| d.get(k).and_then(Value::as_str).map(str::to_owned);
@@ -660,7 +693,7 @@ impl ServerBackend {
                 "size": 1000,
                 "query": { "bool": { "filter": [
                     { "term": { "source_id": source_id } },
-                    { "term": { "build_id": generation } },
+                    scope,
                     { "terms": { "record_kind": ["edge", "link"] } },
                 ] } },
                 "sort": [ { "relationship_id": "asc" } ],
@@ -728,7 +761,7 @@ impl ServerBackend {
                 .copied()
                 .unwrap_or(0)
         };
-        report.counters.copy_requests = ubq(&after) - ubq(&before);
+        report.counters.close_requests = ubq(&after) - ubq(&before);
         result.map(|()| report)
     }
 
@@ -780,7 +813,7 @@ impl ServerBackend {
         // The current generation already holds exactly these records (a
         // new base whose changes did not change any graph record, e.g. a
         // body edit that moves no line): point it at the new base instead
-        // of copying every record into a new generation.
+        // of writing a new generation.
         if let Some(generation) = current.generation.as_deref() {
             if records_identical(&current, &staged) {
                 phase("promoting");
@@ -796,23 +829,29 @@ impl ServerBackend {
                 }
             }
         }
-        // Leftovers of an abandoned pending generation.
-        if let Some(old) = current
-            .pending
-            .as_deref()
-            .filter(|p| *p != input.generation)
-        {
-            self.delete_build_docs(input.source_id, old)?;
-        }
+        // Allocate the attempt's generation; an abandoned pending attempt
+        // is aborted (its records stay invisible).
+        let mut generation = 0;
+        let mut aborted = Vec::new();
+        let mut abandoned = None;
         self.patch_state(input.source_id, input.lease, None, |doc, _| {
+            let mut l = Lineage::of(&Value::Object(doc.clone()), Line::Graph);
+            abandoned = l.pending;
+            generation = l.begin(input.generation, now_millis());
+            aborted = l.aborted_generations();
+            l.put(doc, Line::Graph);
             let mut g = graph_value(doc);
             g.insert("state".into(), json!("building"));
             g.insert("pending".into(), json!(input.generation));
             put_graph(doc, Value::Object(g));
             Ok(())
         })?;
+        if let Some(g) = abandoned {
+            // Housekeeping: the abandoned attempt is already invisible.
+            let _ = self.sweep_generation(Line::Graph, input.source_id, g);
+        }
         let outcome = self
-            .write_graph(input, &src, &staged, &current, report)
+            .write_graph(input, &src, &staged, &current, generation, &aborted, report)
             .and_then(|()| {
                 phase("promoting");
                 let promoting = Instant::now();
@@ -821,21 +860,21 @@ impl ServerBackend {
                 r
             });
         match outcome {
-            Ok(retired) => {
-                for old in retired {
-                    // A failure only leaves unreachable records behind; the
-                    // next promotion retries.
-                    let _ = self.delete_build_docs(input.source_id, &old);
-                }
+            Ok(lineage) => {
+                // A failure only leaves unreachable records behind; the
+                // next promotion collects them.
+                let _ = self.collect_garbage(Line::Graph, input.source_id, input.lease, &lineage);
                 report.generation = Some(input.generation.to_owned());
                 report.published = true;
                 report.seconds = started.elapsed().as_secs_f64();
                 Ok(())
             }
             Err(e) => {
-                let _ = self.delete_build_docs(input.source_id, input.generation);
                 let message = docmonk_telemetry::redact::redact_urls_in_text(&e.to_string());
                 let _ = self.patch_state(input.source_id, input.lease, None, |doc, _| {
+                    let mut l = Lineage::of(&Value::Object(doc.clone()), Line::Graph);
+                    l.abort_pending(generation, now_millis());
+                    l.put(doc, Line::Graph);
                     let mut g = graph_value(doc);
                     if g.get("pending").and_then(Value::as_str) == Some(input.generation) {
                         g.insert("pending".into(), Value::Null);
@@ -845,52 +884,39 @@ impl ServerBackend {
                     put_graph(doc, Value::Object(g));
                     Ok(())
                 });
+                // Housekeeping only (the attempt is already invisible).
+                let _ = self.sweep_generation(Line::Graph, input.source_id, generation);
                 Err(e)
             }
         }
     }
 
-    /// Writes the pending generation: files whose records equal the
-    /// previous generation's are copied forward server-side, in place (the
-    /// records gain the new generation id); only the others are written.
+    /// Writes the pending generation `generation`: files whose records
+    /// equal the previous generation's are left untouched; the others are
+    /// written and the records they replace (and removed files' records)
+    /// are closed.
+    #[allow(clippy::too_many_arguments)]
     fn write_graph(
         &self,
         input: &GraphPublishInput<'_>,
         src: &StageSource<'_>,
         staged: &StagedGraph,
         current: &ServerGraph,
+        generation: i64,
+        aborted: &[i64],
         report: &mut GraphPublishReport,
     ) -> Result<()> {
-        let (copy, write): (Vec<_>, Vec<_>) = staged
+        let (keep, write): (Vec<_>, Vec<_>) = staged
             .files
             .iter()
             .partition(|(id, f)| copies_forward(current, id, &f.digest));
-        if let (Some(from), false) = (current.generation.as_deref(), copy.is_empty()) {
-            if let Some(f) = input.phase {
-                f("copying");
-            }
-            let copying = Instant::now();
-            let ids: Vec<String> = copy.iter().map(|(id, _)| (*id).clone()).collect();
-            // Generations a reader may still be pinned to keep their ids.
-            let mut keep = vec![from.to_owned()];
-            keep.extend(current.retired.iter().cloned());
-            report.records_copied = self.copy_forward_in(
-                &[IndexKind::Relationships],
-                input.source_id,
-                from,
-                input.generation,
-                &ids,
-                &keep,
-            )?;
-            report.timings.copy_seconds = copying.elapsed().as_secs_f64();
-        }
-        report.files_copied = copy.len();
+        report.files_kept = keep.len();
         report.files_written = write.len();
         if let Some(f) = input.phase {
             f("writing");
         }
         let writing = Instant::now();
-        let mut w = self.build_writer(input.source_id, input.generation);
+        let mut w = self.build_writer(input.source_id, input.generation, generation);
         let mut put = |g: &FileGraph, report: &mut GraphPublishReport| -> Result<()> {
             for e in &g.edges {
                 w.edge(e)?;
@@ -934,6 +960,38 @@ impl ServerBackend {
         }
         w.finish()?;
         report.timings.bulk_seconds = writing.elapsed().as_secs_f64();
+        if let Some(f) = input.phase {
+            f("closing");
+        }
+        let closing = Instant::now();
+        report.records_closed = if current.generation.is_none() {
+            self.close_files(Line::Graph, input.source_id, None, generation, aborted)?
+        } else {
+            let mut replaced: Vec<String> = current
+                .file_digests
+                .keys()
+                .filter(|id| {
+                    staged
+                        .files
+                        .get(*id)
+                        .is_none_or(|f| !copies_forward(current, id, &f.digest))
+                })
+                .cloned()
+                .collect();
+            replaced.sort();
+            if replaced.is_empty() {
+                0
+            } else {
+                self.close_files(
+                    Line::Graph,
+                    input.source_id,
+                    Some(&replaced),
+                    generation,
+                    aborted,
+                )?
+            }
+        };
+        report.timings.close_seconds = closing.elapsed().as_secs_f64();
         let refreshing = Instant::now();
         let r = self.refresh_build_indexes();
         report.timings.refresh_seconds = refreshing.elapsed().as_secs_f64();
@@ -998,12 +1056,13 @@ impl ServerBackend {
     }
 
     /// The fenced compare-and-swap that makes the pending generation the
-    /// visible one. Returns retired generations whose grace window ended.
+    /// visible one (the only visibility switch). Returns the lineage after
+    /// it, for garbage collection.
     fn promote_graph(
         &self,
         input: &GraphPublishInput<'_>,
         staged: &StagedGraph,
-    ) -> Result<Vec<String>> {
+    ) -> Result<Lineage> {
         let digest = staged.digest.as_str();
         let file_digests: serde_json::Map<String, Value> = staged
             .files
@@ -1015,7 +1074,7 @@ impl ServerBackend {
             .map(|d| d.as_millis())
             .unwrap_or(0);
         let grace = self.gc_grace().as_millis();
-        let mut expired = Vec::new();
+        let mut lineage = Lineage::default();
         self.patch_state(input.source_id, input.lease, None, |doc, p| {
             let active = p.and_then(|p| p.active_build_id.as_deref());
             if active != Some(input.base_build_id) {
@@ -1050,10 +1109,19 @@ impl ServerBackend {
             {
                 retired.push((old.to_owned(), now_ms));
             }
-            let (keep, gone): (Vec<_>, Vec<_>) = retired
-                .into_iter()
-                .partition(|(_, at)| grace > 0 && now_ms.saturating_sub(*at) < grace);
-            expired = gone.into_iter().map(|(g, _)| g).collect();
+            retired.retain(|(_, at)| grace > 0 && now_ms.saturating_sub(*at) < grace);
+            let keep = retired;
+            let mut l = Lineage::of(&Value::Object(doc.clone()), Line::Graph);
+            if l.publish(input.generation).is_none() {
+                return Err(BackendError::Conflict(format!(
+                    "graph generation {} of {} is not the pending generation",
+                    input.generation, input.source_id
+                )));
+            }
+            let kept: Vec<&str> = keep.iter().map(|(g, _)| g.as_str()).collect();
+            l.retain_ids(&kept);
+            l.put(doc, Line::Graph);
+            lineage = l;
             put_graph(
                 doc,
                 json!({
@@ -1077,7 +1145,7 @@ impl ServerBackend {
             );
             Ok(())
         })?;
-        Ok(expired)
+        Ok(lineage)
     }
 }
 

@@ -80,7 +80,9 @@
         "max_chars": {
          "anyOf": [
           {
-           "type": "integer"
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 1000000
           },
           {
            "type": "null"
@@ -92,7 +94,9 @@
         "max_files": {
          "anyOf": [
           {
-           "type": "integer"
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 1000
           },
           {
            "type": "null"
@@ -104,7 +108,9 @@
         "max_graph_nodes": {
          "anyOf": [
           {
-           "type": "integer"
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 10000
           },
           {
            "type": "null"
@@ -118,7 +124,8 @@
         "query"
        ],
        "title": "docmonk_exploreArguments",
-       "type": "object"
+       "type": "object",
+       "additionalProperties": false
       },
       "outputSchema": {
        "$defs": {
@@ -440,7 +447,9 @@
         "limit": {
          "anyOf": [
           {
-           "type": "integer"
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 1000
           },
           {
            "type": "null"
@@ -454,7 +463,8 @@
         "query"
        ],
        "title": "docmonk_searchArguments",
-       "type": "object"
+       "type": "object",
+       "additionalProperties": false
       },
       "outputSchema": {
        "$defs": {
@@ -680,7 +690,9 @@
         "limit": {
          "anyOf": [
           {
-           "type": "integer"
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 100
           },
           {
            "type": "null"
@@ -694,7 +706,8 @@
         "query"
        ],
        "title": "docmonk_evidenceArguments",
-       "type": "object"
+       "type": "object",
+       "additionalProperties": false
       },
       "outputSchema": {
        "additionalProperties": true,
@@ -760,7 +773,8 @@
         "name"
        ],
        "title": "docmonk_symbolArguments",
-       "type": "object"
+       "type": "object",
+       "additionalProperties": false
       },
       "outputSchema": {
        "$defs": {
@@ -935,7 +949,9 @@
         "max_depth": {
          "anyOf": [
           {
-           "type": "integer"
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 10
           },
           {
            "type": "null"
@@ -947,7 +963,9 @@
         "limit": {
          "anyOf": [
           {
-           "type": "integer"
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 1000
           },
           {
            "type": "null"
@@ -961,7 +979,8 @@
         "name"
        ],
        "title": "docmonk_callersArguments",
-       "type": "object"
+       "type": "object",
+       "additionalProperties": false
       },
       "outputSchema": {
        "$defs": {
@@ -1225,7 +1244,9 @@
         "max_depth": {
          "anyOf": [
           {
-           "type": "integer"
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 10
           },
           {
            "type": "null"
@@ -1237,7 +1258,9 @@
         "limit": {
          "anyOf": [
           {
-           "type": "integer"
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 1000
           },
           {
            "type": "null"
@@ -1251,7 +1274,8 @@
         "name"
        ],
        "title": "docmonk_calleesArguments",
-       "type": "object"
+       "type": "object",
+       "additionalProperties": false
       },
       "outputSchema": {
        "$defs": {
@@ -1515,7 +1539,9 @@
         "max_depth": {
          "anyOf": [
           {
-           "type": "integer"
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 10
           },
           {
            "type": "null"
@@ -1527,7 +1553,9 @@
         "limit": {
          "anyOf": [
           {
-           "type": "integer"
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 1000
           },
           {
            "type": "null"
@@ -1541,7 +1569,8 @@
         "name"
        ],
        "title": "docmonk_impactArguments",
-       "type": "object"
+       "type": "object",
+       "additionalProperties": false
       },
       "outputSchema": {
        "$defs": {
@@ -1814,7 +1843,8 @@
         }
        },
        "title": "docmonk_documentsArguments",
-       "type": "object"
+       "type": "object",
+       "additionalProperties": false
       },
       "outputSchema": {
        "$defs": {
@@ -1985,7 +2015,9 @@
         "error_limit": {
          "anyOf": [
           {
-           "type": "integer"
+           "type": "integer",
+           "minimum": 0,
+           "maximum": 200
           },
           {
            "type": "null"
@@ -1997,7 +2029,8 @@
         }
        },
        "title": "docmonk_statusArguments",
-       "type": "object"
+       "type": "object",
+       "additionalProperties": false
       },
       "outputSchema": {
        "$defs": {
@@ -2788,6 +2821,125 @@
            ],
            "default": null
           },
+          "dependency_state": {
+           "description": "The cross-source dependency stage of this source as a consumer (null when it has none or they are unknown); the published index is searchable whatever this says.",
+           "anyOf": [
+            {
+             "type": "object",
+             "properties": {
+              "state": {
+               "type": "string",
+               "enum": [
+                "current",
+                "stale",
+                "pending"
+               ]
+              },
+              "reason": {
+               "anyOf": [
+                {
+                 "type": "string"
+                },
+                {
+                 "type": "null"
+                }
+               ],
+               "default": null
+              },
+              "updated_at": {
+               "anyOf": [
+                {
+                 "type": "string"
+                },
+                {
+                 "type": "null"
+                }
+               ],
+               "default": null
+              },
+              "producers": {
+               "type": "array",
+               "items": {
+                "type": "string"
+               }
+              },
+              "retry": {
+               "anyOf": [
+                {
+                 "type": "object",
+                 "properties": {
+                  "code": {
+                   "type": "string"
+                  },
+                  "last_error": {
+                   "type": "string"
+                  },
+                  "attempts": {
+                   "type": "integer"
+                  },
+                  "last_attempt_at": {
+                   "anyOf": [
+                    {
+                     "type": "string"
+                    },
+                    {
+                     "type": "null"
+                    }
+                   ],
+                   "default": null
+                  },
+                  "next_attempt_at": {
+                   "anyOf": [
+                    {
+                     "type": "string"
+                    },
+                    {
+                     "type": "null"
+                    }
+                   ],
+                   "default": null
+                  }
+                 },
+                 "required": [
+                  "code",
+                  "last_error",
+                  "attempts"
+                 ]
+                },
+                {
+                 "type": "null"
+                }
+               ],
+               "default": null
+              }
+             },
+             "required": [
+              "state",
+              "producers"
+             ]
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null
+          },
+          "readiness": {
+           "description": "Index readiness and complete-graph readiness, reported independently: complete_graph_ready requires a ready source graph and current cross-source dependencies.",
+           "type": "object",
+           "properties": {
+            "index_ready": {
+             "type": "boolean"
+            },
+            "complete_graph_ready": {
+             "type": "boolean"
+            }
+           },
+           "required": [
+            "index_ready",
+            "complete_graph_ready"
+           ]
+          },
           "build": {
            "type": "object",
            "properties": {
@@ -3456,7 +3608,8 @@
         "question"
        ],
        "title": "docmonk_askArguments",
-       "type": "object"
+       "type": "object",
+       "additionalProperties": false
       },
       "outputSchema": {
        "$defs": {
@@ -3715,9 +3868,8 @@
   "response": {
    "jsonrpc": "2.0",
    "error": {
-    "code": -32602,
-    "message": "Invalid request parameters",
-    "data": ""
+    "code": -32601,
+    "message": "Method not found"
    }
   }
  },
@@ -3827,7 +3979,7 @@
      "query": null,
      "matches": []
     },
-    "isError": false
+    "isError": true
    }
   }
  },
@@ -3863,7 +4015,7 @@
      "query": null,
      "results": []
     },
-    "isError": false
+    "isError": true
    }
   }
  },
@@ -4798,7 +4950,7 @@
      "evidence": [],
      "warnings": []
     },
-    "isError": false
+    "isError": true
    }
   }
  },
@@ -4924,7 +5076,7 @@
      },
      "documents": []
     },
-    "isError": false
+    "isError": true
    }
   }
  },
@@ -5032,6 +5184,11 @@
          "last_error": null,
          "stale_reason": null
         },
+        "dependency_state": null,
+        "readiness": {
+         "index_ready": true,
+         "complete_graph_ready": true
+        },
         "build": {
          "active_id": "<VOLATILE>",
          "pending_id": null,
@@ -5131,7 +5288,7 @@
      "evidence": [],
      "warnings": []
     },
-    "isError": false
+    "isError": true
    }
   }
  },
@@ -5169,7 +5326,7 @@
      "evidence": [],
      "warnings": []
     },
-    "isError": false
+    "isError": true
    }
   }
  }

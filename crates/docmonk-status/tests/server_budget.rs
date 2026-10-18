@@ -42,13 +42,42 @@ fn ok(v: Value) -> BResult<Response> {
     })
 }
 
-fn files_for(build: &str) -> u64 {
-    // Deterministic per build: 10 files, the second generation 12.
-    if build.ends_with("-2") {
+fn files_for(generation: i64) -> u64 {
+    // Deterministic per generation: 10 files, the second generation 12.
+    if generation == 2 {
         12
     } else {
         10
     }
+}
+
+/// A build's generation number (`b-<src>-<n>` is generation `n`).
+fn generation(build: &str) -> i64 {
+    build.rsplit('-').next().unwrap().parse().unwrap()
+}
+
+/// `(source, generation, graph lineage?)` of every source a pairs filter
+/// (`bool.should` of `source term + scope`) asks for.
+fn scoped(b: &Value) -> Vec<(String, i64, bool)> {
+    let should = b
+        .pointer("/query/bool/filter/0/bool/should")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    should
+        .iter()
+        .map(|c| {
+            let f = &c["bool"]["filter"];
+            let scope = &f[1]["bool"]["filter"];
+            (
+                f[0]["term"]["source_id"].as_str().unwrap().to_owned(),
+                scope[0]["bool"]["filter"][0]["range"]["valid_from"]["lte"]
+                    .as_i64()
+                    .unwrap(),
+                scope[1]["terms"]["record_kind"].is_array(),
+            )
+        })
+        .collect()
 }
 
 impl Transport for Mock {
@@ -92,6 +121,12 @@ impl Transport for Mock {
                         "versions": { "graph": build.as_ref().map(|b| json!({
                             "state": "ready", "generation": format!("g-{b}"), "base_build_id": b,
                         })) },
+                        "mvcc": build.as_ref().map(|b| json!({
+                            "base": { "published": generation(b), "next": generation(b) + 1,
+                                      "ids": { b: generation(b) } },
+                            "graph": { "published": generation(b), "next": generation(b) + 1,
+                                       "ids": { format!("g-{b}"): generation(b) } },
+                        })),
                     }, "sort": [id]})
                 })
                 .collect();
@@ -112,34 +147,13 @@ impl Transport for Mock {
             }
             return ok(json!({"hits": {"hits": []}}));
         }
-        let pairs: Vec<(String, String)> = {
-            let f = b
-                .pointer("/query/bool/filter/0/bool/filter")
-                .cloned()
-                .unwrap_or_default();
-            let srcs = f[0]["terms"]["source_id"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default();
-            let blds = f[1]["terms"]["build_id"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default();
-            srcs.iter()
-                .zip(blds.iter())
-                .map(|(s, b)| {
-                    (
-                        s.as_str().unwrap().to_owned(),
-                        b.as_str().unwrap().to_owned(),
-                    )
-                })
-                .collect()
-        };
+        let pairs = scoped(&b);
         if base == format!("/{P}-files/_search") && b.get("aggs").is_some() {
             let buckets: Vec<Value> = pairs
                 .iter()
-                .map(|(s, bl)| {
-                    let n = files_for(bl);
+                .map(|(s, g, graph)| {
+                    assert!(!graph, "base counts read a graph scope");
+                    let n = files_for(*g);
                     json!({"key": s, "doc_count": n,
                         "by_status": {"buckets": [
                             {"key": "indexed", "doc_count": n - 2},
@@ -158,7 +172,7 @@ impl Transport for Mock {
                 .iter()
                 .enumerate()
                 .take(size)
-                .map(|(i, (s, _))| {
+                .map(|(i, (s, _, _))| {
                     json!({"_source": {"source_id": s, "rel_path": "bad.pdf", "status": "failed",
                         "last_error": "boom", "attempt_count": 2,
                         "last_error_at": (1791471600000u64 + i as u64 * 1000).to_string()}})
@@ -170,8 +184,8 @@ impl Transport for Mock {
             // Graph generation counts.
             let srcs: Vec<Value> = pairs
                 .iter()
-                .map(|(s, g)| {
-                    assert!(g.starts_with("g-"), "graph counts read a base build: {g}");
+                .map(|(s, _, graph)| {
+                    assert!(graph, "graph counts read a base scope");
                     json!({"key": s, "doc_count": 7, "kind": {"buckets": [
                         {"key": "edge", "doc_count": 5}, {"key": "link", "doc_count": 2}]}})
                 })
@@ -185,7 +199,7 @@ impl Transport for Mock {
                 .map(|n| {
                     let srcs: Vec<Value> = pairs
                         .iter()
-                        .map(|(s, _)| {
+                        .map(|(s, _, _)| {
                             json!({"key": s, "doc_count": 7,
                                 "kind": {"buckets": if *n == "relationships" {
                                     json!([{"key": "edge", "doc_count": 5}, {"key": "link", "doc_count": 2}])

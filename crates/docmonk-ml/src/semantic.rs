@@ -174,6 +174,7 @@ pub fn search_vector(
     candidate_k: Option<usize>,
     params: AnnParams,
 ) -> Result<SemanticResult, String> {
+    docmonk_core::deadline::check()?;
     let mut stages = SemanticStages::default();
     let k = candidate_k.unwrap_or(limit).max(limit);
     let (engine, raw) = match store.as_project_store() {

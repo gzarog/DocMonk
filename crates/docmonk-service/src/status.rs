@@ -61,6 +61,12 @@ impl StatusSession {
 
     /// One snapshot.
     pub fn collect(&mut self, opts: &CollectOptions) -> Result<StatusReport, DocMonkError> {
+        let mut report = self.collect_report(opts)?;
+        docmonk_status::snapshot::attach_dependency_retries(&mut report, &self.home);
+        Ok(report)
+    }
+
+    fn collect_report(&mut self, opts: &CollectOptions) -> Result<StatusReport, DocMonkError> {
         match &self.backend {
             Backend::Local => {
                 let cp = control_plane(&self.home)?;

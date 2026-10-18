@@ -26,6 +26,7 @@
           <form class="inline" hx-post="/backups/restore" hx-swap="none"
                 hx-confirm="Restore this backup? This REPLACES the current DocMonk databases. The daemon will be restarted.">
             <input type="hidden" name="name" value="{{ b.name }}">
+            <input type="hidden" name="confirm" value="yes">
             <button class="btn small danger" type="submit">Restore</button>
           </form>
         </td>

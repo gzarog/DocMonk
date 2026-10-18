@@ -215,6 +215,7 @@ pub fn collect(
             published: active.as_ref().and(agg).map(published),
             published_missing: active.is_some() && published_map.is_none(),
             relationships: Some(relationship_status(d, active.as_deref())),
+            dependencies: dependency_status(d),
             active_build_id: active,
             lease,
         });
@@ -307,6 +308,22 @@ pub fn collect(
         now,
         Some(started.elapsed().as_millis() as u64),
     ))
+}
+
+/// The dependency manifest of a source-state document
+/// (`versions.graph_external`, bindings excluded from the fetch).
+fn dependency_status(d: &Value) -> Option<crate::model::DependencyStatus> {
+    let m = &d["versions"][docmonk_backends::graph::EXTERNAL_KEY];
+    let producers = m["producers"]
+        .as_object()
+        .map(|o| o.keys().cloned().collect())
+        .unwrap_or_default();
+    crate::snapshot::dependency_status(
+        m["state"].as_str(),
+        m["reason"].as_str(),
+        m["updated_at"].as_str(),
+        producers,
+    )
 }
 
 /// The graph record of a source-state document (`versions.graph`).

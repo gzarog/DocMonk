@@ -13,6 +13,15 @@
 //! * [`resolved_incoming`] / [`resolved_outgoing`]: edges with their other
 //!   end resolved to an entity and file.
 //! * [`find_tests_referencing`]: callers in files named like tests.
+//!
+//! Cross-source edges: a consumer's reference bound to exactly one
+//! producer entity (its dependency manifest) is followed into that
+//! producer, in both directions, when both sources are in the queried
+//! corpora (source filters stay hard restrictions) and both are still at
+//! the generations the binding was computed against. Ambiguous, unbound
+//! and stale bindings are never traversed. Nodes are keyed by
+//! `(corpus, entity id)`, so same-named symbols of unrelated sources never
+//! merge.
 
 use std::collections::{HashMap, HashSet};
 
@@ -50,10 +59,105 @@ pub struct SourceMatch {
 /// One traversed edge and its hop distance from the start entity.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct TraversalEdge {
+    /// The corpus holding `relationship` (the consumer, for an external
+    /// edge).
     #[serde(skip)]
     pub corpus: usize,
     pub depth: usize,
     pub relationship: RelationshipRow,
+    /// Set when the edge crosses into another source through a verified
+    /// dependency binding.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external: Option<ExternalHop>,
+}
+
+/// The producer end of a cross-source edge.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ExternalHop {
+    #[serde(skip)]
+    pub producer_corpus: usize,
+    pub producer_source_id: String,
+    pub consumer_source_id: String,
+    pub target_entity_id: String,
+}
+
+/// `(consumer corpus, relationship id, unresolved target symbol)`.
+type IncomingRef = (usize, String, String);
+
+/// Verified cross-source bindings among `corpora`, both ways.
+#[derive(Debug, Default)]
+struct Overlay {
+    /// `(consumer corpus, relationship id) -> hop`.
+    out: HashMap<(usize, String), ExternalHop>,
+    /// `(producer corpus, entity id) -> [(consumer corpus, relationship id,
+    /// reference text)]`.
+    inc: HashMap<(usize, String), Vec<IncomingRef>>,
+}
+
+impl Overlay {
+    fn load(corpora: &[Corpus<'_>]) -> Result<Self, SearchError> {
+        let mut o = Overlay::default();
+        let index: HashMap<&str, usize> = corpora
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (c.store.source_id(), i))
+            .collect();
+        let mut generations: HashMap<usize, Option<String>> = HashMap::new();
+        let mut generation = |i: usize| -> Result<Option<String>, SearchError> {
+            if let Some(g) = generations.get(&i) {
+                return Ok(g.clone());
+            }
+            let g = corpora[i]
+                .store
+                .dependency_generation(corpora[i].build_id)?;
+            generations.insert(i, g.clone());
+            Ok(g)
+        };
+        for (ci, c) in corpora.iter().enumerate() {
+            let Some(m) = c.store.external_manifest()? else {
+                continue;
+            };
+            if m.state != "current"
+                || m.bindings.is_empty()
+                || generation(ci)?.as_deref() != Some(m.consumer_base_generation.as_str())
+            {
+                continue;
+            }
+            for b in &m.bindings {
+                let (Some(p), Some(t), false) = (&b.producer, &b.target_entity_id, b.ambiguous)
+                else {
+                    continue;
+                };
+                let (Some(&pi), Some(snap)) = (index.get(p.as_str()), m.producers.get(p)) else {
+                    continue;
+                };
+                if pi == ci || generation(pi)?.as_deref() != Some(snap.base_generation.as_str()) {
+                    continue;
+                }
+                o.out.insert(
+                    (ci, b.relationship_id.clone()),
+                    ExternalHop {
+                        producer_corpus: pi,
+                        producer_source_id: p.clone(),
+                        consumer_source_id: c.store.source_id().to_owned(),
+                        target_entity_id: t.clone(),
+                    },
+                );
+                // Bindings written before the symbol was recorded: the
+                // unresolved edge is keyed by the reference's last segment.
+                let symbol = b.target_symbol.clone().unwrap_or_else(|| {
+                    let r = b.reference_text.as_str();
+                    r.rsplit('.').next().unwrap_or(r).to_owned()
+                });
+                o.inc.entry((pi, t.clone())).or_default().push((
+                    ci,
+                    b.relationship_id.clone(),
+                    symbol,
+                ));
+            }
+        }
+        Ok(o)
+    }
 }
 
 /// The edge sort key: type, then target (entity id, else
@@ -146,17 +250,17 @@ pub fn traverse_many(
     max_depth: usize,
     limit: usize,
 ) -> Result<Vec<Vec<TraversalEdge>>, SearchError> {
+    type Node = (usize, String);
     struct Walk {
-        corpus: usize,
-        visited: HashSet<String>,
-        frontier: Vec<String>,
+        visited: HashSet<Node>,
+        frontier: Vec<Node>,
         out: Vec<TraversalEdge>,
     }
     let outgoing = direction == Direction::Outgoing;
+    let overlay = Overlay::load(corpora)?;
     let mut walks: Vec<Walk> = starts
         .iter()
-        .map(|(corpus, start)| Walk {
-            corpus: *corpus,
+        .map(|start| Walk {
             visited: HashSet::from([start.clone()]),
             frontier: vec![start.clone()],
             out: Vec::new(),
@@ -164,14 +268,29 @@ pub fn traverse_many(
         .collect();
     let mut depth = 1;
     while depth <= max_depth {
+        crate::check_deadline()?;
         let active = |w: &Walk| !w.frontier.is_empty() && w.out.len() < limit;
         // One batched read per corpus for this level of every walk.
         let mut wanted: HashMap<usize, Vec<String>> = HashMap::new();
+        // Incoming external edges: consumer corpus -> (reference texts,
+        // relationship ids).
+        let mut external: HashMap<usize, (Vec<String>, HashSet<String>)> = HashMap::new();
         for w in walks.iter().filter(|w| active(w)) {
-            wanted
-                .entry(w.corpus)
-                .or_default()
-                .extend(w.frontier.iter().cloned());
+            for (corpus, id) in &w.frontier {
+                wanted.entry(*corpus).or_default().push(id.clone());
+                if !outgoing {
+                    for (cc, rel, text) in overlay
+                        .inc
+                        .get(&(*corpus, id.clone()))
+                        .into_iter()
+                        .flatten()
+                    {
+                        let e = external.entry(*cc).or_default();
+                        e.0.push(text.clone());
+                        e.1.insert(rel.clone());
+                    }
+                }
+            }
         }
         if wanted.is_empty() {
             break;
@@ -187,25 +306,64 @@ pub fn traverse_many(
                     .entity_edges_many(c.build_id, &ids, types, outgoing, limit as i64)?,
             );
         }
+        let mut external_rows: HashMap<(usize, String), RelationshipRow> = HashMap::new();
+        for (corpus, (mut texts, ids)) in external {
+            texts.sort();
+            texts.dedup();
+            let c = corpora[corpus];
+            let found = c
+                .store
+                .unresolved_edges_many(c.build_id, &texts, types, i64::MAX)?;
+            for r in found.into_values().flatten() {
+                if ids.contains(&r.id) {
+                    external_rows.insert((corpus, r.id.clone()), r);
+                }
+            }
+        }
         for w in walks.iter_mut() {
             if !active(w) {
                 continue;
             }
-            let rows = &level[&w.corpus];
             let mut next = Vec::new();
-            'frontier: for id in &w.frontier {
-                let mut edges = rows.get(id).cloned().unwrap_or_default();
-                edges.sort_by_key(edge_key);
-                for e in edges {
+            'frontier: for (corpus, id) in &w.frontier {
+                let mut edges: Vec<(usize, RelationshipRow)> = level[corpus]
+                    .get(id)
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|e| (*corpus, e))
+                    .collect();
+                if !outgoing {
+                    for (cc, rel, _) in overlay
+                        .inc
+                        .get(&(*corpus, id.clone()))
+                        .into_iter()
+                        .flatten()
+                    {
+                        if let Some(r) = external_rows.get(&(*cc, rel.clone())) {
+                            edges.push((*cc, r.clone()));
+                        }
+                    }
+                }
+                edges.sort_by(|a, b| edge_key(&a.1).cmp(&edge_key(&b.1)));
+                for (ec, e) in edges {
+                    let hop = overlay.out.get(&(ec, e.id.clone())).cloned();
                     let neighbor = if outgoing {
-                        e.target_entity_id.clone()
+                        match (&e.target_entity_id, &hop) {
+                            (Some(t), _) => Some((ec, t.clone())),
+                            (None, Some(h)) => {
+                                Some((h.producer_corpus, h.target_entity_id.clone()))
+                            }
+                            (None, None) => None,
+                        }
                     } else {
-                        Some(e.source_entity_id.clone())
+                        Some((ec, e.source_entity_id.clone()))
                     };
                     w.out.push(TraversalEdge {
-                        corpus: w.corpus,
+                        corpus: ec,
                         depth,
                         relationship: e,
+                        external: hop,
                     });
                     if w.out.len() >= limit {
                         break 'frontier;
@@ -272,6 +430,7 @@ fn unresolved_for_all(
                         corpus,
                         depth: 1,
                         relationship,
+                        external: None,
                     })
                     .collect(),
             );
@@ -317,6 +476,7 @@ pub fn unresolved_symbol_edges(
             corpus,
             depth: 1,
             relationship,
+            external: None,
         })
         .collect())
 }
@@ -424,18 +584,21 @@ fn resolve_all(
     edges: Vec<(String, TraversalEdge)>,
     direction: Direction,
 ) -> Result<Vec<ResolvedEdge>, SearchError> {
-    let neighbor = |e: &TraversalEdge| -> Option<String> {
+    let neighbor = |e: &TraversalEdge| -> Option<(usize, String)> {
         let r = &e.relationship;
-        match direction {
-            Direction::Incoming => Some(r.source_entity_id.clone()),
-            Direction::Outgoing => r.target_entity_id.clone(),
+        match (direction, &e.external) {
+            (Direction::Incoming, _) => Some((e.corpus, r.source_entity_id.clone())),
+            (Direction::Outgoing, Some(h)) if r.target_entity_id.is_none() => {
+                Some((h.producer_corpus, h.target_entity_id.clone()))
+            }
+            (Direction::Outgoing, _) => r.target_entity_id.clone().map(|t| (e.corpus, t)),
         }
-        .filter(|id| !id.is_empty())
+        .filter(|(_, id)| !id.is_empty())
     };
     let mut by_corpus: HashMap<usize, Vec<String>> = HashMap::new();
     for (_, e) in &edges {
-        if let Some(id) = neighbor(e) {
-            by_corpus.entry(e.corpus).or_default().push(id);
+        if let Some((corpus, id)) = neighbor(e) {
+            by_corpus.entry(corpus).or_default().push(id);
         }
     }
     let mut entities: HashMap<(usize, String), EntityRow> = HashMap::new();
@@ -454,10 +617,12 @@ fn resolve_all(
     Ok(edges
         .into_iter()
         .map(|(source_id, edge)| {
-            let entity = neighbor(&edge).and_then(|id| entities.get(&(edge.corpus, id)).cloned());
+            let at = neighbor(&edge);
+            let corpus = at.as_ref().map_or(edge.corpus, |(c, _)| *c);
+            let entity = at.and_then(|k| entities.get(&k).cloned());
             let neighbor_path = entity
                 .as_ref()
-                .and_then(|e| paths.get(&(edge.corpus, e.file_id.clone())).cloned());
+                .and_then(|e| paths.get(&(corpus, e.file_id.clone())).cloned());
             ResolvedEdge {
                 edge,
                 source_id,

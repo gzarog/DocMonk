@@ -375,6 +375,18 @@ pub trait KnowledgeRead {
     fn graph_freshness(&self, _build_id: &str) -> Result<GraphFreshness> {
         Ok(GraphFreshness::unknown())
     }
+
+    /// This source's cross-source dependency manifest (`None`: none).
+    fn external_manifest(&self) -> Result<Option<crate::graph::ExternalManifest>> {
+        Ok(None)
+    }
+
+    /// The generation identifying build `build_id` in dependency manifests
+    /// (`None`: not published), compared at read time so a binding whose
+    /// consumer or producer moved is never served.
+    fn dependency_generation(&self, _build_id: &str) -> Result<Option<String>> {
+        Ok(None)
+    }
 }
 
 impl KnowledgeRead for ProjectStore {
@@ -525,6 +537,12 @@ impl KnowledgeRead for ProjectStore {
     }
     fn graph_freshness(&self, b: &str) -> Result<GraphFreshness> {
         ProjectStore::graph_freshness(self, b)
+    }
+    fn external_manifest(&self) -> Result<Option<crate::graph::ExternalManifest>> {
+        ProjectStore::external_manifest(self)
+    }
+    fn dependency_generation(&self, b: &str) -> Result<Option<String>> {
+        ProjectStore::base_generation(self, b)
     }
 }
 

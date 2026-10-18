@@ -12,7 +12,6 @@
 //! kind, `timeout` or `internal_error`.
 
 use std::io::{BufRead, Write};
-use std::sync::mpsc;
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -24,6 +23,8 @@ use serde_json::{json, Map, Value};
 
 use docmonk_service::query::{self as query_cmd, open_sources};
 use docmonk_service::{load, prepared_home};
+
+pub mod exec;
 
 /// Protocol versions the server accepts; anything else gets the latest.
 const SUPPORTED_PROTOCOL_VERSIONS: &[&str] =
@@ -78,14 +79,18 @@ pub fn serve(mcp: bool) -> Result<(), DocMonkError> {
     }
     // stdout is the transport: diagnostics go to stderr only.
     eprintln!("DocMonk MCP server starting on stdio...");
+    let limit = usize::try_from(load(&home)?.mcp.max_request_bytes).unwrap_or(1 << 20);
     let stdin = std::io::stdin();
+    let mut input = stdin.lock();
     let mut stdout = std::io::stdout();
-    for line in stdin.lock().lines() {
-        let Ok(line) = line else { break };
-        if line.trim().is_empty() {
-            continue;
-        }
-        if let Some(reply) = handle_line(&line) {
+    loop {
+        let reply = match read_bounded_line(&mut input, limit) {
+            Ok(None) | Err(_) => break,
+            Ok(Some(Err(()))) => Some(too_large(limit)),
+            Ok(Some(Ok(line))) if line.trim().is_empty() => continue,
+            Ok(Some(Ok(line))) => handle_line(&line),
+        };
+        if let Some(reply) = reply {
             let text = serde_json::to_string(&reply).unwrap_or_default();
             if writeln!(stdout, "{text}")
                 .and_then(|()| stdout.flush())
@@ -95,27 +100,75 @@ pub fn serve(mcp: bool) -> Result<(), DocMonkError> {
             }
         }
     }
+    // Graceful shutdown: give cancelled workers a moment to stop.
+    let drained = executor().drain(Duration::from_secs(5));
+    eprintln!(
+        "DocMonk MCP server stopped (drained: {drained}); metrics: {}",
+        metrics().to_json()
+    );
     Ok(())
 }
 
-/// One JSON-RPC message in, at most one message out.
+/// JSON-RPC 2.0 error codes.
+pub const PARSE_ERROR: i64 = -32700;
+pub const INVALID_REQUEST: i64 = -32600;
+pub const METHOD_NOT_FOUND: i64 = -32601;
+pub const INVALID_PARAMS: i64 = -32602;
+
+fn rpc_error(id: Value, code: i64, message: &str) -> Value {
+    json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}})
+}
+
+/// The reply to a message longer than `mcp.max_request_bytes` (its id is
+/// unknown, so `null`).
+pub fn too_large(limit: usize) -> Value {
+    rpc_error(
+        Value::Null,
+        INVALID_REQUEST,
+        &format!("request exceeds mcp.max_request_bytes={limit}"),
+    )
+}
+
+/// One JSON-RPC message in, at most one message out. Malformed JSON is a
+/// parse error (-32700, id null); a message that is not a valid request
+/// is -32600; an unknown method -32601; bad `tools/call` params -32602.
+/// Notifications (no `id`) and responses never get a reply.
 pub fn handle_line(line: &str) -> Option<Value> {
     let Ok(msg) = serde_json::from_str::<Value>(line) else {
-        // The parse failure is logged to the client.
-        return Some(json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/message",
-            "params": {
-                "level": "error",
-                "logger": "mcp.server.exception_handler",
-                "data": "Internal Server Error",
-            },
-        }));
+        eprintln!("docmonk mcp: unparseable message ({} bytes)", line.len());
+        return Some(rpc_error(Value::Null, PARSE_ERROR, "Parse error"));
     };
-    let method = msg.get("method")?.as_str()?;
-    // Notifications (no id) and responses get no reply.
-    let id = msg.get("id").filter(|id| !id.is_null())?.clone();
-    let params = msg.get("params").cloned().unwrap_or(Value::Null);
+    let Value::Object(obj) = &msg else {
+        return Some(rpc_error(Value::Null, INVALID_REQUEST, "Invalid Request"));
+    };
+    // A valid id is a string, a number or null; anything else is unusable.
+    let id = match obj.get("id") {
+        None => None,
+        Some(v @ (Value::String(_) | Value::Number(_) | Value::Null)) => Some(v.clone()),
+        Some(_) => {
+            return Some(rpc_error(
+                Value::Null,
+                INVALID_REQUEST,
+                "Invalid Request: bad id",
+            ))
+        }
+    };
+    let method = obj.get("method").and_then(Value::as_str);
+    if obj.get("jsonrpc").and_then(Value::as_str) != Some("2.0") || method.is_none() {
+        // A response from the client (result/error, no method) needs no reply.
+        if method.is_none() && (obj.contains_key("result") || obj.contains_key("error")) {
+            return None;
+        }
+        return Some(rpc_error(
+            id.unwrap_or(Value::Null),
+            INVALID_REQUEST,
+            "Invalid Request",
+        ));
+    }
+    let method = method.unwrap_or_default();
+    // Notifications get no reply.
+    let id = id?;
+    let params = obj.get("params").cloned().unwrap_or(Value::Null);
     let outcome = match method {
         "initialize" => Ok(initialize(&params)),
         "ping" => Ok(json!({})),
@@ -123,13 +176,57 @@ pub fn handle_line(line: &str) -> Option<Value> {
         "prompts/list" => Ok(json!({"prompts": []})),
         "resources/list" => Ok(json!({"resources": []})),
         "resources/templates/list" => Ok(json!({"resourceTemplates": []})),
+        "tools/call" if !params.is_object() => Err((INVALID_PARAMS, "Invalid params")),
         "tools/call" => Ok(call_tool(&params)),
-        _ => Err(json!({"code": -32602, "message": "Invalid request parameters", "data": ""})),
+        _ => Err((METHOD_NOT_FOUND, "Method not found")),
     };
     Some(match outcome {
         Ok(result) => json!({"jsonrpc": "2.0", "id": id, "result": result}),
-        Err(error) => json!({"jsonrpc": "2.0", "id": id, "error": error}),
+        Err((code, message)) => rpc_error(id, code, message),
     })
+}
+
+/// Reads one `\n`-terminated line of at most `limit` bytes. `Ok(None)` at
+/// end of input; `Err(())` for an over-long line, which is consumed up to
+/// its newline so the stream stays in sync.
+pub fn read_bounded_line(
+    r: &mut impl BufRead,
+    limit: usize,
+) -> std::io::Result<Option<Result<String, ()>>> {
+    let mut buf = Vec::new();
+    let mut over = false;
+    loop {
+        let chunk = r.fill_buf()?;
+        if chunk.is_empty() {
+            if buf.is_empty() && !over {
+                return Ok(None);
+            }
+            break;
+        }
+        let (take, done) = match chunk.iter().position(|b| *b == b'\n') {
+            Some(p) => (p + 1, true),
+            None => (chunk.len(), false),
+        };
+        if !over {
+            if buf.len() + take > limit + 1 {
+                over = true;
+                buf.clear();
+            } else {
+                buf.extend_from_slice(&chunk[..take]);
+            }
+        }
+        r.consume(take);
+        if done {
+            break;
+        }
+    }
+    if over {
+        return Ok(Some(Err(())));
+    }
+    while buf.last().is_some_and(|b| *b == b'\n' || *b == b'\r') {
+        buf.pop();
+    }
+    Ok(Some(Ok(String::from_utf8_lossy(&buf).into_owned())))
 }
 
 fn initialize(params: &Value) -> Value {
@@ -180,11 +277,19 @@ fn call_tool(params: &Value) -> Value {
         &spec["outputSchema"],
         &spec["outputSchema"],
     );
+    tool_result(output)
+}
+
+/// The `tools/call` result for a tool's (projected) output.
+fn tool_result(output: Value) -> Value {
     let text = serde_json::to_string_pretty(&output).unwrap_or_default();
+    // A failed call (`ok: false`) is a tool error to the client, not a
+    // successful result that happens to describe one.
+    let is_error = output["ok"] != true;
     json!({
         "content": [{"type": "text", "text": text}],
         "structuredContent": output,
-        "isError": false,
+        "isError": is_error,
     })
 }
 
@@ -192,7 +297,7 @@ fn call_tool(params: &Value) -> Value {
 
 struct Issue {
     field: String,
-    message: &'static str,
+    message: String,
 }
 
 /// Integer arguments also accept integral floats and numeric strings.
@@ -209,6 +314,53 @@ fn as_int(v: &Value) -> Result<Value, &'static str> {
             .map(|i| json!(i))
             .map_err(|_| "expected an integer"),
         _ => Err("expected an integer"),
+    }
+}
+
+/// The non-null branch of a property (`anyOf: [T, null]`), or the
+/// property itself.
+fn branch(prop: &Value) -> &Value {
+    prop["anyOf"]
+        .as_array()
+        .and_then(|a| a.iter().find(|t| t["type"] != "null"))
+        .unwrap_or(prop)
+}
+
+/// Checks one present, non-null argument against its schema branch.
+fn check(value: &Value, schema: &Value) -> Result<Value, String> {
+    match schema["type"].as_str() {
+        Some("string") => match value {
+            Value::String(_) => Ok(value.clone()),
+            _ => Err("expected a string".into()),
+        },
+        Some("boolean") => match value {
+            Value::Bool(_) => Ok(value.clone()),
+            _ => Err("expected a boolean".into()),
+        },
+        Some("integer") => {
+            let v = as_int(value)?;
+            let n = v.as_i64().unwrap_or(i64::MAX);
+            let min = schema["minimum"].as_i64();
+            let max = schema["maximum"].as_i64();
+            if min.is_some_and(|m| n < m) || max.is_some_and(|m| n > m) {
+                return Err(format!(
+                    "must be between {} and {}",
+                    min.map_or("-inf".into(), |m| m.to_string()),
+                    max.map_or("inf".into(), |m| m.to_string())
+                ));
+            }
+            Ok(v)
+        }
+        Some("array") => {
+            let Value::Array(items) = value else {
+                return Err("expected an array".into());
+            };
+            for (i, item) in items.iter().enumerate() {
+                check(item, &schema["items"]).map_err(|m| format!("item {i}: {m}"))?;
+            }
+            Ok(value.clone())
+        }
+        _ => Ok(value.clone()),
     }
 }
 
@@ -231,7 +383,7 @@ fn validate(tool: &str, schema: &Value, args: &Value) -> Result<Map<String, Valu
             if required.contains(&field.as_str()) {
                 issues.push(Issue {
                     field: field.clone(),
-                    message: "required",
+                    message: "required".into(),
                 });
             }
             continue;
@@ -239,27 +391,11 @@ fn validate(tool: &str, schema: &Value, args: &Value) -> Result<Map<String, Valu
         let nullable = prop["anyOf"]
             .as_array()
             .is_some_and(|a| a.iter().any(|t| t["type"] == "null"));
-        let ty = prop["type"].as_str().or_else(|| {
-            prop["anyOf"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|t| t["type"].as_str())
-                .find(|t| *t != "null")
-        });
         if value.is_null() && nullable {
             out.insert(field.clone(), Value::Null);
             continue;
         }
-        let checked = match ty {
-            Some("string") => match value {
-                Value::String(_) => Ok(value.clone()),
-                _ => Err("expected a string"),
-            },
-            Some("integer") => as_int(value),
-            _ => Ok(value.clone()),
-        };
-        match checked {
+        match check(value, branch(prop)) {
             Ok(v) => {
                 out.insert(field.clone(), v);
             }
@@ -267,6 +403,22 @@ fn validate(tool: &str, schema: &Value, args: &Value) -> Result<Map<String, Valu
                 field: field.clone(),
                 message,
             }),
+        }
+    }
+    // Unknown arguments are rejected, not silently ignored: a misspelled
+    // filter must never widen a query.
+    if schema["additionalProperties"] == false {
+        let known = schema["properties"].as_object();
+        let mut extra: Vec<&String> = given
+            .keys()
+            .filter(|k| known.is_none_or(|p| !p.contains_key(*k)))
+            .collect();
+        extra.sort();
+        for field in extra {
+            issues.push(Issue {
+                field: field.clone(),
+                message: "unknown argument".into(),
+            });
         }
     }
     if issues.is_empty() {
@@ -365,47 +517,68 @@ fn failure(kind: &str, message: impl Into<String>) -> Value {
     })
 }
 
+/// The process-wide tool executor (limits refreshed from config per call).
+pub fn executor() -> &'static exec::Executor {
+    static EXEC: OnceLock<exec::Executor> = OnceLock::new();
+    EXEC.get_or_init(exec::Executor::default)
+}
+
+/// Current executor counters (running, queued, rejected, timed out...).
+pub fn metrics() -> exec::Metrics {
+    executor().metrics()
+}
+
 fn run_tool(name: &str, args: Map<String, Value>) -> Value {
     let home = match prepared_home() {
         Ok(h) => h,
         Err(e) => return failure(error_type(&e), e.message()),
     };
-    let timeout = match load(&home) {
-        Ok(cfg) => cfg.mcp.request_timeout_seconds,
+    let mcp = match load(&home) {
+        Ok(cfg) => cfg.mcp,
         Err(e) => return failure(error_type(&e), e.message()),
     };
-    // One result per call; an abandoned worker's send never blocks.
-    let (tx, rx) = mpsc::sync_channel(1);
-    let name = name.to_owned();
-    // An abandoned worker runs to completion in the background; the
-    // timeout only stops waiting for it.
-    std::thread::spawn(move || {
-        let outcome = std::panic::catch_unwind(|| work(&home, &name, &args));
-        let _ = tx.send(outcome);
+    let exec = executor();
+    exec.set_limits(exec::Limits {
+        max_running: usize::try_from(mcp.max_concurrent_calls).unwrap_or(1),
+        max_queued: usize::try_from(mcp.max_queued_calls).unwrap_or(0),
     });
+    let timeout = mcp.request_timeout_seconds;
     let wait = Duration::try_from_secs_f64(timeout.max(0.0)).unwrap_or(Duration::MAX);
-    match rx.recv_timeout(wait) {
-        Ok(Ok(Ok(Value::Object(mut data)))) => {
+    let name = name.to_owned();
+    match exec.run(wait, move || work(&home, &name, &args)) {
+        exec::Outcome::Done(Ok(Value::Object(mut data))) => {
             data.insert("schema_version".into(), json!(SCHEMA_VERSION));
             data.insert("ok".into(), json!(true));
             data.insert("error".into(), Value::Null);
             Value::Object(data)
         }
-        Ok(Ok(Ok(_))) => failure("internal_error", "tool returned no data"),
-        Ok(Ok(Err(e))) => failure(error_type(&e), e.message()),
-        Ok(Err(panic)) => failure(
-            "internal_error",
-            panic
-                .downcast_ref::<String>()
-                .cloned()
-                .or_else(|| panic.downcast_ref::<&str>().map(|s| (*s).to_owned()))
-                .unwrap_or_else(|| "internal error".into()),
-        ),
-        Err(mpsc::RecvTimeoutError::Timeout) => failure(
+        exec::Outcome::Done(Ok(_)) => failure("internal_error", "tool returned no data"),
+        // A worker that hit its own deadline reports the timeout, not the
+        // interrupted read underneath.
+        exec::Outcome::Done(Err(e)) if e.message().contains(docmonk_core::deadline::CANCELLED) => {
+            failure(
+                "timeout",
+                format!("tool call exceeded mcp.request_timeout_seconds={timeout}s"),
+            )
+        }
+        exec::Outcome::Done(Err(e)) => failure(error_type(&e), e.message()),
+        // The panic payload is logged to stderr, never returned.
+        exec::Outcome::Panicked => failure("internal_error", "internal error"),
+        exec::Outcome::Overloaded => {
+            let m = exec.metrics();
+            failure(
+                "overloaded",
+                format!(
+                    "{} tool calls running and {} queued (mcp.max_concurrent_calls / \
+                     mcp.max_queued_calls); retry later",
+                    m.running, m.queued
+                ),
+            )
+        }
+        exec::Outcome::TimedOut => failure(
             "timeout",
             format!("tool call exceeded mcp.request_timeout_seconds={timeout}s"),
         ),
-        Err(mpsc::RecvTimeoutError::Disconnected) => failure("internal_error", "worker stopped"),
     }
 }
 
@@ -417,12 +590,12 @@ fn required(args: &Map<String, Value>, field: &str) -> Result<String, DocMonkErr
     Ok(value.to_owned())
 }
 
-/// An optional positive integer argument; `None`/0 mean the default.
+/// An optional integer argument (range-checked by [`validate`]); absent
+/// or null means the default.
 fn optional(args: &Map<String, Value>, field: &str, default: usize) -> usize {
-    match args.get(field).and_then(Value::as_i64) {
-        Some(v) if v != 0 => v.max(0) as usize,
-        _ => default,
-    }
+    args.get(field)
+        .and_then(Value::as_u64)
+        .map_or(default, |v| v as usize)
 }
 
 fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, DocMonkError> {
@@ -432,8 +605,8 @@ fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, Doc
             let query = required(args, "query")?;
             let mut budget = query_cmd::config_budget(&cfg);
             let set = |field: &str, slot: &mut usize| {
-                if let Some(v) = args.get(field).and_then(Value::as_i64) {
-                    *slot = v.max(0) as usize;
+                if let Some(v) = args.get(field).and_then(Value::as_u64) {
+                    *slot = v as usize;
                 }
             };
             set("max_chars", &mut budget.max_chars);
@@ -501,7 +674,7 @@ fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, Doc
                             .and_then(Value::as_bool)
                             .unwrap_or(false),
                     },
-                    limit: optional(args, "limit", 10).min(100),
+                    limit: optional(args, "limit", 10),
                 },
             )
         }
@@ -609,11 +782,86 @@ mod tests {
         let ok = validate(
             "docmonk_search",
             schema,
-            &json!({"query": "q", "limit": "3", "extra": 1}),
+            &json!({"query": "q", "limit": "3"}),
         )
         .unwrap();
         assert_eq!(ok["limit"], 3);
-        assert!(!ok.contains_key("extra"));
+    }
+
+    /// Audit PH05: unknown arguments, out-of-range numbers, wrong booleans
+    /// and wrongly typed array items are rejected (before, they were
+    /// dropped, clamped or ignored, silently widening a query).
+    #[test]
+    fn validation_rejects_unknown_out_of_range_and_mistyped_arguments() {
+        let search = &tool("docmonk_search").unwrap()["inputSchema"];
+        let err = validate(
+            "docmonk_search",
+            search,
+            &json!({"query": "q", "limit": -5, "sourceids": ["a"]}),
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "invalid arguments for docmonk_search: limit: must be between 1 and 1000; \
+             sourceids: unknown argument"
+        );
+        let calls = &tool("docmonk_callers").unwrap()["inputSchema"];
+        assert!(validate(
+            "docmonk_callers",
+            calls,
+            &json!({"name": "f", "max_depth": 1_000_000})
+        )
+        .unwrap_err()
+        .contains("max_depth: must be between 1 and 10"));
+        let evidence = &tool("docmonk_evidence").unwrap()["inputSchema"];
+        let err = validate(
+            "docmonk_evidence",
+            evidence,
+            &json!({
+                "query": "q",
+                "exclude_attachments": "yes",
+                "path_prefixes": ["docs/", 7],
+                "limit": 500,
+            }),
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("exclude_attachments: expected a boolean"),
+            "{err}"
+        );
+        assert!(
+            err.contains("path_prefixes: item 1: expected a string"),
+            "{err}"
+        );
+        assert!(err.contains("limit: must be between 1 and 100"), "{err}");
+        // Every bounded integer in the catalog declares both bounds.
+        for t in tools() {
+            for (field, prop) in t["inputSchema"]["properties"].as_object().unwrap() {
+                let b = branch(prop);
+                if b["type"] == "integer" {
+                    assert!(
+                        b["minimum"].is_i64() && b["maximum"].is_i64(),
+                        "{}.{field}",
+                        t["name"]
+                    );
+                }
+            }
+            assert_eq!(
+                t["inputSchema"]["additionalProperties"], false,
+                "{}",
+                t["name"]
+            );
+        }
+    }
+
+    /// Audit PH05: a failed call is flagged `isError`.
+    #[test]
+    fn failed_results_set_is_error() {
+        let failed = tool_result(failure("timeout", "too slow"));
+        assert_eq!(failed["isError"], true);
+        assert_eq!(failed["structuredContent"]["error"]["type"], "timeout");
+        let ok = tool_result(json!({"schema_version": "1", "ok": true, "error": null}));
+        assert_eq!(ok["isError"], false);
     }
 
     #[test]
@@ -656,9 +904,10 @@ mod tests {
         let r = handle_line(r#"{"jsonrpc":"2.0","id":7,"method":"initialize","params":{"protocolVersion":"1999-01-01"}}"#).unwrap();
         assert_eq!(r["result"]["protocolVersion"], LATEST_PROTOCOL_VERSION);
         let r = handle_line(r#"{"jsonrpc":"2.0","id":"a","method":"x"}"#).unwrap();
-        assert_eq!(r["error"]["code"], -32602);
+        assert_eq!(r["error"]["code"], METHOD_NOT_FOUND);
         assert_eq!(r["id"], "a");
         let r = handle_line("garbage").unwrap();
-        assert_eq!(r["method"], "notifications/message");
+        assert_eq!(r["error"]["code"], PARSE_ERROR);
+        assert!(r["id"].is_null());
     }
 }

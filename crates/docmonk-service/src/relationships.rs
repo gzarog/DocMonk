@@ -316,11 +316,11 @@ pub struct StageSummary {
     pub files_reresolved: usize,
     pub resolutions_changed: usize,
     pub relationships_written: usize,
-    /// Server mode: files copied forward / written, records copied forward
-    /// and records adopted from the server into a staging store.
-    pub files_copied: usize,
+    /// Server mode: files kept untouched / written, previous records
+    /// closed and records adopted from the server into a staging store.
+    pub files_kept: usize,
     pub files_written: usize,
-    pub records_copied: u64,
+    pub records_closed: u64,
     pub records_hydrated: usize,
     pub planning_seconds: f64,
     /// Seconds per graph phase and request/statement counts, summed over
@@ -330,7 +330,7 @@ pub struct StageSummary {
     pub linking_seconds: f64,
     pub commit_seconds: f64,
     pub server_staging_seconds: f64,
-    pub server_copy_seconds: f64,
+    pub server_close_seconds: f64,
     pub server_bulk_seconds: f64,
     pub server_promotion_seconds: f64,
     pub sql_statements: u64,
@@ -379,14 +379,14 @@ impl StageSummary {
         self.sql_statements += g.counters.sql_statements;
         if let Some(p) = &run.server_publish {
             self.server_staging_seconds += p.timings.staging_seconds;
-            self.server_copy_seconds += p.timings.copy_seconds;
+            self.server_close_seconds += p.timings.close_seconds;
             self.server_bulk_seconds += p.timings.bulk_seconds + p.timings.refresh_seconds;
             self.server_promotion_seconds += p.timings.promotion_seconds;
             self.sql_statements += p.counters.staging_sql_statements;
             self.server_http_requests += p.counters.http_requests;
-            self.files_copied += p.files_copied;
+            self.files_kept += p.files_kept;
             self.files_written += p.files_written;
-            self.records_copied += p.records_copied;
+            self.records_closed += p.records_closed;
             self.records_hydrated += p.records_hydrated;
             self.relationships_written += p.edges_written + p.links_written;
         }
@@ -395,6 +395,12 @@ impl StageSummary {
     /// Sources whose graph is not current after the stage.
     pub fn not_current(&self) -> usize {
         self.failed + self.stale
+    }
+
+    /// Graphs not current plus unresolved (or unchecked) dependencies: what
+    /// keeps a `relationships build` from `success`.
+    pub fn incomplete(&self) -> usize {
+        self.not_current() + self.dependencies.not_current()
     }
 }
 
@@ -444,10 +450,11 @@ pub fn build(
                     &backend,
                     &all,
                     opts.lock_timeout,
-                    |_, o| summary.dependencies.add(&o),
+                    |s, o| summary.dependencies.record(&s.id, &o),
                 ),
                 Err(e) => {
-                    tracing::warn!(component = "relationships", event = "dependencies_skipped", error = %e.message())
+                    tracing::warn!(component = "relationships", event = "dependencies_skipped", error = %e.message());
+                    summary.dependencies.skip(e.message());
                 }
             }
             tracker.set_phase("done");

@@ -26,6 +26,9 @@ use crate::{generic, load};
 const START_TIMEOUT: Duration = Duration::from_secs(30);
 const STOP_TIMEOUT: Duration = Duration::from_secs(15);
 const POLL: Duration = Duration::from_millis(100);
+/// How often the daemon looks for due dependency retries (each consumer
+/// keeps its own backoff in the retry book).
+const RETRY_CHECK: Duration = Duration::from_secs(10);
 
 /// The result of [`start`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,50 +161,54 @@ pub fn run_foreground(home: &Home, on_ready: impl FnOnce(i64)) -> Result<(), Doc
     let workers = cfg.indexing.resolved_max_parallel_sources().max(1);
     let registry =
         || docmonk_convert::registry_with(&cfg, &docmonk_convert::RegistryOptions::for_home(home));
-    let (catalog, runners): (Box<dyn Catalog>, Vec<Box<dyn PassRunner>>) =
-        match crate::backend::open_for_write(home)? {
-            crate::backend::Backend::Local => {
-                let layout = StorageLayout::new(home);
-                let cache = cfg.runtime.sqlite_cache_size_mb;
-                let open = || ControlPlane::open(&layout, cache).map_err(generic);
-                // The daemon's catalog connection, and each worker's own.
-                let mut runners: Vec<Box<dyn PassRunner>> = Vec::new();
-                let graph: docmonk_indexing::daemon::GraphHook = {
-                    let (home, cfg) = (home.clone(), cfg.clone());
-                    Arc::new(move |source: &SourceRecord| {
-                        Some(daemon_graph(
-                            &home,
-                            &cfg,
-                            &crate::backend::Backend::Local,
-                            source,
-                        ))
-                    })
-                };
-                for _ in 0..workers {
-                    runners.push(Box::new(CoordinatorRunner {
-                        layout: layout.clone(),
-                        control: open()?,
-                        registry: registry(),
-                        opts: Options::from_config(&cfg),
-                        graph: Some(graph.clone()),
-                    }));
-                }
-                (Box::new(open()?), runners)
+    let backend = crate::backend::open_for_write(home)?;
+    let retry_backend = match &backend {
+        crate::backend::Backend::Local => crate::backend::Backend::Local,
+        crate::backend::Backend::Server(s) => crate::backend::Backend::Server(s.clone()),
+    };
+    let (catalog, runners): (Box<dyn Catalog>, Vec<Box<dyn PassRunner>>) = match backend {
+        crate::backend::Backend::Local => {
+            let layout = StorageLayout::new(home);
+            let cache = cfg.runtime.sqlite_cache_size_mb;
+            let open = || ControlPlane::open(&layout, cache).map_err(generic);
+            // The daemon's catalog connection, and each worker's own.
+            let mut runners: Vec<Box<dyn PassRunner>> = Vec::new();
+            let graph: docmonk_indexing::daemon::GraphHook = {
+                let (home, cfg) = (home.clone(), cfg.clone());
+                Arc::new(move |source: &SourceRecord| {
+                    Some(daemon_graph(
+                        &home,
+                        &cfg,
+                        &crate::backend::Backend::Local,
+                        source,
+                    ))
+                })
+            };
+            for _ in 0..workers {
+                runners.push(Box::new(CoordinatorRunner {
+                    layout: layout.clone(),
+                    control: open()?,
+                    registry: registry(),
+                    opts: Options::from_config(&cfg),
+                    graph: Some(graph.clone()),
+                }));
             }
-            crate::backend::Backend::Server(server) => {
-                let mut runners: Vec<Box<dyn PassRunner>> = Vec::new();
-                for _ in 0..workers {
-                    runners.push(Box::new(ServerRunner {
-                        home: home.clone(),
-                        cfg: cfg.clone(),
-                        server: server.clone(),
-                        registry: registry(),
-                        opts: Options::from_config(&cfg),
-                    }));
-                }
-                (Box::new(ServerCatalog(server)), runners)
+            (Box::new(open()?), runners)
+        }
+        crate::backend::Backend::Server(server) => {
+            let mut runners: Vec<Box<dyn PassRunner>> = Vec::new();
+            for _ in 0..workers {
+                runners.push(Box::new(ServerRunner {
+                    home: home.clone(),
+                    cfg: cfg.clone(),
+                    server: server.clone(),
+                    registry: registry(),
+                    opts: Options::from_config(&cfg),
+                }));
             }
-        };
+            (Box::new(ServerCatalog(server)), runners)
+        }
+    };
     let daemon = Daemon::start_with_runners(
         home.clone(),
         DaemonOptions::from_config(&cfg),
@@ -209,7 +216,12 @@ pub fn run_foreground(home: &Home, on_ready: impl FnOnce(i64)) -> Result<(), Doc
         runners,
     )?;
     on_ready(me);
+    let mut next_retry = Instant::now() + RETRY_CHECK;
     while !stop.load(Ordering::Relaxed) {
+        if cfg.indexing.relationships_enabled && Instant::now() >= next_retry {
+            retry_dependencies(home, &cfg, &retry_backend);
+            next_retry = Instant::now() + RETRY_CHECK;
+        }
         std::thread::sleep(Duration::from_millis(200));
     }
     daemon.stop();
@@ -217,6 +229,33 @@ pub fn run_foreground(home: &Home, on_ready: impl FnOnce(i64)) -> Result<(), Doc
         pid::remove_pid_file(home);
     }
     Ok(())
+}
+
+/// Targeted retries of consumers whose dependencies are not current and
+/// whose backoff has elapsed: only their bindings are recomputed (no base
+/// reindex, no source graph rebuild).
+fn retry_dependencies(
+    home: &Home,
+    cfg: &docmonk_config::DocMonkConfig,
+    backend: &crate::backend::Backend,
+) {
+    let lock_timeout = Options::from_config(cfg).lock_timeout;
+    if let Some(summary) = crate::dependencies::retry_due(
+        home,
+        cfg,
+        backend,
+        lock_timeout,
+        |consumer, o| {
+            tracing::info!(component = "daemon", event = "dependency_retry", source_id = %consumer.id, state = o.state(), reason_code = o.code().unwrap_or_default());
+        },
+    ) {
+        tracing::info!(
+            component = "daemon",
+            event = "dependency_retries",
+            consumers = summary.consumers,
+            unresolved = summary.unresolved.len()
+        );
+    }
 }
 
 /// The server catalog as the daemon's source list.

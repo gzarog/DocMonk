@@ -68,6 +68,10 @@ pub struct ExternalBinding {
     pub relationship_id: String,
     pub file_id: String,
     pub reference_text: String,
+    /// The reference's unresolved target symbol in the consumer graph (how
+    /// readers find the edge from the producer side).
+    #[serde(default)]
+    pub target_symbol: Option<String>,
     /// Producer source of the single candidate (`None` when unbound or
     /// ambiguous).
     #[serde(default)]
@@ -103,6 +107,11 @@ pub struct ExternalManifest {
     /// Graph generation of the consumer the bindings were derived from.
     #[serde(default)]
     pub consumer_generation: u64,
+    /// Dependency generation of the consumer's published base the bindings
+    /// were derived from (see `KnowledgeRead::dependency_generation`):
+    /// readers serve the bindings only while it is still current.
+    #[serde(default)]
+    pub consumer_base_generation: String,
     #[serde(default)]
     pub producers: BTreeMap<String, ProducerSnapshot>,
     /// `producer -> qualified key -> candidate fingerprint`.
@@ -116,6 +125,11 @@ pub struct ExternalManifest {
     pub unsupported: Vec<String>,
     #[serde(default)]
     pub updated_at: Option<String>,
+    /// Monotonic revision, advanced by every persisted change: the copy
+    /// with the higher revision wins (in server mode the authoritative
+    /// copy is written first, so a lagging staging cache is repaired).
+    #[serde(default)]
+    pub revision: u64,
 }
 
 /// Candidate fingerprint of a qualified lookup: the candidates' entity ids
