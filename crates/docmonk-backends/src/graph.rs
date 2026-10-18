@@ -694,16 +694,17 @@ impl ServerBackend {
         source_id: &str,
         generation: &str,
     ) -> Result<Vec<docmonk_storage::knowledge::RelationshipRow>> {
+        // `reference_text` is stored, not indexed: it is checked here.
         Ok(self
             .graph_records_where(
                 source_id,
                 generation,
-                vec![
-                    json!({ "term": { "resolver": "unresolved" } }),
-                    json!({ "exists": { "field": "reference_text" } }),
-                ],
+                vec![json!({ "term": { "resolver": "unresolved" } })],
             )?
-            .edges)
+            .edges
+            .into_iter()
+            .filter(|r| r.reference_text.is_some())
+            .collect())
     }
 
     fn graph_records_where(
