@@ -31,6 +31,23 @@ pub struct ReadFilter {
     pub document_ids: Vec<String>,
 }
 
+/// Hard filters a server pushes into its kNN pre-filter (audit F06): the
+/// engine returns the exact top `k` inside them, so no out-of-scope
+/// vector crowds an in-scope one out. Callers still post-filter.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct VectorFilter {
+    /// Source-relative path prefixes (any).
+    pub path_prefixes: Vec<String>,
+    /// Document ids (any); entities never match a document filter.
+    pub document_ids: Vec<String>,
+    /// Search entity vectors (code index).
+    pub entities: bool,
+    /// Search chunk vectors (chunks index).
+    pub documents: bool,
+    /// Leave out chunks of email attachments.
+    pub exclude_attachments: bool,
+}
+
 impl ReadFilter {
     pub fn is_empty(&self) -> bool {
         self.path_prefixes.is_empty() && self.document_ids.is_empty()
@@ -365,6 +382,21 @@ pub trait KnowledgeRead {
         _query: &[f32],
         _k: usize,
         _num_candidates: usize,
+    ) -> Result<Option<Vec<VectorHit>>> {
+        Ok(None)
+    }
+
+    /// [`Self::vector_search`] with `filter` applied by the engine before
+    /// ranking, or `None` when this backend cannot push it down (the
+    /// caller then widens and post-filters).
+    fn vector_search_filtered(
+        &self,
+        _build_id: &str,
+        _fingerprint: &str,
+        _query: &[f32],
+        _k: usize,
+        _num_candidates: usize,
+        _filter: &VectorFilter,
     ) -> Result<Option<Vec<VectorHit>>> {
         Ok(None)
     }

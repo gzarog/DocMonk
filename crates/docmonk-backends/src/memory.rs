@@ -87,6 +87,29 @@ fn cmp(a: &Value, b: &Value) -> std::cmp::Ordering {
     }
 }
 
+/// `*`-only wildcard matching (no `?`, no escapes).
+fn glob(pattern: &str, text: &str) -> bool {
+    let parts: Vec<&str> = pattern.split('*').collect();
+    if parts.len() == 1 {
+        return pattern == text;
+    }
+    let (first, last) = (parts[0], parts[parts.len() - 1]);
+    if !text.starts_with(first) || text.len() < first.len() + last.len() {
+        return false;
+    }
+    let mut rest = &text[first.len()..text.len() - last.len()];
+    if !text.ends_with(last) {
+        return false;
+    }
+    for mid in &parts[1..parts.len() - 1] {
+        match rest.find(mid) {
+            Some(i) => rest = &rest[i + mid.len()..],
+            None => return false,
+        }
+    }
+    true
+}
+
 /// Whether `doc` matches `q`.
 pub fn matches(doc: &Value, q: &Value) -> bool {
     let Some((kind, body)) = q.as_object().and_then(|o| o.iter().next()) else {
@@ -120,6 +143,22 @@ pub fn matches(doc: &Value, q: &Value) -> bool {
                         && ok("lt", |o| o.is_lt())
                         && ok("lte", |o| o.is_le())
                 })
+            })
+        }),
+        "prefix" => body.as_object().is_some_and(|o| {
+            o.iter().all(|(f, v)| {
+                let v = v.get("value").unwrap_or(v).as_str().unwrap_or_default();
+                values(doc, f)
+                    .iter()
+                    .any(|x| x.as_str().is_some_and(|x| x.starts_with(v)))
+            })
+        }),
+        "wildcard" => body.as_object().is_some_and(|o| {
+            o.iter().all(|(f, v)| {
+                let v = v.get("value").unwrap_or(v).as_str().unwrap_or_default();
+                values(doc, f)
+                    .iter()
+                    .any(|x| x.as_str().is_some_and(|x| glob(v, x)))
             })
         }),
         "exists" => body["field"]

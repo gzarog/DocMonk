@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use docmonk_storage::read::KnowledgeRead;
+use docmonk_storage::read::{KnowledgeRead, VectorFilter};
 
 use crate::ann::{self, Engine};
 use crate::embedder::Embedder;
@@ -174,6 +174,32 @@ pub fn search_vector(
     candidate_k: Option<usize>,
     params: AnnParams,
 ) -> Result<SemanticResult, String> {
+    search_vector_filtered(
+        store,
+        project_dir,
+        build_id,
+        qv,
+        limit,
+        candidate_k,
+        params,
+        None,
+    )
+}
+
+/// [`search_vector`] with hard filters the server applies inside its kNN
+/// query (exact top-`k` under the filter). The local ANN index ignores
+/// `filter`: its caller widens and post-filters instead.
+#[allow(clippy::too_many_arguments)]
+pub fn search_vector_filtered(
+    store: &dyn KnowledgeRead,
+    project_dir: &Path,
+    build_id: &str,
+    qv: &QueryVector,
+    limit: usize,
+    candidate_k: Option<usize>,
+    params: AnnParams,
+    filter: Option<&VectorFilter>,
+) -> Result<SemanticResult, String> {
     docmonk_core::deadline::check()?;
     let mut stages = SemanticStages::default();
     let k = candidate_k.unwrap_or(limit).max(limit);
@@ -195,15 +221,24 @@ pub fn search_vector(
         }
         None => {
             let t = std::time::Instant::now();
-            let found = store
-                .vector_search(
+            let found = match filter {
+                Some(f) => store.vector_search_filtered(
                     build_id,
                     &qv.fingerprint,
                     &qv.vector,
                     k,
                     params.num_candidates,
-                )
-                .map_err(|e| e.to_string())?;
+                    f,
+                ),
+                None => store.vector_search(
+                    build_id,
+                    &qv.fingerprint,
+                    &qv.vector,
+                    k,
+                    params.num_candidates,
+                ),
+            }
+            .map_err(|e| e.to_string())?;
             stages.ann_search_ms = ms(t);
             match found {
                 Some(hits) => (Engine::Server, hits),

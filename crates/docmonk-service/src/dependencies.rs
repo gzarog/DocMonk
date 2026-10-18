@@ -39,6 +39,7 @@
 //! * Runs indexing only some sources still update their impacted consumers
 //!   against those consumers' existing published bases.
 
+use docmonk_storage::read::KnowledgeRead;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
 
@@ -108,12 +109,106 @@ impl Registry {
 
 /// A source's published build, opened for reading.
 pub(crate) struct View {
-    pub store: ProjectStore,
+    /// Local mode: the project store. Server mode: this host's staging
+    /// cache of the consumer manifest, when there is one (derived; never
+    /// read for references, project files or the graph).
+    pub store: Option<ProjectStore>,
+    /// Server mode: the authoritative published index (F04).
+    pub server: Option<docmonk_backends::reader::ServerReader>,
+    pub source_id: String,
     pub build: String,
     pub generation: String,
     /// The authoritative active build id when the view was opened (the
     /// control plane locally, the server's state in server mode).
     pub active: String,
+}
+
+impl View {
+    fn local(&self) -> Result<&ProjectStore, DocMonkError> {
+        self.store
+            .as_ref()
+            .ok_or_else(|| crate::generic("local view without a store"))
+    }
+
+    fn external_manifest(&self) -> Result<Option<ExternalManifest>, DocMonkError> {
+        match &self.server {
+            Some(r) => KnowledgeRead::external_manifest(r).map_err(db),
+            None => self.local()?.external_manifest().map_err(db),
+        }
+    }
+
+    /// Relative paths of the published `.csproj` files.
+    fn project_files(&self) -> Result<Vec<String>, DocMonkError> {
+        match &self.server {
+            Some(r) => r.file_paths_with_suffix(&self.build, ".csproj").map_err(db),
+            None => self
+                .local()?
+                .file_paths_with_suffix(&self.build, ".csproj")
+                .map_err(db),
+        }
+    }
+
+    fn graph_freshness(&self) -> Result<docmonk_storage::read::GraphFreshness, DocMonkError> {
+        match &self.server {
+            Some(r) => KnowledgeRead::graph_freshness(r, &self.build).map_err(db),
+            None => self.local()?.graph_freshness(&self.build).map_err(db),
+        }
+    }
+
+    /// The consumer's current graph generation, read afresh (the fence
+    /// compares it again after bindings are computed). In server mode the
+    /// graph lineage's generation number of the served graph (0: none),
+    /// and its id for reads.
+    fn graph_generation(&self) -> Result<(u64, String), DocMonkError> {
+        match &self.server {
+            Some(r) => {
+                let b = r.backend();
+                let source = &self.source_id;
+                let Some((id, _)) = b
+                    .served_graph(source, &self.build, true)
+                    .map_err(server_err)?
+                else {
+                    return Ok((0, String::new()));
+                };
+                let doc = b
+                    .source_state(source)
+                    .map_err(server_err)?
+                    .map(|s| s.doc)
+                    .unwrap_or_default();
+                let g = docmonk_backends::generations::Lineage::of(
+                    &doc,
+                    docmonk_backends::generations::Line::Graph,
+                )
+                .generation_of(&id)
+                .unwrap_or(0);
+                Ok((g.max(0) as u64, id))
+            }
+            None => Ok((
+                self.local()?.graph_state().map_err(db)?.generation,
+                String::new(),
+            )),
+        }
+    }
+
+    /// Unresolved cross-file references with reference text, by id.
+    fn unresolved_references(
+        &self,
+        graph_generation: &str,
+    ) -> Result<Vec<docmonk_storage::knowledge::RelationshipRow>, DocMonkError> {
+        match &self.server {
+            Some(r) => r
+                .backend()
+                .graph_unresolved_references(&self.source_id, graph_generation)
+                .map_err(server_err),
+            None => Ok(self
+                .local()?
+                .cross_file_references(&self.build)
+                .map_err(db)?
+                .into_iter()
+                .filter(|r| r.resolver == "unresolved" && r.reference_text.is_some())
+                .collect()),
+        }
+    }
 }
 
 /// The authoritative active build id of `source` right now.
@@ -142,7 +237,7 @@ pub(crate) fn open_view(
     backend: &Backend,
     source: &SourceRecord,
 ) -> Result<Option<View>, DocMonkError> {
-    let (store, build, active) = match backend {
+    match backend {
         Backend::Local => {
             let Some(build) = control_plane(home)?
                 .state(&source.id)
@@ -163,24 +258,42 @@ pub(crate) fn open_view(
                 cfg.runtime.sqlite_cache_size_mb,
             )
             .map_err(db)?;
-            (store, build.clone(), build)
+            let Some(generation) = store.base_generation(&build).map_err(db)? else {
+                return Ok(None);
+            };
+            Ok(Some(View {
+                store: Some(store),
+                server: None,
+                source_id: source.id.clone(),
+                build: build.clone(),
+                generation,
+                active: build,
+            }))
         }
         Backend::Server(server) => {
-            match crate::server_index::synced_staging_store(home, cfg, server, source)? {
-                Some(v) => v,
-                None => return Ok(None),
-            }
+            // Everything is read from the authoritative published index;
+            // a staging copy is only a manifest cache (F04: no host-local
+            // state decides what the consumer references).
+            let Some(active) = active_build(home, backend, source)? else {
+                return Ok(None);
+            };
+            let cache = crate::server_index::synced_staging_store(home, cfg, server, source)
+                .ok()
+                .flatten()
+                .map(|(store, _, _)| store);
+            Ok(Some(View {
+                store: cache,
+                server: Some(docmonk_backends::reader::ServerReader::new(
+                    server.clone(),
+                    &source.id,
+                )),
+                source_id: source.id.clone(),
+                build: active.clone(),
+                generation: format!("server:{active}"),
+                active,
+            }))
         }
-    };
-    let Some(generation) = store.base_generation(&build).map_err(db)? else {
-        return Ok(None);
-    };
-    Ok(Some(View {
-        store,
-        build,
-        generation,
-        active,
-    }))
+    }
 }
 
 /// Where a producer's published definitions are read from.
@@ -202,10 +315,65 @@ pub(crate) struct Producer {
 
 type Candidates = std::collections::HashMap<String, Vec<docmonk_storage::knowledge::EntityRow>>;
 
+/// Producer candidates already read during one dependency run, keyed by
+/// `(producer, generation)` and name (PH09: 150 consumers of one producer
+/// look its names up once). A generation's definitions never change, so
+/// a hit is the same answer a read would give; it never stands in for the
+/// fence, which still compares every producer's generation before a
+/// consumer's bindings are published.
+#[derive(Default)]
+pub(crate) struct LookupCache {
+    map: std::cell::RefCell<std::collections::HashMap<(String, String), Candidates>>,
+    /// Names served from the cache / read from a producer (diagnostics).
+    pub hits: std::cell::Cell<usize>,
+    pub reads: std::cell::Cell<usize>,
+}
+
 impl Producer {
-    /// Exact qualified-name candidates of `names`, batched. An error is a
-    /// failed read, never "no candidate".
-    fn lookup(&self, names: &[&str]) -> Result<Candidates, String> {
+    /// Exact qualified-name candidates of `names`, batched; names this run
+    /// already read at the same generation come from `cache`. An error is
+    /// a failed read, never "no candidate".
+    fn lookup(&self, id: &str, cache: &LookupCache, names: &[&str]) -> Result<Candidates, String> {
+        let key = (id.to_owned(), self.generation.clone());
+        let mut out = Candidates::new();
+        let mut missing: Vec<&str> = Vec::new();
+        {
+            let map = cache.map.borrow();
+            let known = map.get(&key);
+            for n in names {
+                match known.and_then(|k| k.get(*n)) {
+                    Some(rows) => {
+                        out.insert((*n).to_owned(), rows.clone());
+                    }
+                    None => missing.push(n),
+                }
+            }
+        }
+        missing.sort_unstable();
+        missing.dedup();
+        cache
+            .hits
+            .set(cache.hits.get() + names.len() - missing.len());
+        if missing.is_empty() {
+            return Ok(out);
+        }
+        cache.reads.set(cache.reads.get() + missing.len());
+        test_hooks::names_read(missing.len());
+        let found = self.read(&missing)?;
+        let mut map = cache.map.borrow_mut();
+        let entry = map.entry(key).or_default();
+        for n in missing {
+            // "No candidate" is an answer too.
+            let rows = found.get(n).cloned().unwrap_or_default();
+            entry.insert(n.to_owned(), rows.clone());
+            if !rows.is_empty() {
+                out.insert(n.to_owned(), rows);
+            }
+        }
+        Ok(out)
+    }
+
+    fn read(&self, names: &[&str]) -> Result<Candidates, String> {
         match &self.defs {
             Definitions::Store(s) => s
                 .entities_by_qualified_names(&self.build, names)
@@ -234,11 +402,13 @@ fn open_producer(
     source: &SourceRecord,
 ) -> Result<Option<Producer>, DocMonkError> {
     match backend {
-        Backend::Local => Ok(open_view(home, cfg, backend, source)?.map(|v| Producer {
-            defs: Definitions::Store(v.store),
-            build: v.build,
-            generation: v.generation,
-            active: v.active,
+        Backend::Local => Ok(open_view(home, cfg, backend, source)?.and_then(|v| {
+            Some(Producer {
+                defs: Definitions::Store(v.store?),
+                build: v.build,
+                generation: v.generation,
+                active: v.active,
+            })
         })),
         Backend::Server(server) => {
             let Some(active) = active_build(home, backend, source)? else {
@@ -404,14 +574,14 @@ pub fn discover(
                 continue;
             }
         };
-        match view.store.external_manifest() {
+        match view.external_manifest() {
             Ok(Some(m)) if !m.producers.is_empty() || !m.bindings.is_empty() => {
                 reg.manifest_owners.insert(source.id.clone());
             }
             Ok(_) => {}
             Err(e) => incomplete(format!("manifest unreadable: {e}")),
         }
-        let projects = match view.store.file_paths_with_suffix(&view.build, ".csproj") {
+        let projects = match view.project_files() {
             Ok(p) => p,
             Err(e) => {
                 incomplete(format!("project files unreadable: {e}"));
@@ -618,7 +788,7 @@ fn persist(
     cfg: &docmonk_config::DocMonkConfig,
     backend: &Backend,
     consumer: &SourceRecord,
-    store: &mut ProjectStore,
+    store: Option<&mut ProjectStore>,
     m: &mut ExternalManifest,
 ) -> Result<(), DocMonkError> {
     m.revision += 1;
@@ -635,7 +805,9 @@ fn persist(
         let _ = server.release_lease(&lease);
         r?;
     }
-    store.put_external_manifest(m).map_err(db)?;
+    if let Some(store) = store {
+        store.put_external_manifest(m).map_err(db)?;
+    }
     Ok(())
 }
 
@@ -645,9 +817,12 @@ fn persist(
 fn load_manifest(
     backend: &Backend,
     consumer: &SourceRecord,
-    store: &mut ProjectStore,
+    store: Option<&mut ProjectStore>,
 ) -> Result<ExternalManifest, DocMonkError> {
-    let cached = store.external_manifest().map_err(db)?;
+    let cached = match &store {
+        Some(s) => s.external_manifest().map_err(db)?,
+        None => None,
+    };
     let Backend::Server(server) = backend else {
         return Ok(cached.unwrap_or_default());
     };
@@ -660,7 +835,9 @@ fn load_manifest(
     Ok(match (cached, authoritative) {
         (Some(c), Some(a)) if c.revision >= a.revision && a.revision > 0 => c,
         (_, Some(a)) => {
-            store.put_external_manifest(&a).map_err(db)?;
+            if let Some(store) = store {
+                store.put_external_manifest(&a).map_err(db)?;
+            }
             a
         }
         (c, None) => c.unwrap_or_default(),
@@ -674,6 +851,19 @@ pub mod test_hooks {
 
     type Hook = Box<dyn Fn(&str) + Send>;
     static BEFORE_FENCE: Mutex<Option<Hook>> = Mutex::new(None);
+    thread_local! {
+        static NAMES_READ: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
+
+    /// Names this thread has looked up in producers so far (cache misses
+    /// only).
+    pub fn producer_names_read() -> usize {
+        NAMES_READ.with(|n| n.get())
+    }
+
+    pub(crate) fn names_read(n: usize) {
+        NAMES_READ.with(|c| c.set(c.get() + n));
+    }
 
     /// Runs `hook(consumer_id)` after bindings are computed and before the
     /// publication fence (`None` clears it).
@@ -696,6 +886,7 @@ fn update_consumer(
     reg: &Registry,
     sources: &[SourceRecord],
     consumer: &SourceRecord,
+    cache: &LookupCache,
 ) -> Result<DependencyOutcome, DocMonkError> {
     if !consumer.enabled {
         return Ok(DependencyOutcome::Pending {
@@ -709,7 +900,7 @@ fn update_consumer(
             reason: "consumer has no published index on this host".into(),
         });
     };
-    let mut manifest = load_manifest(backend, consumer, &mut view.store)?;
+    let mut manifest = load_manifest(backend, consumer, view.store.as_mut())?;
     manifest.unsupported = reg
         .unsupported
         .get(&consumer.id)
@@ -717,19 +908,19 @@ fn update_consumer(
         .unwrap_or_default();
     // Bindings are computed against the consumer's current graph only
     // (never the stale one readers may be served meanwhile).
-    let freshness = view.store.graph_freshness(&view.build).map_err(db)?;
+    let freshness = view.graph_freshness()?;
     if !freshness.visible || freshness.stale {
         if manifest.state != "stale" {
             manifest.state = "stale".into();
             manifest.reason = Some("the consumer's own graph is not current".into());
-            persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+            persist(cfg, backend, consumer, view.store.as_mut(), &mut manifest)?;
         }
         return Ok(stale(
             reason::CONSUMER_GRAPH_STALE,
             "the consumer's own graph is not current",
         ));
     }
-    let graph_generation = view.store.graph_state().map_err(db)?.generation;
+    let (graph_generation, graph_id) = view.graph_generation()?;
 
     // Producers in scope, each opened at its current published base.
     let mut producers: BTreeMap<String, (Producer, &'static str)> = BTreeMap::new();
@@ -755,7 +946,7 @@ fn update_consumer(
         if let Some((code, reason)) = reason {
             manifest.state = "stale".into();
             manifest.reason = Some(reason.clone());
-            persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+            persist(cfg, backend, consumer, view.store.as_mut(), &mut manifest)?;
             return Ok(stale(code, reason));
         }
     }
@@ -771,7 +962,7 @@ fn update_consumer(
             let reason = format!("dependency discovery incomplete: {why}");
             manifest.state = "stale".into();
             manifest.reason = Some(reason.clone());
-            persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+            persist(cfg, backend, consumer, view.store.as_mut(), &mut manifest)?;
             return Ok(stale(reason::DISCOVERY_INCOMPLETE, reason));
         }
     }
@@ -796,13 +987,13 @@ fn update_consumer(
                 .keys()
                 .map(|k| k.strip_prefix("q:").unwrap_or(k))
                 .collect();
-            let found = match p.lookup(&names) {
+            let found = match p.lookup(id, cache, &names) {
                 Ok(found) => found,
                 Err(e) => {
                     let reason = lookup_failed(id, &e);
                     manifest.state = "stale".into();
                     manifest.reason = Some(reason.clone());
-                    persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+                    persist(cfg, backend, consumer, view.store.as_mut(), &mut manifest)?;
                     return Ok(stale(reason::PRODUCER_LOOKUP_FAILED, reason));
                 }
             };
@@ -830,7 +1021,7 @@ fn update_consumer(
             if moved {
                 // Through the authoritative path: the server must never lag
                 // the staging cache.
-                persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+                persist(cfg, backend, consumer, view.store.as_mut(), &mut manifest)?;
             }
             return Ok(DependencyOutcome::Current);
         }
@@ -845,14 +1036,11 @@ fn update_consumer(
         "dependency inputs changed ({})",
         triggered_by.iter().cloned().collect::<Vec<_>>().join(", ")
     ));
-    persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+    persist(cfg, backend, consumer, view.store.as_mut(), &mut manifest)?;
 
     let refs: Vec<_> = view
-        .store
-        .cross_file_references(&view.build)
-        .map_err(db)?
+        .unresolved_references(&graph_id)?
         .into_iter()
-        .filter(|r| r.resolver == "unresolved")
         .filter_map(|r| Some((r.reference_text.clone()?, r)))
         .filter(|(t, _)| full || changed.contains(&qualified_key(t)))
         .collect();
@@ -882,7 +1070,7 @@ fn update_consumer(
         .collect();
     let mut candidates: BTreeMap<&str, Candidates> = BTreeMap::new();
     for (id, (p, _)) in &producers {
-        match p.lookup(&names) {
+        match p.lookup(id, cache, &names) {
             Ok(found) => {
                 candidates.insert(id.as_str(), found);
             }
@@ -890,7 +1078,7 @@ fn update_consumer(
                 let reason = lookup_failed(id, &e);
                 tracing::warn!(component = "relationships", event = "producer_lookup_failed", source_id = %consumer.id, producer = %id, retryable = true, error = %e);
                 manifest.reason = Some(reason.clone());
-                persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+                persist(cfg, backend, consumer, view.store.as_mut(), &mut manifest)?;
                 return Ok(stale(reason::PRODUCER_LOOKUP_FAILED, reason));
             }
         }
@@ -934,7 +1122,7 @@ fn update_consumer(
     // that is still stored is not enough).
     let mut moved = None;
     if active_build(home, backend, consumer)?.as_deref() != Some(view.active.as_str())
-        || view.store.graph_state().map_err(db)?.generation != graph_generation
+        || view.graph_generation()?.0 != graph_generation
     {
         moved = Some("the consumer was reindexed during the update".to_owned());
     }
@@ -956,7 +1144,7 @@ fn update_consumer(
     }
     if let Some(reason) = moved {
         manifest.reason = Some(reason.clone());
-        persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+        persist(cfg, backend, consumer, view.store.as_mut(), &mut manifest)?;
         return Ok(stale(reason::REPUBLISHED_DURING_UPDATE, reason));
     }
     let bound = bindings
@@ -989,7 +1177,7 @@ fn update_consumer(
         updated_at: None,
         revision: manifest.revision,
     };
-    persist(cfg, backend, consumer, &mut view.store, &mut manifest)?;
+    persist(cfg, backend, consumer, view.store.as_mut(), &mut manifest)?;
     Ok(DependencyOutcome::Updated {
         full,
         keys_changed: changed.len(),
@@ -1056,6 +1244,7 @@ fn run_stage_for(
     let mut book = RetryBook::load(home);
     let now = chrono::Utc::now();
     let candidates = reg.refresh_candidates();
+    let cache = LookupCache::default();
     if only.is_none() {
         // A consumer with no dependency left has nothing to retry.
         book.retain(|id| candidates.contains(id));
@@ -1069,7 +1258,7 @@ fn run_stage_for(
             continue;
         };
         let update = || {
-            update_consumer(home, cfg, backend, &reg, sources, consumer)
+            update_consumer(home, cfg, backend, &reg, sources, consumer, &cache)
                 .unwrap_or_else(|e| stale(reason::UPDATE_FAILED, e.message().to_owned()))
         };
         let outcome = if held == Some(consumer.id.as_str()) {

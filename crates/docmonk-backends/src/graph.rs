@@ -683,19 +683,50 @@ impl ServerBackend {
 
     /// Every edge and link record of a graph generation of `source_id`.
     pub fn graph_records(&self, source_id: &str, generation: &str) -> Result<GraphRecords> {
+        self.graph_records_where(source_id, generation, Vec::new())
+    }
+
+    /// The unresolved cross-file references (with their reference text)
+    /// of a graph generation of `source_id`, by relationship id: the
+    /// authoritative inputs of cross-source dependency resolution (F04).
+    pub fn graph_unresolved_references(
+        &self,
+        source_id: &str,
+        generation: &str,
+    ) -> Result<Vec<docmonk_storage::knowledge::RelationshipRow>> {
+        Ok(self
+            .graph_records_where(
+                source_id,
+                generation,
+                vec![
+                    json!({ "term": { "resolver": "unresolved" } }),
+                    json!({ "exists": { "field": "reference_text" } }),
+                ],
+            )?
+            .edges)
+    }
+
+    fn graph_records_where(
+        &self,
+        source_id: &str,
+        generation: &str,
+        extra: Vec<Value>,
+    ) -> Result<GraphRecords> {
         let path = format!("/{}/_search", self.index(IndexKind::Relationships));
         let scope = self.scope_of(source_id, generation)?;
+        let mut filter = vec![
+            json!({ "term": { "source_id": source_id } }),
+            scope,
+            json!({ "terms": { "record_kind": ["edge", "link"] } }),
+        ];
+        filter.extend(extra);
         let mut out = GraphRecords::default();
         let mut after: Option<Value> = None;
         let s = |d: &Value, k: &str| d.get(k).and_then(Value::as_str).map(str::to_owned);
         loop {
             let mut body = json!({
                 "size": 1000,
-                "query": { "bool": { "filter": [
-                    { "term": { "source_id": source_id } },
-                    scope,
-                    { "terms": { "record_kind": ["edge", "link"] } },
-                ] } },
+                "query": { "bool": { "filter": filter } },
                 "sort": [ { "relationship_id": "asc" } ],
                 "track_total_hits": false,
             });
