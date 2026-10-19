@@ -377,7 +377,11 @@ mod tests {
 }
 "#;
         let x = crate::extract::extract(src, "csharp", "f", "f").unwrap();
-        let lits: Vec<(&str, i64)> = x.literals.iter().map(|l| (l.text.as_str(), l.line)).collect();
+        let lits: Vec<(&str, i64)> = x
+            .literals
+            .iter()
+            .map(|l| (l.text.as_str(), l.line))
+            .collect();
         assert_eq!(lits, [("/api/content/groups/image", 3)]);
     }
 
