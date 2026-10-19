@@ -550,6 +550,29 @@ impl ServerBackend {
         }))
     }
 
+    /// The derivation identity of the graph generation readers of
+    /// `base_build_id` are served, when it is the promoted generation
+    /// (`None`: no graph served, or an older generation whose derivation
+    /// is not recorded).
+    pub fn served_graph_derivation(
+        &self,
+        source_id: &str,
+        base_build_id: &str,
+        require_current: bool,
+    ) -> Result<Option<String>> {
+        Ok(self.source_state(source_id)?.and_then(|s| {
+            let g = ServerGraph::from_state(&s);
+            let promoted = g
+                .served_generation(Some(base_build_id), require_current)
+                .is_some_and(|(served, _)| g.generation.as_deref() == Some(served));
+            if promoted {
+                g.derivation
+            } else {
+                None
+            }
+        }))
+    }
+
     pub fn visible_graph(&self, source_id: &str, base_build_id: &str) -> Result<Option<String>> {
         Ok(self.source_state(source_id)?.and_then(|s| {
             ServerGraph::from_state(&s)

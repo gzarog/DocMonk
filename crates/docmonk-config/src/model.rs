@@ -554,6 +554,58 @@ section! {
 }
 
 section! {
+    /// Typed technical anchors (URL paths, file paths, symbols) steer
+    /// routing; false restores the pre-anchor route (rollback).
+    SearchAnchorsConfig {
+        enabled: bool = true;
+    }
+}
+
+section! {
+    /// Exact URL-literal and composed-route occurrences (graph derivation
+    /// `graph-3` and later), with a verified document fallback.
+    SearchExactOccurrencesConfig {
+        enabled: bool = true;
+        max_results: i64 = 50, check = |v| if (1..=1000).contains(v) { Ok(()) } else {
+            Err("must be between 1 and 1000".into())
+        };
+    }
+}
+
+section! {
+    /// Progressive lexical tiers: server reads prefetch only the precise
+    /// tiers; looser tiers run only when the precise ones fall short.
+    SearchAdaptiveLexicalConfig {
+        enabled: bool = true;
+    }
+}
+
+section! {
+    /// Graph expansion only from sources with exact seeds, within a node
+    /// budget per request.
+    SearchSelectiveGraphConfig {
+        enabled: bool = true;
+        max_seed_entities: i64 = 25, check = |v| if (1..=500).contains(v) { Ok(()) } else {
+            Err("must be between 1 and 500".into())
+        };
+    }
+}
+
+section! {
+    /// Process-local explore result cache (long-lived MCP / UI processes
+    /// only), keyed by every source's build and graph generation.
+    SearchCacheConfig {
+        enabled: bool = true;
+        max_entries: i64 = 64, check = |v| if (1..=10_000).contains(v) { Ok(()) } else {
+            Err("must be between 1 and 10000".into())
+        };
+        ttl_seconds: i64 = 300, check = |v| if (1..=86_400).contains(v) { Ok(()) } else {
+            Err("must be between 1 and 86400".into())
+        };
+    }
+}
+
+section! {
     SearchConfig {
         lexical: bool = true;
         graph: bool = true;
@@ -570,6 +622,16 @@ section! {
         grounding: SearchGroundingConfig = SearchGroundingConfig::default();
         max_query_budget_ms: i64 = 5000, check = |v| if (100..=600_000).contains(v) { Ok(()) } else {
             Err("must be between 100 and 600000".into())
+        };
+        anchors: SearchAnchorsConfig = SearchAnchorsConfig::default();
+        exact_occurrences: SearchExactOccurrencesConfig = SearchExactOccurrencesConfig::default();
+        adaptive_lexical: SearchAdaptiveLexicalConfig = SearchAdaptiveLexicalConfig::default();
+        selective_graph: SearchSelectiveGraphConfig = SearchSelectiveGraphConfig::default();
+        cache: SearchCacheConfig = SearchCacheConfig::default();
+        // Server mode: corpora searched concurrently per request (a bounded
+        // worker pool, never one thread per source).
+        max_concurrency: i64 = 8, check = |v| if (1..=64).contains(v) { Ok(()) } else {
+            Err("must be between 1 and 64".into())
         };
     }
 }

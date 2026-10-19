@@ -70,6 +70,53 @@ docmonk search "refund policy" --path docs/ --kind document --no-attachments --e
 | `search.grounding.enabled` / `.min_coverage` | `true` / `0.5` |
 | `search.max_query_budget_ms` | `5000` |
 | `search.ann.ef_search` / `.num_candidates` | `400` / `0` (automatic: `max(10 * k, 100)`) |
+| `search.anchors.enabled` | `true` |
+| `search.exact_occurrences.enabled` / `.max_results` | `true` / `50` |
+| `search.adaptive_lexical.enabled` | `true` |
+| `search.selective_graph.enabled` / `.max_seed_entities` | `true` / `25` |
+| `search.cache.enabled` / `.max_entries` / `.ttl_seconds` | `true` / `64` / `300` |
+| `search.max_concurrency` | `8` |
+
+### URL anchors and exact occurrences
+
+<!-- clean-slate-audit: allow-start (API URL paths with a version segment are user data) -->
+
+```bash
+docmonk explore "Is /sb/v1/content/groups/image used anywhere? Trace the callers." --json
+docmonk explore "/sb/v1/content/groups/image" --explain
+```
+
+An API path written anywhere in a question (`/a/b`, `~/a/b`, `https://host/a/b?q`, `api/...`, `v1/...`, or any path with a `{param}`) is the question's primary anchor. The intent is `endpoint_reference` in `explore`, `ask`, MCP, `evidence` and `search --explain`, and documentation keywords never override it. Slash-separated prose ("route/client/API", "and/or") and file paths (`src/a.cs`, `C:\repo\a.cs`) are not URL anchors. Anchors appear under `anchors` (explore) and `plan.anchors` (evidence).
+
+Exact occurrences are looked up by a match key. The key is the path only, with parameters (`{id}`, `{id:int}`, `<int:id>`) written `{}` and letters lower-cased. Segment boundaries are kept, so `/x/image2` and `/x/image/thumbnail` never match `/x/image`. Each occurrence has an `evidence_class`:
+
+| Class | Meaning |
+|---|---|
+| `direct_exact_literal` | The path appears verbatim in a code string literal (owning entity and line given) |
+| `statically_composed_route` | An ASP.NET controller `[Route]` prefix plus an action `[Http*]`/`[Route]` template (or a Flask/FastAPI decorator) composes to the path. This is static evidence, not runtime proof |
+| `document_reference` | A document chunk whose stored text contains the path (verified, not just a full-text match) |
+| `heuristic_match` | A template (`/x/{id}`) or interpolated literal (`$"/x/{id}"`) that may produce the path |
+| `resolved_code_relationship` | A graph relationship (caller, reference) of a matched entity |
+| `unresolved_or_not_indexed` | A source that could not be checked |
+
+Code occurrences come from the relationship graph, derivation `graph-3` or later. A source with an older or invisible graph is listed under `exact_capabilities` / `exact_unchecked_sources`, and `exact_complete` is `false`: zero hits there do not mean "unused". Rebuilding the graph adds the projection (`docmonk index` recomputes graphs after an upgrade) without reindexing content.
+
+Once exact seeds exist, explore reads only the sources that hold them. Callers of the owning entities (handlers, client methods) are traversed within the usual depth and edge caps. Lexical search runs on the anchor, not on the sentence, and skips its loosest tier. Semantic search never runs for an endpoint question with verified exact evidence.
+
+`--explain` (MCP `explain: true`) adds `diagnostics`:
+
+- the route and its signals;
+- per-stage `duration_ms` and hits for exact occurrences, lexical search and its sub-stages, symbols, graph stages, linked documents and semantic search;
+- service stages: plan, graph freshness, absolutize;
+- source counts considered, searched and expanded;
+- graph seeds and edges, and `traversal_truncated`;
+- exact reads and rejected document candidates;
+- backend kind, requests and bytes;
+- build ids;
+- for the CLI, config load and `open_sources` time.
+
+Without `--explain` the output is unchanged and no diagnostics are kept.
+<!-- clean-slate-audit: allow-end -->
 
 Optional profiles (set with `docmonk config set`; none enables an expensive model by default):
 
@@ -78,6 +125,8 @@ Optional profiles (set with `docmonk config set`; none enables an expensive mode
 | code-heavy | defaults; `search.semantic false` |
 | document-heavy | `search.semantic true`, `search.lazy_semantic true`, `search.grounding.min_coverage 0.6` |
 | mixed | `search.semantic true`, `search.reranker.enabled true` (measure latency first: the reranker raised p95 in `benchmarks/semantic-quality.json`) |
+
+**Long questions.** The lexical planner is bounded. The "at least half the terms" tier is expanded into AND groups only while there are at most 20 groups. Beyond that it becomes an OR of at most 16 terms, identifiers first. At most 64 content terms are planned, and an expression longer than 4 KiB is dropped. Server readers prefetch only the precise tiers in one `_msearch` (at most 32 searches per request) and read looser tiers only when needed (`search.adaptive_lexical.enabled`). At most `search.max_concurrency` sources are read at once.
 
 **Lexical matching.** Identifiers are also indexed as their words
 (`cancelOrder`, `CancelOrder2` → `cancel order 2`) with English stemming, so

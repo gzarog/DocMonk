@@ -16,9 +16,11 @@ use regex::Regex;
 use serde::Serialize;
 use serde_json::{json, Value};
 
+use crate::exact::{self, EvidenceClass, ExactOutcome, Occurrence};
 use crate::graph::{self, ResolvedEdge, SourceMatch, CALL_TYPES, DEFAULT_LIMIT, DEFAULT_MAX_DEPTH};
 use crate::hybrid::SemanticOutcome;
 use crate::lexical::{self, RankTier, SearchResult};
+use crate::route::{self, QueryAnchors, QueryIntent, Route, RouteOptions};
 use crate::{Corpus, SearchError};
 
 // ---- planner -----------------------------------------------------------
@@ -37,6 +39,8 @@ pub enum Strategy {
     Tests,
     Documents,
     Semantic,
+    /// Indexed exact occurrences of URL anchors ([`crate::exact`]).
+    ExactOccurrences,
 }
 
 impl Strategy {
@@ -50,6 +54,7 @@ impl Strategy {
             Self::Tests => "tests",
             Self::Documents => "documents",
             Self::Semantic => "semantic",
+            Self::ExactOccurrences => "exact_occurrences",
         }
     }
 }
@@ -63,6 +68,9 @@ pub enum Intent {
     Impact,
     Document,
     General,
+    /// An API endpoint path is the question's primary anchor.
+    #[serde(rename = "endpoint_reference")]
+    Endpoint,
 }
 
 impl Intent {
@@ -74,16 +82,21 @@ impl Intent {
             Self::Impact => "impact",
             Self::Document => "document",
             Self::General => "general",
+            Self::Endpoint => "endpoint_reference",
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct QueryPlan {
     pub query: String,
     pub intent: Intent,
     pub strategies: Vec<Strategy>,
     pub symbol: Option<String>,
+    /// Typed anchors of the query (empty for the rule-order [`plan`]).
+    pub anchors: QueryAnchors,
+    /// The shared routing decision behind a [`plan_routed`] plan.
+    pub route: Option<Route>,
 }
 
 struct Patterns {
@@ -139,7 +152,15 @@ fn first_match(patterns: &[Regex], text: &str) -> Option<String> {
 /// in order: impact, callers, callees, document hint,
 /// identifier, general). `semantic_enabled` only ever adds
 /// [`Strategy::Semantic`] to document/general plans.
+///
+/// The rule-order planner, kept for compatibility (its plans are what
+/// [`plan_routed`] produces for a query without technical anchors).
+/// Explore, ask and MCP use [`plan_routed`].
 pub fn plan(query: &str, semantic_enabled: bool) -> QueryPlan {
+    plan_rules(query, semantic_enabled, &QueryAnchors::default())
+}
+
+fn plan_rules(query: &str, semantic_enabled: bool, anchors: &QueryAnchors) -> QueryPlan {
     use Strategy::*;
     let p = patterns();
     let text = query.trim();
@@ -148,6 +169,8 @@ pub fn plan(query: &str, semantic_enabled: bool) -> QueryPlan {
         intent,
         strategies,
         symbol,
+        anchors: anchors.clone(),
+        route: None,
     };
     if let Some(s) = first_match(&p.impact, text) {
         return mk(
@@ -162,7 +185,16 @@ pub fn plan(query: &str, semantic_enabled: bool) -> QueryPlan {
     if let Some(s) = first_match(&p.callees, text) {
         return mk(Intent::Callees, vec![Identifier, Callees], Some(s));
     }
+    // A documentation keyword never overrides a code identifier: "docs for
+    // SettlementService" needs the symbol and its documentation.
     if p.document.is_match(text) {
+        if let Some(sym) = anchors.symbols.first() {
+            let mut st = vec![Identifier, Fts, References, Documents];
+            if semantic_enabled {
+                st.push(Semantic);
+            }
+            return mk(Intent::General, st, Some(sym.clone()));
+        }
         let mut st = vec![Fts, Documents];
         if semantic_enabled {
             st.push(Semantic);
@@ -181,6 +213,35 @@ pub fn plan(query: &str, semantic_enabled: bool) -> QueryPlan {
         st.push(Semantic);
     }
     mk(Intent::General, st, None)
+}
+
+/// The explore plan of `query` from the shared router ([`route::route`]):
+/// one decision path for explore, evidence, ask and MCP (P02). An API
+/// endpoint path anywhere in the question plans exact occurrences first,
+/// then the code around them (callers), linked documents and a lexical
+/// search focused on the anchor; semantic search is a fallback the caller
+/// runs only when exact and lexical evidence fall short. Without anchors
+/// the plan is the rule order of [`plan`].
+pub fn plan_routed(query: &str, semantic_enabled: bool, opts: RouteOptions) -> QueryPlan {
+    use Strategy::*;
+    let r = route::route(query, opts);
+    if r.intent == QueryIntent::EndpointReference {
+        let mut st = vec![ExactOccurrences, Identifier, Callers, Documents, Fts];
+        if semantic_enabled {
+            st.push(Semantic);
+        }
+        return QueryPlan {
+            query: query.to_owned(),
+            intent: Intent::Endpoint,
+            strategies: st,
+            symbol: r.anchors.symbols.first().cloned(),
+            anchors: r.anchors.clone(),
+            route: Some(r),
+        };
+    }
+    let mut p = plan_rules(query, semantic_enabled, &r.anchors);
+    p.route = Some(r);
+    p
 }
 
 // ---- evidence ------------------------------------------------------------
@@ -672,12 +733,45 @@ fn semantic_evidence(h: &crate::hybrid::SourcedHit) -> EvidenceItem {
     }
 }
 
+/// Exact-occurrence settings of an explore run
+/// (`search.exact_occurrences.*`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ExactSettings {
+    pub enabled: bool,
+    pub max_results: usize,
+    /// Verify document chunks too.
+    pub documents: bool,
+    pub max_template_variants: usize,
+}
+
+impl Default for ExactSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_results: 50,
+            documents: true,
+            max_template_variants: 4,
+        }
+    }
+}
+
 /// Inputs `explore` does not compute itself.
 #[derive(Debug, Clone, Copy)]
 pub struct ExploreOptions {
     pub budget: Budget,
     /// `search.output.snippet_max_tokens`.
     pub snippet_tokens: i64,
+    pub exact: ExactSettings,
+    /// `search.adaptive_lexical.enabled`: with verified exact evidence the
+    /// loosest lexical tier is skipped.
+    pub adaptive_lexical: bool,
+    /// `search.selective_graph.enabled`: lexical and graph stages read only
+    /// the sources with exact seeds once there are any.
+    pub selective_graph: bool,
+    /// `search.selective_graph.max_seed_entities`.
+    pub max_seed_entities: usize,
+    /// Collect the `explain` diagnostics payload.
+    pub explain: bool,
 }
 
 impl Default for ExploreOptions {
@@ -685,8 +779,131 @@ impl Default for ExploreOptions {
         Self {
             budget: Budget::default(),
             snippet_tokens: 32,
+            exact: ExactSettings::default(),
+            adaptive_lexical: true,
+            selective_graph: true,
+            max_seed_entities: 25,
+            explain: false,
         }
     }
+}
+
+/// Per-stage timings and counters of one explore run (P00). Durations
+/// are monotonic wall-clock milliseconds of each stage on this thread.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Diagnostics {
+    pub stages: Vec<lexical::StageTiming>,
+    pub source_count_considered: usize,
+    pub source_count_searched: usize,
+    pub source_count_expanded: usize,
+    pub graph_seeds: usize,
+    pub graph_edges: usize,
+    pub traversal_truncated: bool,
+    pub lexical_query: Option<String>,
+    pub lexical_or_fallback: bool,
+    pub semantic: &'static str,
+    pub exact_reads: usize,
+    pub exact_rejected_document_candidates: usize,
+    pub exact_truncated: bool,
+}
+
+impl Diagnostics {
+    fn time<T>(
+        &mut self,
+        stage: &'static str,
+        hits: impl Fn(&T) -> usize,
+        run: impl FnOnce() -> Result<T, SearchError>,
+    ) -> Result<T, SearchError> {
+        crate::check_deadline()?;
+        let t = std::time::Instant::now();
+        let out = run()?;
+        self.stages.push(lexical::StageTiming {
+            stage,
+            hits: hits(&out),
+            duration_ms: t.elapsed().as_secs_f64() * 1000.0,
+        });
+        Ok(out)
+    }
+}
+
+/// What the lexical and exact stages found, for the caller's lazy
+/// semantic decision (P07).
+pub struct ExploreProgress<'r> {
+    pub plan: &'r QueryPlan,
+    pub lexical: &'r [SearchResult],
+    /// Verified exact occurrences or matched symbols exist.
+    pub exact_evidence: bool,
+}
+
+fn occurrence_confidence(class: EvidenceClass) -> &'static str {
+    match class {
+        EvidenceClass::DirectExactLiteral | EvidenceClass::DocumentReference => "exact",
+        EvidenceClass::StaticallyComposedRoute | EvidenceClass::ResolvedCodeRelationship => "high",
+        _ => "heuristic",
+    }
+}
+
+fn occurrence_evidence(o: &Occurrence) -> EvidenceItem {
+    EvidenceItem {
+        evidence: Evidence {
+            source: o.resolver.clone(),
+            path: o.path.clone(),
+            location: EvidenceLocation {
+                line_start: o.line,
+                line_end: o.line,
+                page: o.page,
+                section: o.section.clone(),
+            },
+            entity: o.entity.clone().unwrap_or_else(|| o.anchor.clone()),
+            relationship: o.class.as_str().into(),
+            confidence: occurrence_confidence(o.class).into(),
+        },
+        snippet: match &o.http_method {
+            Some(m) => format!("{m} {}", o.matched),
+            None => o.matched.clone(),
+        },
+    }
+}
+
+fn occurrence_json(o: &Occurrence) -> Value {
+    let mut v = serde_json::to_value(o).unwrap_or(Value::Null);
+    v["evidence_class"] = json!(o.class.as_str());
+    v
+}
+
+/// Graph seeds of the code occurrences: their owning entities, one per
+/// `(corpus, entity)`, at most `max`. Heuristic matches seed only when
+/// there is no stronger occurrence.
+fn occurrence_seeds(outcome: &ExactOutcome, max: usize) -> (Vec<SourceMatch>, bool) {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    let mut truncated = false;
+    let strong = outcome
+        .occurrences
+        .iter()
+        .any(|o| o.entity_row.is_some() && o.class != EvidenceClass::HeuristicMatch);
+    for o in &outcome.occurrences {
+        if strong && o.class == EvidenceClass::HeuristicMatch {
+            continue;
+        }
+        let Some(e) = &o.entity_row else {
+            continue;
+        };
+        if !seen.insert((o.corpus, e.id.clone())) {
+            continue;
+        }
+        if out.len() >= max {
+            truncated = true;
+            break;
+        }
+        out.push(SourceMatch {
+            corpus: o.corpus,
+            source_id: o.source_id.clone(),
+            entity: e.clone(),
+            rel_path: o.path.clone(),
+        });
+    }
+    (out, truncated)
 }
 
 /// The `explore` payload for `query_plan`. `semantic` is the
@@ -698,72 +915,299 @@ pub fn explore(
     semantic: Option<&SemanticOutcome>,
     opts: ExploreOptions,
 ) -> Result<Value, SearchError> {
+    explore_with(corpora, query_plan, &mut |_| Ok(semantic.cloned()), opts)
+}
+
+/// [`explore`] with a lazy semantic stage: `semantic` is called once,
+/// after the exact, lexical and graph stages, only when the plan includes
+/// [`Strategy::Semantic`]; it sees what those stages found and returns
+/// `None` to skip the embedding (P07).
+pub fn explore_with(
+    corpora: &[Corpus<'_>],
+    query_plan: &QueryPlan,
+    semantic: &mut dyn FnMut(&ExploreProgress<'_>) -> Result<Option<SemanticOutcome>, SearchError>,
+    opts: ExploreOptions,
+) -> Result<Value, SearchError> {
     use Strategy::*;
     let has = |s: Strategy| query_plan.strategies.contains(&s);
+    let mut diag = Diagnostics {
+        source_count_considered: corpora.len(),
+        semantic: "not_planned",
+        ..Diagnostics::default()
+    };
+    let endpoint = query_plan.intent == Intent::Endpoint;
+
+    // 1. Exact occurrences of URL anchors (indexed, verified).
+    let outcome = if has(ExactOccurrences) && opts.exact.enabled {
+        let ex = exact::ExactOptions {
+            max_results: opts.exact.max_results,
+            documents: opts.exact.documents,
+            filter: Default::default(),
+            snippet_tokens: opts.snippet_tokens,
+            max_template_variants: opts.exact.max_template_variants,
+        };
+        let o = diag.time(
+            "exact_occurrences",
+            |o: &ExactOutcome| o.occurrences.len(),
+            || exact::find_occurrences(corpora, &query_plan.anchors.url_paths, &ex),
+        )?;
+        diag.exact_reads = o.reads;
+        diag.exact_rejected_document_candidates = o.rejected_document_candidates;
+        diag.exact_truncated = o.truncated;
+        Some(o)
+    } else {
+        None
+    };
+    let exact_found = outcome.as_ref().is_some_and(|o| {
+        o.occurrences
+            .iter()
+            .any(|x| x.class != EvidenceClass::HeuristicMatch)
+    });
+    // Selective stages (P05): once exact seeds exist, later stages read
+    // only their sources (an optimization, never a scope change: hard
+    // filters were applied to `corpora` by the caller).
+    let selected: Vec<usize> = match &outcome {
+        Some(o) if opts.selective_graph && exact_found => o.candidate_corpora.clone(),
+        _ => (0..corpora.len()).collect(),
+    };
+    let scoped: Vec<Corpus<'_>> = selected.iter().map(|&i| corpora[i]).collect();
+    // Indexes into `scoped` map back to `corpora` through `selected`.
+    let remap = |i: usize| selected[i];
+
+    // 2. Lexical, focused on the anchor for endpoint questions.
     let symbol_query = query_plan
         .symbol
         .clone()
         .unwrap_or_else(|| query_plan.query.clone());
+    let lexical_text = if endpoint {
+        query_plan
+            .anchors
+            .url_paths
+            .iter()
+            .map(|u| u.path.as_str())
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else {
+        query_plan.query.clone()
+    };
+    let mut lex_opts = lexical::LexicalOptions::default();
+    lex_opts.plan.or_fallback = !(opts.adaptive_lexical && exact_found);
+    diag.lexical_or_fallback = lex_opts.plan.or_fallback;
     let lexical_results = if has(Fts) || has(Identifier) {
-        lexical::search(corpora, &query_plan.query, 25, opts.snippet_tokens)?
+        diag.lexical_query = Some(lexical_text.clone());
+        diag.source_count_searched = scoped.len();
+        let (mut rows, stages) = diag.time(
+            "lexical",
+            |(r, _): &(Vec<SearchResult>, Vec<lexical::StageTiming>)| r.len(),
+            || {
+                lexical::search_with_options(
+                    &scoped,
+                    &lexical_text,
+                    25,
+                    opts.snippet_tokens,
+                    &lex_opts,
+                )
+            },
+        )?;
+        if opts.explain {
+            diag.stages.extend(stages.into_iter().map(|mut t| {
+                t.stage = match t.stage {
+                    "prefetch" => "lexical.prefetch",
+                    "entities" => "lexical.entities",
+                    "documents" => "lexical.documents",
+                    "paths" => "lexical.paths",
+                    "merge" => "lexical.merge",
+                    other => other,
+                };
+                t
+            }));
+        }
+        rows.truncate(25);
+        rows
     } else {
         Vec::new()
     };
-    let matches = if has(Identifier) {
-        graph::find_symbol_matches(corpora, &symbol_query)?
-    } else {
-        Vec::new()
-    };
-    let (mut callers, mut callees, mut tests) = (Vec::new(), Vec::new(), Vec::new());
+
+    // 3. Symbols: exact seeds' owners (endpoint), else the named symbol.
+    let mut matches: Vec<SourceMatch> = Vec::new();
+    if let Some(o) = &outcome {
+        let (seeds, truncated) = occurrence_seeds(o, opts.max_seed_entities);
+        diag.traversal_truncated |= truncated;
+        matches.extend(seeds);
+    }
+    if has(Identifier) && (!endpoint || query_plan.symbol.is_some()) {
+        let found = diag.time(
+            "symbols",
+            |m: &Vec<SourceMatch>| m.len(),
+            || graph::find_symbol_matches(&scoped, &symbol_query),
+        )?;
+        for mut m in found {
+            m.corpus = remap(m.corpus);
+            if !matches
+                .iter()
+                .any(|x| x.corpus == m.corpus && x.entity.id == m.entity.id)
+            {
+                matches.push(m);
+            }
+        }
+    }
+    diag.graph_seeds = matches.len();
+    let expanded: BTreeSet<usize> = matches.iter().map(|m| m.corpus).collect();
+    diag.source_count_expanded = expanded.len();
+
+    // 4. Graph expansion from the seeds only (bounded depth and edges).
+    let (mut callers, mut callees, mut tests, mut references) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     if !matches.is_empty() {
+        let seed_name = if endpoint {
+            matches[0].entity.name.clone()
+        } else {
+            symbol_query.clone()
+        };
         if has(Callers) {
-            callers = graph::resolved_incoming(
-                corpora,
-                &matches,
-                &symbol_query,
-                &CALL_TYPES,
-                DEFAULT_MAX_DEPTH,
-                DEFAULT_LIMIT,
+            callers = diag.time(
+                "graph.callers",
+                |e: &Vec<ResolvedEdge>| e.len(),
+                || {
+                    graph::resolved_incoming(
+                        corpora,
+                        &matches,
+                        &seed_name,
+                        &CALL_TYPES,
+                        DEFAULT_MAX_DEPTH,
+                        DEFAULT_LIMIT,
+                    )
+                },
             )?;
         }
         if has(Callees) {
-            callees = graph::resolved_outgoing(
-                corpora,
-                &matches,
-                &CALL_TYPES,
-                DEFAULT_MAX_DEPTH,
-                DEFAULT_LIMIT,
+            callees = diag.time(
+                "graph.callees",
+                |e: &Vec<ResolvedEdge>| e.len(),
+                || {
+                    graph::resolved_outgoing(
+                        corpora,
+                        &matches,
+                        &CALL_TYPES,
+                        DEFAULT_MAX_DEPTH,
+                        DEFAULT_LIMIT,
+                    )
+                },
             )?;
         }
         if has(Tests) {
-            tests = graph::find_tests_referencing(
-                corpora,
-                &matches,
-                &symbol_query,
-                DEFAULT_MAX_DEPTH,
-                DEFAULT_LIMIT,
+            tests = diag.time(
+                "graph.tests",
+                |e: &Vec<ResolvedEdge>| e.len(),
+                || {
+                    graph::find_tests_referencing(
+                        corpora,
+                        &matches,
+                        &symbol_query,
+                        DEFAULT_MAX_DEPTH,
+                        DEFAULT_LIMIT,
+                    )
+                },
+            )?;
+        }
+        // The planned References strategy (F07): incoming `references`
+        // edges of the matched symbols.
+        if has(References) {
+            references = diag.time(
+                "graph.references",
+                |e: &Vec<ResolvedEdge>| e.len(),
+                || {
+                    graph::resolved_incoming(
+                        corpora,
+                        &matches,
+                        &symbol_query,
+                        &["references"],
+                        DEFAULT_MAX_DEPTH,
+                        DEFAULT_LIMIT,
+                    )
+                },
             )?;
         }
     }
+    diag.graph_edges = callers.len() + callees.len() + tests.len() + references.len();
+    diag.traversal_truncated |= [&callers, &callees, &tests, &references]
+        .iter()
+        .any(|e| e.len() >= DEFAULT_LIMIT);
     let doc_links = if !matches.is_empty() && has(Documents) {
-        linked_document_evidence(corpora, &matches)?
+        diag.time(
+            "documents.links",
+            |d: &Vec<Evidence>| d.len(),
+            || linked_document_evidence(corpora, &matches),
+        )?
     } else {
         Vec::new()
     };
+
+    // 5. Semantic, lazily (the caller decides with what was found).
+    let semantic = if has(Semantic) && endpoint && exact_found {
+        // Verified exact evidence answers an endpoint question: the query
+        // is never embedded (P07).
+        diag.semantic = "skipped_exact_evidence";
+        None
+    } else if has(Semantic) {
+        let progress = ExploreProgress {
+            plan: query_plan,
+            lexical: &lexical_results,
+            exact_evidence: exact_found || !matches.is_empty(),
+        };
+        let s = diag.time(
+            "semantic",
+            |s: &Option<SemanticOutcome>| s.as_ref().map_or(0, |s| s.hits.len()),
+            || semantic(&progress),
+        )?;
+        diag.semantic = if s.is_some() { "ran" } else { "skipped" };
+        s
+    } else {
+        None
+    };
+    let semantic = semantic.as_ref();
+
+    // 6. Evidence and context.
+    let names: HashMap<(usize, &str), &str> = matches
+        .iter()
+        .map(|m| {
+            (
+                (m.corpus, m.entity.id.as_str()),
+                m.entity.qualified_name.as_str(),
+            )
+        })
+        .collect();
     let symbol_display = matches
         .first()
         .map_or_else(|| symbol_query.clone(), |m| m.entity.qualified_name.clone());
-    let semantic = if has(Semantic) { semantic } else { None };
-
+    let display_for = |e: &ResolvedEdge| -> String {
+        let r = &e.edge.relationship;
+        let id = r.target_entity_id.as_deref().unwrap_or("");
+        names
+            .get(&(e.edge.corpus, id))
+            .map_or_else(|| symbol_display.clone(), |n| (*n).to_owned())
+    };
     let mut items = Vec::new();
     let mut paths = Vec::new();
+    if let Some(o) = &outcome {
+        items.extend(o.occurrences.iter().map(occurrence_evidence));
+    }
     for e in &callers {
         items.extend(edge_evidence(e));
-        paths.push(graph_path(e, true, &symbol_display));
+        let target = if endpoint {
+            display_for(e)
+        } else {
+            symbol_display.clone()
+        };
+        paths.push(graph_path(e, true, &target));
     }
     for e in &callees {
         items.extend(edge_evidence(e));
         paths.push(graph_path(e, false, &symbol_display));
+    }
+    for e in &references {
+        items.extend(edge_evidence(e));
+        paths.push(graph_path(e, true, &symbol_display));
     }
     for ev in &doc_links {
         items.push(EvidenceItem {
@@ -771,7 +1215,7 @@ pub fn explore(
             evidence: ev.clone(),
         });
     }
-    if matches.is_empty() {
+    if matches.is_empty() && !exact_found {
         items.extend(
             lexical_results
                 .iter()
@@ -789,14 +1233,26 @@ pub fn explore(
         .filter(|r| r.kind == "document")
         .map(search_result_json)
         .collect();
-    let rel_paths: BTreeSet<&str> = lexical_results.iter().map(|r| r.path.as_str()).collect();
-    let summary = format!(
-        "Found {} symbol(s) and {} document(s) matching '{}'; see below for details.",
-        matches.len(),
-        documents.len(),
-        query_plan.query
-    );
-    Ok(json!({
+    let mut rel_paths: BTreeSet<&str> = lexical_results.iter().map(|r| r.path.as_str()).collect();
+    if let Some(o) = &outcome {
+        rel_paths.extend(o.occurrences.iter().map(|x| x.path.as_str()));
+    }
+    let summary = match &outcome {
+        Some(o) => format!(
+            "Found {} exact occurrence(s), {} symbol(s) and {} document(s) matching '{}'; see below for details.",
+            o.occurrences.len(),
+            matches.len(),
+            documents.len(),
+            query_plan.query
+        ),
+        None => format!(
+            "Found {} symbol(s) and {} document(s) matching '{}'; see below for details.",
+            matches.len(),
+            documents.len(),
+            query_plan.query
+        ),
+    };
+    let mut out = json!({
         "query": query_plan.query,
         "intent": query_plan.intent.as_str(),
         "strategies": query_plan.strategies.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
@@ -823,7 +1279,56 @@ pub fn explore(
         "semantic_results": semantic.map_or_else(Vec::new, |s| s.hits.iter().map(semantic_hit_json).collect()),
         "semantic_available": semantic.map(|s| s.available),
         "semantic_reason": semantic.map(|s| s.reason.clone()),
-    }))
+    });
+    // Additive keys, present only when they carry information.
+    // Technical anchors (paths) are reported with the payload; symbol-only
+    // anchors are in the `--explain` route.
+    let a = &query_plan.anchors;
+    if !a.url_paths.is_empty() || !a.file_paths.is_empty() {
+        out["anchors"] = json!(a);
+    }
+    if !references.is_empty() {
+        out["references"] = json!(paths
+            .iter()
+            .filter(|p| p.relationship == "references")
+            .collect::<Vec<_>>());
+    }
+    if let Some(o) = &outcome {
+        out["exact_occurrences"] = json!(o
+            .occurrences
+            .iter()
+            .map(occurrence_json)
+            .collect::<Vec<_>>());
+        out["exact_occurrences_truncated"] = json!(o.truncated);
+        // A source that could not answer is never reported as "absent".
+        out["exact_capabilities"] = json!(o.capabilities);
+        let incomplete: Vec<&str> = o
+            .capabilities
+            .iter()
+            .filter(|c| c.exact_occurrences != "indexed")
+            .map(|c| c.source_id.as_str())
+            .collect();
+        out["exact_complete"] = json!(incomplete.is_empty());
+        if !incomplete.is_empty() {
+            out["exact_unchecked_sources"] = json!(incomplete);
+        }
+    }
+    if opts.explain {
+        // `lexical.*` entries are sub-stages of `lexical`.
+        let total: f64 = diag
+            .stages
+            .iter()
+            .filter(|t| !t.stage.starts_with("lexical."))
+            .map(|t| t.duration_ms)
+            .sum();
+        let mut d = serde_json::to_value(&diag).unwrap_or(Value::Null);
+        d["stages_total_ms"] = json!(total);
+        if let Some(r) = &query_plan.route {
+            d["route"] = json!(r);
+        }
+        out["diagnostics"] = d;
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

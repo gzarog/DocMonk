@@ -4,7 +4,8 @@
 //! docmonk-search-bench [--files N] [--docs M] [--corpus DIR]... [--work-dir DIR] [--reuse]
 //!                      [--modes lexical,hybrid,hybrid_rerank,evidence,explore,impact]
 //!                      [--conditions warm,cold] [--runs R] [--cold-queries K]
-//!                      [--queries FILE] [--server] [--label NAME] [--out report.json]
+//!                      [--queries FILE] [--server] [--planner] [--label NAME]
+//!                      [--out report.json]
 //! ```
 //!
 //! Indexes a corpus once (the synthetic C# + Markdown corpus of
@@ -29,10 +30,20 @@
 //! `semantic.ann_search`, `semantic.meta_join`, `semantic.attachments`),
 //! `neural_rerank`, `context` and `total`.
 //!
+//! `explore` is broken into its stages (`explore.exact_occurrences`,
+//! `explore.lexical`, `explore.symbols`, `explore.graph.*`,
+//! `explore.semantic`, `explore.plan`, `explore.graph_freshness`,
+//! `explore.absolutize`) from its `--explain` diagnostics, not timed as
+//! one opaque block.
+//!
+//! `--planner` times the lexical planner alone over the retrieval plan's
+//! long questions (`planner.*`, p50/p95/p99 over `--runs` x 100 calls).
+//!
 //! `--server` also runs the lexical plan and caller traversal against an
 //! in-process engine that answers every read with no hits. It yields
-//! request **counts** per query and source (every plan tier runs, so
-//! counts are an upper bound), never cluster timings.
+//! request **counts** per query and source (precise tiers are prefetched;
+//! loose tiers run on demand, so counts are an upper bound), never
+//! cluster timings.
 //!
 //! Without the pinned models (`DOCMONK_MODELS_DIR`) the semantic and
 //! rerank stages report the model as unavailable and measure nothing.
@@ -84,6 +95,13 @@ fn default_queries(groups: usize) -> Vec<(String, bool)> {
         (format!("Orders{}Controller.cs", g(4)), false),
         ("design note".into(), false),
         ("entity base class".into(), false),
+        (
+            format!(
+                "Is the URL path /api/orders{} used or referenced? Trace the callers.",
+                g(9)
+            ),
+            false,
+        ),
     ]
 }
 
@@ -150,9 +168,35 @@ fn run_mode(
         }
         "explore" => {
             let t = Instant::now();
-            query::explore_value(home, &cfg, &opened, query, query::config_budget(&cfg))
-                .map_err(|e| e.to_string())?;
+            let v = query::explore_value_with(
+                home,
+                &cfg,
+                &opened,
+                &query::ExploreRequest {
+                    query,
+                    budget: query::config_budget(&cfg),
+                    explain: true,
+                },
+            )
+            .map_err(|e| e.to_string())?;
             out.push(("explore".into(), ms(t)));
+            let d = &v["diagnostics"];
+            for key in ["stages", "service_stages"] {
+                for st in d[key].as_array().into_iter().flatten() {
+                    out.push((
+                        format!("explore.{}", st["stage"].as_str().unwrap_or("?")),
+                        st["duration_ms"].as_f64().unwrap_or(0.0),
+                    ));
+                }
+            }
+            out.push((
+                "explore.backend_requests".into(),
+                d["backend"]["requests"].as_f64().unwrap_or(0.0),
+            ));
+            out.push((
+                "explore.sources_searched".into(),
+                d["source_count_searched"].as_f64().unwrap_or(0.0),
+            ));
         }
         "impact" => {
             let t = Instant::now();
@@ -175,6 +219,56 @@ fn ms(t: Instant) -> f64 {
     t.elapsed().as_secs_f64() * 1000.0
 }
 
+/// The lexical planner alone: p50/p95/p99 microseconds per question over
+/// `runs` x 100 calls, plus the worst case (P01 regression guard).
+fn planner_bench(runs: usize) -> Value {
+    let words: Vec<String> = (0..120).map(|i| format!("term{i}x")).collect();
+    // clean-slate-audit: allow-start (API URL paths with a version segment are user data)
+    let cases = [
+        (
+            "url_question_25_terms",
+            "Is the URL path /sb/v1/content/groups/image used, referenced, or related to any \
+             code or documentation in the indexed DocMonk project? Trace matching \
+             route/client/API references and relevant call paths."
+                .to_owned(),
+        ),
+        (
+            "stress_120_terms",
+            format!(
+                "{} /sb/v1/content/groups/image \"Quoted.Literal\"",
+                words.join(" ")
+            ),
+        ),
+        (
+            "short_4_terms",
+            "how is the hnsw index persisted".to_owned(),
+        ),
+    ];
+    let mut out = serde_json::Map::new();
+    for (name, q) in cases {
+        let mut v = Vec::new();
+        for _ in 0..runs.max(1) * 100 {
+            let t = Instant::now();
+            std::hint::black_box(lexical::query_plan(std::hint::black_box(&q)));
+            v.push(t.elapsed().as_secs_f64() * 1e6);
+        }
+        v.sort_by(f64::total_cmp);
+        let round = |x: f64| (x * 1000.0).round() / 1000.0;
+        out.insert(
+            format!("planner.{name}"),
+            json!({
+                "unit": "us",
+                "p50": round(percentile(&v, 0.5)),
+                "p95": round(percentile(&v, 0.95)),
+                "p99": round(percentile(&v, 0.99)),
+                "max": round(v.last().copied().unwrap_or(0.0)),
+                "n": v.len(),
+            }),
+        );
+    }
+    Value::Object(out)
+}
+
 /// `stage -> {p50, p95, n}` over every sample.
 fn summarize(samples: &[Vec<(String, f64)>]) -> Value {
     let mut by: BTreeMap<&str, Vec<f64>> = BTreeMap::new();
@@ -190,7 +284,7 @@ fn summarize(samples: &[Vec<(String, f64)>]) -> Value {
                 v.sort_by(f64::total_cmp);
                 (
                     k.to_owned(),
-                    json!({"p50": round(percentile(&v, 0.5)), "p95": round(percentile(&v, 0.95)), "n": v.len()}),
+                    json!({"p50": round(percentile(&v, 0.5)), "p95": round(percentile(&v, 0.95)), "p99": round(percentile(&v, 0.99)), "n": v.len()}),
                 )
             })
             .collect(),
@@ -461,6 +555,9 @@ fn main() {
     }
     if flag("--server") {
         report["server"] = server_counts(&queries);
+    }
+    if flag("--planner") {
+        report["planner"] = planner_bench(runs);
     }
     let text = serde_json::to_string_pretty(&report).expect("json");
     match arg("--out") {

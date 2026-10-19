@@ -67,6 +67,10 @@ fn extraction_and_relationships_are_as_expected() {
     )
     .unwrap();
     let golden = &golden["files"];
+    // `DOCMONK_BLESS=1` re-records every file's relationships (a
+    // deliberate derivation change); entities are never re-recorded.
+    let bless = std::env::var("DOCMONK_BLESS").as_deref() == Ok("1");
+    let mut blessed: BTreeMap<String, Vec<Value>> = BTreeMap::new();
 
     let mut prepared = BTreeMap::new();
     for rel in files(&root) {
@@ -179,6 +183,10 @@ fn extraction_and_relationships_are_as_expected() {
                         .collect(),
                 );
                 let want = canon(g["relationships"].as_array().cloned().unwrap_or_default());
+                if bless {
+                    blessed.insert(rel.clone(), got);
+                    continue;
+                }
                 if got != want {
                     let only_rust: Vec<_> = got.iter().filter(|x| !want.contains(x)).collect();
                     let only_py: Vec<_> = want.iter().filter(|x| !got.contains(x)).collect();
@@ -188,6 +196,24 @@ fn extraction_and_relationships_are_as_expected() {
                 }
             }
         }
+    }
+    if bless {
+        let path = repo_root().join("fixtures/expected/code.json");
+        let mut all: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        for (rel, rels) in blessed {
+            all["files"][&rel]["relationships"] = Value::Array(rels);
+        }
+        let mut out = Vec::new();
+        let fmt = serde_json::ser::PrettyFormatter::with_indent(b" ");
+        serde::Serialize::serialize(
+            &all,
+            &mut serde_json::Serializer::with_formatter(&mut out, fmt),
+        )
+        .unwrap();
+        out.push(b'\n');
+        std::fs::write(path, out).unwrap();
+        return;
     }
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }

@@ -19,7 +19,7 @@ helper for packaging and repository audits.
 | `docmonk-convert` | Rust-native document conversion (docling.rs, no ML/network), Docling-JSON normalizer, email and attachments, document processor |
 | `docmonk-knowledge` | cross-domain linker (code entities <-> document chunks) and persistent manual links |
 | `docmonk-ml` | pinned model assets, pure-Rust (Candle) embeddings, embedding cache, persistent HNSW index, semantic search, RRF and the cross-encoder reranker |
-| `docmonk-retrieval` | lexical and hybrid search, exact-match pinning, reranking, symbol search, graph queries, explore and impact, context expansion and query classification |
+| `docmonk-retrieval` | lexical and hybrid search, exact-match pinning, reranking, symbol search, graph queries, explore and impact, context expansion, query classification, typed query anchors and routing, exact URL/route occurrences, and the bounded per-source worker pool |
 | `docmonk-indexing` | scanner, ignore rules, incremental diff, retries, per-source run locks, bounded parallel executor, process-wide resource governor, bounded transactional build coordinator, per-source progress and heartbeats, process probes, fair multi-worker daemon, filesystem watcher, network polling, targeted passes |
 | `docmonk-storage` | SQLite control plane (`state/control.db`), per-project knowledge stores (`projects/<id>/knowledge.db`) and the storage-neutral `KnowledgeRead` port every retrieval stage reads through |
 | `docmonk-config` | `config.yaml` loading, layering (defaults < user < project < env < CLI), typed validation |
@@ -54,5 +54,24 @@ OpenSearch/Elasticsearch indexes are, and nothing local is read for the
 catalog, builds or knowledge (ADR 0033). Retrieval is written once against
 `KnowledgeRead`, so lexical, graph, context and semantic stages behave the
 same on both backends (ranking scores are each engine's own).
+
+## Retrieval pipeline
+
+One deterministic router (`docmonk_retrieval::route`) serves `search
+--explain`, `evidence`, `explore`, `ask` and MCP. It extracts typed
+anchors (URL paths, file paths, symbols, HTTP methods, quoted literals)
+and classifies intent. The stages are then:
+
+1. exact occurrences of URL anchors: indexed `url_literal:` / `route:`
+   graph rows, plus verified document text;
+2. lexical tiers (bounded planner, progressive server prefetch);
+3. symbol and graph expansion from the exact seeds' sources only;
+4. semantic search, only when the earlier stages fall short;
+5. evidence assembly with evidence classes, budget truncation and
+   freshness.
+
+Every read goes through `KnowledgeRead`, pinned to each source's published
+build and graph generation. Backend-specific code only implements those
+reads. See [ADR 0036](adr/0036-retrieval-anchors-and-exact-occurrences.md).
 
 Design decisions are recorded in [`docs/adr/`](adr).

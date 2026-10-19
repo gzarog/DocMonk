@@ -26,6 +26,9 @@ pub enum QueryIntent {
     Conceptual,
     CrossSourceComparison,
     MultiHop,
+    /// A question about an API endpoint path (`/api/orders/{id}`) embedded
+    /// anywhere in it: exact occurrences first, then the code around them.
+    EndpointReference,
     Ambiguous,
 }
 
@@ -40,6 +43,7 @@ impl QueryIntent {
             Self::Conceptual => "conceptual",
             Self::CrossSourceComparison => "cross_source_comparison",
             Self::MultiHop => "multi_hop",
+            Self::EndpointReference => "endpoint_reference",
             Self::Ambiguous => "ambiguous",
         }
     }
@@ -67,6 +71,9 @@ pub enum RouteStrategy {
     Rerank,
     /// Bounded deterministic decomposition into subqueries.
     Decompose,
+    /// Indexed exact-occurrence lookup of typed anchors (URL literals,
+    /// composed routes) verified against the original text.
+    ExactOccurrence,
 }
 
 /// Inputs that change which strategies a route may use.
@@ -75,6 +82,9 @@ pub struct RouteOptions {
     pub semantic_available: bool,
     pub reranker_enabled: bool,
     pub decomposition_enabled: bool,
+    /// `search.anchors.enabled = false`: embedded technical anchors do not
+    /// change the route (the pre-anchor behaviour, kept for rollback).
+    pub anchors_disabled: bool,
 }
 
 /// The routing decision, with its explanation.
@@ -90,6 +100,9 @@ pub struct Route {
     pub fallback: bool,
     /// Symbol or path the route keyed on, if any.
     pub target: Option<String>,
+    /// Typed technical anchors found anywhere in the query.
+    #[serde(skip_serializing_if = "QueryAnchors::is_empty")]
+    pub anchors: QueryAnchors,
 }
 
 /// Hard scope of a search. Every field is an AND-ed restriction; empty
@@ -214,6 +227,148 @@ fn rules() -> &'static Rules {
     })
 }
 
+/// One API endpoint path found in a query.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+pub struct UrlAnchor {
+    /// As written (surrounding quotes and punctuation stripped).
+    pub raw: String,
+    /// The path part: no scheme/host, query or fragment, one leading `/`.
+    pub path: String,
+    /// The exact-match key ([`url_match_key`]).
+    pub key: String,
+}
+
+/// Typed technical anchors of a query (P02). Extraction is deterministic
+/// and never widens hard filters; anchors only steer which retrieval
+/// stages run first.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct QueryAnchors {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub url_paths: Vec<UrlAnchor>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub file_paths: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub symbols: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub http_methods: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub quoted: Vec<String>,
+}
+
+impl QueryAnchors {
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+pub use docmonk_core::urls::url_match_key;
+use docmonk_core::urls::{is_url_char, looks_like_endpoint, url_path};
+
+/// Extracts typed anchors from anywhere in `text` (P02): URL paths
+/// (`/api/content/groups/image`, `https://host/x/y?q=1`), file paths
+/// (`src/a.cs`, `C:\repo\a.cs`), identifiers, HTTP methods and quoted
+/// literals. Surrounding quotes and trailing punctuation are stripped;
+/// duplicates keep their first position.
+pub fn extract_anchors(text: &str) -> QueryAnchors {
+    let mut a = QueryAnchors::default();
+    static QUOTED: OnceLock<Regex> = OnceLock::new();
+    let quoted =
+        QUOTED.get_or_init(|| Regex::new(r#""([^"\n]{1,200})"|`([^`\n]{1,200})`"#).expect("valid"));
+    for c in quoted.captures_iter(text) {
+        let q = c
+            .get(1)
+            .or_else(|| c.get(2))
+            .map_or("", |m| m.as_str())
+            .trim();
+        if !q.is_empty() && !a.quoted.iter().any(|x| x == q) {
+            a.quoted.push(q.to_owned());
+        }
+    }
+    let strip = |t: &str| -> String {
+        let t = t.trim_matches(|c: char| "\"'`()[]<>,;!".contains(c));
+        // A question mark or period ending a sentence is not part of a path.
+        t.trim_end_matches(['?', '.', ':', ',']).to_owned()
+    };
+    for raw_token in text.split_whitespace() {
+        let token = strip(raw_token);
+        if token.is_empty() {
+            continue;
+        }
+        let windows_path = token.len() > 2
+            && token.as_bytes()[1] == b':'
+            && token.as_bytes()[0].is_ascii_alphabetic()
+            && token.contains('\\');
+        if windows_path || (token.contains('\\') && !token.contains('/')) {
+            if !a.file_paths.contains(&token) {
+                a.file_paths.push(token);
+            }
+            continue;
+        }
+        if !token.contains('/') {
+            continue;
+        }
+        let last = token.trim_end_matches('/').rsplit('/').next().unwrap_or("");
+        let has_ext = last.rsplit_once('.').is_some_and(|(stem, ext)| {
+            !stem.is_empty() && FILE_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str())
+        });
+        if looks_like_endpoint(&token) && (!has_ext || token.contains("://")) {
+            let url_part: String = token
+                .chars()
+                .take_while(|&c| is_url_char(c) || c == '?' || c == '#')
+                .collect();
+            let Some(key) = url_match_key(&url_part) else {
+                continue;
+            };
+            let path_only = url_path(&url_part);
+            if !a.url_paths.iter().any(|u| u.key == key) {
+                a.url_paths.push(UrlAnchor {
+                    raw: token.clone(),
+                    path: path_only,
+                    key,
+                });
+            }
+        } else if has_ext && !a.file_paths.contains(&token) {
+            a.file_paths.push(token);
+        }
+    }
+    static METHOD: OnceLock<Regex> = OnceLock::new();
+    let method = METHOD.get_or_init(|| {
+        Regex::new(r"\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b").expect("valid")
+    });
+    for m in method.find_iter(text) {
+        if !a.http_methods.iter().any(|x| x == m.as_str()) {
+            a.http_methods.push(m.as_str().to_owned());
+        }
+    }
+    // Identifiers outside the URL and file anchors (a path's segments are
+    // not symbols).
+    let mut rest = text.to_owned();
+    for u in &a.url_paths {
+        rest = rest.replace(&u.raw, " ");
+    }
+    for f in &a.file_paths {
+        rest = rest.replace(f.as_str(), " ");
+    }
+    // Dotted names first (`OrderService.Cancel`, not `OrderService`); a
+    // dotted run needs a capital or `_` so prose (`e.g`) is not a symbol.
+    static SYMBOL: OnceLock<Regex> = OnceLock::new();
+    let symbol = SYMBOL.get_or_init(|| {
+        Regex::new(r"\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+|[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+|[a-z]+_[a-z0-9_]+)\b")
+            .expect("valid")
+    });
+    for m in symbol.find_iter(&rest) {
+        let id = m.as_str();
+        let dotted = id.contains('.');
+        if dotted && !id.chars().any(|c| c.is_ascii_uppercase() || c == '_') {
+            continue;
+        }
+        if !a.symbols.iter().any(|s| s == id) {
+            a.symbols.push(id.to_owned());
+        }
+    }
+    a
+}
+
 fn identifiers(text: &str) -> Vec<String> {
     static R: OnceLock<Regex> = OnceLock::new();
     let r = R.get_or_init(|| {
@@ -252,12 +407,7 @@ fn phrase_target(text: &str) -> Option<String> {
         .find_map(|r| r.captures(text).map(|c| c[1].to_owned()))
 }
 
-/// Extensions that make a dotted single token a file name, not a symbol.
-const FILE_EXTENSIONS: &[&str] = &[
-    "md", "txt", "pdf", "eml", "docx", "doc", "odt", "pptx", "xlsx", "csv", "html", "htm", "json",
-    "yaml", "yml", "toml", "xml", "cs", "py", "rs", "ts", "tsx", "js", "jsx", "go", "java", "kt",
-    "rb", "php", "sql", "sh", "png", "jpg",
-];
+use docmonk_core::urls::FILE_EXTENSIONS;
 
 /// Routes `query` (see the module docs). Deterministic: the same query and
 /// options always produce the same route.
@@ -276,6 +426,11 @@ pub fn route(query: &str, opts: RouteOptions) -> Route {
         }
         v
     };
+    let anchors = if opts.anchors_disabled {
+        QueryAnchors::default()
+    } else {
+        extract_anchors(text)
+    };
     let mk = |intent, confidence: f64, signals: Vec<String>, strategies, target, fallback| Route {
         intent,
         confidence: (confidence * 100.0).round() / 100.0,
@@ -283,6 +438,7 @@ pub fn route(query: &str, opts: RouteOptions) -> Route {
         strategies,
         fallback,
         target,
+        anchors: anchors.clone(),
     };
     if text.is_empty() {
         return mk(
@@ -292,6 +448,23 @@ pub fn route(query: &str, opts: RouteOptions) -> Route {
             vec![LexicalFts],
             None,
             true,
+        );
+    }
+    // 0. An API endpoint path anywhere in the query is the primary target,
+    // whatever else the question mentions ("documentation", "trace", ...):
+    // exact occurrences first, then the code relationships around them.
+    if let Some(url) = anchors.url_paths.first() {
+        signals.push("url_anchor".into());
+        if r.document.is_match(text) {
+            signals.push("document_phrase".into());
+        }
+        return mk(
+            QueryIntent::EndpointReference,
+            0.95,
+            signals,
+            vec![ExactOccurrence, LexicalExact, SymbolGraph, LexicalFts],
+            Some(url.path.clone()),
+            false,
         );
     }
     // 1. Structural cues: a path (slashes, or a known file extension) or a
@@ -552,6 +725,7 @@ mod tests {
                 semantic_available: true,
                 reranker_enabled: true,
                 decomposition_enabled: true,
+                anchors_disabled: false,
             },
         );
         for s in [
@@ -569,6 +743,7 @@ mod tests {
                 semantic_available: true,
                 reranker_enabled: true,
                 decomposition_enabled: true,
+                anchors_disabled: false,
             },
         );
         assert!(!sym.strategies.contains(&RouteStrategy::Semantic));
@@ -588,6 +763,113 @@ mod tests {
             assert_eq!(route(q, o), route(q, o));
         }
     }
+
+    // clean-slate-audit: allow-start (API URL paths with a version segment are user data)
+    const Q01: &str =
+        "Is the URL path /sb/v1/content/groups/image used, referenced, or related to any \
+                       code or documentation in the indexed DocMonk project? Trace matching \
+                       route/client/API references and relevant call paths.";
+
+    #[test]
+    fn embedded_url_is_the_primary_anchor() {
+        let r = route(Q01, RouteOptions::default());
+        assert_eq!(r.intent, QueryIntent::EndpointReference);
+        assert_eq!(r.target.as_deref(), Some("/sb/v1/content/groups/image"));
+        assert_eq!(r.anchors.url_paths.len(), 1, "{:?}", r.anchors);
+        assert_eq!(r.anchors.url_paths[0].key, "sb/v1/content/groups/image");
+        assert!(r.strategies.contains(&RouteStrategy::ExactOccurrence));
+        assert!(!r.strategies.contains(&RouteStrategy::Semantic));
+        // "route/client/API" is plain English, not a path anchor.
+        assert!(r.anchors.file_paths.is_empty());
+        // The bare endpoint has the same primary target.
+        let bare = route("/sb/v1/content/groups/image", RouteOptions::default());
+        assert_eq!(bare.intent, QueryIntent::EndpointReference);
+        assert_eq!(bare.target, r.target);
+        assert_eq!(bare.anchors.url_paths[0].key, r.anchors.url_paths[0].key);
+        // Documentation keywords never override the exact anchor.
+        let mixed = route(
+            "what does the documentation say about /sb/v1/content/groups/image?",
+            RouteOptions {
+                semantic_available: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(mixed.intent, QueryIntent::EndpointReference);
+        assert!(!mixed.strategies.contains(&RouteStrategy::Semantic));
+        // Rollback flag: the pre-anchor route.
+        let off = route(
+            Q01,
+            RouteOptions {
+                anchors_disabled: true,
+                ..Default::default()
+            },
+        );
+        assert_ne!(off.intent, QueryIntent::EndpointReference);
+        assert!(off.anchors.is_empty());
+    }
+
+    #[test]
+    fn url_keys_normalize_without_over_normalizing() {
+        let k = |s: &str| url_match_key(s);
+        assert_eq!(
+            k("/sb/v1/content/groups/image").as_deref(),
+            Some("sb/v1/content/groups/image")
+        );
+        assert_eq!(
+            k("https://api.example.com//SB/v1/content/groups/image/?x=1#f").as_deref(),
+            Some("sb/v1/content/groups/image")
+        );
+        assert_eq!(
+            k("~/sb/v1/content/groups/image").as_deref(),
+            Some("sb/v1/content/groups/image")
+        );
+        assert_eq!(k("api/orders/{id:int}").as_deref(), Some("api/orders/{}"));
+        assert_eq!(
+            k("api/orders/{orderId}/lines").as_deref(),
+            Some("api/orders/{}/lines")
+        );
+        assert_eq!(k("/a%2Fb/C").as_deref(), Some("a%2fb/c"));
+        assert_ne!(
+            k("/sb/v1/content/groups/image2"),
+            k("/sb/v1/content/groups/image")
+        );
+        assert_ne!(
+            k("/sb/v1/groups/content/image"),
+            k("/sb/v1/content/groups/image")
+        );
+        assert_eq!(k("/"), None);
+        assert_eq!(k("https://host"), None);
+    }
+
+    #[test]
+    fn anchors_are_typed() {
+        let a = extract_anchors(
+            "Does `OrderService.Cancel` call GET \"/api/v2/orders/{id}\" or src/billing/ledger.cs \
+             or C:\\repo\\Billing\\Ledger.cs, and/or https://h.example.com/v1/items?page=2.",
+        );
+        let urls: Vec<&str> = a.url_paths.iter().map(|u| u.path.as_str()).collect();
+        assert_eq!(urls, ["/api/v2/orders/{id}", "/v1/items"]);
+        assert_eq!(
+            a.file_paths,
+            ["src/billing/ledger.cs", "C:\\repo\\Billing\\Ledger.cs"]
+        );
+        assert_eq!(a.http_methods, ["GET"]);
+        assert!(
+            a.symbols.contains(&"OrderService.Cancel".to_owned()),
+            "{:?}",
+            a.symbols
+        );
+        assert!(a.quoted.contains(&"OrderService.Cancel".to_owned()));
+        // Non-ASCII words and plain slashes are not anchors.
+        let g = extract_anchors("τι λέει η πολιτική για input/output και ναι/όχι");
+        assert!(g.url_paths.is_empty() && g.file_paths.is_empty(), "{g:?}");
+        // A file path stays a file path.
+        assert_eq!(
+            route("src/billing/ledger.cs", RouteOptions::default()).intent,
+            QueryIntent::PathLookup
+        );
+    }
+    // clean-slate-audit: allow-end
 
     #[test]
     fn filters_are_conjunctive() {

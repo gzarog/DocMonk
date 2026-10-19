@@ -166,10 +166,13 @@ fn multiset(edges: &[Value]) -> Vec<String> {
 
 #[test]
 fn symbol_and_graph_queries_are_as_expected() {
-    let golden: Value = serde_json::from_str(
+    let mut golden: Value = serde_json::from_str(
         &std::fs::read_to_string(repo_root().join("fixtures/expected/graph.json")).unwrap(),
     )
     .unwrap();
+    // `DOCMONK_BLESS=1` re-records every traversal (a deliberate graph
+    // derivation change); symbol matches are never re-recorded.
+    let bless = std::env::var("DOCMONK_BLESS").as_deref() == Ok("1");
     let mut failures = Vec::new();
     let mut checked = 0;
     for name in ["graph", "code", "linking"] {
@@ -179,8 +182,9 @@ fn symbol_and_graph_queries_are_as_expected() {
             store: &ix.store,
             build_id: &ix.build,
         }];
-        for item in golden[name]["queries"].as_array().unwrap() {
-            let q = item["query"].as_str().unwrap();
+        for item in golden[name]["queries"].as_array_mut().unwrap() {
+            let q = item["query"].as_str().unwrap().to_owned();
+            let q = q.as_str();
             let mut fail = |what: &str, got: String, want: String| {
                 if got != want {
                     failures.push(format!(
@@ -206,8 +210,9 @@ fn symbol_and_graph_queries_are_as_expected() {
             );
             for depth in [1usize, 3] {
                 checked += 1;
-                let exp = &item[format!("d{depth}")];
+                let exp = item[format!("d{depth}")].clone();
                 let lists = |v: &Value| v.as_array().unwrap().clone();
+                let mut blessed: Vec<(&str, Vec<Value>)> = Vec::new();
                 let (_, callers) = graph::traverse_symbol(
                     &corpora,
                     q,
@@ -239,6 +244,13 @@ fn symbol_and_graph_queries_are_as_expected() {
                 ];
                 for (what, edges) in traversed {
                     let got: Vec<Value> = edges.iter().map(|e| edge(&ent, e)).collect();
+                    if bless {
+                        // Only lists that differ are re-recorded.
+                        if canonical(&got) != canonical(&lists(&exp[what])) {
+                            blessed.push((what, got));
+                        }
+                        continue;
+                    }
                     fail(
                         &format!("{what}@{depth}"),
                         format!("{:?}", canonical(&got)),
@@ -248,14 +260,35 @@ fn symbol_and_graph_queries_are_as_expected() {
                 let res = [("incoming", &inc), ("outgoing", &out), ("tests", &tests)];
                 for (what, edges) in res {
                     let got: Vec<Value> = edges.iter().map(|e| resolved(&ent, e)).collect();
+                    if bless {
+                        if multiset(&got) != multiset(&lists(&exp[what])) {
+                            blessed.push((what, got));
+                        }
+                        continue;
+                    }
                     fail(
                         &format!("{what}@{depth}"),
                         format!("{:?}", multiset(&got)),
                         format!("{:?}", multiset(&lists(&exp[what]))),
                     );
                 }
+                for (what, got) in blessed {
+                    item[format!("d{depth}")][what] = Value::Array(got);
+                }
             }
         }
+    }
+    if bless {
+        let mut out = Vec::new();
+        let fmt = serde_json::ser::PrettyFormatter::with_indent(b" ");
+        serde::Serialize::serialize(
+            &golden,
+            &mut serde_json::Serializer::with_formatter(&mut out, fmt),
+        )
+        .unwrap();
+        out.push(b'\n');
+        std::fs::write(repo_root().join("fixtures/expected/graph.json"), out).unwrap();
+        return;
     }
     for f in failures.iter().take(25) {
         eprintln!("{f}");

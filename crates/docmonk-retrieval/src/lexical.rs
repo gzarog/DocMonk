@@ -647,6 +647,19 @@ pub fn merge(results: Vec<SearchResult>) -> Vec<SearchResult> {
     out
 }
 
+static ADAPTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// `search.adaptive_lexical.enabled` (process-wide; on by default): server
+/// readers prefetch only the precise tiers. Off restores prefetching every
+/// tier up front.
+pub fn set_adaptive(enabled: bool) {
+    ADAPTIVE.store(enabled, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn adaptive_enabled() -> bool {
+    ADAPTIVE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Per-stage timing for `--explain`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct StageTiming {
@@ -669,7 +682,8 @@ pub fn search(
 /// [`search`] plus a per-stage timing breakdown.
 ///
 /// Corpora whose readers can be shared across threads (server mode) are
-/// searched concurrently, and each prefetches its whole plan in one
+/// searched concurrently by at most [`crate::pool::max_concurrency`]
+/// workers, and each prefetches the plan's precise tiers in one
 /// round-trip; SQLite corpora run one after another on this thread. The
 /// merged ranking does not depend on either.
 pub fn search_with_timings(
@@ -700,45 +714,10 @@ pub fn search_with_options(
     if q.is_empty() {
         return Ok((Vec::new(), Vec::new()));
     }
-    let sync: Option<Vec<&(dyn docmonk_storage::read::KnowledgeRead + Sync)>> =
-        corpora.iter().map(|c| c.store.as_sync()).collect();
-    let per_corpus: Vec<CorpusOutput> = match sync {
-        Some(stores) if corpora.len() > 1 => std::thread::scope(|scope| {
-            let token = docmonk_core::deadline::current();
-            let handles: Vec<_> = stores
-                .into_iter()
-                .zip(corpora)
-                .map(|(store, c)| {
-                    let build_id = c.build_id;
-                    let token = token.clone();
-                    scope.spawn(move || {
-                        let _deadline = token.as_ref().map(docmonk_core::deadline::Token::enter);
-                        corpus_search(
-                            Corpus {
-                                store: store as &dyn docmonk_storage::read::KnowledgeRead,
-                                build_id,
-                            },
-                            q,
-                            limit,
-                            snippet_tokens,
-                            opts,
-                        )
-                    })
-                })
-                .collect();
-            handles
-                .into_iter()
-                .map(|h| {
-                    h.join()
-                        .unwrap_or_else(|_| Err(SearchError("search thread panicked".into())))
-                })
-                .collect::<Result<Vec<_>, _>>()
-        })?,
-        _ => corpora
-            .iter()
-            .map(|&c| corpus_search(c, q, limit, snippet_tokens, opts))
-            .collect::<Result<Vec<_>, _>>()?,
-    };
+    // A bounded worker pool (P06): never one thread per source.
+    let per_corpus: Vec<CorpusOutput> = crate::pool::map_corpora(corpora, |_, c| {
+        corpus_search(c, q, limit, snippet_tokens, opts)
+    })?;
     let mut timings = Vec::new();
     let mut all = Vec::new();
     for (hits, t) in per_corpus {
@@ -784,8 +763,15 @@ fn corpus_search(
         Ok(())
     };
     if c.store.backend_kind() != "sqlite" {
+        // Progressive tiers (P04): only the precise tiers are prefetched;
+        // the loose OR tiers are read on demand, when the precise ones
+        // left the limit unfilled (`run_plan` stops early otherwise).
+        let adaptive = adaptive_enabled();
         let mut expressions: Vec<String> = Vec::new();
         for v in query_plan_with(q, opts.plan).unwrap_or_default() {
+            if adaptive && v.tier == LexicalTier::OrFallback {
+                continue;
+            }
             if !expressions.contains(&v.expression) {
                 expressions.push(v.expression);
             }
@@ -915,6 +901,7 @@ mod tests {
         }
     }
 
+    // clean-slate-audit: allow-start (API URL paths with a version segment are user data)
     /// The URL question of the retrieval plan (25 content terms): the old
     /// planner built all C(25, 13) = 5,200,300 groups before falling back.
     #[test]
@@ -965,6 +952,7 @@ mod tests {
         assert_eq!(exprs("order order ORDER")[0].1, "\"order order ORDER\"");
         assert_eq!(exprs("order order ORDER").len(), 2);
     }
+    // clean-slate-audit: allow-end
 
     #[test]
     fn exact_paths_match_whole_segments() {

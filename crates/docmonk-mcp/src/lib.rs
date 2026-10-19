@@ -613,7 +613,20 @@ fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, Doc
             set("max_files", &mut budget.max_files);
             set("max_graph_nodes", &mut budget.max_graph_nodes);
             let opened = open_sources(home, None)?;
-            let r = query_cmd::explore_value(home, &cfg, &opened, &query, budget)?;
+            let explain = args
+                .get("explain")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let r = query_cmd::explore_value_with(
+                home,
+                &cfg,
+                &opened,
+                &query_cmd::ExploreRequest {
+                    query: &query,
+                    budget,
+                    explain,
+                },
+            )?;
             let mut warnings: Vec<Value> = Vec::new();
             if r["evidence_truncated"] == true {
                 warnings.extend(

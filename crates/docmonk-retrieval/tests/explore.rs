@@ -178,7 +178,7 @@ fn impact_and_explore_are_as_expected() {
         for want in golden[name]["explore"].as_array_mut().unwrap() {
             checked += 1;
             let q = want["query"].as_str().unwrap();
-            let plan = explore::plan(q, false);
+            let plan = explore::plan_routed(q, false, Default::default());
             let got =
                 strip(&explore::explore(&corpora, &plan, None, ExploreOptions::default()).unwrap());
             if bless {

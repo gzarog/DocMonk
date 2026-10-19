@@ -32,8 +32,10 @@ pub const CODE_DERIVATION_VERSION: &str = "rust-code-2";
 
 /// Derivation identity of the relationship graph (per-file edges, cross-file
 /// resolution and linking). Independent of the base index identity: a
-/// change recomputes graphs only, never reindexes content.
-pub const GRAPH_DERIVATION_VERSION: &str = "graph-2";
+/// change recomputes graphs only, never reindexes content. (3: URL string
+/// literals and statically composed framework routes are recorded as
+/// `url_literal:` / `route:` references, the exact-occurrence projection.)
+pub const GRAPH_DERIVATION_VERSION: &str = "graph-3";
 
 /// The full graph identity recorded with every graph generation (it
 /// includes the code derivation, whose entity ids the graph points at).
@@ -285,6 +287,61 @@ pub fn build_relationships(
                 confidence: Confidence::Heuristic.as_str().into(),
                 source_location: Some(rel_path.to_owned()),
                 evidence: Some(finding.evidence),
+                ..RelationshipRow::default()
+            },
+        );
+    }
+    // The exact-occurrence projection: URL literals and composed routes,
+    // keyed by `docmonk_core::urls::url_match_key` in `target_symbol` (an
+    // indexed exact lookup on every backend).
+    for lit in &extraction.literals {
+        let Some(key) = docmonk_core::urls::url_match_key(&lit.text) else {
+            continue;
+        };
+        let source = lit
+            .owner_local_id
+            .map_or(namespace.as_str(), |o| ids[o].as_str());
+        let (resolver, confidence) = if lit.interpolated {
+            ("literal:interpolated", Confidence::Heuristic)
+        } else {
+            ("literal:url", Confidence::Exact)
+        };
+        let target = format!("{}{key}", docmonk_core::urls::URL_LITERAL_PREFIX);
+        push(
+            &mut out,
+            RelationshipType::References,
+            source,
+            &format!("{resolver}#{target}"),
+            RelationshipRow {
+                file_id: file_id.to_owned(),
+                relationship_type: RelationshipType::References.as_str().into(),
+                source_entity_id: source.to_owned(),
+                target_symbol: Some(target),
+                resolver: resolver.into(),
+                confidence: confidence.as_str().into(),
+                source_location: location(lit.line),
+                evidence: Some(lit.text.clone()),
+                ..RelationshipRow::default()
+            },
+        );
+    }
+    for route in framework::compose_routes(language, &extraction.entities, &extraction.decorators) {
+        let source = &ids[route.subject_local_id];
+        let target = format!("{}{}", docmonk_core::urls::ROUTE_PREFIX, route.key);
+        push(
+            &mut out,
+            RelationshipType::References,
+            source,
+            &format!("{}#{target}#{}", route.resolver, route.method),
+            RelationshipRow {
+                file_id: file_id.to_owned(),
+                relationship_type: RelationshipType::References.as_str().into(),
+                source_entity_id: source.clone(),
+                target_symbol: Some(target),
+                resolver: route.resolver.into(),
+                confidence: Confidence::Heuristic.as_str().into(),
+                source_location: location(route.line),
+                evidence: Some(format!("{} {}", route.method, route.path)),
                 ..RelationshipRow::default()
             },
         );

@@ -149,7 +149,14 @@ impl ServerReader {
     /// made afterwards with the same arguments are served from it. Results
     /// are identical to sending each search alone (same bodies), so this
     /// only changes the number of round-trips.
+    /// Request counters of the backend this reader talks to (shared by
+    /// every reader of the process).
+    pub fn backend_stats(&self) -> crate::transport::RequestStats {
+        self.backend.stats()
+    }
+
     pub fn prefetch(&self, calls: impl FnOnce(&Self)) -> Result<()> {
+        const MSEARCH_BATCH: usize = 32;
         *self.recording.lock().unwrap_or_else(|p| p.into_inner()) = Some(Vec::new());
         calls(self);
         let recorded = self
@@ -169,7 +176,12 @@ impl ServerReader {
         if uniq.is_empty() {
             return Ok(());
         }
-        let responses = self.backend.msearch(&uniq).map_err(Self::err)?;
+        // Bounded `_msearch` payloads (P06): at most MSEARCH_BATCH items
+        // per request.
+        let mut responses = Vec::with_capacity(uniq.len());
+        for batch in uniq.chunks(MSEARCH_BATCH) {
+            responses.extend(self.backend.msearch(batch).map_err(Self::err)?);
+        }
         let mut cache = self.prefetched.lock().unwrap_or_else(|p| p.into_inner());
         for ((index, body), r) in uniq.into_iter().zip(responses) {
             // A failed search is not cached: sent alone later, it reports
@@ -1216,6 +1228,12 @@ impl KnowledgeRead for ServerReader {
     fn dependency_generation(&self, b: &str) -> Result<Option<String>> {
         // Server builds are immutable: the build id is the generation.
         Ok(Some(format!("server:{b}")))
+    }
+
+    fn graph_derivation(&self, b: &str) -> Result<Option<String>> {
+        self.backend
+            .served_graph_derivation(&self.source_id, b, self.require_current)
+            .map_err(Self::err)
     }
 
     fn graph_freshness(&self, b: &str) -> Result<docmonk_storage::read::GraphFreshness> {

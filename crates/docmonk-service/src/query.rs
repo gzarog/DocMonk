@@ -66,6 +66,7 @@ pub fn release_pooled_stores() {
         .lock()
         .unwrap_or_else(|p| p.into_inner())
         .clear();
+    clear_explore_cache();
 }
 
 fn pool_enabled() -> bool {
@@ -458,9 +459,13 @@ pub fn traverse_value(
 /// `[{source_id, state, generation, visible, stale}]`: how current each
 /// source's relationship graph is.
 pub fn graph_json(opened: &[Opened]) -> Result<Value, DocMonkError> {
+    // Server readers answer concurrently (bounded pool, P06).
+    let fresh = docmonk_retrieval::pool::map_corpora(&corpora(opened), |_, c| {
+        Ok(c.store.graph_freshness(c.build_id)?)
+    })
+    .map_err(search_err)?;
     let mut out = Vec::with_capacity(opened.len());
-    for o in opened {
-        let f = o.store.read().graph_freshness(&o.build).map_err(db)?;
+    for (o, f) in opened.iter().zip(fresh) {
         out.push(json!({
             "source_id": o.source.id,
             "state": f.state,
@@ -521,6 +526,20 @@ pub fn semantic_json(s: &hybrid::SemanticOutcome) -> Value {
     })
 }
 
+/// The routing options of `cfg` (one decision path for search explain,
+/// evidence, explore, ask and MCP).
+pub fn route_options(
+    cfg: &docmonk_config::DocMonkConfig,
+) -> docmonk_retrieval::route::RouteOptions {
+    let sc = &cfg.search;
+    docmonk_retrieval::route::RouteOptions {
+        semantic_available: sc.semantic,
+        reranker_enabled: sc.reranker.enabled,
+        decomposition_enabled: sc.decomposition.enabled,
+        anchors_disabled: !sc.anchors.enabled,
+    }
+}
+
 /// The configured `context.*` budget.
 pub fn config_budget(cfg: &docmonk_config::DocMonkConfig) -> explore::Budget {
     explore::Budget {
@@ -528,6 +547,46 @@ pub fn config_budget(cfg: &docmonk_config::DocMonkConfig) -> explore::Budget {
         max_files: cfg.context.max_files.max(0) as usize,
         max_graph_nodes: cfg.context.max_graph_nodes.max(0) as usize,
     }
+}
+
+/// Applies the process-wide retrieval settings of `cfg` (worker cap,
+/// progressive lexical tiers) before a request runs.
+pub fn apply_retrieval_settings(cfg: &docmonk_config::DocMonkConfig) {
+    docmonk_retrieval::pool::set_max_concurrency(cfg.search.max_concurrency.max(1) as usize);
+    lexical::set_adaptive(cfg.search.adaptive_lexical.enabled);
+}
+
+/// The explore options of `cfg` under `budget`.
+pub fn explore_options(
+    cfg: &docmonk_config::DocMonkConfig,
+    budget: explore::Budget,
+    explain: bool,
+) -> explore::ExploreOptions {
+    let sc = &cfg.search;
+    explore::ExploreOptions {
+        budget,
+        snippet_tokens: sc.output.snippet_max_tokens,
+        exact: explore::ExactSettings {
+            enabled: sc.exact_occurrences.enabled,
+            max_results: sc.exact_occurrences.max_results.max(1) as usize,
+            documents: true,
+            max_template_variants: 4,
+        },
+        adaptive_lexical: sc.adaptive_lexical.enabled,
+        selective_graph: sc.selective_graph.enabled,
+        max_seed_entities: sc.selective_graph.max_seed_entities.max(1) as usize,
+        explain,
+    }
+}
+
+/// One `explore` request.
+#[derive(Debug, Clone, Copy)]
+pub struct ExploreRequest<'a> {
+    pub query: &'a str,
+    pub budget: explore::Budget,
+    /// Add the `diagnostics` payload (stage timings, counters, route,
+    /// backend and build ids). Never cached.
+    pub explain: bool,
 }
 
 /// `explore --json` data under `budget`.
@@ -538,33 +597,212 @@ pub fn explore_value(
     query: &str,
     budget: explore::Budget,
 ) -> Result<Value, DocMonkError> {
+    explore_value_with(
+        home,
+        cfg,
+        opened,
+        &ExploreRequest {
+            query,
+            budget,
+            explain: false,
+        },
+    )
+}
+
+/// [`explore_value`] with options: the shared routed planner
+/// ([`explore::plan_routed`]), exact occurrences, selective graph
+/// expansion, a lazy semantic stage and, when asked, diagnostics.
+pub fn explore_value_with(
+    home: &Home,
+    cfg: &docmonk_config::DocMonkConfig,
+    opened: &[Opened],
+    req: &ExploreRequest<'_>,
+) -> Result<Value, DocMonkError> {
+    let started = Instant::now();
+    apply_retrieval_settings(cfg);
+    let sc = &cfg.search;
+    let mut service_stages = Vec::new();
+    let mut stage = |name: &str, t: Instant| {
+        service_stages
+            .push(json!({"stage": name, "duration_ms": t.elapsed().as_secs_f64() * 1000.0}));
+    };
+    let t = Instant::now();
+    let plan = explore::plan_routed(req.query, sc.semantic, route_options(cfg));
+    stage("plan", t);
+    let t = Instant::now();
+    let graph = graph_json(opened)?;
+    stage("graph_freshness", t);
+    // Generation-keyed result cache (long-lived processes only, P07).
+    let cache_key = (sc.cache.enabled && pool_enabled() && !req.explain)
+        .then(|| explore_cache_key(cfg, opened, &graph, req));
+    if let Some(k) = &cache_key {
+        if let Some(v) = explore_cache_get(k, sc.cache.ttl_seconds.max(1) as u64) {
+            return Ok(v);
+        }
+    }
     let corp = corpora(opened);
-    let plan = explore::plan(query, cfg.search.semantic);
-    let semantic = if plan.strategies.contains(&explore::Strategy::Semantic) {
+    let before = opened
+        .iter()
+        .find_map(|o| o.store.server())
+        .map(ServerReader::backend_stats);
+    let lazy_semantic = sc.lazy_semantic;
+    let mut semantic = |p: &explore::ExploreProgress<'_>| {
+        // Exact anchors well supported by direct evidence never embed
+        // the query (P07); a confident lexical answer skips it when
+        // `search.lazy_semantic` is on.
+        if p.plan.intent == explore::Intent::Endpoint && p.exact_evidence {
+            return Ok(None);
+        }
+        if lazy_semantic && classify::estimate_confidence(p.lexical) == "high" {
+            return Ok(None);
+        }
         let lazy = lazy_embedder(home, cfg);
         let embedder = lazy.get().ok().map(|a| a.as_ref());
-        Some(
-            hybrid::semantic_search_with(
-                &corp,
-                embedder,
-                query,
-                lexical::DEFAULT_LIMIT,
-                Some(cfg.search.semantic_top_k.max(1) as usize),
-                ann_params(cfg),
-            )
-            .map_err(search_err)?,
+        hybrid::semantic_search_with(
+            &corp,
+            embedder,
+            req.query,
+            lexical::DEFAULT_LIMIT,
+            Some(sc.semantic_top_k.max(1) as usize),
+            ann_params(cfg),
         )
-    } else {
-        None
+        .map(Some)
     };
-    let opts = explore::ExploreOptions {
-        budget,
-        snippet_tokens: cfg.search.output.snippet_max_tokens,
-    };
-    let mut r = explore::explore(&corp, &plan, semantic.as_ref(), opts).map_err(search_err)?;
+    let t = Instant::now();
+    let opts = explore_options(cfg, req.budget, req.explain);
+    let mut r = explore::explore_with(&corp, &plan, &mut semantic, opts).map_err(search_err)?;
+    stage("explore", t);
+    let t = Instant::now();
     absolutize_json(&mut r, opened, None);
-    r["graph"] = graph_json(opened)?;
+    stage("absolutize", t);
+    r["graph"] = graph;
+    if req.explain {
+        let after = opened
+            .iter()
+            .find_map(|o| o.store.server())
+            .map(ServerReader::backend_stats);
+        let backend = match (&before, &after) {
+            (Some(b), Some(a)) => json!({
+                "kind": opened.first().map(|o| o.store.read().backend_kind()),
+                "requests": a.requests.saturating_sub(b.requests),
+                "bytes_sent": a.bytes_sent.saturating_sub(b.bytes_sent),
+                "bytes_received": a.bytes_received.saturating_sub(b.bytes_received),
+            }),
+            _ => {
+                json!({"kind": opened.first().map(|o| o.store.read().backend_kind()), "requests": 0})
+            }
+        };
+        let d = &mut r["diagnostics"];
+        d["service_stages"] = json!(service_stages);
+        d["backend"] = backend;
+        d["builds"] = json!(opened
+            .iter()
+            .map(|o| json!({"source_id": o.source.id, "build_id": o.build}))
+            .collect::<Vec<_>>());
+        d["total_ms"] = json!(started.elapsed().as_secs_f64() * 1000.0);
+        d["cache"] = json!(if sc.cache.enabled && pool_enabled() {
+            "bypassed_for_explain"
+        } else {
+            "disabled"
+        });
+    }
+    if let Some(k) = cache_key {
+        explore_cache_put(k, &r, sc.cache.max_entries.max(1) as usize);
+    }
     Ok(r)
+}
+
+type ExploreCache = std::sync::Mutex<(
+    HashMap<String, (Instant, Value)>,
+    std::collections::VecDeque<String>,
+)>;
+
+fn explore_cache() -> &'static ExploreCache {
+    static CACHE: std::sync::OnceLock<ExploreCache> = std::sync::OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+/// Everything an explore payload depends on: the query and budget, every
+/// opened source with its root and published build, each graph's state
+/// and generation, the search/context/graph settings and this binary's
+/// version. A publication, graph promotion, source removal or settings
+/// change produces another key, so a stale payload is never served.
+fn explore_cache_key(
+    cfg: &docmonk_config::DocMonkConfig,
+    opened: &[Opened],
+    graph: &Value,
+    req: &ExploreRequest<'_>,
+) -> String {
+    let sources: Vec<(&str, &str, &str, &str)> = opened
+        .iter()
+        .map(|o| {
+            (
+                o.source.id.as_str(),
+                o.source.path.as_str(),
+                o.build.as_str(),
+                o.store.read().backend_kind(),
+            )
+        })
+        .collect();
+    format!(
+        "{}\u{0}{:?}\u{0}{:?}\u{0}{}\u{0}{:?}\u{0}{:?}\u{0}{:?}\u{0}{}",
+        req.query,
+        (
+            req.budget.max_chars,
+            req.budget.max_files,
+            req.budget.max_graph_nodes
+        ),
+        sources,
+        graph,
+        cfg.search,
+        cfg.context,
+        cfg.graph,
+        env!("CARGO_PKG_VERSION"),
+    )
+}
+
+static EXPLORE_CACHE_HITS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Explore payloads served from the cache by this process.
+pub fn explore_cache_hits() -> u64 {
+    EXPLORE_CACHE_HITS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn explore_cache_get(key: &str, ttl_seconds: u64) -> Option<Value> {
+    let mut c = explore_cache().lock().unwrap_or_else(|p| p.into_inner());
+    let (at, v) = c.0.get(key)?;
+    if at.elapsed() > std::time::Duration::from_secs(ttl_seconds) {
+        c.0.remove(key);
+        return None;
+    }
+    let v = v.clone();
+    EXPLORE_CACHE_HITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    Some(v)
+}
+
+fn explore_cache_put(key: String, v: &Value, max_entries: usize) {
+    let mut c = explore_cache().lock().unwrap_or_else(|p| p.into_inner());
+    if c.0
+        .insert(key.clone(), (Instant::now(), v.clone()))
+        .is_none()
+    {
+        c.1.push_back(key);
+    }
+    while c.0.len() > max_entries {
+        match c.1.pop_front() {
+            Some(old) => {
+                c.0.remove(&old);
+            }
+            None => break,
+        }
+    }
+}
+
+/// Drops every cached explore payload.
+pub fn clear_explore_cache() {
+    let mut c = explore_cache().lock().unwrap_or_else(|p| p.into_inner());
+    c.0.clear();
+    c.1.clear();
 }
 
 /// `{available, reason, results}` of a semantic search, absolute paths.
@@ -862,6 +1100,7 @@ pub fn run_search(
     opened: &[Opened],
     req: &SearchRequest<'_>,
 ) -> Result<SearchRun, DocMonkError> {
+    apply_retrieval_settings(cfg);
     let sc = &cfg.search;
     let f = &req.filters;
     let counters_before = docmonk_ml::counters::snapshot();

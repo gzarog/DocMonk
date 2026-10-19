@@ -53,6 +53,9 @@ impl Response {
 pub struct RequestStats {
     pub requests: u64,
     pub bytes_sent: u64,
+    /// Response body bytes over all requests.
+    #[serde(default)]
+    pub bytes_received: u64,
     pub by_endpoint: BTreeMap<String, u64>,
     pub bulk_requests: u64,
     pub bulk_actions: u64,
@@ -115,7 +118,11 @@ impl<T: Transport> Counting<T> {
                 .entry(format!("{} {}", method.as_str(), endpoint_of(path)))
                 .or_default() += 1;
         }
-        self.inner.send(method, path, body)
+        let r = self.inner.send(method, path, body)?;
+        if let Ok(mut s) = self.stats.lock() {
+            s.bytes_received += r.body.len() as u64;
+        }
+        Ok(r)
     }
 }
 

@@ -49,6 +49,12 @@
      ],
      "default": null,
      "title": "Max Graph Nodes"
+    },
+    "explain": {
+     "type": "boolean",
+     "default": false,
+     "title": "Explain",
+     "description": "Add a diagnostics object: routing decision, per-stage timings, source counts, backend request counters and build ids."
     }
    },
    "required": [

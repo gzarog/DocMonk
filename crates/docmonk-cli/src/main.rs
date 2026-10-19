@@ -135,6 +135,10 @@ enum Command {
         query: String,
         #[arg(long = "json")]
         json: bool,
+        /// Add routing, per-stage timing and counter diagnostics (with
+        /// --json: a `diagnostics` object).
+        #[arg(long = "explain")]
+        explain: bool,
     },
     /// Inspect and manually correct the link graph.
     #[command(subcommand)]
@@ -355,7 +359,11 @@ fn run(cli: Cli) -> Result<(), DocMonkError> {
         Command::Callees(a) => query_cmd::calls(&a, docmonk_retrieval::graph::Direction::Outgoing)?,
         Command::References(a) => query_cmd::references(&a)?,
         Command::Impact(a) => query_cmd::impact(&a)?,
-        Command::Explore { query, json } => query_cmd::explore(&query, json)?,
+        Command::Explore {
+            query,
+            json,
+            explain,
+        } => query_cmd::explore(&query, json, explain)?,
         Command::Evidence(a) => query_cmd::evidence(&a)?,
         Command::Link(cmd) => query_cmd::link(cmd)?,
         Command::Doctor { json } => doctor_cmd::doctor(json)?,
