@@ -449,6 +449,9 @@ pub fn traverse_value(
         "query": name,
         "matches": matches.iter().map(|m| match_json(m, opened)).collect::<Vec<_>>(),
         "edges": edges.iter().map(|e| edge_json(e, opened)).collect::<Vec<_>>(),
+        // The traversal budget (PH09): at the result limit, more edges may
+        // exist than were returned.
+        "truncated": edges.len() >= limit,
     }))
 }
 
@@ -994,6 +997,7 @@ pub fn run_search(
             "hits": s.hits.len(),
             "duration_ms": duration_ms,
             "substages": s.substages_json(model_load_ms),
+            "prefiltered_sources": s.prefiltered,
         }));
         Some(s)
     } else {

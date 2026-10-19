@@ -156,6 +156,30 @@ Persisting the unit index (plan P3-02/P3-05) would save at most the load and ind
 - **P6** Graph parsing takes the process-wide `cpu` permits; batch size measurable.
 - **P7** CI guards (equivalence and per-change statement counts), operations documentation, this report.
 
+## PH09: dependency-manifest writes (2,039 files, 3 runs + 1 warmup, local)
+
+A full promotion rewrote the dependency manifest one file at a time and
+first deleted the file's reference keys with `DELETE FROM graph_symbol_refs
+WHERE file_id = ?`. That table's key is `(key, file_id)`, so each delete
+scanned it: quadratic in the number of files, and the largest part of the
+cold "commit" phase (1.5 s of 1.8 s; the SQLite `COMMIT` itself took
+0.33 s). Deletes now go by primary key, from the file's stored symbols, and
+a full promotion (tables just cleared) skips them.
+
+| Scenario | Graph median before | after | p95 before | after | Fingerprint |
+|---|---|---|---|---|---|
+| cold | 3.896 s | 2.392 s | 4.028 s | 2.445 s | identical |
+| body_edit | 0.070 s | 0.070 s | 0.077 s | 0.113 s | identical |
+| rename_definition | 0.249 s | 0.202 s | 0.268 s | 0.206 s | identical |
+| add_file | 0.074 s | 0.062 s | 0.081 s | 0.064 s | identical |
+| remove_file | 0.173 s | 0.171 s | 0.209 s | 0.187 s | identical |
+| doc_edit | 0.162 s | 0.112 s | 0.208 s | 0.119 s | identical |
+
+Peak RSS 129 MB before and 130 MB after. Same container as above (4 vCPU),
+`--files 2000 --docs 40 --server none`; raw reports in
+`ph09-manifest-2039-before.json` / `ph09-manifest-2039-after.json`. The
+8,203-file and 150-repository figures were not re-measured for this change.
+
 ## Not measured, not done, and what remains
 
 - **Live clusters** (*not measured*): OpenSearch/Elasticsearch timings, bulk and copy-forward tuning (P5-03), and OpenSearch vs Elasticsearch parity were not measured; the CI live-server suite checks correctness on both. The in-process engine counts requests and records only.

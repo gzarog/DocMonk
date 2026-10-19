@@ -17,7 +17,9 @@ use serde_json::{json, Value};
 
 use docmonk_storage::error::{Result, StorageError};
 use docmonk_storage::knowledge::{ChunkRow, EntityRow, RelationshipRow};
-use docmonk_storage::read::{parse_expression, FtsTerm, KnowledgeRead, ReadFilter, VectorHit};
+use docmonk_storage::read::{
+    parse_expression, FtsTerm, KnowledgeRead, ReadFilter, VectorFilter, VectorHit,
+};
 use docmonk_storage::search::{
     AttachmentProvenance, DocumentSearchRow, EntityLinkRow, EntitySearchRow, PathSearchRow,
 };
@@ -90,6 +92,25 @@ impl ServerReader {
             .map_err(Self::err)?;
         cache.insert(b.to_owned(), g.clone());
         Ok(g)
+    }
+
+    /// Relative paths of build `b`'s files ending in `suffix`, sorted
+    /// (the authoritative copy of a staging `file_paths_with_suffix`).
+    pub fn file_paths_with_suffix(&self, b: &str, suffix: &str) -> Result<Vec<String>> {
+        let pattern = format!("*{}", wildcard_literal(suffix));
+        let mut out: Vec<String> = self
+            .scan_all(
+                IndexKind::Files,
+                b,
+                vec![json!({ "wildcard": { "rel_path": pattern } })],
+                "file_id",
+            )?
+            .iter()
+            .map(|s| str_of(s, "rel_path"))
+            .collect();
+        out.sort();
+        out.dedup();
+        Ok(out)
     }
 
     pub fn backend(&self) -> &ServerBackend {
@@ -472,6 +493,86 @@ impl ServerReader {
             }),
         }
     }
+
+    /// Top-`k` vectors of build `b` inside `filter`, pre-filtered by the
+    /// engine (exact under the filter, audit F06): the generation scope,
+    /// the fingerprint and the hard filters all go into the kNN `filter`.
+    fn knn_search(
+        &self,
+        b: &str,
+        fingerprint: &str,
+        query: &[f32],
+        k: usize,
+        num_candidates: usize,
+        vf: &VectorFilter,
+    ) -> Result<Option<Vec<VectorHit>>> {
+        let Some(spec) = self.backend.vector_spec() else {
+            return Ok(None);
+        };
+        if query.len() != spec.dims as usize {
+            return Err(StorageError::Backend(format!(
+                "query vector has {} dimensions but the server indexes were created for {} ({}); \
+                 recreate the indexes for this model",
+                query.len(),
+                spec.dims,
+                spec.model_id
+            )));
+        }
+        if k == 0 {
+            return Ok(Some(Vec::new()));
+        }
+        let mut filter = self.scope(b)?;
+        filter.push(json!({ "term": { "embedding_fingerprint": fingerprint } }));
+        filter.extend(vector_filter_clauses(vf));
+        // A document filter excludes every entity.
+        let entities = vf.entities && vf.document_ids.is_empty();
+        let mut out = Vec::new();
+        for (kind, subject, id_field, on) in [
+            (IndexKind::Chunks, SUBJECT_CHUNK, "chunk_id", vf.documents),
+            (IndexKind::Code, SUBJECT_ENTITY, "entity_id", entities),
+        ] {
+            if !on {
+                continue;
+            }
+            let mut f = filter.clone();
+            if kind == IndexKind::Chunks {
+                f.extend(chunk_filter_clauses(vf));
+            }
+            for h in self.hits(kind, self.knn_body(f, query, k, num_candidates))? {
+                out.push((
+                    subject.to_owned(),
+                    str_of(&h["_source"], id_field),
+                    cosine(h["_score"].as_f64().unwrap_or(0.0)),
+                ));
+            }
+        }
+        out.sort_by(|a, b| b.2.total_cmp(&a.2).then_with(|| a.1.cmp(&b.1)));
+        out.truncate(k);
+        Ok(Some(out))
+    }
+}
+
+/// Hard-filter clauses common to every vector index (`rel_path` prefixes).
+fn vector_filter_clauses(vf: &VectorFilter) -> Vec<Value> {
+    path_filter(&ReadFilter {
+        path_prefixes: vf.path_prefixes.clone(),
+        document_ids: Vec::new(),
+    })
+}
+
+/// Chunk-only hard-filter clauses: document ids (the chunk's document or
+/// its parent) and the attachment exclusion.
+fn chunk_filter_clauses(vf: &VectorFilter) -> Vec<Value> {
+    let mut out = Vec::new();
+    if !vf.document_ids.is_empty() {
+        out.push(json!({ "terms": { "document_id": vf.document_ids } }));
+    }
+    if vf.exclude_attachments {
+        out.push(
+            json!({ "bool": { "must_not": [ { "exists": { "field": "attachment_index" } } ] } }),
+        );
+    }
+    out
 }
 
 /// `rel_path` prefix clauses of `filter` (any of them), as a filter list.
@@ -1645,42 +1746,30 @@ impl KnowledgeRead for ServerReader {
         k: usize,
         num_candidates: usize,
     ) -> Result<Option<Vec<VectorHit>>> {
-        let Some(spec) = self.backend.vector_spec() else {
-            return Ok(None);
-        };
-        if query.len() != spec.dims as usize {
-            return Err(StorageError::Backend(format!(
-                "query vector has {} dimensions but the server indexes were created for {} ({}); \
-                 recreate the indexes for this model",
-                query.len(),
-                spec.dims,
-                spec.model_id
-            )));
-        }
-        if k == 0 {
-            return Ok(Some(Vec::new()));
-        }
-        let mut filter = self.scope(b)?;
-        filter.push(json!({ "term": { "embedding_fingerprint": fingerprint } }));
-        let mut out = Vec::new();
-        for (kind, subject, id_field) in [
-            (IndexKind::Chunks, SUBJECT_CHUNK, "chunk_id"),
-            (IndexKind::Code, SUBJECT_ENTITY, "entity_id"),
-        ] {
-            for h in self.hits(
-                kind,
-                self.knn_body(filter.clone(), query, k, num_candidates),
-            )? {
-                out.push((
-                    subject.to_owned(),
-                    str_of(&h["_source"], id_field),
-                    cosine(h["_score"].as_f64().unwrap_or(0.0)),
-                ));
-            }
-        }
-        out.sort_by(|a, b| b.2.total_cmp(&a.2).then_with(|| a.1.cmp(&b.1)));
-        out.truncate(k);
-        Ok(Some(out))
+        self.knn_search(
+            b,
+            fingerprint,
+            query,
+            k,
+            num_candidates,
+            &VectorFilter {
+                entities: true,
+                documents: true,
+                ..VectorFilter::default()
+            },
+        )
+    }
+
+    fn vector_search_filtered(
+        &self,
+        b: &str,
+        fingerprint: &str,
+        query: &[f32],
+        k: usize,
+        num_candidates: usize,
+        filter: &VectorFilter,
+    ) -> Result<Option<Vec<VectorHit>>> {
+        self.knn_search(b, fingerprint, query, k, num_candidates, filter)
     }
 
     fn subject_meta(&self, b: &str, keys: &[(String, String)]) -> Result<Vec<SubjectMeta>> {
@@ -1798,6 +1887,27 @@ mod tests {
         let q = ServerReader::fts_query("\"a\" OR \"b\"", &["a"]).unwrap();
         assert_eq!(q["bool"]["minimum_should_match"], 1);
         assert!(ServerReader::fts_query("a AND b", &["a"]).is_none());
+    }
+
+    #[test]
+    fn hard_filters_become_knn_prefilter_clauses() {
+        let vf = VectorFilter {
+            path_prefixes: vec!["src/".into()],
+            document_ids: vec!["d1".into()],
+            entities: true,
+            documents: true,
+            exclude_attachments: true,
+        };
+        let common = vector_filter_clauses(&vf);
+        assert_eq!(common[0]["bool"]["should"][0]["prefix"]["rel_path"], "src/");
+        let chunk = chunk_filter_clauses(&vf);
+        assert_eq!(chunk[0]["terms"]["document_id"][0], "d1");
+        assert_eq!(
+            chunk[1]["bool"]["must_not"][0]["exists"]["field"],
+            "attachment_index"
+        );
+        assert!(vector_filter_clauses(&VectorFilter::default()).is_empty());
+        assert!(chunk_filter_clauses(&VectorFilter::default()).is_empty());
     }
 
     #[test]

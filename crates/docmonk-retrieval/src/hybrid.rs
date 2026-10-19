@@ -50,6 +50,9 @@ pub struct SemanticOutcome {
     pub stages: SemanticStages,
     /// Attachment provenance lookups for chunk hits (milliseconds).
     pub attachments_ms: f64,
+    /// Sources whose hard filters ran inside the server kNN query (exact
+    /// filtered top-k); the others widened and post-filtered (`--explain`).
+    pub prefiltered: Vec<String>,
 }
 
 impl SemanticOutcome {
@@ -61,6 +64,7 @@ impl SemanticOutcome {
             degraded: Vec::new(),
             stages: SemanticStages::default(),
             attachments_ms: 0.0,
+            prefiltered: Vec::new(),
         }
     }
 
@@ -200,6 +204,7 @@ pub fn semantic_search_filtered(
     };
     let mut attachments_ms = 0.0;
     let mut degraded = Vec::new();
+    let mut prefiltered = Vec::new();
     let mut first_reason = None;
     let mut answered = 0;
     for c in corpora {
@@ -222,6 +227,35 @@ pub fn semantic_search_filtered(
             stages.add(&r.stages);
             if r.available {
                 (Some(r.hits), false)
+            } else {
+                unavailable = Some(r.reason);
+                (None, false)
+            }
+        } else if c.store.as_project_store().is_none() {
+            // Server: the hard filters go into the kNN pre-filter, so the
+            // engine's top-k is already exact under them (F06). The
+            // post-filter stays as a second check.
+            let vf = filter.vector_filter();
+            let r = semantic::search_vector_filtered(
+                c.store,
+                &dir,
+                c.build_id,
+                &qv,
+                limit,
+                Some(base_k),
+                ann,
+                Some(&vf),
+            )
+            .map_err(SearchError)?;
+            stages.add(&r.stages);
+            prefiltered.push(sid.clone());
+            if r.available {
+                let kept = r
+                    .hits
+                    .into_iter()
+                    .filter(|h| semantic_hit_allowed(filter, &sid, h))
+                    .collect();
+                (Some(kept), false)
             } else {
                 unavailable = Some(r.reason);
                 (None, false)
@@ -301,6 +335,7 @@ pub fn semantic_search_filtered(
         degraded,
         stages,
         attachments_ms,
+        prefiltered,
     })
 }
 

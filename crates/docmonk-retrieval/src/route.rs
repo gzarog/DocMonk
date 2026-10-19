@@ -147,6 +147,21 @@ impl SearchFilters {
         }
     }
 
+    /// The filters a server pushes into its kNN pre-filter.
+    pub fn vector_filter(&self) -> docmonk_storage::read::VectorFilter {
+        docmonk_storage::read::VectorFilter {
+            path_prefixes: self
+                .path_prefixes
+                .iter()
+                .map(|p| p.replace('\\', "/").trim_start_matches("./").to_owned())
+                .collect(),
+            document_ids: self.document_ids.clone(),
+            entities: self.allows_kind("entity"),
+            documents: self.allows_kind("document"),
+            exclude_attachments: self.exclude_attachments,
+        }
+    }
+
     pub fn allows_kind(&self, kind: &str) -> bool {
         self.kinds.is_empty() || self.kinds.iter().any(|k| k == kind)
     }

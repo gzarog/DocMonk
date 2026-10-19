@@ -1148,6 +1148,12 @@
      },
      "title": "Edges",
      "type": "array"
+    },
+    "truncated": {
+     "default": false,
+     "description": "The result limit was reached: more edges may exist than were returned.",
+     "title": "Truncated",
+     "type": "boolean"
     }
    },
    "required": [
@@ -1443,6 +1449,12 @@
      },
      "title": "Edges",
      "type": "array"
+    },
+    "truncated": {
+     "default": false,
+     "description": "The result limit was reached: more edges may exist than were returned.",
+     "title": "Truncated",
+     "type": "boolean"
     }
    },
    "required": [

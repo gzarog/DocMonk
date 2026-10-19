@@ -207,6 +207,62 @@ fn a_project_reference_scopes_resolution_to_the_producer_only() {
 }
 
 #[test]
+fn ph09_consumers_of_one_producer_share_its_lookups_within_a_run() {
+    let mut env = setup(&[]);
+    // A second consumer `d` of producer `b`, referencing the same name.
+    let d = env._d.path().join("d");
+    write(
+        &d,
+        "Tool/Tool.cs",
+        "namespace Tool {\n  public class Tool {\n    public static int Run() { return Lib.Shared.Compute(); }\n  }\n}\n",
+    );
+    write(
+        &d,
+        "Tool/Tool.csproj",
+        "<Project><ItemGroup>\n  <ProjectReference Include=\"..\\..\\b\\Lib\\Lib.csproj\" />\n</ItemGroup></Project>\n",
+    );
+    docmonk_service::sources::catalog(&env.home)
+        .unwrap()
+        .add(d.to_str().unwrap(), vec![], vec![])
+        .unwrap();
+    env.roots.insert("d", d);
+    let outcomes = env.run(&[]);
+    assert!(
+        updated(&outcomes["a"]) && updated(&outcomes["d"]),
+        "{outcomes:?}"
+    );
+    // Both consumers recompute in one run (the stage runs on this thread).
+    invalidate(&env, "a");
+    invalidate(&env, "d");
+    let before = docmonk_service::dependencies::test_hooks::producer_names_read();
+    let mut n = 0;
+    docmonk_service::dependencies::refresh(&env.home, |_, o| {
+        if updated(o) {
+            n += 1;
+        }
+    })
+    .unwrap();
+    let read = docmonk_service::dependencies::test_hooks::producer_names_read() - before;
+    assert_eq!(n, 2);
+    // Each distinct name is read from the producer once for both
+    // consumers: `a` alone needs as many as both together.
+    let names: std::collections::BTreeSet<String> = ["a", "d"]
+        .iter()
+        .flat_map(|k| {
+            env.manifest(k)
+                .lookups
+                .into_values()
+                .flat_map(|l| l.into_keys())
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_eq!(read, names.len(), "{names:?}");
+    assert!(env.manifest("d").bindings.iter().any(
+        |b| b.reference_text == "Lib.Shared.Compute" && b.target_entity_id == env.compute("b")
+    ));
+}
+
+#[test]
 fn producer_edits_invalidate_consumers_only_when_a_referenced_candidate_changes() {
     let env = setup(&[]);
     env.run(&[]);

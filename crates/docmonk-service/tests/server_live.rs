@@ -589,6 +589,44 @@ fn cross_host_dependencies(base: &str, engine: &str) {
     assert_eq!(binding.producer.as_deref(), Some(producer.id.as_str()));
     assert!(binding.target_entity_id.is_some() && !binding.ambiguous);
 
+    // F04 (PH02): host 1 never indexed the consumer (no staging copy of
+    // it at all). Forcing a full recomputation there reads the consumer's
+    // references and project files from the server and binds exactly what
+    // the indexing host bound.
+    let mut dirty = m.clone();
+    dirty.state = "stale".into();
+    dirty.revision += 1;
+    server(&host1)
+        .set_graph_external(&consumer.id, None, &serde_json::to_value(&dirty).unwrap())
+        .unwrap();
+    let mut again = None;
+    docmonk_service::dependencies::refresh(&host1.home, |s, o| {
+        if s.id == consumer.id {
+            again = Some(o.clone());
+        }
+    })
+    .unwrap();
+    assert!(
+        matches!(
+            again,
+            Some(DependencyOutcome::Updated {
+                full: true,
+                bound: 1,
+                ..
+            })
+        ),
+        "{again:?}"
+    );
+    let m2: docmonk_storage::graph::ExternalManifest = serde_json::from_value(
+        server(&host1)
+            .graph_external(&consumer.id)
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(m2.state, "current");
+    assert_eq!(m2.bindings, m.bindings, "cache-free resolution matches");
+
     // F01 (PH03): either host traverses the binding from the producer's
     // definition to the consumer's call, read from the server.
     for home in [&host1.home, &home2] {

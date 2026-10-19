@@ -1,0 +1,2868 @@
+{
+  "benchmark": "relationships",
+  "label": null,
+  "measurement": "measured (SQLite, synthetic); server figures are request counts against an in-process engine",
+  "metadata": {
+    "git_sha": null,
+    "host_os": "linux",
+    "arch": "x86_64",
+    "cpus": 4,
+    "worker_count": 4,
+    "graph_batch": 256,
+    "code_files": 2000,
+    "documents": 40,
+    "runs": 3,
+    "warmup": 1,
+    "scenarios": null,
+    "server": false,
+    "fact_cache": false
+  },
+  "summary": {
+    "cold": {
+      "index_seconds": {
+        "median": 1.112476033,
+        "p95": 1.167938205
+      },
+      "graph_seconds": {
+        "median": 2.392247709,
+        "p95": 2.444675089
+      },
+      "full_pipeline_seconds": {
+        "median": 3.506507073,
+        "p95": 3.616068055
+      },
+      "cpu_seconds": {
+        "median": 5.130000000000003,
+        "p95": 5.639999999999999
+      },
+      "peak_rss_mb": {
+        "median": 129.515625,
+        "p95": 130.015625
+      },
+      "deterministic": true,
+      "plan_action": "full",
+      "fingerprint": {
+        "edges": 36640,
+        "links": 4320,
+        "digest": "dbf777dbfde8fec33bd7a64337b7df50e92dd6642f20961f2cfdcd7ee3415574"
+      },
+      "server_deterministic": true,
+      "server_graph_digest": null,
+      "sql_statements": 85056,
+      "server_http_requests": null
+    },
+    "no_change": {
+      "index_seconds": {
+        "median": 0.0,
+        "p95": 0.0
+      },
+      "graph_seconds": {
+        "median": 0.010481289,
+        "p95": 0.014796292
+      },
+      "full_pipeline_seconds": {
+        "median": 0.013507404,
+        "p95": 0.017368819
+      },
+      "cpu_seconds": {
+        "median": 0.21999999999999886,
+        "p95": 0.22000000000000242
+      },
+      "peak_rss_mb": {
+        "median": 129.4609375,
+        "p95": 129.9609375
+      },
+      "deterministic": true,
+      "plan_action": "skip",
+      "fingerprint": {
+        "edges": 36640,
+        "links": 4320,
+        "digest": "dbf777dbfde8fec33bd7a64337b7df50e92dd6642f20961f2cfdcd7ee3415574"
+      },
+      "server_deterministic": true,
+      "server_graph_digest": null,
+      "sql_statements": 7,
+      "server_http_requests": null
+    },
+    "equivalent_republish": {
+      "index_seconds": {
+        "median": 3.20024172,
+        "p95": 3.20902163
+      },
+      "graph_seconds": {
+        "median": 0.017072074,
+        "p95": 0.01792725
+      },
+      "full_pipeline_seconds": {
+        "median": 3.220777669,
+        "p95": 3.228363067
+      },
+      "cpu_seconds": {
+        "median": 4.18,
+        "p95": 4.239999999999998
+      },
+      "peak_rss_mb": {
+        "median": 129.76953125,
+        "p95": 130.19921875
+      },
+      "deterministic": true,
+      "plan_action": "rebind",
+      "fingerprint": {
+        "edges": 36640,
+        "links": 4320,
+        "digest": "dbf777dbfde8fec33bd7a64337b7df50e92dd6642f20961f2cfdcd7ee3415574"
+      },
+      "server_deterministic": true,
+      "server_graph_digest": null,
+      "sql_statements": 13,
+      "server_http_requests": null
+    },
+    "body_edit": {
+      "index_seconds": {
+        "median": 0.050974088,
+        "p95": 0.063314007
+      },
+      "graph_seconds": {
+        "median": 0.069517338,
+        "p95": 0.112509995
+      },
+      "full_pipeline_seconds": {
+        "median": 0.134073522,
+        "p95": 0.166275771
+      },
+      "cpu_seconds": {
+        "median": 0.3400000000000034,
+        "p95": 0.3999999999999986
+      },
+      "peak_rss_mb": {
+        "median": 129.76953125,
+        "p95": 130.19921875
+      },
+      "deterministic": true,
+      "plan_action": "incremental",
+      "fingerprint": {
+        "edges": 36640,
+        "links": 4320,
+        "digest": "dbf777dbfde8fec33bd7a64337b7df50e92dd6642f20961f2cfdcd7ee3415574"
+      },
+      "server_deterministic": true,
+      "server_graph_digest": null,
+      "sql_statements": 116,
+      "server_http_requests": null
+    },
+    "rename_definition": {
+      "index_seconds": {
+        "median": 0.048911867,
+        "p95": 0.074973957
+      },
+      "graph_seconds": {
+        "median": 0.201920525,
+        "p95": 0.206246794
+      },
+      "full_pipeline_seconds": {
+        "median": 0.252712274,
+        "p95": 0.284140338
+      },
+      "cpu_seconds": {
+        "median": 0.4399999999999977,
+        "p95": 0.46999999999999886
+      },
+      "peak_rss_mb": {
+        "median": 129.76953125,
+        "p95": 130.19921875
+      },
+      "deterministic": true,
+      "plan_action": "incremental",
+      "fingerprint": {
+        "edges": 36640,
+        "links": 4318,
+        "digest": "9d4bd5c82eb09e49a358d73b629f202f1c82e5b20037fdc6cfe0129b3eb42c23"
+      },
+      "server_deterministic": true,
+      "server_graph_digest": null,
+      "sql_statements": 117,
+      "server_http_requests": null
+    },
+    "add_file": {
+      "index_seconds": {
+        "median": 0.044764137,
+        "p95": 0.045921682
+      },
+      "graph_seconds": {
+        "median": 0.061964605,
+        "p95": 0.064095214
+      },
+      "full_pipeline_seconds": {
+        "median": 0.109508222,
+        "p95": 0.110548431
+      },
+      "cpu_seconds": {
+        "median": 0.3200000000000003,
+        "p95": 0.3200000000000003
+      },
+      "peak_rss_mb": {
+        "median": 129.76953125,
+        "p95": 130.19921875
+      },
+      "deterministic": true,
+      "plan_action": "incremental",
+      "fingerprint": {
+        "edges": 36646,
+        "links": 4318,
+        "digest": "d1412ae345a8854f601819a758376829d020a11a07ad470a12e3e95d75563987"
+      },
+      "server_deterministic": true,
+      "server_graph_digest": null,
+      "sql_statements": 71,
+      "server_http_requests": null
+    },
+    "remove_file": {
+      "index_seconds": {
+        "median": 0.044324395,
+        "p95": 0.044740182
+      },
+      "graph_seconds": {
+        "median": 0.170799389,
+        "p95": 0.186547433
+      },
+      "full_pipeline_seconds": {
+        "median": 0.217103299,
+        "p95": 0.233167704
+      },
+      "cpu_seconds": {
+        "median": 0.3999999999999986,
+        "p95": 0.4399999999999977
+      },
+      "peak_rss_mb": {
+        "median": 129.76953125,
+        "p95": 130.19921875
+      },
+      "deterministic": true,
+      "plan_action": "incremental",
+      "fingerprint": {
+        "edges": 36639,
+        "links": 4318,
+        "digest": "83262d6dfc9615891cdf9cca9ce2971707d76f10360217c12f2a76950902604e"
+      },
+      "server_deterministic": true,
+      "server_graph_digest": null,
+      "sql_statements": 47,
+      "server_http_requests": null
+    },
+    "doc_edit": {
+      "index_seconds": {
+        "median": 0.0677818,
+        "p95": 0.193109537
+      },
+      "graph_seconds": {
+        "median": 0.112420788,
+        "p95": 0.119226633
+      },
+      "full_pipeline_seconds": {
+        "median": 0.189049656,
+        "p95": 0.30734985
+      },
+      "cpu_seconds": {
+        "median": 0.38000000000000256,
+        "p95": 0.39000000000000057
+      },
+      "peak_rss_mb": {
+        "median": 129.76953125,
+        "p95": 130.19921875
+      },
+      "deterministic": true,
+      "plan_action": "incremental",
+      "fingerprint": {
+        "edges": 36639,
+        "links": 4321,
+        "digest": "f722b358c4066391f931ee45c01aad6a55fc5929dcd98ef5a84aa18c36cd9a03"
+      },
+      "server_deterministic": true,
+      "server_graph_digest": null,
+      "sql_statements": 193,
+      "server_http_requests": null
+    }
+  },
+  "runs": [
+    [
+      {
+        "scenario": "cold",
+        "plan_action": "full",
+        "plan_reason": "first_build",
+        "files_total": 2039,
+        "entities_total": 13326,
+        "index_seconds": 1.167938205,
+        "graph_seconds": 2.444675089,
+        "full_pipeline_seconds": 3.616068055,
+        "cpu_seconds": 5.639999999999999,
+        "peak_rss_mb": 129.33984375,
+        "phase_seconds": {
+          "committing": 0.481982085,
+          "deriving": 1.150905792,
+          "linking": 0.412946803,
+          "resolving": 0.374299694
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "full",
+          "reason": "first_build",
+          "full": true,
+          "generation": 1,
+          "base_generation": "105db8e04071c08583c473f74d43efbb@2026-10-18T15:32:27.165641+00:00",
+          "files_processed": 2039,
+          "relationships_written": 36640,
+          "resolutions_changed": 11322,
+          "files_reresolved": 2039,
+          "links": 4320,
+          "files_added": 0,
+          "files_modified": 2039,
+          "files_removed": 0,
+          "planning_seconds": 0.013868073,
+          "seconds": 2.4446060689999998,
+          "timings": {
+            "state_load_seconds": 0.008786094,
+            "clear_seconds": 0.000262568,
+            "derivation_seconds": 0.361904234,
+            "read_hash_seconds": 0.05061312299999991,
+            "parse_seconds": 0.9803823960000009,
+            "cache_load_seconds": 0.00008361699999999855,
+            "sqlite_write_seconds": 0.788730544,
+            "symbol_manifest_seconds": 0.136491761,
+            "resolution_seconds": 0.23780501,
+            "linking_seconds": 0.412947937,
+            "commit_seconds": 0.440093828,
+            "write_lock_seconds": 1.7269230819999999
+          },
+          "counters": {
+            "files_total": 2039,
+            "files_derived": 1999,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 1010729,
+            "resolution": {
+              "changed": 11322,
+              "references_examined": 11322,
+              "candidate_rows": 13326,
+              "candidate_queries": 1
+            },
+            "sql_statements": 85056
+          },
+          "linking": {
+            "links": 4320,
+            "manual": 0,
+            "entities_loaded": 13326,
+            "units_loaded": 1000,
+            "routes_loaded": 1332,
+            "candidates": 4320,
+            "narrow": false,
+            "load_seconds": 0.190011187,
+            "index_seconds": 0.017260923999999997,
+            "match_seconds": 0.09743781999999994,
+            "exact_seconds": 0.013225524999999985,
+            "qualified_seconds": 0.03486697099999999,
+            "alias_seconds": 0.02024911499999998,
+            "filename_seconds": 0.007001539999999985,
+            "route_seconds": 0.0019422380000000052,
+            "write_seconds": 0.063056192,
+            "manual_seconds": 0.000185502
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 2039,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 2039,
+            "changed": 0,
+            "unchanged": 0,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 0
+          },
+          "timings": {
+            "scan_seconds": 0.017896259,
+            "classify_seconds": 0.001882543,
+            "hash_calls": 0,
+            "process_seconds": 1.111198697,
+            "publish_seconds": 0.000843478
+          }
+        },
+        "fingerprint": {
+          "edges": 36640,
+          "links": 4320,
+          "digest": "dbf777dbfde8fec33bd7a64337b7df50e92dd6642f20961f2cfdcd7ee3415574"
+        }
+      },
+      {
+        "scenario": "no_change",
+        "plan_action": "skip",
+        "plan_reason": "current",
+        "files_total": 2039,
+        "entities_total": 13326,
+        "index_seconds": 0.0,
+        "graph_seconds": 0.010481289,
+        "full_pipeline_seconds": 0.013507404,
+        "cpu_seconds": 0.22000000000000242,
+        "peak_rss_mb": 129.28515625,
+        "phase_seconds": {},
+        "graph": {
+          "outcome": "up_to_date",
+          "action": "skip",
+          "reason": "current",
+          "full": false,
+          "generation": 1,
+          "base_generation": "105db8e04071c08583c473f74d43efbb@2026-10-18T15:32:27.165641+00:00",
+          "files_processed": 0,
+          "relationships_written": 0,
+          "resolutions_changed": 0,
+          "files_reresolved": 0,
+          "links": 0,
+          "files_added": 0,
+          "files_modified": 0,
+          "files_removed": 0,
+          "planning_seconds": 0.009494709,
+          "seconds": 0.010479486,
+          "timings": {
+            "state_load_seconds": 0.0,
+            "clear_seconds": 0.0,
+            "derivation_seconds": 0.0,
+            "read_hash_seconds": 0.0,
+            "parse_seconds": 0.0,
+            "cache_load_seconds": 0.0,
+            "sqlite_write_seconds": 0.0,
+            "symbol_manifest_seconds": 0.0,
+            "resolution_seconds": 0.0,
+            "linking_seconds": 0.0,
+            "commit_seconds": 0.0,
+            "write_lock_seconds": 0.0
+          },
+          "counters": {
+            "files_total": 0,
+            "files_derived": 0,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 0,
+            "resolution": {
+              "changed": 0,
+              "references_examined": 0,
+              "candidate_rows": 0,
+              "candidate_queries": 0
+            },
+            "sql_statements": 7
+          },
+          "linking": {
+            "links": 0,
+            "manual": 0,
+            "entities_loaded": 0,
+            "units_loaded": 0,
+            "routes_loaded": 0,
+            "candidates": 0,
+            "narrow": false,
+            "load_seconds": 0.0,
+            "index_seconds": 0.0,
+            "match_seconds": 0.0,
+            "exact_seconds": 0.0,
+            "qualified_seconds": 0.0,
+            "alias_seconds": 0.0,
+            "filename_seconds": 0.0,
+            "route_seconds": 0.0,
+            "write_seconds": 0.0,
+            "manual_seconds": 0.0
+          }
+        },
+        "server": null,
+        "index": null,
+        "fingerprint": {
+          "edges": 36640,
+          "links": 4320,
+          "digest": "dbf777dbfde8fec33bd7a64337b7df50e92dd6642f20961f2cfdcd7ee3415574"
+        }
+      },
+      {
+        "scenario": "equivalent_republish",
+        "plan_action": "rebind",
+        "plan_reason": "equivalent_snapshot",
+        "files_total": 2039,
+        "entities_total": 13326,
+        "index_seconds": 3.20024172,
+        "graph_seconds": 0.01792725,
+        "full_pipeline_seconds": 3.220777669,
+        "cpu_seconds": 4.239999999999998,
+        "peak_rss_mb": 129.28515625,
+        "phase_seconds": {},
+        "graph": {
+          "outcome": "rebound",
+          "action": "rebind",
+          "reason": "equivalent_snapshot",
+          "full": false,
+          "generation": 1,
+          "base_generation": "95024b7c39d9219d7e23b81f52b78847@2026-10-18T15:32:31.311686+00:00",
+          "files_processed": 0,
+          "relationships_written": 0,
+          "resolutions_changed": 0,
+          "files_reresolved": 0,
+          "links": 0,
+          "files_added": 0,
+          "files_modified": 0,
+          "files_removed": 0,
+          "planning_seconds": 0.012958672,
+          "seconds": 0.017924282,
+          "timings": {
+            "state_load_seconds": 0.0,
+            "clear_seconds": 0.0,
+            "derivation_seconds": 0.0,
+            "read_hash_seconds": 0.0,
+            "parse_seconds": 0.0,
+            "cache_load_seconds": 0.0,
+            "sqlite_write_seconds": 0.0,
+            "symbol_manifest_seconds": 0.0,
+            "resolution_seconds": 0.0,
+            "linking_seconds": 0.0,
+            "commit_seconds": 0.0,
+            "write_lock_seconds": 0.0
+          },
+          "counters": {
+            "files_total": 0,
+            "files_derived": 0,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 0,
+            "resolution": {
+              "changed": 0,
+              "references_examined": 0,
+              "candidate_rows": 0,
+              "candidate_queries": 0
+            },
+            "sql_statements": 13
+          },
+          "linking": {
+            "links": 0,
+            "manual": 0,
+            "entities_loaded": 0,
+            "units_loaded": 0,
+            "routes_loaded": 0,
+            "candidates": 0,
+            "narrow": false,
+            "load_seconds": 0.0,
+            "index_seconds": 0.0,
+            "match_seconds": 0.0,
+            "exact_seconds": 0.0,
+            "qualified_seconds": 0.0,
+            "alias_seconds": 0.0,
+            "filename_seconds": 0.0,
+            "route_seconds": 0.0,
+            "write_seconds": 0.0,
+            "manual_seconds": 0.0
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 2039,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 2039,
+            "changed": 0,
+            "unchanged": 0,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 0
+          },
+          "timings": {
+            "scan_seconds": 0.015786209,
+            "classify_seconds": 0.00174297,
+            "hash_calls": 0,
+            "process_seconds": 1.148668823,
+            "publish_seconds": 1.956333838
+          }
+        },
+        "fingerprint": {
+          "edges": 36640,
+          "links": 4320,
+          "digest": "dbf777dbfde8fec33bd7a64337b7df50e92dd6642f20961f2cfdcd7ee3415574"
+        }
+      },
+      {
+        "scenario": "body_edit",
+        "plan_action": "incremental",
+        "plan_reason": "files_changed",
+        "files_total": 2039,
+        "entities_total": 13326,
+        "index_seconds": 0.050974088,
+        "graph_seconds": 0.112509995,
+        "full_pipeline_seconds": 0.166275771,
+        "cpu_seconds": 0.3999999999999986,
+        "peak_rss_mb": 129.28515625,
+        "phase_seconds": {
+          "committing": 0.005348866,
+          "deriving": 0.056260993,
+          "linking": 0.02106517,
+          "resolving": 0.005226109
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "incremental",
+          "reason": "files_changed",
+          "full": false,
+          "generation": 2,
+          "base_generation": "95024b7c39d9219d7e23b81f52b78847@2026-10-18T15:32:33.630140+00:00",
+          "files_processed": 1,
+          "relationships_written": 24,
+          "resolutions_changed": 4,
+          "files_reresolved": 1,
+          "links": 12,
+          "files_added": 0,
+          "files_modified": 1,
+          "files_removed": 0,
+          "planning_seconds": 0.014173424,
+          "seconds": 0.112504678,
+          "timings": {
+            "state_load_seconds": 0.008628148,
+            "clear_seconds": 0.053407633,
+            "derivation_seconds": 0.001473611,
+            "read_hash_seconds": 0.00008923,
+            "parse_seconds": 0.000668092,
+            "cache_load_seconds": 4.3e-8,
+            "sqlite_write_seconds": 0.0013789560000000002,
+            "symbol_manifest_seconds": 0.000528508,
+            "resolution_seconds": 0.004681563,
+            "linking_seconds": 0.021080823,
+            "commit_seconds": 0.003586717,
+            "write_lock_seconds": 0.08449275
+          },
+          "counters": {
+            "files_total": 2039,
+            "files_derived": 1,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 605,
+            "resolution": {
+              "changed": 4,
+              "references_examined": 4,
+              "candidate_rows": 667,
+              "candidate_queries": 2
+            },
+            "sql_statements": 116
+          },
+          "linking": {
+            "links": 12,
+            "manual": 0,
+            "entities_loaded": 10,
+            "units_loaded": 1000,
+            "routes_loaded": 0,
+            "candidates": 12,
+            "narrow": true,
+            "load_seconds": 0.015349219,
+            "index_seconds": 0.003081728,
+            "match_seconds": 0.0005439569999999999,
+            "exact_seconds": 0.000249346,
+            "qualified_seconds": 0.000141749,
+            "alias_seconds": 0.000069343,
+            "filename_seconds": 0.000060862,
+            "route_seconds": 2.93e-7,
+            "write_seconds": 0.000464493,
+            "manual_seconds": 0.000246536
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 1,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 0,
+            "changed": 1,
+            "unchanged": 2038,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 1
+          },
+          "timings": {
+            "scan_seconds": 0.016986757,
+            "classify_seconds": 0.015781891,
+            "hash_calls": 1,
+            "process_seconds": 0.003289615,
+            "publish_seconds": 0.002179185
+          }
+        },
+        "fingerprint": {
+          "edges": 36640,
+          "links": 4320,
+          "digest": "dbf777dbfde8fec33bd7a64337b7df50e92dd6642f20961f2cfdcd7ee3415574"
+        }
+      },
+      {
+        "scenario": "rename_definition",
+        "plan_action": "incremental",
+        "plan_reason": "files_changed",
+        "files_total": 2039,
+        "entities_total": 13326,
+        "index_seconds": 0.074973957,
+        "graph_seconds": 0.206246794,
+        "full_pipeline_seconds": 0.284140338,
+        "cpu_seconds": 0.46999999999999886,
+        "peak_rss_mb": 129.28515625,
+        "phase_seconds": {
+          "committing": 0.004898843,
+          "deriving": 0.034053335,
+          "linking": 0.013603579,
+          "resolving": 0.138337284
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "incremental",
+          "reason": "files_changed",
+          "full": false,
+          "generation": 3,
+          "base_generation": "95024b7c39d9219d7e23b81f52b78847@2026-10-18T15:32:34.074841+00:00",
+          "files_processed": 1,
+          "relationships_written": 24,
+          "resolutions_changed": 5,
+          "files_reresolved": 667,
+          "links": 6,
+          "files_added": 0,
+          "files_modified": 1,
+          "files_removed": 0,
+          "planning_seconds": 0.008816598,
+          "seconds": 0.206242257,
+          "timings": {
+            "state_load_seconds": 0.004293164,
+            "clear_seconds": 0.031363363,
+            "derivation_seconds": 0.001444872,
+            "read_hash_seconds": 0.000046505,
+            "parse_seconds": 0.000878698,
+            "cache_load_seconds": 4.3e-8,
+            "sqlite_write_seconds": 0.001244879,
+            "symbol_manifest_seconds": 0.001185886,
+            "resolution_seconds": 0.137073675,
+            "linking_seconds": 0.013680799,
+            "commit_seconds": 0.003240323,
+            "write_lock_seconds": 0.187669543
+          },
+          "counters": {
+            "files_total": 2039,
+            "files_derived": 1,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 598,
+            "resolution": {
+              "changed": 5,
+              "references_examined": 7997,
+              "candidate_rows": 4662,
+              "candidate_queries": 4
+            },
+            "sql_statements": 117
+          },
+          "linking": {
+            "links": 6,
+            "manual": 0,
+            "entities_loaded": 10,
+            "units_loaded": 1000,
+            "routes_loaded": 0,
+            "candidates": 6,
+            "narrow": true,
+            "load_seconds": 0.010232696,
+            "index_seconds": 0.001802276,
+            "match_seconds": 0.00030232200000000005,
+            "exact_seconds": 0.000167404,
+            "qualified_seconds": 0.000082377,
+            "alias_seconds": 0.000030822,
+            "filename_seconds": 0.000013541,
+            "route_seconds": 3.51e-7,
+            "write_seconds": 0.000327173,
+            "manual_seconds": 0.000096469
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 1,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 0,
+            "changed": 1,
+            "unchanged": 2038,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 2
+          },
+          "timings": {
+            "scan_seconds": 0.030997706,
+            "classify_seconds": 0.02219919,
+            "hash_calls": 2,
+            "process_seconds": 0.004017301,
+            "publish_seconds": 0.002255227
+          }
+        },
+        "fingerprint": {
+          "edges": 36640,
+          "links": 4318,
+          "digest": "9d4bd5c82eb09e49a358d73b629f202f1c82e5b20037fdc6cfe0129b3eb42c23"
+        }
+      },
+      {
+        "scenario": "add_file",
+        "plan_action": "incremental",
+        "plan_reason": "files_changed",
+        "files_total": 2040,
+        "entities_total": 13329,
+        "index_seconds": 0.044764137,
+        "graph_seconds": 0.064095214,
+        "full_pipeline_seconds": 0.110548431,
+        "cpu_seconds": 0.3200000000000003,
+        "peak_rss_mb": 129.28515625,
+        "phase_seconds": {
+          "committing": 0.00262815,
+          "deriving": 0.031371998,
+          "linking": 0.010966739,
+          "resolving": 0.005072933
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "incremental",
+          "reason": "files_changed",
+          "full": false,
+          "generation": 4,
+          "base_generation": "95024b7c39d9219d7e23b81f52b78847@2026-10-18T15:32:34.549172+00:00",
+          "files_processed": 1,
+          "relationships_written": 6,
+          "resolutions_changed": 2,
+          "files_reresolved": 1,
+          "links": 0,
+          "files_added": 1,
+          "files_modified": 0,
+          "files_removed": 0,
+          "planning_seconds": 0.007877781,
+          "seconds": 0.064091468,
+          "timings": {
+            "state_load_seconds": 0.004573399,
+            "clear_seconds": 0.029863297,
+            "derivation_seconds": 0.000903307,
+            "read_hash_seconds": 0.00006233,
+            "parse_seconds": 0.000353781,
+            "cache_load_seconds": 5.8e-8,
+            "sqlite_write_seconds": 0.000604398,
+            "symbol_manifest_seconds": 0.00034678400000000005,
+            "resolution_seconds": 0.004724498,
+            "linking_seconds": 0.010968366,
+            "commit_seconds": 0.0015971,
+            "write_lock_seconds": 0.04803792
+          },
+          "counters": {
+            "files_total": 2040,
+            "files_derived": 1,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 149,
+            "resolution": {
+              "changed": 2,
+              "references_examined": 2,
+              "candidate_rows": 667,
+              "candidate_queries": 2
+            },
+            "sql_statements": 71
+          },
+          "linking": {
+            "links": 0,
+            "manual": 0,
+            "entities_loaded": 3,
+            "units_loaded": 1000,
+            "routes_loaded": 0,
+            "candidates": 0,
+            "narrow": true,
+            "load_seconds": 0.008554841,
+            "index_seconds": 0.001700324,
+            "match_seconds": 0.000017843000000000002,
+            "exact_seconds": 7.301e-6,
+            "qualified_seconds": 3.519e-6,
+            "alias_seconds": 4.625e-6,
+            "filename_seconds": 1.235e-6,
+            "route_seconds": 6.1e-8,
+            "write_seconds": 1.32e-7,
+            "manual_seconds": 0.000178323
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 1,
+          "failed": 0,
+          "counts": {
+            "scanned": 2040,
+            "new": 1,
+            "changed": 0,
+            "unchanged": 2039,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 2
+          },
+          "timings": {
+            "scan_seconds": 0.017077033,
+            "classify_seconds": 0.013754874,
+            "hash_calls": 2,
+            "process_seconds": 0.002285366,
+            "publish_seconds": 0.001989244
+          }
+        },
+        "fingerprint": {
+          "edges": 36646,
+          "links": 4318,
+          "digest": "d1412ae345a8854f601819a758376829d020a11a07ad470a12e3e95d75563987"
+        }
+      },
+      {
+        "scenario": "remove_file",
+        "plan_action": "incremental",
+        "plan_reason": "files_changed",
+        "files_total": 2039,
+        "entities_total": 13325,
+        "index_seconds": 0.044740182,
+        "graph_seconds": 0.186547433,
+        "full_pipeline_seconds": 0.233167704,
+        "cpu_seconds": 0.4399999999999977,
+        "peak_rss_mb": 129.28515625,
+        "phase_seconds": {
+          "committing": 0.00358823,
+          "deriving": 0.046328964,
+          "linking": 0.000313218,
+          "resolving": 0.118641903
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "incremental",
+          "reason": "files_changed",
+          "full": false,
+          "generation": 5,
+          "base_generation": "95024b7c39d9219d7e23b81f52b78847@2026-10-18T15:32:34.883042+00:00",
+          "files_processed": 0,
+          "relationships_written": 0,
+          "resolutions_changed": 0,
+          "files_reresolved": 666,
+          "links": 0,
+          "files_added": 0,
+          "files_modified": 0,
+          "files_removed": 1,
+          "planning_seconds": 0.008853673,
+          "seconds": 0.18654316,
+          "timings": {
+            "state_load_seconds": 0.007154722,
+            "clear_seconds": 0.04608566,
+            "derivation_seconds": 0.0,
+            "read_hash_seconds": 0.0,
+            "parse_seconds": 0.0,
+            "cache_load_seconds": 0.0,
+            "sqlite_write_seconds": 0.000243201,
+            "symbol_manifest_seconds": 0.001350531,
+            "resolution_seconds": 0.117181885,
+            "linking_seconds": 0.000423379,
+            "commit_seconds": 0.002012488,
+            "write_lock_seconds": 0.167026941
+          },
+          "counters": {
+            "files_total": 2039,
+            "files_derived": 0,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 0,
+            "resolution": {
+              "changed": 0,
+              "references_examined": 2665,
+              "candidate_rows": 1996,
+              "candidate_queries": 2
+            },
+            "sql_statements": 47
+          },
+          "linking": {
+            "links": 0,
+            "manual": 0,
+            "entities_loaded": 0,
+            "units_loaded": 0,
+            "routes_loaded": 0,
+            "candidates": 0,
+            "narrow": false,
+            "load_seconds": 0.0,
+            "index_seconds": 0.0,
+            "match_seconds": 0.0,
+            "exact_seconds": 0.0,
+            "qualified_seconds": 0.0,
+            "alias_seconds": 0.0,
+            "filename_seconds": 0.0,
+            "route_seconds": 0.0,
+            "write_seconds": 6.42e-7,
+            "manual_seconds": 0.000309228
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 0,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 0,
+            "changed": 0,
+            "unchanged": 2039,
+            "moved": 0,
+            "deleted": 1,
+            "unseen_kept": 0,
+            "hash_calls": 3
+          },
+          "timings": {
+            "scan_seconds": 0.018063952,
+            "classify_seconds": 0.013008203,
+            "hash_calls": 3,
+            "process_seconds": 0.000478726,
+            "publish_seconds": 0.001787382
+          }
+        },
+        "fingerprint": {
+          "edges": 36639,
+          "links": 4318,
+          "digest": "83262d6dfc9615891cdf9cca9ce2971707d76f10360217c12f2a76950902604e"
+        }
+      },
+      {
+        "scenario": "doc_edit",
+        "plan_action": "incremental",
+        "plan_reason": "files_changed",
+        "files_total": 2039,
+        "entities_total": 13325,
+        "index_seconds": 0.065133202,
+        "graph_seconds": 0.109322215,
+        "full_pipeline_seconds": 0.176232868,
+        "cpu_seconds": 0.370000000000001,
+        "peak_rss_mb": 129.28515625,
+        "phase_seconds": {
+          "committing": 0.00441408,
+          "deriving": 0.029787551,
+          "linking": 0.060589027,
+          "resolving": 0.000150584
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "incremental",
+          "reason": "files_changed",
+          "full": false,
+          "generation": 6,
+          "base_generation": "95024b7c39d9219d7e23b81f52b78847@2026-10-18T15:32:35.361521+00:00",
+          "files_processed": 1,
+          "relationships_written": 0,
+          "resolutions_changed": 0,
+          "files_reresolved": 1,
+          "links": 111,
+          "files_added": 0,
+          "files_modified": 1,
+          "files_removed": 0,
+          "planning_seconds": 0.008806164,
+          "seconds": 0.109317851,
+          "timings": {
+            "state_load_seconds": 0.004327984,
+            "clear_seconds": 0.029446488,
+            "derivation_seconds": 0.00014231,
+            "read_hash_seconds": 0.0,
+            "parse_seconds": 0.0,
+            "cache_load_seconds": 0.0,
+            "sqlite_write_seconds": 0.00019745,
+            "symbol_manifest_seconds": 0.000130262,
+            "resolution_seconds": 0.000021702,
+            "linking_seconds": 0.060588337,
+            "commit_seconds": 0.003197533,
+            "write_lock_seconds": 0.09358224
+          },
+          "counters": {
+            "files_total": 2039,
+            "files_derived": 0,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 0,
+            "resolution": {
+              "changed": 0,
+              "references_examined": 0,
+              "candidate_rows": 0,
+              "candidate_queries": 0
+            },
+            "sql_statements": 193
+          },
+          "linking": {
+            "links": 111,
+            "manual": 0,
+            "entities_loaded": 2815,
+            "units_loaded": 1001,
+            "routes_loaded": 1332,
+            "candidates": 111,
+            "narrow": false,
+            "load_seconds": 0.042542419,
+            "index_seconds": 0.003698519,
+            "match_seconds": 0.008544202,
+            "exact_seconds": 0.000860604,
+            "qualified_seconds": 0.002160044,
+            "alias_seconds": 0.002208118,
+            "filename_seconds": 0.000070265,
+            "route_seconds": 0.00048672,
+            "write_seconds": 0.001773927,
+            "manual_seconds": 0.000149503
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 1,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 0,
+            "changed": 1,
+            "unchanged": 2038,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 4
+          },
+          "timings": {
+            "scan_seconds": 0.026669425,
+            "classify_seconds": 0.012942517,
+            "hash_calls": 4,
+            "process_seconds": 0.011998803,
+            "publish_seconds": 0.002166534
+          }
+        },
+        "fingerprint": {
+          "edges": 36639,
+          "links": 4321,
+          "digest": "f722b358c4066391f931ee45c01aad6a55fc5929dcd98ef5a84aa18c36cd9a03"
+        }
+      }
+    ],
+    [
+      {
+        "scenario": "cold",
+        "plan_action": "full",
+        "plan_reason": "first_build",
+        "files_total": 2039,
+        "entities_total": 13326,
+        "index_seconds": 1.112476033,
+        "graph_seconds": 2.392247709,
+        "full_pipeline_seconds": 3.506507073,
+        "cpu_seconds": 5.130000000000003,
+        "peak_rss_mb": 129.515625,
+        "phase_seconds": {
+          "committing": 0.47181596,
+          "deriving": 1.186234596,
+          "linking": 0.383956765,
+          "resolving": 0.335880735
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "full",
+          "reason": "first_build",
+          "full": true,
+          "generation": 1,
+          "base_generation": "c6ef3ec03e7010507eb5c5b55d571d59@2026-10-18T15:32:37.970667+00:00",
+          "files_processed": 2039,
+          "relationships_written": 36640,
+          "resolutions_changed": 11322,
+          "files_reresolved": 2039,
+          "links": 4320,
+          "files_added": 0,
+          "files_modified": 2039,
+          "files_removed": 0,
+          "planning_seconds": 0.009215933,
+          "seconds": 2.3921627389999998,
+          "timings": {
+            "state_load_seconds": 0.003702418,
+            "clear_seconds": 0.000239938,
+            "derivation_seconds": 0.274931459,
+            "read_hash_seconds": 0.04351901799999998,
+            "parse_seconds": 0.8603564559999992,
+            "cache_load_seconds": 0.00008026999999999903,
+            "sqlite_write_seconds": 0.911056373,
+            "symbol_manifest_seconds": 0.137676889,
+            "resolution_seconds": 0.198200983,
+            "linking_seconds": 0.383958531,
+            "commit_seconds": 0.437302063,
+            "write_lock_seconds": 1.753684356
+          },
+          "counters": {
+            "files_total": 2039,
+            "files_derived": 1999,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 1010729,
+            "resolution": {
+              "changed": 11322,
+              "references_examined": 11322,
+              "candidate_rows": 13326,
+              "candidate_queries": 1
+            },
+            "sql_statements": 85056
+          },
+          "linking": {
+            "links": 4320,
+            "manual": 0,
+            "entities_loaded": 13326,
+            "units_loaded": 1000,
+            "routes_loaded": 1332,
+            "candidates": 4320,
+            "narrow": false,
+            "load_seconds": 0.171424958,
+            "index_seconds": 0.018110722999999995,
+            "match_seconds": 0.0947931140000001,
+            "exact_seconds": 0.013386776999999959,
+            "qualified_seconds": 0.034823398000000075,
+            "alias_seconds": 0.020654503000000025,
+            "filename_seconds": 0.006684928000000002,
+            "route_seconds": 0.0019469170000000118,
+            "write_seconds": 0.057644415,
+            "manual_seconds": 0.000130395
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 2039,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 2039,
+            "changed": 0,
+            "unchanged": 0,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 0
+          },
+          "timings": {
+            "scan_seconds": 0.016389244,
+            "classify_seconds": 0.001744341,
+            "hash_calls": 0,
+            "process_seconds": 1.06752855,
+            "publish_seconds": 0.000316964
+          }
+        },
+        "fingerprint": {
+          "edges": 36640,
+          "links": 4320,
+          "digest": "dbf777dbfde8fec33bd7a64337b7df50e92dd6642f20961f2cfdcd7ee3415574"
+        }
+      },
+      {
+        "scenario": "no_change",
+        "plan_action": "skip",
+        "plan_reason": "current",
+        "files_total": 2039,
+        "entities_total": 13326,
+        "index_seconds": 0.0,
+        "graph_seconds": 0.014796292,
+        "full_pipeline_seconds": 0.017368819,
+        "cpu_seconds": 0.21999999999999886,
+        "peak_rss_mb": 129.4609375,
+        "phase_seconds": {},
+        "graph": {
+          "outcome": "up_to_date",
+          "action": "skip",
+          "reason": "current",
+          "full": false,
+          "generation": 1,
+          "base_generation": "c6ef3ec03e7010507eb5c5b55d571d59@2026-10-18T15:32:37.970667+00:00",
+          "files_processed": 0,
+          "relationships_written": 0,
+          "resolutions_changed": 0,
+          "files_reresolved": 0,
+          "links": 0,
+          "files_added": 0,
+          "files_modified": 0,
+          "files_removed": 0,
+          "planning_seconds": 0.013251085,
+          "seconds": 0.014794203,
+          "timings": {
+            "state_load_seconds": 0.0,
+            "clear_seconds": 0.0,
+            "derivation_seconds": 0.0,
+            "read_hash_seconds": 0.0,
+            "parse_seconds": 0.0,
+            "cache_load_seconds": 0.0,
+            "sqlite_write_seconds": 0.0,
+            "symbol_manifest_seconds": 0.0,
+            "resolution_seconds": 0.0,
+            "linking_seconds": 0.0,
+            "commit_seconds": 0.0,
+            "write_lock_seconds": 0.0
+          },
+          "counters": {
+            "files_total": 0,
+            "files_derived": 0,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 0,
+            "resolution": {
+              "changed": 0,
+              "references_examined": 0,
+              "candidate_rows": 0,
+              "candidate_queries": 0
+            },
+            "sql_statements": 7
+          },
+          "linking": {
+            "links": 0,
+            "manual": 0,
+            "entities_loaded": 0,
+            "units_loaded": 0,
+            "routes_loaded": 0,
+            "candidates": 0,
+            "narrow": false,
+            "load_seconds": 0.0,
+            "index_seconds": 0.0,
+            "match_seconds": 0.0,
+            "exact_seconds": 0.0,
+            "qualified_seconds": 0.0,
+            "alias_seconds": 0.0,
+            "filename_seconds": 0.0,
+            "route_seconds": 0.0,
+            "write_seconds": 0.0,
+            "manual_seconds": 0.0
+          }
+        },
+        "server": null,
+        "index": null,
+        "fingerprint": {
+          "edges": 36640,
+          "links": 4320,
+          "digest": "dbf777dbfde8fec33bd7a64337b7df50e92dd6642f20961f2cfdcd7ee3415574"
+        }
+      },
+      {
+        "scenario": "equivalent_republish",
+        "plan_action": "rebind",
+        "plan_reason": "equivalent_snapshot",
+        "files_total": 2039,
+        "entities_total": 13326,
+        "index_seconds": 3.043650131,
+        "graph_seconds": 0.016271919,
+        "full_pipeline_seconds": 3.062520873,
+        "cpu_seconds": 4.18,
+        "peak_rss_mb": 129.76953125,
+        "phase_seconds": {},
+        "graph": {
+          "outcome": "rebound",
+          "action": "rebind",
+          "reason": "equivalent_snapshot",
+          "full": false,
+          "generation": 1,
+          "base_generation": "1cfd588a1133149b4804801df9d9d135@2026-10-18T15:32:42.119640+00:00",
+          "files_processed": 0,
+          "relationships_written": 0,
+          "resolutions_changed": 0,
+          "files_reresolved": 0,
+          "links": 0,
+          "files_added": 0,
+          "files_modified": 0,
+          "files_removed": 0,
+          "planning_seconds": 0.012092273,
+          "seconds": 0.016269579,
+          "timings": {
+            "state_load_seconds": 0.0,
+            "clear_seconds": 0.0,
+            "derivation_seconds": 0.0,
+            "read_hash_seconds": 0.0,
+            "parse_seconds": 0.0,
+            "cache_load_seconds": 0.0,
+            "sqlite_write_seconds": 0.0,
+            "symbol_manifest_seconds": 0.0,
+            "resolution_seconds": 0.0,
+            "linking_seconds": 0.0,
+            "commit_seconds": 0.0,
+            "write_lock_seconds": 0.0
+          },
+          "counters": {
+            "files_total": 0,
+            "files_derived": 0,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 0,
+            "resolution": {
+              "changed": 0,
+              "references_examined": 0,
+              "candidate_rows": 0,
+              "candidate_queries": 0
+            },
+            "sql_statements": 13
+          },
+          "linking": {
+            "links": 0,
+            "manual": 0,
+            "entities_loaded": 0,
+            "units_loaded": 0,
+            "routes_loaded": 0,
+            "candidates": 0,
+            "narrow": false,
+            "load_seconds": 0.0,
+            "index_seconds": 0.0,
+            "match_seconds": 0.0,
+            "exact_seconds": 0.0,
+            "qualified_seconds": 0.0,
+            "alias_seconds": 0.0,
+            "filename_seconds": 0.0,
+            "route_seconds": 0.0,
+            "write_seconds": 0.0,
+            "manual_seconds": 0.0
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 2039,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 2039,
+            "changed": 0,
+            "unchanged": 0,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 0
+          },
+          "timings": {
+            "scan_seconds": 0.015625367,
+            "classify_seconds": 0.001699609,
+            "hash_calls": 0,
+            "process_seconds": 1.222182403,
+            "publish_seconds": 1.741187096
+          }
+        },
+        "fingerprint": {
+          "edges": 36640,
+          "links": 4320,
+          "digest": "dbf777dbfde8fec33bd7a64337b7df50e92dd6642f20961f2cfdcd7ee3415574"
+        }
+      },
+      {
+        "scenario": "body_edit",
+        "plan_action": "incremental",
+        "plan_reason": "files_changed",
+        "files_total": 2039,
+        "entities_total": 13326,
+        "index_seconds": 0.063314007,
+        "graph_seconds": 0.068579575,
+        "full_pipeline_seconds": 0.134073522,
+        "cpu_seconds": 0.3400000000000034,
+        "peak_rss_mb": 129.76953125,
+        "phase_seconds": {
+          "committing": 0.003721827,
+          "deriving": 0.031740654,
+          "linking": 0.013468883,
+          "resolving": 0.003598138
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "incremental",
+          "reason": "files_changed",
+          "full": false,
+          "generation": 2,
+          "base_generation": "1cfd588a1133149b4804801df9d9d135@2026-10-18T15:32:44.251312+00:00",
+          "files_processed": 1,
+          "relationships_written": 24,
+          "resolutions_changed": 4,
+          "files_reresolved": 1,
+          "links": 12,
+          "files_added": 0,
+          "files_modified": 1,
+          "files_removed": 0,
+          "planning_seconds": 0.009147615,
+          "seconds": 0.06857451,
+          "timings": {
+            "state_load_seconds": 0.004564705,
+            "clear_seconds": 0.029471928,
+            "derivation_seconds": 0.00127726,
+            "read_hash_seconds": 0.000043446,
+            "parse_seconds": 0.000769768,
+            "cache_load_seconds": 4.3e-8,
+            "sqlite_write_seconds": 0.000990877,
+            "symbol_manifest_seconds": 0.00057142,
+            "resolution_seconds": 0.003018686,
+            "linking_seconds": 0.013476726,
+            "commit_seconds": 0.002650709,
+            "write_lock_seconds": 0.050065514
+          },
+          "counters": {
+            "files_total": 2039,
+            "files_derived": 1,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 605,
+            "resolution": {
+              "changed": 4,
+              "references_examined": 4,
+              "candidate_rows": 667,
+              "candidate_queries": 2
+            },
+            "sql_statements": 116
+          },
+          "linking": {
+            "links": 12,
+            "manual": 0,
+            "entities_loaded": 10,
+            "units_loaded": 1000,
+            "routes_loaded": 0,
+            "candidates": 12,
+            "narrow": true,
+            "load_seconds": 0.010397783,
+            "index_seconds": 0.001696094,
+            "match_seconds": 0.00037287899999999995,
+            "exact_seconds": 0.000170667,
+            "qualified_seconds": 0.000129157,
+            "alias_seconds": 0.00004331,
+            "filename_seconds": 0.000014787,
+            "route_seconds": 1.02e-7,
+            "write_seconds": 0.00037164,
+            "manual_seconds": 0.000099287
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 1,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 0,
+            "changed": 1,
+            "unchanged": 2038,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 1
+          },
+          "timings": {
+            "scan_seconds": 0.02416835,
+            "classify_seconds": 0.020482044,
+            "hash_calls": 1,
+            "process_seconds": 0.00334192,
+            "publish_seconds": 0.002124552
+          }
+        },
+        "fingerprint": {
+          "edges": 36640,
+          "links": 4320,
+          "digest": "dbf777dbfde8fec33bd7a64337b7df50e92dd6642f20961f2cfdcd7ee3415574"
+        }
+      },
+      {
+        "scenario": "rename_definition",
+        "plan_action": "incremental",
+        "plan_reason": "files_changed",
+        "files_total": 2039,
+        "entities_total": 13326,
+        "index_seconds": 0.048911867,
+        "graph_seconds": 0.201920525,
+        "full_pipeline_seconds": 0.252712274,
+        "cpu_seconds": 0.4399999999999977,
+        "peak_rss_mb": 129.76953125,
+        "phase_seconds": {
+          "committing": 0.00439664,
+          "deriving": 0.036756105,
+          "linking": 0.012841857,
+          "resolving": 0.13290332
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "incremental",
+          "reason": "files_changed",
+          "full": false,
+          "generation": 3,
+          "base_generation": "1cfd588a1133149b4804801df9d9d135@2026-10-18T15:32:44.593124+00:00",
+          "files_processed": 1,
+          "relationships_written": 24,
+          "resolutions_changed": 5,
+          "files_reresolved": 667,
+          "links": 6,
+          "files_added": 0,
+          "files_modified": 1,
+          "files_removed": 0,
+          "planning_seconds": 0.009428062,
+          "seconds": 0.201916093,
+          "timings": {
+            "state_load_seconds": 0.004100044000000001,
+            "clear_seconds": 0.03384573,
+            "derivation_seconds": 0.001514561,
+            "read_hash_seconds": 0.000065971,
+            "parse_seconds": 0.000939155,
+            "cache_load_seconds": 6e-8,
+            "sqlite_write_seconds": 0.001394558,
+            "symbol_manifest_seconds": 0.001100974,
+            "resolution_seconds": 0.131725645,
+            "linking_seconds": 0.012918547,
+            "commit_seconds": 0.003171008,
+            "write_lock_seconds": 0.184025617
+          },
+          "counters": {
+            "files_total": 2039,
+            "files_derived": 1,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 598,
+            "resolution": {
+              "changed": 5,
+              "references_examined": 7997,
+              "candidate_rows": 4662,
+              "candidate_queries": 4
+            },
+            "sql_statements": 117
+          },
+          "linking": {
+            "links": 6,
+            "manual": 0,
+            "entities_loaded": 10,
+            "units_loaded": 1000,
+            "routes_loaded": 0,
+            "candidates": 6,
+            "narrow": true,
+            "load_seconds": 0.009662096,
+            "index_seconds": 0.001839503,
+            "match_seconds": 0.000304297,
+            "exact_seconds": 0.000172477,
+            "qualified_seconds": 0.000078288,
+            "alias_seconds": 0.0000306,
+            "filename_seconds": 0.00001407,
+            "route_seconds": 8.75e-7,
+            "write_seconds": 0.000348601,
+            "manual_seconds": 0.000084229
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 1,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 0,
+            "changed": 1,
+            "unchanged": 2038,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 2
+          },
+          "timings": {
+            "scan_seconds": 0.016985199,
+            "classify_seconds": 0.013657954,
+            "hash_calls": 2,
+            "process_seconds": 0.004555846,
+            "publish_seconds": 0.002215293
+          }
+        },
+        "fingerprint": {
+          "edges": 36640,
+          "links": 4318,
+          "digest": "9d4bd5c82eb09e49a358d73b629f202f1c82e5b20037fdc6cfe0129b3eb42c23"
+        }
+      },
+      {
+        "scenario": "add_file",
+        "plan_action": "incremental",
+        "plan_reason": "files_changed",
+        "files_total": 2040,
+        "entities_total": 13329,
+        "index_seconds": 0.045921682,
+        "graph_seconds": 0.061964605,
+        "full_pipeline_seconds": 0.109508222,
+        "cpu_seconds": 0.3100000000000023,
+        "peak_rss_mb": 129.76953125,
+        "phase_seconds": {
+          "committing": 0.003135534,
+          "deriving": 0.02921607,
+          "linking": 0.010861571,
+          "resolving": 0.004331498
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "incremental",
+          "reason": "files_changed",
+          "full": false,
+          "generation": 4,
+          "base_generation": "1cfd588a1133149b4804801df9d9d135@2026-10-18T15:32:45.071698+00:00",
+          "files_processed": 1,
+          "relationships_written": 6,
+          "resolutions_changed": 2,
+          "files_reresolved": 1,
+          "links": 0,
+          "files_added": 1,
+          "files_modified": 0,
+          "files_removed": 0,
+          "planning_seconds": 0.008323888,
+          "seconds": 0.061960299,
+          "timings": {
+            "state_load_seconds": 0.004677798,
+            "clear_seconds": 0.027800004,
+            "derivation_seconds": 0.000701545,
+            "read_hash_seconds": 0.000044384,
+            "parse_seconds": 0.000261853,
+            "cache_load_seconds": 3.6e-8,
+            "sqlite_write_seconds": 0.000713707,
+            "symbol_manifest_seconds": 0.00026163200000000003,
+            "resolution_seconds": 0.004067472,
+            "linking_seconds": 0.010863455,
+            "commit_seconds": 0.002109424,
+            "write_lock_seconds": 0.045750894
+          },
+          "counters": {
+            "files_total": 2040,
+            "files_derived": 1,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 149,
+            "resolution": {
+              "changed": 2,
+              "references_examined": 2,
+              "candidate_rows": 667,
+              "candidate_queries": 2
+            },
+            "sql_statements": 71
+          },
+          "linking": {
+            "links": 0,
+            "manual": 0,
+            "entities_loaded": 3,
+            "units_loaded": 1000,
+            "routes_loaded": 0,
+            "candidates": 0,
+            "narrow": true,
+            "load_seconds": 0.008071442,
+            "index_seconds": 0.002061219,
+            "match_seconds": 0.000019194000000000003,
+            "exact_seconds": 7.852e-6,
+            "qualified_seconds": 3.456e-6,
+            "alias_seconds": 4.911e-6,
+            "filename_seconds": 1.555e-6,
+            "route_seconds": 5.5e-8,
+            "write_seconds": 1.34e-7,
+            "manual_seconds": 0.000219256
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 1,
+          "failed": 0,
+          "counts": {
+            "scanned": 2040,
+            "new": 1,
+            "changed": 0,
+            "unchanged": 2039,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 2
+          },
+          "timings": {
+            "scan_seconds": 0.017385151,
+            "classify_seconds": 0.012238287,
+            "hash_calls": 2,
+            "process_seconds": 0.001949197,
+            "publish_seconds": 0.001669933
+          }
+        },
+        "fingerprint": {
+          "edges": 36646,
+          "links": 4318,
+          "digest": "d1412ae345a8854f601819a758376829d020a11a07ad470a12e3e95d75563987"
+        }
+      },
+      {
+        "scenario": "remove_file",
+        "plan_action": "incremental",
+        "plan_reason": "files_changed",
+        "files_total": 2039,
+        "entities_total": 13325,
+        "index_seconds": 0.043560713,
+        "graph_seconds": 0.137233819,
+        "full_pipeline_seconds": 0.182752086,
+        "cpu_seconds": 0.37999999999999545,
+        "peak_rss_mb": 129.76953125,
+        "phase_seconds": {
+          "committing": 0.003078688,
+          "deriving": 0.028518122,
+          "linking": 0.000307546,
+          "resolving": 0.090506563
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "incremental",
+          "reason": "files_changed",
+          "full": false,
+          "generation": 5,
+          "base_generation": "1cfd588a1133149b4804801df9d9d135@2026-10-18T15:32:45.389123+00:00",
+          "files_processed": 0,
+          "relationships_written": 0,
+          "resolutions_changed": 0,
+          "files_reresolved": 666,
+          "links": 0,
+          "files_added": 0,
+          "files_modified": 0,
+          "files_removed": 1,
+          "planning_seconds": 0.008695692,
+          "seconds": 0.13722976,
+          "timings": {
+            "state_load_seconds": 0.004375036,
+            "clear_seconds": 0.02834367,
+            "derivation_seconds": 0.0,
+            "read_hash_seconds": 0.0,
+            "parse_seconds": 0.0,
+            "cache_load_seconds": 0.0,
+            "sqlite_write_seconds": 0.000173673,
+            "symbol_manifest_seconds": 0.0009385050000000001,
+            "resolution_seconds": 0.089496788,
+            "linking_seconds": 0.000378903,
+            "commit_seconds": 0.001627605,
+            "write_lock_seconds": 0.120823307
+          },
+          "counters": {
+            "files_total": 2039,
+            "files_derived": 0,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 0,
+            "resolution": {
+              "changed": 0,
+              "references_examined": 2665,
+              "candidate_rows": 1996,
+              "candidate_queries": 2
+            },
+            "sql_statements": 47
+          },
+          "linking": {
+            "links": 0,
+            "manual": 0,
+            "entities_loaded": 0,
+            "units_loaded": 0,
+            "routes_loaded": 0,
+            "candidates": 0,
+            "narrow": false,
+            "load_seconds": 0.0,
+            "index_seconds": 0.0,
+            "match_seconds": 0.0,
+            "exact_seconds": 0.0,
+            "qualified_seconds": 0.0,
+            "alias_seconds": 0.0,
+            "filename_seconds": 0.0,
+            "route_seconds": 0.0,
+            "write_seconds": 5.54e-7,
+            "manual_seconds": 0.000303101
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 0,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 0,
+            "changed": 0,
+            "unchanged": 2039,
+            "moved": 0,
+            "deleted": 1,
+            "unseen_kept": 0,
+            "hash_calls": 3
+          },
+          "timings": {
+            "scan_seconds": 0.018573989,
+            "classify_seconds": 0.013118639,
+            "hash_calls": 3,
+            "process_seconds": 0.000493173,
+            "publish_seconds": 0.00153017
+          }
+        },
+        "fingerprint": {
+          "edges": 36639,
+          "links": 4318,
+          "digest": "83262d6dfc9615891cdf9cca9ce2971707d76f10360217c12f2a76950902604e"
+        }
+      },
+      {
+        "scenario": "doc_edit",
+        "plan_action": "incremental",
+        "plan_reason": "files_changed",
+        "files_total": 2039,
+        "entities_total": 13325,
+        "index_seconds": 0.193109537,
+        "graph_seconds": 0.112420788,
+        "full_pipeline_seconds": 0.30734985,
+        "cpu_seconds": 0.38000000000000256,
+        "peak_rss_mb": 129.76953125,
+        "phase_seconds": {
+          "committing": 0.005167034,
+          "deriving": 0.029558373,
+          "linking": 0.063440966,
+          "resolving": 0.000161334
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "incremental",
+          "reason": "files_changed",
+          "full": false,
+          "generation": 6,
+          "base_generation": "1cfd588a1133149b4804801df9d9d135@2026-10-18T15:32:45.789748+00:00",
+          "files_processed": 1,
+          "relationships_written": 0,
+          "resolutions_changed": 0,
+          "files_reresolved": 1,
+          "links": 111,
+          "files_added": 0,
+          "files_modified": 1,
+          "files_removed": 0,
+          "planning_seconds": 0.008727506,
+          "seconds": 0.112416728,
+          "timings": {
+            "state_load_seconds": 0.004025433,
+            "clear_seconds": 0.029196094,
+            "derivation_seconds": 0.000136307,
+            "read_hash_seconds": 0.0,
+            "parse_seconds": 0.0,
+            "cache_load_seconds": 0.0,
+            "sqlite_write_seconds": 0.00022521799999999998,
+            "symbol_manifest_seconds": 0.000139829,
+            "resolution_seconds": 0.00002252,
+            "linking_seconds": 0.063440347,
+            "commit_seconds": 0.003353781,
+            "write_lock_seconds": 0.096378319
+          },
+          "counters": {
+            "files_total": 2039,
+            "files_derived": 0,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 0,
+            "resolution": {
+              "changed": 0,
+              "references_examined": 0,
+              "candidate_rows": 0,
+              "candidate_queries": 0
+            },
+            "sql_statements": 193
+          },
+          "linking": {
+            "links": 111,
+            "manual": 0,
+            "entities_loaded": 2815,
+            "units_loaded": 1001,
+            "routes_loaded": 1332,
+            "candidates": 111,
+            "narrow": false,
+            "load_seconds": 0.044131826,
+            "index_seconds": 0.003697482,
+            "match_seconds": 0.008915378000000002,
+            "exact_seconds": 0.000871277,
+            "qualified_seconds": 0.002246471,
+            "alias_seconds": 0.00223179,
+            "filename_seconds": 0.00007854,
+            "route_seconds": 0.000543395,
+            "write_seconds": 0.001943266,
+            "manual_seconds": 0.00011532
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 1,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 0,
+            "changed": 1,
+            "unchanged": 2038,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 4
+          },
+          "timings": {
+            "scan_seconds": 0.018810856,
+            "classify_seconds": 0.012612879,
+            "hash_calls": 4,
+            "process_seconds": 0.011076077,
+            "publish_seconds": 0.00204771
+          }
+        },
+        "fingerprint": {
+          "edges": 36639,
+          "links": 4321,
+          "digest": "f722b358c4066391f931ee45c01aad6a55fc5929dcd98ef5a84aa18c36cd9a03"
+        }
+      }
+    ],
+    [
+      {
+        "scenario": "cold",
+        "plan_action": "full",
+        "plan_reason": "first_build",
+        "files_total": 2039,
+        "entities_total": 13326,
+        "index_seconds": 1.10552666,
+        "graph_seconds": 2.081561179,
+        "full_pipeline_seconds": 3.18891465,
+        "cpu_seconds": 4.93,
+        "peak_rss_mb": 130.015625,
+        "phase_seconds": {
+          "committing": 0.431874306,
+          "deriving": 0.869793609,
+          "linking": 0.37293234,
+          "resolving": 0.396313586
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "full",
+          "reason": "first_build",
+          "full": true,
+          "generation": 1,
+          "base_generation": "e7dfb029741c39d3446f2326660b0370@2026-10-18T15:32:48.306319+00:00",
+          "files_processed": 2039,
+          "relationships_written": 36640,
+          "resolutions_changed": 11322,
+          "files_reresolved": 2039,
+          "links": 4320,
+          "files_added": 0,
+          "files_modified": 2039,
+          "files_removed": 0,
+          "planning_seconds": 0.006571755,
+          "seconds": 2.081511397,
+          "timings": {
+            "state_load_seconds": 0.002965919,
+            "clear_seconds": 0.000172127,
+            "derivation_seconds": 0.230939216,
+            "read_hash_seconds": 0.038802838,
+            "parse_seconds": 0.7598255970000003,
+            "cache_load_seconds": 0.00007018799999999935,
+            "sqlite_write_seconds": 0.6386769750000001,
+            "symbol_manifest_seconds": 0.151448027,
+            "resolution_seconds": 0.244864354,
+            "linking_seconds": 0.372932436,
+            "commit_seconds": 0.404365104,
+            "write_lock_seconds": 1.5926160459999998
+          },
+          "counters": {
+            "files_total": 2039,
+            "files_derived": 1999,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 1010729,
+            "resolution": {
+              "changed": 11322,
+              "references_examined": 11322,
+              "candidate_rows": 13326,
+              "candidate_queries": 1
+            },
+            "sql_statements": 85056
+          },
+          "linking": {
+            "links": 4320,
+            "manual": 0,
+            "entities_loaded": 13326,
+            "units_loaded": 1000,
+            "routes_loaded": 1332,
+            "candidates": 4320,
+            "narrow": false,
+            "load_seconds": 0.168216165,
+            "index_seconds": 0.015401494999999996,
+            "match_seconds": 0.08990028100000005,
+            "exact_seconds": 0.011945701000000005,
+            "qualified_seconds": 0.03354556800000008,
+            "alias_seconds": 0.01906966699999998,
+            "filename_seconds": 0.0070231509999999974,
+            "route_seconds": 0.0017323580000000042,
+            "write_seconds": 0.056430604,
+            "manual_seconds": 0.00014099
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 2039,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 2039,
+            "changed": 0,
+            "unchanged": 0,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 0
+          },
+          "timings": {
+            "scan_seconds": 0.018690892,
+            "classify_seconds": 0.002010576,
+            "hash_calls": 0,
+            "process_seconds": 1.054360449,
+            "publish_seconds": 0.000531454
+          }
+        },
+        "fingerprint": {
+          "edges": 36640,
+          "links": 4320,
+          "digest": "dbf777dbfde8fec33bd7a64337b7df50e92dd6642f20961f2cfdcd7ee3415574"
+        }
+      },
+      {
+        "scenario": "no_change",
+        "plan_action": "skip",
+        "plan_reason": "current",
+        "files_total": 2039,
+        "entities_total": 13326,
+        "index_seconds": 0.0,
+        "graph_seconds": 0.009500487,
+        "full_pipeline_seconds": 0.011544012,
+        "cpu_seconds": 0.21000000000000085,
+        "peak_rss_mb": 129.9609375,
+        "phase_seconds": {},
+        "graph": {
+          "outcome": "up_to_date",
+          "action": "skip",
+          "reason": "current",
+          "full": false,
+          "generation": 1,
+          "base_generation": "e7dfb029741c39d3446f2326660b0370@2026-10-18T15:32:48.306319+00:00",
+          "files_processed": 0,
+          "relationships_written": 0,
+          "resolutions_changed": 0,
+          "files_reresolved": 0,
+          "links": 0,
+          "files_added": 0,
+          "files_modified": 0,
+          "files_removed": 0,
+          "planning_seconds": 0.008488813,
+          "seconds": 0.009498738,
+          "timings": {
+            "state_load_seconds": 0.0,
+            "clear_seconds": 0.0,
+            "derivation_seconds": 0.0,
+            "read_hash_seconds": 0.0,
+            "parse_seconds": 0.0,
+            "cache_load_seconds": 0.0,
+            "sqlite_write_seconds": 0.0,
+            "symbol_manifest_seconds": 0.0,
+            "resolution_seconds": 0.0,
+            "linking_seconds": 0.0,
+            "commit_seconds": 0.0,
+            "write_lock_seconds": 0.0
+          },
+          "counters": {
+            "files_total": 0,
+            "files_derived": 0,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 0,
+            "resolution": {
+              "changed": 0,
+              "references_examined": 0,
+              "candidate_rows": 0,
+              "candidate_queries": 0
+            },
+            "sql_statements": 7
+          },
+          "linking": {
+            "links": 0,
+            "manual": 0,
+            "entities_loaded": 0,
+            "units_loaded": 0,
+            "routes_loaded": 0,
+            "candidates": 0,
+            "narrow": false,
+            "load_seconds": 0.0,
+            "index_seconds": 0.0,
+            "match_seconds": 0.0,
+            "exact_seconds": 0.0,
+            "qualified_seconds": 0.0,
+            "alias_seconds": 0.0,
+            "filename_seconds": 0.0,
+            "route_seconds": 0.0,
+            "write_seconds": 0.0,
+            "manual_seconds": 0.0
+          }
+        },
+        "server": null,
+        "index": null,
+        "fingerprint": {
+          "edges": 36640,
+          "links": 4320,
+          "digest": "dbf777dbfde8fec33bd7a64337b7df50e92dd6642f20961f2cfdcd7ee3415574"
+        }
+      },
+      {
+        "scenario": "equivalent_republish",
+        "plan_action": "rebind",
+        "plan_reason": "equivalent_snapshot",
+        "files_total": 2039,
+        "entities_total": 13326,
+        "index_seconds": 3.20902163,
+        "graph_seconds": 0.017072074,
+        "full_pipeline_seconds": 3.228363067,
+        "cpu_seconds": 4.18,
+        "peak_rss_mb": 130.19921875,
+        "phase_seconds": {},
+        "graph": {
+          "outcome": "rebound",
+          "action": "rebind",
+          "reason": "equivalent_snapshot",
+          "full": false,
+          "generation": 1,
+          "base_generation": "c1d623725c38bbcc5eb62c17f57fc16c@2026-10-18T15:32:52.108846+00:00",
+          "files_processed": 0,
+          "relationships_written": 0,
+          "resolutions_changed": 0,
+          "files_reresolved": 0,
+          "links": 0,
+          "files_added": 0,
+          "files_modified": 0,
+          "files_removed": 0,
+          "planning_seconds": 0.01241342,
+          "seconds": 0.017069543,
+          "timings": {
+            "state_load_seconds": 0.0,
+            "clear_seconds": 0.0,
+            "derivation_seconds": 0.0,
+            "read_hash_seconds": 0.0,
+            "parse_seconds": 0.0,
+            "cache_load_seconds": 0.0,
+            "sqlite_write_seconds": 0.0,
+            "symbol_manifest_seconds": 0.0,
+            "resolution_seconds": 0.0,
+            "linking_seconds": 0.0,
+            "commit_seconds": 0.0,
+            "write_lock_seconds": 0.0
+          },
+          "counters": {
+            "files_total": 0,
+            "files_derived": 0,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 0,
+            "resolution": {
+              "changed": 0,
+              "references_examined": 0,
+              "candidate_rows": 0,
+              "candidate_queries": 0
+            },
+            "sql_statements": 13
+          },
+          "linking": {
+            "links": 0,
+            "manual": 0,
+            "entities_loaded": 0,
+            "units_loaded": 0,
+            "routes_loaded": 0,
+            "candidates": 0,
+            "narrow": false,
+            "load_seconds": 0.0,
+            "index_seconds": 0.0,
+            "match_seconds": 0.0,
+            "exact_seconds": 0.0,
+            "qualified_seconds": 0.0,
+            "alias_seconds": 0.0,
+            "filename_seconds": 0.0,
+            "route_seconds": 0.0,
+            "write_seconds": 0.0,
+            "manual_seconds": 0.0
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 2039,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 2039,
+            "changed": 0,
+            "unchanged": 0,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 0
+          },
+          "timings": {
+            "scan_seconds": 0.016558979,
+            "classify_seconds": 0.001784152,
+            "hash_calls": 0,
+            "process_seconds": 1.207940399,
+            "publish_seconds": 1.921646438
+          }
+        },
+        "fingerprint": {
+          "edges": 36640,
+          "links": 4320,
+          "digest": "dbf777dbfde8fec33bd7a64337b7df50e92dd6642f20961f2cfdcd7ee3415574"
+        }
+      },
+      {
+        "scenario": "body_edit",
+        "plan_action": "incremental",
+        "plan_reason": "files_changed",
+        "files_total": 2039,
+        "entities_total": 13326,
+        "index_seconds": 0.047803243,
+        "graph_seconds": 0.069517338,
+        "full_pipeline_seconds": 0.119262094,
+        "cpu_seconds": 0.3100000000000023,
+        "peak_rss_mb": 130.19921875,
+        "phase_seconds": {
+          "committing": 0.003839799,
+          "deriving": 0.0355849,
+          "linking": 0.011580196,
+          "resolving": 0.003239338
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "incremental",
+          "reason": "files_changed",
+          "full": false,
+          "generation": 2,
+          "base_generation": "c1d623725c38bbcc5eb62c17f57fc16c@2026-10-18T15:32:54.365744+00:00",
+          "files_processed": 1,
+          "relationships_written": 24,
+          "resolutions_changed": 4,
+          "files_reresolved": 1,
+          "links": 12,
+          "files_added": 0,
+          "files_modified": 1,
+          "files_removed": 0,
+          "planning_seconds": 0.009055866,
+          "seconds": 0.069513693,
+          "timings": {
+            "state_load_seconds": 0.004870875,
+            "clear_seconds": 0.033289407,
+            "derivation_seconds": 0.00122103,
+            "read_hash_seconds": 0.000047145,
+            "parse_seconds": 0.00069661,
+            "cache_load_seconds": 4.2e-8,
+            "sqlite_write_seconds": 0.00107409,
+            "symbol_manifest_seconds": 0.000451419,
+            "resolution_seconds": 0.002747413,
+            "linking_seconds": 0.011620646,
+            "commit_seconds": 0.002672738,
+            "write_lock_seconds": 0.051733325
+          },
+          "counters": {
+            "files_total": 2039,
+            "files_derived": 1,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 605,
+            "resolution": {
+              "changed": 4,
+              "references_examined": 4,
+              "candidate_rows": 667,
+              "candidate_queries": 2
+            },
+            "sql_statements": 116
+          },
+          "linking": {
+            "links": 12,
+            "manual": 0,
+            "entities_loaded": 10,
+            "units_loaded": 1000,
+            "routes_loaded": 0,
+            "candidates": 12,
+            "narrow": true,
+            "load_seconds": 0.008279926,
+            "index_seconds": 0.001880668,
+            "match_seconds": 0.000381654,
+            "exact_seconds": 0.00020369,
+            "qualified_seconds": 0.000108093,
+            "alias_seconds": 0.000043137,
+            "filename_seconds": 0.000013665,
+            "route_seconds": 9.9e-8,
+            "write_seconds": 0.000341732,
+            "manual_seconds": 0.000090444
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 1,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 0,
+            "changed": 1,
+            "unchanged": 2038,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 1
+          },
+          "timings": {
+            "scan_seconds": 0.018180879,
+            "classify_seconds": 0.014281844,
+            "hash_calls": 1,
+            "process_seconds": 0.003034233,
+            "publish_seconds": 0.001702952
+          }
+        },
+        "fingerprint": {
+          "edges": 36640,
+          "links": 4320,
+          "digest": "dbf777dbfde8fec33bd7a64337b7df50e92dd6642f20961f2cfdcd7ee3415574"
+        }
+      },
+      {
+        "scenario": "rename_definition",
+        "plan_action": "incremental",
+        "plan_reason": "files_changed",
+        "files_total": 2039,
+        "entities_total": 13326,
+        "index_seconds": 0.043466903,
+        "graph_seconds": 0.199565434,
+        "full_pipeline_seconds": 0.244977979,
+        "cpu_seconds": 0.4399999999999977,
+        "peak_rss_mb": 130.19921875,
+        "phase_seconds": {
+          "committing": 0.004808194,
+          "deriving": 0.03175347,
+          "linking": 0.012581412,
+          "resolving": 0.136447766
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "incremental",
+          "reason": "files_changed",
+          "full": false,
+          "generation": 3,
+          "base_generation": "c1d623725c38bbcc5eb62c17f57fc16c@2026-10-18T15:32:54.690260+00:00",
+          "files_processed": 1,
+          "relationships_written": 24,
+          "resolutions_changed": 5,
+          "files_reresolved": 667,
+          "links": 6,
+          "files_added": 0,
+          "files_modified": 1,
+          "files_removed": 0,
+          "planning_seconds": 0.008773288,
+          "seconds": 0.199561079,
+          "timings": {
+            "state_load_seconds": 0.004205732,
+            "clear_seconds": 0.029262059,
+            "derivation_seconds": 0.001219662,
+            "read_hash_seconds": 0.000054071,
+            "parse_seconds": 0.00061469,
+            "cache_load_seconds": 1.56e-7,
+            "sqlite_write_seconds": 0.0012704130000000002,
+            "symbol_manifest_seconds": 0.001062341,
+            "resolution_seconds": 0.135268413,
+            "linking_seconds": 0.012698213,
+            "commit_seconds": 0.003160318,
+            "write_lock_seconds": 0.182598376
+          },
+          "counters": {
+            "files_total": 2039,
+            "files_derived": 1,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 598,
+            "resolution": {
+              "changed": 5,
+              "references_examined": 7997,
+              "candidate_rows": 4662,
+              "candidate_queries": 4
+            },
+            "sql_statements": 117
+          },
+          "linking": {
+            "links": 6,
+            "manual": 0,
+            "entities_loaded": 10,
+            "units_loaded": 1000,
+            "routes_loaded": 0,
+            "candidates": 6,
+            "narrow": true,
+            "load_seconds": 0.009502643,
+            "index_seconds": 0.001743888,
+            "match_seconds": 0.000280301,
+            "exact_seconds": 0.000152314,
+            "qualified_seconds": 0.000074898,
+            "alias_seconds": 0.000030352,
+            "filename_seconds": 0.000013446,
+            "route_seconds": 5.12e-7,
+            "write_seconds": 0.000295749,
+            "manual_seconds": 0.000083457
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 1,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 0,
+            "changed": 1,
+            "unchanged": 2038,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 2
+          },
+          "timings": {
+            "scan_seconds": 0.01608697,
+            "classify_seconds": 0.013282987,
+            "hash_calls": 2,
+            "process_seconds": 0.002647118,
+            "publish_seconds": 0.001519564
+          }
+        },
+        "fingerprint": {
+          "edges": 36640,
+          "links": 4318,
+          "digest": "9d4bd5c82eb09e49a358d73b629f202f1c82e5b20037fdc6cfe0129b3eb42c23"
+        }
+      },
+      {
+        "scenario": "add_file",
+        "plan_action": "incremental",
+        "plan_reason": "files_changed",
+        "files_total": 2040,
+        "entities_total": 13329,
+        "index_seconds": 0.04074434,
+        "graph_seconds": 0.058942198,
+        "full_pipeline_seconds": 0.101325868,
+        "cpu_seconds": 0.3200000000000003,
+        "peak_rss_mb": 130.19921875,
+        "phase_seconds": {
+          "committing": 0.002766839,
+          "deriving": 0.028206157,
+          "linking": 0.010773365,
+          "resolving": 0.004241794
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "incremental",
+          "reason": "files_changed",
+          "full": false,
+          "generation": 4,
+          "base_generation": "c1d623725c38bbcc5eb62c17f57fc16c@2026-10-18T15:32:55.157553+00:00",
+          "files_processed": 1,
+          "relationships_written": 6,
+          "resolutions_changed": 2,
+          "files_reresolved": 1,
+          "links": 0,
+          "files_added": 1,
+          "files_modified": 0,
+          "files_removed": 0,
+          "planning_seconds": 0.007814429,
+          "seconds": 0.058938345,
+          "timings": {
+            "state_load_seconds": 0.004075199,
+            "clear_seconds": 0.026780145,
+            "derivation_seconds": 0.000712288,
+            "read_hash_seconds": 0.000048914,
+            "parse_seconds": 0.000250576,
+            "cache_load_seconds": 4.2e-8,
+            "sqlite_write_seconds": 0.00071298,
+            "symbol_manifest_seconds": 0.000254449,
+            "resolution_seconds": 0.003985907,
+            "linking_seconds": 0.010774836,
+            "commit_seconds": 0.001734835,
+            "write_lock_seconds": 0.044181244
+          },
+          "counters": {
+            "files_total": 2040,
+            "files_derived": 1,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 149,
+            "resolution": {
+              "changed": 2,
+              "references_examined": 2,
+              "candidate_rows": 667,
+              "candidate_queries": 2
+            },
+            "sql_statements": 71
+          },
+          "linking": {
+            "links": 0,
+            "manual": 0,
+            "entities_loaded": 3,
+            "units_loaded": 1000,
+            "routes_loaded": 0,
+            "candidates": 0,
+            "narrow": true,
+            "load_seconds": 0.008431969,
+            "index_seconds": 0.001665225,
+            "match_seconds": 0.000018436,
+            "exact_seconds": 7.597e-6,
+            "qualified_seconds": 3.703e-6,
+            "alias_seconds": 4.222e-6,
+            "filename_seconds": 1.35e-6,
+            "route_seconds": 6.1e-8,
+            "write_seconds": 1.57e-7,
+            "manual_seconds": 0.00021934
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 1,
+          "failed": 0,
+          "counts": {
+            "scanned": 2040,
+            "new": 1,
+            "changed": 0,
+            "unchanged": 2039,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 2
+          },
+          "timings": {
+            "scan_seconds": 0.016840606,
+            "classify_seconds": 0.012286974,
+            "hash_calls": 2,
+            "process_seconds": 0.002082802,
+            "publish_seconds": 0.00115291
+          }
+        },
+        "fingerprint": {
+          "edges": 36646,
+          "links": 4318,
+          "digest": "d1412ae345a8854f601819a758376829d020a11a07ad470a12e3e95d75563987"
+        }
+      },
+      {
+        "scenario": "remove_file",
+        "plan_action": "incremental",
+        "plan_reason": "files_changed",
+        "files_total": 2039,
+        "entities_total": 13325,
+        "index_seconds": 0.044324395,
+        "graph_seconds": 0.170799389,
+        "full_pipeline_seconds": 0.217103299,
+        "cpu_seconds": 0.3999999999999986,
+        "peak_rss_mb": 130.19921875,
+        "phase_seconds": {
+          "committing": 0.002856954,
+          "deriving": 0.031282585,
+          "linking": 0.000280334,
+          "resolving": 0.121200095
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "incremental",
+          "reason": "files_changed",
+          "full": false,
+          "generation": 5,
+          "base_generation": "c1d623725c38bbcc5eb62c17f57fc16c@2026-10-18T15:32:55.485848+00:00",
+          "files_processed": 0,
+          "relationships_written": 0,
+          "resolutions_changed": 0,
+          "files_reresolved": 666,
+          "links": 0,
+          "files_added": 0,
+          "files_modified": 0,
+          "files_removed": 1,
+          "planning_seconds": 0.009196083,
+          "seconds": 0.170795555,
+          "timings": {
+            "state_load_seconds": 0.004862128,
+            "clear_seconds": 0.031092602,
+            "derivation_seconds": 0.0,
+            "read_hash_seconds": 0.0,
+            "parse_seconds": 0.0,
+            "cache_load_seconds": 0.0,
+            "sqlite_write_seconds": 0.000189172,
+            "symbol_manifest_seconds": 0.00100967,
+            "resolution_seconds": 0.120121212,
+            "linking_seconds": 0.000350462,
+            "commit_seconds": 0.001496661,
+            "write_lock_seconds": 0.154108003
+          },
+          "counters": {
+            "files_total": 2039,
+            "files_derived": 0,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 0,
+            "resolution": {
+              "changed": 0,
+              "references_examined": 2665,
+              "candidate_rows": 1996,
+              "candidate_queries": 2
+            },
+            "sql_statements": 47
+          },
+          "linking": {
+            "links": 0,
+            "manual": 0,
+            "entities_loaded": 0,
+            "units_loaded": 0,
+            "routes_loaded": 0,
+            "candidates": 0,
+            "narrow": false,
+            "load_seconds": 0.0,
+            "index_seconds": 0.0,
+            "match_seconds": 0.0,
+            "exact_seconds": 0.0,
+            "qualified_seconds": 0.0,
+            "alias_seconds": 0.0,
+            "filename_seconds": 0.0,
+            "route_seconds": 0.0,
+            "write_seconds": 3.58e-7,
+            "manual_seconds": 0.000276545
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 0,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 0,
+            "changed": 0,
+            "unchanged": 2039,
+            "moved": 0,
+            "deleted": 1,
+            "unseen_kept": 0,
+            "hash_calls": 3
+          },
+          "timings": {
+            "scan_seconds": 0.016921853,
+            "classify_seconds": 0.01272152,
+            "hash_calls": 3,
+            "process_seconds": 0.000548595,
+            "publish_seconds": 0.001632672
+          }
+        },
+        "fingerprint": {
+          "edges": 36639,
+          "links": 4318,
+          "digest": "83262d6dfc9615891cdf9cca9ce2971707d76f10360217c12f2a76950902604e"
+        }
+      },
+      {
+        "scenario": "doc_edit",
+        "plan_action": "incremental",
+        "plan_reason": "files_changed",
+        "files_total": 2039,
+        "entities_total": 13325,
+        "index_seconds": 0.0677818,
+        "graph_seconds": 0.119226633,
+        "full_pipeline_seconds": 0.189049656,
+        "cpu_seconds": 0.39000000000000057,
+        "peak_rss_mb": 130.19921875,
+        "phase_seconds": {
+          "committing": 0.004844759,
+          "deriving": 0.034933816,
+          "linking": 0.062325172,
+          "resolving": 0.000170658
+        },
+        "graph": {
+          "outcome": "built",
+          "action": "incremental",
+          "reason": "files_changed",
+          "full": false,
+          "generation": 6,
+          "base_generation": "c1d623725c38bbcc5eb62c17f57fc16c@2026-10-18T15:32:55.934332+00:00",
+          "files_processed": 1,
+          "relationships_written": 0,
+          "resolutions_changed": 0,
+          "files_reresolved": 1,
+          "links": 111,
+          "files_added": 0,
+          "files_modified": 1,
+          "files_removed": 0,
+          "planning_seconds": 0.010967813,
+          "seconds": 0.119222221,
+          "timings": {
+            "state_load_seconds": 0.0042266019999999994,
+            "clear_seconds": 0.034602605,
+            "derivation_seconds": 0.00014209,
+            "read_hash_seconds": 0.0,
+            "parse_seconds": 0.0,
+            "cache_load_seconds": 0.0,
+            "sqlite_write_seconds": 0.000188404,
+            "symbol_manifest_seconds": 0.000148633,
+            "resolution_seconds": 0.000023032,
+            "linking_seconds": 0.062324004,
+            "commit_seconds": 0.003389652,
+            "write_lock_seconds": 0.10067693
+          },
+          "counters": {
+            "files_total": 2039,
+            "files_derived": 0,
+            "facts_hits": 0,
+            "facts_misses": 0,
+            "facts_dropped": 0,
+            "bytes_read": 0,
+            "resolution": {
+              "changed": 0,
+              "references_examined": 0,
+              "candidate_rows": 0,
+              "candidate_queries": 0
+            },
+            "sql_statements": 193
+          },
+          "linking": {
+            "links": 111,
+            "manual": 0,
+            "entities_loaded": 2815,
+            "units_loaded": 1001,
+            "routes_loaded": 1332,
+            "candidates": 111,
+            "narrow": false,
+            "load_seconds": 0.044755464,
+            "index_seconds": 0.0038053339999999996,
+            "match_seconds": 0.00801075,
+            "exact_seconds": 0.000652431,
+            "qualified_seconds": 0.002264645,
+            "alias_seconds": 0.00230455,
+            "filename_seconds": 0.00006804,
+            "route_seconds": 0.00043846,
+            "write_seconds": 0.002007685,
+            "manual_seconds": 0.000142927
+          }
+        },
+        "server": null,
+        "index": {
+          "indexed": 1,
+          "failed": 0,
+          "counts": {
+            "scanned": 2039,
+            "new": 0,
+            "changed": 1,
+            "unchanged": 2038,
+            "moved": 0,
+            "deleted": 0,
+            "unseen_kept": 0,
+            "hash_calls": 4
+          },
+          "timings": {
+            "scan_seconds": 0.023211309,
+            "classify_seconds": 0.015442622,
+            "hash_calls": 4,
+            "process_seconds": 0.0119724,
+            "publish_seconds": 0.002439888
+          }
+        },
+        "fingerprint": {
+          "edges": 36639,
+          "links": 4321,
+          "digest": "f722b358c4066391f931ee45c01aad6a55fc5929dcd98ef5a84aa18c36cd9a03"
+        }
+      }
+    ]
+  ]
+}

@@ -504,8 +504,7 @@ impl ProjectStore {
             }
             Ok(())
         })?;
-        let removed: Vec<String> = Vec::new();
-        self.put_graph_state_delta(state, &state.files, &state.symbols, &removed)
+        self.write_graph_manifest(state, &state.files, &state.symbols, &[], true)
     }
 
     /// Stores the state and updates the dependency manifest for the given
@@ -519,12 +518,25 @@ impl ProjectStore {
         symbols: &BTreeMap<String, FileSymbols>,
         removed: &[String],
     ) -> Result<()> {
+        self.write_graph_manifest(state, keys, symbols, removed, false)
+    }
+
+    /// `cleared`: the manifest tables were just emptied, so no file has
+    /// earlier rows to replace.
+    fn write_graph_manifest(
+        &mut self,
+        state: &GraphState,
+        keys: &BTreeMap<String, String>,
+        symbols: &BTreeMap<String, FileSymbols>,
+        removed: &[String],
+        cleared: bool,
+    ) -> Result<()> {
         write_tx(&mut self.conn, |tx| {
             for f in removed {
+                delete_symbol_refs(tx, f)?;
                 for sql in [
                     "DELETE FROM graph_file_keys WHERE file_id = ?1",
                     "DELETE FROM graph_symbols WHERE file_id = ?1",
-                    "DELETE FROM graph_symbol_refs WHERE file_id = ?1",
                 ] {
                     cached(tx, sql, [f]).map_err(StorageError::sqlite("write graph manifest"))?;
                 }
@@ -539,6 +551,11 @@ impl ProjectStore {
                 .map_err(StorageError::sqlite("write graph manifest"))?;
             }
             for (f, s) in symbols {
+                if !cleared {
+                    // Before the file's symbols are replaced: they list the
+                    // reference rows to drop.
+                    delete_symbol_refs(tx, f)?;
+                }
                 let json = serde_json::to_string(s).map_err(invalid)?;
                 cached(
                     tx,
@@ -547,8 +564,6 @@ impl ProjectStore {
                     params![f, json],
                 )
                 .map_err(StorageError::sqlite("write graph manifest"))?;
-                cached(tx, "DELETE FROM graph_symbol_refs WHERE file_id = ?1", [f])
-                    .map_err(StorageError::sqlite("write graph manifest"))?;
                 for k in &s.refs {
                     cached(
                         tx,
@@ -1202,6 +1217,42 @@ impl ProjectStore {
             Ok(())
         })
     }
+}
+
+/// Drops `file_id`'s reference keys. The table's key is `(key, file_id)`,
+/// so a delete by file alone scans it (one scan per file made full
+/// promotions quadratic, audit PH09): the keys come from the file's
+/// stored symbols, which every write keeps in step with its references.
+/// An unreadable entry falls back to the scan.
+fn delete_symbol_refs(tx: &rusqlite::Connection, file_id: &str) -> Result<()> {
+    let raw: Option<String> = tx
+        .prepare_cached("SELECT symbols FROM graph_symbols WHERE file_id = ?1")
+        .and_then(|mut st| st.query_row([file_id], |r| r.get(0)).optional())
+        .map_err(StorageError::sqlite("write graph manifest"))?;
+    let Some(raw) = raw else {
+        return Ok(());
+    };
+    match serde_json::from_str::<FileSymbols>(&raw) {
+        Ok(old) => {
+            for k in &old.refs {
+                cached(
+                    tx,
+                    "DELETE FROM graph_symbol_refs WHERE key = ?1 AND file_id = ?2",
+                    params![k, file_id],
+                )
+                .map_err(StorageError::sqlite("write graph manifest"))?;
+            }
+        }
+        Err(_) => {
+            cached(
+                tx,
+                "DELETE FROM graph_symbol_refs WHERE file_id = ?1",
+                [file_id],
+            )
+            .map_err(StorageError::sqlite("write graph manifest"))?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

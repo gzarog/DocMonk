@@ -56,14 +56,15 @@
     },
     "F04": {
       "phase": "PH02",
-      "status": "fixed_producer_reads",
+      "status": "fixed_server_verified_in_ci_live",
       "checks": [
         {
           "test": "crates/docmonk-service/tests/server_live.rs::{opensearch,elasticsearch}_cross_host_dependencies",
-          "fails_on_baseline": "yes by construction: baseline required a host-local staging copy of the producer and reported it stale"
+          "fails_on_baseline": "yes by construction: baseline required a host-local staging copy of the producer and reported it stale; and a host without the consumer's staging copy reported it unpublished"
         }
       ],
-      "remaining": "The consumer's own references still come from its staging store (the host that indexed it)."
+      "design": "Server mode reads the consumer's unresolved references (graph lineage, served generation), its .csproj paths (files index) and its graph freshness and manifest from the authoritative published index; a staging copy is only a derived manifest cache. The live test forces a full recomputation on a host that never indexed the consumer and requires identical bindings.",
+      "remaining": "Project file contents are still read from the source path on disk (the server stores no file contents), so discovery needs the source checked out on the running host."
     },
     "F05": {
       "phase": "PH01",
@@ -91,7 +92,7 @@
           "test": "crates/docmonk-retrieval/tests/attachments.rs::f06_filtered_semantic_search_finds_low_ranked_in_scope_hits (real embeddings; runs in CI with models)"
         }
       ],
-      "remaining": "Native kNN prefilters (server) are not yet pushed down; bounded adaptive expansion (cap 4096 per corpus, reported in degraded when reached) is used for both backends."
+      "remaining": "Server corpora push every hard filter (path prefixes, document ids, kinds, attachment exclusion) into the native kNN pre-filter (exact filtered top-k, listed in explain as prefiltered_sources; crates/docmonk-backends/src/reader.rs::tests::hard_filters_become_knn_prefilter_clauses). The local ANN index cannot pre-filter, so local corpora keep the bounded adaptive expansion (cap 4096, reported in degraded when reached). Live recall under filters is checked by the CI live suites only for correctness, not measured."
     },
     "F07": {
       "phase": "PH05",
@@ -206,7 +207,12 @@
         }
       ],
       "design": "docs/adr/0035-server-mvcc-publication.md: immutable records with valid_from/valid_to per lineage (base, graph); a fresh generation per attempt; aborted attempts' writes and closes ignored by readers; the fenced state CAS is the only visibility switch; GC by numeric range. Schema version 5 (fresh indexes; existing ones are refused, never converted).",
-      "remaining": "The live 8k/50k performance gate (write amplification, recall@10 and p95 within 5%, CPU) is not measured yet; verified on the in-process engine only. No nightly benchmark gate added yet (T08.3)."
+      "ph09": {
+        "local_graph": "Full promotions deleted each file's dependency-manifest references by file id, which the (key, file_id) primary key cannot serve: one table scan per file, quadratic. Deletes now go by primary key from the file's stored symbols. 2,039 files, 3 runs + 1 warmup: cold graph stage 3.896 s -> 2.392 s median, rename 0.249 -> 0.202 s, doc edit 0.162 -> 0.112 s; identical fingerprints in all 8 scenarios; peak RSS 129 -> 130 MB (benchmarks/relationships/ph09-manifest-2039-{before,after}.json).",
+        "dependencies": "Producer lookups are cached per run by (producer, generation): consumers of one producer read each name once (crates/docmonk-service/tests/dependencies.rs::ph09_consumers_of_one_producer_share_its_lookups_within_a_run). The fence still re-checks every producer's generation.",
+        "traversal": "callers/callees report truncated when the result budget is reached."
+      },
+      "remaining": "150-repository and 8k/50k end-to-end figures were not re-measured in this change. The live 8k/50k performance gate (write amplification, recall@10 and p95 within 5%, CPU) is not measured yet; verified on the in-process engine only. No nightly benchmark gate added yet (T08.3)."
     },
     "F11": {
       "phase": "PH07",
