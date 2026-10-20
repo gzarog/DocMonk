@@ -143,8 +143,37 @@ pub const STOPWORDS: &[&str] = &[
 ];
 
 /// Largest number of AND groups the minimum-should-match tier expands to;
-/// beyond it the tier is a plain OR of the content terms.
+/// beyond it the tier is a plain OR of the content terms. The group count
+/// C(n, ceil(n/2)) is computed (capped) before any group is built, so a
+/// long question never enumerates millions of unused subsets.
 const MAX_MSM_GROUPS: usize = 20;
+
+/// Planner work safeguards: content terms considered (the rest are
+/// dropped, identifiers first kept), terms of the loosest OR tier, and
+/// the byte length of any one expression. A query over them gets a
+/// documented degraded plan, never a panic or a huge allocation.
+pub const MAX_QUERY_TERMS: usize = 64;
+pub const MAX_OR_TERMS: usize = 16;
+pub const MAX_EXPRESSION_BYTES: usize = 4096;
+
+/// C(n, k), saturating at `cap + 1`: exact when at most `cap`, otherwise
+/// any value above `cap`. Iterative and overflow-safe (every intermediate
+/// is C(n - k + i, i) <= C(n, k), and the loop stops once past `cap`).
+pub fn binomial_capped(n: usize, k: usize, cap: usize) -> usize {
+    if k > n {
+        return 0;
+    }
+    let k = k.min(n - k);
+    let mut c: u128 = 1;
+    for i in 1..=k as u128 {
+        // C(n-k+i, i) = C(n-k+i-1, i-1) * (n-k+i) / i, exact at each step.
+        c = c * (n as u128 - k as u128 + i) / i;
+        if c > cap as u128 {
+            return cap.saturating_add(1);
+        }
+    }
+    c as usize
+}
 
 /// Plan options.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -208,6 +237,12 @@ pub fn query_plan_with(text: &str, opts: PlanOptions) -> Option<Vec<QueryVariant
     if content.is_empty() {
         content = tokens.clone();
     }
+    // FTS matching is case-insensitive: a repeated term adds nothing.
+    let mut seen_terms = HashSet::new();
+    content.retain(|t| seen_terms.insert(t.to_lowercase()));
+    if content.len() > MAX_QUERY_TERMS {
+        content = cap_terms(content, MAX_QUERY_TERMS);
+    }
     let quote = |t: &String| format!("\"{t}\"");
     let quoted: Vec<String> = content.iter().map(quote).collect();
     let mut plan = vec![QueryVariant {
@@ -250,21 +285,28 @@ pub fn query_plan_with(text: &str, opts: PlanOptions) -> Option<Vec<QueryVariant
     }
     if opts.or_fallback && content.len() > 1 {
         let k = content.len().div_ceil(2);
-        let groups = combinations(&content, k);
-        let expression = if k == 1 || groups.len() > MAX_MSM_GROUPS {
-            quoted.join(" OR ")
-        } else {
-            groups
-                .iter()
-                .map(|g| {
-                    format!(
-                        "({})",
-                        g.iter().map(quote).collect::<Vec<_>>().join(" AND ")
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join(" OR ")
-        };
+        // Guard before enumerating: C(25, 13) alone is 5,200,300 groups.
+        let expression =
+            if k == 1 || binomial_capped(content.len(), k, MAX_MSM_GROUPS) > MAX_MSM_GROUPS {
+                // Degraded plan for long questions: a plain OR of at most
+                // MAX_OR_TERMS terms (identifiers kept first).
+                cap_terms(content.clone(), MAX_OR_TERMS)
+                    .iter()
+                    .map(quote)
+                    .collect::<Vec<_>>()
+                    .join(" OR ")
+            } else {
+                combinations(&content, k)
+                    .iter()
+                    .map(|g| {
+                        format!(
+                            "({})",
+                            g.iter().map(quote).collect::<Vec<_>>().join(" AND ")
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" OR ")
+            };
         plan.push(QueryVariant {
             tier: LexicalTier::OrFallback,
             expression,
@@ -274,6 +316,7 @@ pub fn query_plan_with(text: &str, opts: PlanOptions) -> Option<Vec<QueryVariant
         let idents: Vec<String> = content
             .iter()
             .filter(|t| looks_like_identifier(t))
+            .take(MAX_OR_TERMS)
             .map(quote)
             .collect();
         if !idents.is_empty() {
@@ -284,10 +327,35 @@ pub fn query_plan_with(text: &str, opts: PlanOptions) -> Option<Vec<QueryVariant
         }
     }
     // Drop repeated expressions (a single content term makes several
-    // tiers identical), keeping the most precise tier.
+    // tiers identical), keeping the most precise tier, and any expression
+    // over the size budget (a 100-word phrase can't usefully match).
     let mut seen = HashSet::new();
-    plan.retain(|v| seen.insert(v.expression.clone()));
+    plan.retain(|v| {
+        v.expression.len() <= MAX_EXPRESSION_BYTES && seen.insert(v.expression.clone())
+    });
+    if plan.is_empty() {
+        // Every tier was over budget: the capped OR still finds candidates.
+        plan.push(QueryVariant {
+            tier: LexicalTier::OrFallback,
+            expression: cap_terms(content, MAX_OR_TERMS)
+                .iter()
+                .map(quote)
+                .collect::<Vec<_>>()
+                .join(" OR "),
+        });
+    }
     Some(plan)
+}
+
+/// At most `max` of `terms`: identifier-shaped terms first, then the
+/// rest, each group in query order.
+fn cap_terms(terms: Vec<String>, max: usize) -> Vec<String> {
+    if terms.len() <= max {
+        return terms;
+    }
+    let (idents, rest): (Vec<String>, Vec<String>) =
+        terms.into_iter().partition(|t| looks_like_identifier(t));
+    idents.into_iter().chain(rest).take(max).collect()
 }
 
 /// Runs `plan` most precise first, skipping repeated expressions and
@@ -579,6 +647,19 @@ pub fn merge(results: Vec<SearchResult>) -> Vec<SearchResult> {
     out
 }
 
+static ADAPTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// `search.adaptive_lexical.enabled` (process-wide; on by default): server
+/// readers prefetch only the precise tiers. Off restores prefetching every
+/// tier up front.
+pub fn set_adaptive(enabled: bool) {
+    ADAPTIVE.store(enabled, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn adaptive_enabled() -> bool {
+    ADAPTIVE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Per-stage timing for `--explain`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct StageTiming {
@@ -601,7 +682,8 @@ pub fn search(
 /// [`search`] plus a per-stage timing breakdown.
 ///
 /// Corpora whose readers can be shared across threads (server mode) are
-/// searched concurrently, and each prefetches its whole plan in one
+/// searched concurrently by at most [`crate::pool::max_concurrency`]
+/// workers, and each prefetches the plan's precise tiers in one
 /// round-trip; SQLite corpora run one after another on this thread. The
 /// merged ranking does not depend on either.
 pub fn search_with_timings(
@@ -632,45 +714,10 @@ pub fn search_with_options(
     if q.is_empty() {
         return Ok((Vec::new(), Vec::new()));
     }
-    let sync: Option<Vec<&(dyn docmonk_storage::read::KnowledgeRead + Sync)>> =
-        corpora.iter().map(|c| c.store.as_sync()).collect();
-    let per_corpus: Vec<CorpusOutput> = match sync {
-        Some(stores) if corpora.len() > 1 => std::thread::scope(|scope| {
-            let token = docmonk_core::deadline::current();
-            let handles: Vec<_> = stores
-                .into_iter()
-                .zip(corpora)
-                .map(|(store, c)| {
-                    let build_id = c.build_id;
-                    let token = token.clone();
-                    scope.spawn(move || {
-                        let _deadline = token.as_ref().map(docmonk_core::deadline::Token::enter);
-                        corpus_search(
-                            Corpus {
-                                store: store as &dyn docmonk_storage::read::KnowledgeRead,
-                                build_id,
-                            },
-                            q,
-                            limit,
-                            snippet_tokens,
-                            opts,
-                        )
-                    })
-                })
-                .collect();
-            handles
-                .into_iter()
-                .map(|h| {
-                    h.join()
-                        .unwrap_or_else(|_| Err(SearchError("search thread panicked".into())))
-                })
-                .collect::<Result<Vec<_>, _>>()
-        })?,
-        _ => corpora
-            .iter()
-            .map(|&c| corpus_search(c, q, limit, snippet_tokens, opts))
-            .collect::<Result<Vec<_>, _>>()?,
-    };
+    // A bounded worker pool (P06): never one thread per source.
+    let per_corpus: Vec<CorpusOutput> = crate::pool::map_corpora(corpora, |_, c| {
+        corpus_search(c, q, limit, snippet_tokens, opts)
+    })?;
     let mut timings = Vec::new();
     let mut all = Vec::new();
     for (hits, t) in per_corpus {
@@ -716,8 +763,15 @@ fn corpus_search(
         Ok(())
     };
     if c.store.backend_kind() != "sqlite" {
+        // Progressive tiers (P04): only the precise tiers are prefetched;
+        // the loose OR tiers are read on demand, when the precise ones
+        // left the limit unfilled (`run_plan` stops early otherwise).
+        let adaptive = adaptive_enabled();
         let mut expressions: Vec<String> = Vec::new();
         for v in query_plan_with(q, opts.plan).unwrap_or_default() {
+            if adaptive && v.tier == LexicalTier::OrFallback {
+                continue;
+            }
             if !expressions.contains(&v.expression) {
                 expressions.push(v.expression);
             }
@@ -813,6 +867,92 @@ mod tests {
         .unwrap();
         assert!(plan.iter().all(|v| v.tier != LexicalTier::OrFallback));
     }
+
+    #[test]
+    fn binomial_is_exact_under_the_cap_and_saturates_above() {
+        assert_eq!(binomial_capped(4, 2, 20), 6);
+        assert_eq!(binomial_capped(6, 3, 20), 20);
+        assert_eq!(binomial_capped(7, 4, 20), 21);
+        assert_eq!(binomial_capped(25, 13, 20), 21);
+        assert_eq!(binomial_capped(25, 13, usize::MAX - 1), 5_200_300);
+        assert_eq!(binomial_capped(3, 5, 20), 0);
+        for n in 0..=256usize {
+            for k in 0..=n {
+                let c = binomial_capped(n, k, MAX_MSM_GROUPS);
+                assert!(c <= MAX_MSM_GROUPS + 1, "C({n},{k})");
+                assert!(c >= 1);
+            }
+        }
+        // Exact against Pascal's triangle where it fits.
+        let mut row = vec![1u128];
+        for n in 1..=60usize {
+            let mut next = vec![1u128; n + 1];
+            for k in 1..n {
+                next[k] = row[k - 1] + row[k];
+            }
+            row = next;
+            for (k, want) in row.iter().enumerate() {
+                assert_eq!(
+                    binomial_capped(n, k, usize::MAX - 1) as u128,
+                    *want,
+                    "C({n},{k})"
+                );
+            }
+        }
+    }
+
+    // clean-slate-audit: allow-start (API URL paths with a version segment are user data)
+    /// The URL question of the retrieval plan (25 content terms): the old
+    /// planner built all C(25, 13) = 5,200,300 groups before falling back.
+    #[test]
+    fn long_questions_plan_in_bounded_time_and_size() {
+        let q = "Is the URL path /sb/v1/content/groups/image used, referenced, or related to any \
+                 code or documentation in the indexed DocMonk project? Trace matching \
+                 route/client/API references and relevant call paths.";
+        let started = std::time::Instant::now();
+        let plan = query_plan(q).unwrap();
+        assert!(started.elapsed() < std::time::Duration::from_millis(250));
+        assert!(plan
+            .iter()
+            .all(|v| v.expression.len() <= MAX_EXPRESSION_BYTES));
+        let or = plan
+            .iter()
+            .find(|v| v.tier == LexicalTier::OrFallback)
+            .unwrap();
+        assert!(
+            !or.expression.contains('('),
+            "no MSM groups: {}",
+            or.expression
+        );
+        assert!(or.expression.matches(" OR ").count() < MAX_OR_TERMS);
+        // 150 distinct words, a route and a quoted literal: still bounded.
+        let words: Vec<String> = (0..150).map(|i| format!("word{i}x")).collect();
+        let long = format!(
+            "{} /sb/v1/content/groups/image \"Quoted.Literal\"",
+            words.join(" ")
+        );
+        let started = std::time::Instant::now();
+        let plan = query_plan(&long).unwrap();
+        assert!(started.elapsed() < std::time::Duration::from_millis(250));
+        assert!(plan
+            .iter()
+            .all(|v| v.expression.len() <= MAX_EXPRESSION_BYTES));
+        assert!(plan
+            .iter()
+            .all(|v| v.expression.matches(" OR ").count() < MAX_OR_TERMS));
+        // Repeated and odd Unicode tokens never panic.
+        for q in [
+            "order order ORDER Order",
+            "ελληνικά ελληνικά λέξεις \u{0301}\u{0301} 🚀🚀",
+            &"a ".repeat(500),
+            &"résumé ".repeat(300),
+        ] {
+            let _ = query_plan(q);
+        }
+        assert_eq!(exprs("order order ORDER")[0].1, "\"order order ORDER\"");
+        assert_eq!(exprs("order order ORDER").len(), 2);
+    }
+    // clean-slate-audit: allow-end
 
     #[test]
     fn exact_paths_match_whole_segments() {

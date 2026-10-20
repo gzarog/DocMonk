@@ -34,3 +34,7 @@
 (method_declaration
   (attribute_list
     (attribute) @decorator.raw)) @decorator.subject
+
+(class_declaration
+  (attribute_list
+    (attribute) @decorator.raw)) @decorator.subject

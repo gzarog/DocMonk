@@ -32,10 +32,8 @@ use docmonk_retrieval::decompose::{decompose, Subquery};
 use docmonk_retrieval::grounding::{self, EvidenceRef};
 use docmonk_retrieval::hybrid::{self, RankedHit, SourcedHit};
 use docmonk_retrieval::lexical::{self, SearchResult};
-use docmonk_retrieval::route::{
-    route, QueryIntent, Route, RouteOptions, RouteStrategy, SearchFilters,
-};
-use docmonk_retrieval::{context, diversify, graph, Corpus};
+use docmonk_retrieval::route::{route, QueryIntent, Route, RouteStrategy, SearchFilters};
+use docmonk_retrieval::{context, diversify, exact, graph, Corpus};
 use serde_json::{json, Value};
 
 use crate::query::{corpora, join_location, lazy_embedder, open_sources, search_err, Opened};
@@ -90,16 +88,20 @@ fn run_part(
     plan: &Route,
     filters: &SearchFilters,
     limit: usize,
+    exact_pins: bool,
     degraded: &mut Vec<String>,
 ) -> Result<Vec<RankedHit>, DocMonkError> {
     // Over-fetch so filtering still leaves enough candidates.
     let fetch = (limit * 4).max(20);
     // Filters are pushed down into the reads; a conceptual question that
     // semantic search will answer skips the loosest lexical tier (its hits
-    // are mostly common-word noise).
+    // are mostly common-word noise), and so does a question exact
+    // occurrences already answer.
     let mut opts = filters.lexical_options();
-    opts.plan.or_fallback = !(plan.intent == QueryIntent::Conceptual
-        && plan.strategies.contains(&RouteStrategy::Semantic));
+    let semantic_answers = plan.intent == QueryIntent::Conceptual
+        && plan.strategies.contains(&RouteStrategy::Semantic);
+    let exact_answers = exact_pins && cfg.search.adaptive_lexical.enabled;
+    opts.plan.or_fallback = !(semantic_answers || exact_answers);
     let mut lex = Vec::new();
     for c in corp {
         let (rows, _) = lexical::search_with_options(
@@ -179,6 +181,52 @@ fn caller_hit(
     }
 }
 
+/// An exact occurrence as a pinned hit: code occurrences cite their
+/// owning entity, document occurrences their chunk. Template and
+/// interpolated matches are not pinned (they are not proof).
+fn occurrence_hit(o: &exact::Occurrence) -> Option<RankedHit> {
+    let (kind, id, title) = match (&o.entity_row, &o.chunk_id) {
+        (Some(e), _) => ("entity", e.id.clone(), e.qualified_name.clone()),
+        (None, Some(c)) => ("document", c.clone(), o.path.clone()),
+        _ => return None,
+    };
+    let snippet = match &o.http_method {
+        Some(m) => format!("{m} {}", o.matched),
+        None => o.matched.clone(),
+    };
+    Some(RankedHit {
+        candidate: hybrid::Candidate {
+            kind: kind.into(),
+            id,
+            title,
+            path: o.path.clone(),
+            source_id: o.source_id.clone(),
+            snippet: Some(snippet),
+            location: Some(lexical::Location {
+                line_start: o.line,
+                line_end: o.line,
+                section: o.section.clone(),
+                page_start: o.page,
+                page_end: o.page,
+                ..Default::default()
+            }),
+            lexical_tier: None,
+            lexical_fts_rank: 0,
+            lexical_query_tier: lexical::LexicalTier::Phrase,
+            entity_kind_rank: 0,
+            mtime: 0.0,
+            lexical_rank: None,
+            bm25: None,
+            semantic_score: None,
+            semantic_rank: None,
+            exact_match: o.class != exact::EvidenceClass::HeuristicMatch,
+            rrf_score: None,
+        },
+        tier_label: o.class.as_str(),
+        neural_score: None,
+    })
+}
+
 /// RRF across subqueries; pinned exact matches first.
 fn fuse(parts: Vec<Vec<RankedHit>>) -> Vec<RankedHit> {
     let mut best: HashMap<(String, String, String), (RankedHit, f64, usize)> = HashMap::new();
@@ -251,14 +299,7 @@ pub fn evidence_value(
     let mut degraded: Vec<String> = Vec::new();
     let sc = &cfg.search;
     let plan = if sc.routing.enabled {
-        route(
-            req.query,
-            RouteOptions {
-                semantic_available: sc.semantic,
-                reranker_enabled: sc.reranker.enabled,
-                decomposition_enabled: sc.decomposition.enabled,
-            },
-        )
+        route(req.query, crate::query::route_options(cfg))
     } else {
         // Routing off: the plain lexical plan, nothing intent-specific.
         Route {
@@ -268,18 +309,72 @@ pub fn evidence_value(
             strategies: vec![RouteStrategy::LexicalExact, RouteStrategy::LexicalFts],
             fallback: true,
             target: None,
+            anchors: Default::default(),
         }
     };
     // Hard source filter before any retrieval: other sources are not read.
     let mut opened = open_sources(home, None)?;
     opened.retain(|o| req.filters.allows_source(&o.source.id));
     let corp = corpora(&opened);
+    crate::query::apply_retrieval_settings(cfg);
+    // Exact occurrences of URL anchors first (P03), within the filters.
+    let endpoint = plan.intent == QueryIntent::EndpointReference;
+    let mut exact_outcome: Option<exact::ExactOutcome> = None;
+    if endpoint && sc.exact_occurrences.enabled {
+        let t = Instant::now();
+        let mut o = exact::find_occurrences(
+            &corp,
+            &plan.anchors.url_paths,
+            &exact::ExactOptions {
+                max_results: sc.exact_occurrences.max_results.max(1) as usize,
+                documents: true,
+                filter: req.filters.lexical_options().filter,
+                snippet_tokens: sc.output.snippet_max_tokens,
+                max_template_variants: 4,
+            },
+        )
+        .map_err(search_err)?;
+        o.occurrences.retain(|x| {
+            let kind = if x.chunk_id.is_some() {
+                "document"
+            } else {
+                "entity"
+            };
+            req.filters
+                .allows(&x.source_id, &x.path, kind, x.document_id.as_deref(), false)
+        });
+        timings.push(json!({"stage": "exact_occurrences", "ms": t.elapsed().as_millis()}));
+        for c in o
+            .capabilities
+            .iter()
+            .filter(|c| c.exact_occurrences != "indexed")
+        {
+            degraded.push(format!(
+                "exact occurrences not checked in source {} ({}): rebuild its graph to add them",
+                c.source_id, c.exact_occurrences
+            ));
+        }
+        exact_outcome = Some(o);
+    }
+    let exact_pins: Vec<RankedHit> = exact_outcome
+        .iter()
+        .flat_map(|o| o.occurrences.iter().filter_map(occurrence_hit))
+        .collect();
     let subqueries: Vec<Subquery> = if plan.strategies.contains(&RouteStrategy::Decompose) {
         decompose(req.query, sc.decomposition.max_subqueries.max(1) as usize)
     } else {
         Vec::new()
     };
-    let parts: Vec<String> = if subqueries.is_empty() {
+    let parts: Vec<String> = if endpoint {
+        // Lexical search focused on the anchors, not the whole question.
+        vec![plan
+            .anchors
+            .url_paths
+            .iter()
+            .map(|u| u.path.clone())
+            .collect::<Vec<_>>()
+            .join(" ")]
+    } else if subqueries.is_empty() {
         vec![req.query.to_owned()]
     } else {
         subqueries.iter().map(|s| s.text.clone()).collect()
@@ -303,6 +398,7 @@ pub fn evidence_value(
             &plan,
             &req.filters,
             limit,
+            !exact_pins.is_empty(),
             &mut degraded,
         )?);
     }
@@ -361,6 +457,24 @@ pub fn evidence_value(
     if sc.diversity.enabled && !over(&started) {
         hits = diversify::mmr(hits, sc.diversity.lambda);
     }
+    if !exact_pins.is_empty() {
+        let key = |h: &RankedHit| {
+            (
+                h.candidate.source_id.clone(),
+                h.candidate.kind.clone(),
+                h.candidate.id.clone(),
+            )
+        };
+        let mut seen = std::collections::HashSet::new();
+        let mut pinned: Vec<RankedHit> = exact_pins
+            .iter()
+            .filter(|h| seen.insert(key(h)))
+            .cloned()
+            .collect();
+        hits.retain(|h| !seen.contains(&key(h)));
+        pinned.append(&mut hits);
+        hits = pinned;
+    }
     hits.truncate(limit);
 
     // Graph context for symbol-centred routes (filtered like everything).
@@ -369,18 +483,53 @@ pub fn evidence_value(
     let mut graph_edges = Vec::new();
     if plan.strategies.contains(&RouteStrategy::SymbolGraph) && !over(&started) {
         if let Some(target) = &plan.target {
-            let (_, edges) = graph::traverse_symbol(
-                &corp,
-                target,
-                graph::Direction::Incoming,
-                &graph::CALL_TYPES,
-                2,
-                50,
-            )
-            .map_err(search_err)?;
+            let edges = if endpoint {
+                // Callers of the entities holding the exact occurrences
+                // (handlers, client methods): only their sources are read.
+                let mut starts: Vec<(usize, String)> = Vec::new();
+                for o in exact_outcome.iter().flat_map(|o| &o.occurrences) {
+                    if o.class == exact::EvidenceClass::HeuristicMatch {
+                        continue;
+                    }
+                    if let Some(e) = &o.entity_row {
+                        let s = (o.corpus, e.id.clone());
+                        if !starts.contains(&s) {
+                            starts.push(s);
+                        }
+                    }
+                }
+                starts.truncate(sc.selective_graph.max_seed_entities.max(1) as usize);
+                let mut edges: Vec<graph::TraversalEdge> = graph::traverse_many(
+                    &corp,
+                    &starts,
+                    graph::Direction::Incoming,
+                    &graph::CALL_TYPES,
+                    2,
+                    50,
+                )
+                .map_err(search_err)?
+                .into_iter()
+                .flatten()
+                .collect();
+                edges.truncate(50);
+                edges
+            } else {
+                graph::traverse_symbol(
+                    &corp,
+                    target,
+                    graph::Direction::Incoming,
+                    &graph::CALL_TYPES,
+                    2,
+                    50,
+                )
+                .map_err(search_err)?
+                .1
+            };
             let callers_are_answer = matches!(
                 plan.intent,
-                QueryIntent::CodeNavigation | QueryIntent::ImpactAnalysis
+                QueryIntent::CodeNavigation
+                    | QueryIntent::ImpactAnalysis
+                    | QueryIntent::EndpointReference
             );
             let pins = hits.iter().take_while(|h| h.candidate.exact_match).count();
             let mut callers = Vec::new();
@@ -535,7 +684,7 @@ pub fn evidence_value(
         })
         .collect();
     timings.push(json!({"stage": "total", "ms": started.elapsed().as_millis()}));
-    Ok(json!({
+    let mut out = json!({
         "query": req.query,
         "verdict": verdict,
         "plan": {
@@ -561,5 +710,23 @@ pub fn evidence_value(
             "degraded": degraded,
             "timings": timings,
         },
-    }))
+    });
+    // Additive keys, only when the route has anchors.
+    if !plan.anchors.is_empty() {
+        out["plan"]["anchors"] = json!(plan.anchors);
+    }
+    if let Some(o) = &exact_outcome {
+        out["exact_occurrences"] = json!(o
+            .occurrences
+            .iter()
+            .map(|x| {
+                let mut v = json!(x);
+                v["evidence_class"] = json!(x.class.as_str());
+                v["path"] = json!(absolute(&opened, &x.source_id, &x.path));
+                v
+            })
+            .collect::<Vec<_>>());
+        out["exact_capabilities"] = json!(o.capabilities);
+    }
+    Ok(out)
 }

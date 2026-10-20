@@ -408,6 +408,15 @@ pub trait KnowledgeRead {
         Ok(GraphFreshness::unknown())
     }
 
+    /// The derivation identity (`rust-code-N+graph-M`) of the graph rows
+    /// graph reads of `build_id` see; `None` when no graph is visible or
+    /// the reader cannot tell. Retrieval uses it to advertise whether a
+    /// source carries a projection (capability negotiation), never to
+    /// decide what may be read.
+    fn graph_derivation(&self, _build_id: &str) -> Result<Option<String>> {
+        Ok(None)
+    }
+
     /// This source's cross-source dependency manifest (`None`: none).
     fn external_manifest(&self) -> Result<Option<crate::graph::ExternalManifest>> {
         Ok(None)
@@ -569,6 +578,12 @@ impl KnowledgeRead for ProjectStore {
     }
     fn graph_freshness(&self, b: &str) -> Result<GraphFreshness> {
         ProjectStore::graph_freshness(self, b)
+    }
+    fn graph_derivation(&self, b: &str) -> Result<Option<String>> {
+        if !ProjectStore::graph_visible(self, b)? {
+            return Ok(None);
+        }
+        Ok(ProjectStore::graph_state(self)?.derivation_version)
     }
     fn external_manifest(&self) -> Result<Option<crate::graph::ExternalManifest>> {
         ProjectStore::external_manifest(self)

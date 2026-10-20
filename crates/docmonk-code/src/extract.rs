@@ -85,6 +85,20 @@ pub struct ExtractedDecorator {
     pub line: i64,
 }
 
+/// A string literal whose content is a URL path or endpoint
+/// ([`docmonk_core::urls::is_url_literal`]), with its owning entity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtractedLiteral {
+    pub owner_local_id: Option<usize>,
+    /// Content as written (quotes and prefixes stripped); interpolations
+    /// are written `{}`.
+    pub text: String,
+    pub line: i64,
+    /// Built at runtime (`$"..."`, f-strings, template strings): never a
+    /// direct exact match.
+    pub interpolated: bool,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Extraction {
     pub entities: Vec<ExtractedEntity>,
@@ -92,6 +106,107 @@ pub struct Extraction {
     pub calls: Vec<ExtractedCall>,
     pub inherits: Vec<ExtractedInherit>,
     pub decorators: Vec<ExtractedDecorator>,
+    pub literals: Vec<ExtractedLiteral>,
+}
+
+/// String literal node kinds of every supported grammar.
+const LITERAL_KINDS: &[&str] = &[
+    "string",
+    "string_literal",
+    "verbatim_string_literal",
+    "raw_string_literal",
+    "interpolated_string_expression",
+    "interpreted_string_literal",
+    "template_string",
+];
+
+/// URL literals kept per file (bounds graph rows on generated code).
+pub const MAX_LITERALS_PER_FILE: usize = 256;
+
+/// The content of a string literal as written in code: prefixes (`@`,
+/// `$`, `r`, `f`, `b`, ...), `#` guards and quote runs stripped;
+/// interpolations (`{x}`, `${x}`) written `{}`. Returns the content and
+/// whether the literal is interpolated.
+pub fn literal_content(text: &str) -> (String, bool) {
+    let t = text.trim();
+    let Some(q) = t.find(['"', '\'', '`']) else {
+        return (t.to_owned(), false);
+    };
+    let prefix = t[..q].trim_end_matches('#');
+    let mut body = t[q..].trim_end_matches('#');
+    let quote = body.chars().next().unwrap_or('"');
+    let run = body.chars().take_while(|&c| c == quote).count().min(3);
+    let run = if run == 2 { 1 } else { run };
+    for _ in 0..run {
+        body = body.strip_prefix(quote).unwrap_or(body);
+        body = body.strip_suffix(quote).unwrap_or(body);
+    }
+    let interpolated = prefix.contains(['$', 'f', 'F']) || (quote == '`' && body.contains("${"));
+    if !interpolated {
+        return (body.to_owned(), false);
+    }
+    let mut out = String::with_capacity(body.len());
+    let mut depth = 0usize;
+    let mut chars = body.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '$' if quote == '`' && chars.peek() == Some(&'{') => {}
+            '{' if chars.peek() == Some(&'{') && depth == 0 => {
+                chars.next();
+                out.push('{');
+            }
+            '{' => {
+                if depth == 0 {
+                    out.push_str("{}");
+                }
+                depth += 1;
+            }
+            '}' if depth > 0 => depth -= 1,
+            _ if depth > 0 => {}
+            c => out.push(c),
+        }
+    }
+    (out, true)
+}
+
+/// Every URL-shaped string literal under `root`, owned by its nearest
+/// known entity, at most [`MAX_LITERALS_PER_FILE`].
+fn url_literals(
+    source: &[u8],
+    root: Node<'_>,
+    known: &HashMap<usize, usize>,
+) -> Vec<ExtractedLiteral> {
+    let mut out = Vec::new();
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        // Route attribute / decorator arguments are server route templates,
+        // recorded as composed routes (framework.rs), not client references.
+        // Other attributes keep their literals (Refit's `[Get("/x")]` is a
+        // client reference).
+        if matches!(node.kind(), "attribute" | "decorator")
+            && crate::framework::is_route_decorator(&decode(source, node))
+        {
+            continue;
+        }
+        if LITERAL_KINDS.contains(&node.kind()) {
+            let (text, interpolated) = literal_content(&decode(source, node));
+            if docmonk_core::urls::is_url_literal(&text, docmonk_core::urls::FILE_EXTENSIONS) {
+                out.push(ExtractedLiteral {
+                    owner_local_id: nearest_ancestor_entity(node, known),
+                    text,
+                    line: node.start_position().row as i64 + 1,
+                    interpolated,
+                });
+            }
+            continue;
+        }
+        let mut cursor = node.walk();
+        let children: Vec<Node<'_>> = node.children(&mut cursor).collect();
+        stack.extend(children.into_iter().rev());
+    }
+    out.sort_by_key(|l| l.line);
+    out.truncate(MAX_LITERALS_PER_FILE);
+    out
 }
 
 impl Extraction {
@@ -388,6 +503,7 @@ pub(crate) fn extract_tree(
             }
         }
     }
+    out.literals = url_literals(source, tree.root_node(), &known);
     out
 }
 
@@ -414,6 +530,61 @@ mod tests {
             ("root".into(), "root".into())
         );
     }
+
+    // clean-slate-audit: allow-start (API URL paths with a version segment are user data)
+    #[test]
+    fn literal_contents() {
+        assert_eq!(literal_content("\"/sb/v1/x\""), ("/sb/v1/x".into(), false));
+        assert_eq!(literal_content("@\"/sb/v1/x\""), ("/sb/v1/x".into(), false));
+        assert_eq!(literal_content("'/a/b/c'"), ("/a/b/c".into(), false));
+        assert_eq!(literal_content("r#\"/a/b/c\"#"), ("/a/b/c".into(), false));
+        assert_eq!(
+            literal_content("\"\"\"/a/b/c\"\"\""),
+            ("/a/b/c".into(), false)
+        );
+        assert_eq!(
+            literal_content("$\"/sb/v1/{id}/image\""),
+            ("/sb/v1/{}/image".into(), true)
+        );
+        assert_eq!(literal_content("f'/a/{x.y}/c'"), ("/a/{}/c".into(), true));
+        assert_eq!(
+            literal_content("`/api/${id}/x`"),
+            ("/api/{}/x".into(), true)
+        );
+        assert_eq!(literal_content("\"\""), ("".into(), false));
+    }
+
+    #[test]
+    fn csharp_url_literals_have_owners_and_lines() {
+        let src = br#"namespace Shop {
+  public class ImageClient {
+    public Task Get() {
+      var a = "/sb/v1/content/groups/image";
+      var b = $"/sb/v1/content/groups/{id}";
+      var c = "image/png";
+      return http.GetAsync("sb/v1/content/groups/image");
+    }
+  }
+}
+"#;
+        let x = extract(src, "csharp", "f", "f").unwrap();
+        let lits: Vec<(&str, i64, bool)> = x
+            .literals
+            .iter()
+            .map(|l| (l.text.as_str(), l.line, l.interpolated))
+            .collect();
+        assert_eq!(
+            lits,
+            [
+                ("/sb/v1/content/groups/image", 4, false),
+                ("/sb/v1/content/groups/{}", 5, true),
+                ("sb/v1/content/groups/image", 7, false),
+            ]
+        );
+        let owner = x.literals[0].owner_local_id.unwrap();
+        assert_eq!(x.entities[owner].name, "Get");
+    }
+    // clean-slate-audit: allow-end
 
     #[test]
     fn signature_is_first_python_line_capped() {

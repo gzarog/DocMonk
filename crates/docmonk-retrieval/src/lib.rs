@@ -15,11 +15,13 @@ pub mod classify;
 pub mod context;
 pub mod decompose;
 pub mod diversify;
+pub mod exact;
 pub mod explore;
 pub mod graph;
 pub mod grounding;
 pub mod hybrid;
 pub mod lexical;
+pub mod pool;
 pub mod route;
 
 use docmonk_storage::read::KnowledgeRead;

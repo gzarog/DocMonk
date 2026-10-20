@@ -9,9 +9,9 @@ use docmonk_retrieval::graph::{self, Direction, SourceMatch, TraversalEdge};
 use docmonk_retrieval::lexical::{self, SearchResult};
 use docmonk_retrieval::{classify, explore, hybrid};
 use docmonk_service::query::{
-    config_budget, corpora, edge_json, explore_value, impact_value, link_add, link_list,
+    config_budget, corpora, edge_json, explore_value_with, impact_value, link_add, link_list,
     link_remove, match_json, open_sources, run_search, search_err, semantic_json, symbol_value,
-    tokenizer_json, LinkAdded, Opened, SearchRequest,
+    tokenizer_json, ExploreRequest, LinkAdded, Opened, SearchRequest,
 };
 use serde_json::{json, Value};
 
@@ -222,16 +222,90 @@ pub fn impact(a: &GraphArgs) -> Result<(), DocMonkError> {
 
 // ---------------------------------------------------------- explore ---
 
-pub fn explore(query: &str, json_output: bool) -> Result<(), DocMonkError> {
+pub fn explore(query: &str, json_output: bool, explain: bool) -> Result<(), DocMonkError> {
+    let started = std::time::Instant::now();
     let home = prepared_home()?;
     let cfg = load(&home)?;
+    let config_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let t = std::time::Instant::now();
     let opened = open_sources(&home, None)?;
-    let r = explore_value(&home, &cfg, &opened, query, config_budget(&cfg))?;
+    let open_ms = t.elapsed().as_secs_f64() * 1000.0;
+    let mut r = explore_value_with(
+        &home,
+        &cfg,
+        &opened,
+        &ExploreRequest {
+            query,
+            budget: config_budget(&cfg),
+            explain,
+        },
+    )?;
+    if explain {
+        // One-shot CLI costs, reported apart from the in-process stages
+        // (a warm MCP server pays neither).
+        r["diagnostics"]["cli"] = json!({
+            "config_load_ms": config_ms,
+            "open_sources_ms": open_ms,
+            "process_total_ms": started.elapsed().as_secs_f64() * 1000.0,
+        });
+    }
     if json_output {
-        return print_json(&r);
+        let t = std::time::Instant::now();
+        let text = serde_json::to_string_pretty(&r).unwrap_or_default();
+        if explain {
+            eprintln!(
+                "explain: serialization {:.3} ms",
+                t.elapsed().as_secs_f64() * 1000.0
+            );
+        }
+        println!("{text}");
+        return Ok(());
     }
     print_explore(&r);
+    if explain {
+        print_explore_diagnostics(&r["diagnostics"]);
+    }
     Ok(())
+}
+
+fn print_explore_diagnostics(d: &Value) {
+    println!("Diagnostics");
+    if let Some(route) = d.get("route") {
+        println!(
+            "  Route: {} (confidence {}), signals: {}",
+            route["intent"].as_str().unwrap_or_default(),
+            route["confidence"],
+            route["signals"]
+                .as_array()
+                .map(|a| a
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", "))
+                .unwrap_or_default()
+        );
+    }
+    for key in ["stages", "service_stages"] {
+        for st in d[key].as_array().into_iter().flatten() {
+            println!(
+                "  {:<22} {:>10.3} ms  {}",
+                st["stage"].as_str().unwrap_or_default(),
+                st["duration_ms"].as_f64().unwrap_or(0.0),
+                st.get("hits")
+                    .map(|h| format!("{h} hit(s)"))
+                    .unwrap_or_default()
+            );
+        }
+    }
+    println!(
+        "  Sources: considered {}, searched {}, expanded {}",
+        d["source_count_considered"], d["source_count_searched"], d["source_count_expanded"]
+    );
+    println!(
+        "  Backend: {} requests {}",
+        d["backend"]["kind"].as_str().unwrap_or("?"),
+        d["backend"]["requests"]
+    );
 }
 
 fn print_explore(r: &Value) {
@@ -596,11 +670,7 @@ pub fn search(a: &SearchArgs) -> Result<(), DocMonkError> {
             // Routing plan and filters (additive keys, ADR 0033).
             let plan = docmonk_retrieval::route::route(
                 &a.query,
-                docmonk_retrieval::route::RouteOptions {
-                    semantic_available: sc.semantic,
-                    reranker_enabled: sc.reranker.enabled,
-                    decomposition_enabled: sc.decomposition.enabled,
-                },
+                docmonk_service::query::route_options(&cfg),
             );
             payload["explain"]["plan"] = json!(plan);
             payload["explain"]["filters"] = json!(docmonk_retrieval::route::SearchFilters {

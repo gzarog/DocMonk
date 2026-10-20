@@ -23364,24 +23364,6 @@
        1,
        "calls",
        [
-        "csharp/Animals.cs",
-        "Animals.Dog.Speak",
-        "method",
-        20
-       ],
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog.Bark",
-        "method",
-        27
-       ],
-       "exact",
-       "same_file_name"
-      ],
-      [
-       1,
-       "calls",
-       [
         "csharp/Api/Controllers.cs",
         "Api.Controllers.DogsController.Create",
         "method",
@@ -23395,6 +23377,24 @@
        ],
        "medium",
        "name_only"
+      ],
+      [
+       1,
+       "calls",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Bark",
+        "method",
+        27
+       ],
+       "exact",
+       "same_file_name"
       ],
       [
        1,
@@ -23459,6 +23459,22 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       [
+        "symbol",
+        "route:api/dogs/{}"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ]
      ],
      "incoming": [
@@ -23578,6 +23594,23 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       [
+        "symbol",
+        "route:api/dogs/{}"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
        null
       ]
      ],
@@ -23629,24 +23662,6 @@
        1,
        "calls",
        [
-        "csharp/Animals.cs",
-        "Animals.Dog.Speak",
-        "method",
-        20
-       ],
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog.Bark",
-        "method",
-        27
-       ],
-       "exact",
-       "same_file_name"
-      ],
-      [
-       1,
-       "calls",
-       [
         "csharp/Api/Controllers.cs",
         "Api.Controllers.DogsController.Create",
         "method",
@@ -23660,6 +23675,24 @@
        ],
        "medium",
        "name_only"
+      ],
+      [
+       1,
+       "calls",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Bark",
+        "method",
+        27
+       ],
+       "exact",
+       "same_file_name"
       ],
       [
        1,
@@ -23724,6 +23757,22 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       [
+        "symbol",
+        "route:api/dogs/{}"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ]
      ],
      "incoming": [
@@ -23843,6 +23892,23 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       [
+        "symbol",
+        "route:api/dogs/{}"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
        null
       ]
      ],
@@ -24244,17 +24310,87 @@
     "d1": {
      "callers": [],
      "callees": [],
-     "references": [],
+     "references": [
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController",
+        "class",
+        6
+       ],
+       [
+        "symbol",
+        "ApiController"
+       ],
+       "medium",
+       "unresolved"
+      ]
+     ],
      "incoming": [],
-     "outgoing": [],
+     "outgoing": [
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController",
+        "class",
+        6
+       ],
+       [
+        "symbol",
+        "ApiController"
+       ],
+       "medium",
+       "unresolved",
+       null
+      ]
+     ],
      "tests": []
     },
     "d3": {
      "callers": [],
      "callees": [],
-     "references": [],
+     "references": [
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController",
+        "class",
+        6
+       ],
+       [
+        "symbol",
+        "ApiController"
+       ],
+       "medium",
+       "unresolved"
+      ]
+     ],
      "incoming": [],
-     "outgoing": [],
+     "outgoing": [
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController",
+        "class",
+        6
+       ],
+       [
+        "symbol",
+        "ApiController"
+       ],
+       "medium",
+       "unresolved",
+       null
+      ]
+     ],
      "tests": []
     },
     "symbol": [
@@ -24335,11 +24471,13 @@
         11
        ],
        [
-        "symbol",
-        "Ok"
+        "csharp/Animals.cs",
+        "Animals.Dog",
+        "class",
+        11
        ],
        "medium",
-       "unresolved"
+       "name_only"
       ],
       [
        1,
@@ -24369,13 +24507,11 @@
         11
        ],
        [
-        "csharp/Animals.cs",
-        "Animals.Dog",
-        "class",
-        11
+        "symbol",
+        "Ok"
        ],
        "medium",
-       "name_only"
+       "unresolved"
       ],
       [
        1,
@@ -24408,10 +24544,74 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "symbol",
+        "route:api/dogs"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ]
      ],
      "incoming": [],
      "outgoing": [
+      [
+       1,
+       "calls",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog",
+        "class",
+        11
+       ],
+       "medium",
+       "name_only",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog",
+        "class",
+        11
+       ]
+      ],
+      [
+       1,
+       "calls",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       "medium",
+       "name_only",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ]
+      ],
       [
        1,
        "calls",
@@ -24428,54 +24628,6 @@
        "medium",
        "unresolved",
        null
-      ],
-      [
-       1,
-       "calls",
-       [
-        "csharp/Api/Controllers.cs",
-        "Api.Controllers.DogsController.Create",
-        "method",
-        11
-       ],
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog.Speak",
-        "method",
-        20
-       ],
-       "medium",
-       "name_only",
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog.Speak",
-        "method",
-        20
-       ]
-      ],
-      [
-       1,
-       "calls",
-       [
-        "csharp/Api/Controllers.cs",
-        "Api.Controllers.DogsController.Create",
-        "method",
-        11
-       ],
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog",
-        "class",
-        11
-       ],
-       "medium",
-       "name_only",
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog",
-        "class",
-        11
-       ]
       ],
       [
        1,
@@ -24509,6 +24661,23 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "symbol",
+        "route:api/dogs"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
        null
       ]
      ],
@@ -24599,11 +24768,13 @@
         11
        ],
        [
-        "symbol",
-        "Ok"
+        "csharp/Animals.cs",
+        "Animals.Dog",
+        "class",
+        11
        ],
        "medium",
-       "unresolved"
+       "name_only"
       ],
       [
        1,
@@ -24633,13 +24804,11 @@
         11
        ],
        [
-        "csharp/Animals.cs",
-        "Animals.Dog",
-        "class",
-        11
+        "symbol",
+        "Ok"
        ],
        "medium",
-       "name_only"
+       "unresolved"
       ],
       [
        1,
@@ -24672,6 +24841,22 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "symbol",
+        "route:api/dogs"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ],
       [
        2,
@@ -24754,10 +24939,74 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       2,
+       "references",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       [
+        "symbol",
+        "route:api/dogs/{}"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ]
      ],
      "incoming": [],
      "outgoing": [
+      [
+       1,
+       "calls",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog",
+        "class",
+        11
+       ],
+       "medium",
+       "name_only",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog",
+        "class",
+        11
+       ]
+      ],
+      [
+       1,
+       "calls",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       "medium",
+       "name_only",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ]
+      ],
       [
        1,
        "calls",
@@ -24774,54 +25023,6 @@
        "medium",
        "unresolved",
        null
-      ],
-      [
-       1,
-       "calls",
-       [
-        "csharp/Api/Controllers.cs",
-        "Api.Controllers.DogsController.Create",
-        "method",
-        11
-       ],
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog.Speak",
-        "method",
-        20
-       ],
-       "medium",
-       "name_only",
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog.Speak",
-        "method",
-        20
-       ]
-      ],
-      [
-       1,
-       "calls",
-       [
-        "csharp/Api/Controllers.cs",
-        "Api.Controllers.DogsController.Create",
-        "method",
-        11
-       ],
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog",
-        "class",
-        11
-       ],
-       "medium",
-       "name_only",
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog",
-        "class",
-        11
-       ]
       ],
       [
        1,
@@ -24855,6 +25056,23 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "symbol",
+        "route:api/dogs"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
        null
       ],
       [
@@ -24947,6 +25165,23 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       2,
+       "references",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       [
+        "symbol",
+        "route:api/dogs/{}"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
        null
       ]
      ],
@@ -25243,6 +25478,22 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.List",
+        "method",
+        21
+       ],
+       [
+        "symbol",
+        "route:api/dogs/all"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ]
      ],
      "incoming": [
@@ -25272,30 +25523,6 @@
       ]
      ],
      "outgoing": [
-      [
-       1,
-       "calls",
-       [
-        "csharp/Api/Controllers.cs",
-        "Api.Controllers.DogsController.List",
-        "method",
-        24
-       ],
-       [
-        "go/svc/svc.go",
-        "svc.Run",
-        "function",
-        16
-       ],
-       "medium",
-       "name_only",
-       [
-        "go/svc/svc.go",
-        "svc.Run",
-        "function",
-        16
-       ]
-      ],
       [
        1,
        "references",
@@ -25329,6 +25556,47 @@
        "heuristic",
        "framework:csharp_route_attribute",
        null
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.List",
+        "method",
+        21
+       ],
+       [
+        "symbol",
+        "route:api/dogs/all"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
+       null
+      ],
+      [
+       1,
+       "calls",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.List",
+        "method",
+        24
+       ],
+       [
+        "go/svc/svc.go",
+        "svc.Run",
+        "function",
+        16
+       ],
+       "medium",
+       "name_only",
+       [
+        "go/svc/svc.go",
+        "svc.Run",
+        "function",
+        16
+       ]
       ]
      ],
      "tests": []
@@ -25527,6 +25795,22 @@
        "framework:csharp_route_attribute"
       ],
       [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.List",
+        "method",
+        21
+       ],
+       [
+        "symbol",
+        "route:api/dogs/all"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
+      ],
+      [
        2,
        "calls",
        [
@@ -25656,6 +25940,57 @@
       ]
      ],
      "outgoing": [
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.List",
+        "method",
+        21
+       ],
+       [
+        "symbol",
+        "Route"
+       ],
+       "medium",
+       "unresolved",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.List",
+        "method",
+        21
+       ],
+       [
+        "symbol",
+        "http_endpoint:ANY:api/dogs/all"
+       ],
+       "heuristic",
+       "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.List",
+        "method",
+        21
+       ],
+       [
+        "symbol",
+        "route:api/dogs/all"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
+       null
+      ],
       [
        1,
        "calls",
@@ -25801,40 +26136,6 @@
        ],
        "medium",
        "unresolved",
-       null
-      ],
-      [
-       1,
-       "references",
-       [
-        "csharp/Api/Controllers.cs",
-        "Api.Controllers.DogsController.List",
-        "method",
-        21
-       ],
-       [
-        "symbol",
-        "Route"
-       ],
-       "medium",
-       "unresolved",
-       null
-      ],
-      [
-       1,
-       "references",
-       [
-        "csharp/Api/Controllers.cs",
-        "Api.Controllers.DogsController.List",
-        "method",
-        21
-       ],
-       [
-        "symbol",
-        "http_endpoint:ANY:api/dogs/all"
-       ],
-       "heuristic",
-       "framework:csharp_route_attribute",
        null
       ]
      ],
@@ -26485,11 +26786,13 @@
         11
        ],
        [
-        "symbol",
-        "Ok"
+        "csharp/Animals.cs",
+        "Animals.Dog",
+        "class",
+        11
        ],
        "medium",
-       "unresolved"
+       "name_only"
       ],
       [
        1,
@@ -26519,13 +26822,11 @@
         11
        ],
        [
-        "csharp/Animals.cs",
-        "Animals.Dog",
-        "class",
-        11
+        "symbol",
+        "Ok"
        ],
        "medium",
-       "name_only"
+       "unresolved"
       ],
       [
        1,
@@ -26558,10 +26859,74 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "symbol",
+        "route:api/dogs"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ]
      ],
      "incoming": [],
      "outgoing": [
+      [
+       1,
+       "calls",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog",
+        "class",
+        11
+       ],
+       "medium",
+       "name_only",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog",
+        "class",
+        11
+       ]
+      ],
+      [
+       1,
+       "calls",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       "medium",
+       "name_only",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ]
+      ],
       [
        1,
        "calls",
@@ -26578,54 +26943,6 @@
        "medium",
        "unresolved",
        null
-      ],
-      [
-       1,
-       "calls",
-       [
-        "csharp/Api/Controllers.cs",
-        "Api.Controllers.DogsController.Create",
-        "method",
-        11
-       ],
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog.Speak",
-        "method",
-        20
-       ],
-       "medium",
-       "name_only",
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog.Speak",
-        "method",
-        20
-       ]
-      ],
-      [
-       1,
-       "calls",
-       [
-        "csharp/Api/Controllers.cs",
-        "Api.Controllers.DogsController.Create",
-        "method",
-        11
-       ],
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog",
-        "class",
-        11
-       ],
-       "medium",
-       "name_only",
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog",
-        "class",
-        11
-       ]
       ],
       [
        1,
@@ -26659,6 +26976,23 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "symbol",
+        "route:api/dogs"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
        null
       ]
      ],
@@ -26749,11 +27083,13 @@
         11
        ],
        [
-        "symbol",
-        "Ok"
+        "csharp/Animals.cs",
+        "Animals.Dog",
+        "class",
+        11
        ],
        "medium",
-       "unresolved"
+       "name_only"
       ],
       [
        1,
@@ -26783,13 +27119,11 @@
         11
        ],
        [
-        "csharp/Animals.cs",
-        "Animals.Dog",
-        "class",
-        11
+        "symbol",
+        "Ok"
        ],
        "medium",
-       "name_only"
+       "unresolved"
       ],
       [
        1,
@@ -26822,6 +27156,22 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "symbol",
+        "route:api/dogs"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ],
       [
        2,
@@ -26904,10 +27254,74 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       2,
+       "references",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       [
+        "symbol",
+        "route:api/dogs/{}"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ]
      ],
      "incoming": [],
      "outgoing": [
+      [
+       1,
+       "calls",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog",
+        "class",
+        11
+       ],
+       "medium",
+       "name_only",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog",
+        "class",
+        11
+       ]
+      ],
+      [
+       1,
+       "calls",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       "medium",
+       "name_only",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ]
+      ],
       [
        1,
        "calls",
@@ -26924,54 +27338,6 @@
        "medium",
        "unresolved",
        null
-      ],
-      [
-       1,
-       "calls",
-       [
-        "csharp/Api/Controllers.cs",
-        "Api.Controllers.DogsController.Create",
-        "method",
-        11
-       ],
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog.Speak",
-        "method",
-        20
-       ],
-       "medium",
-       "name_only",
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog.Speak",
-        "method",
-        20
-       ]
-      ],
-      [
-       1,
-       "calls",
-       [
-        "csharp/Api/Controllers.cs",
-        "Api.Controllers.DogsController.Create",
-        "method",
-        11
-       ],
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog",
-        "class",
-        11
-       ],
-       "medium",
-       "name_only",
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog",
-        "class",
-        11
-       ]
       ],
       [
        1,
@@ -27005,6 +27371,23 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "symbol",
+        "route:api/dogs"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
        null
       ],
       [
@@ -27097,6 +27480,23 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       2,
+       "references",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       [
+        "symbol",
+        "route:api/dogs/{}"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
        null
       ]
      ],
@@ -28371,17 +28771,87 @@
     "d1": {
      "callers": [],
      "callees": [],
-     "references": [],
+     "references": [
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController",
+        "class",
+        6
+       ],
+       [
+        "symbol",
+        "ApiController"
+       ],
+       "medium",
+       "unresolved"
+      ]
+     ],
      "incoming": [],
-     "outgoing": [],
+     "outgoing": [
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController",
+        "class",
+        6
+       ],
+       [
+        "symbol",
+        "ApiController"
+       ],
+       "medium",
+       "unresolved",
+       null
+      ]
+     ],
      "tests": []
     },
     "d3": {
      "callers": [],
      "callees": [],
-     "references": [],
+     "references": [
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController",
+        "class",
+        6
+       ],
+       [
+        "symbol",
+        "ApiController"
+       ],
+       "medium",
+       "unresolved"
+      ]
+     ],
      "incoming": [],
-     "outgoing": [],
+     "outgoing": [
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController",
+        "class",
+        6
+       ],
+       [
+        "symbol",
+        "ApiController"
+       ],
+       "medium",
+       "unresolved",
+       null
+      ]
+     ],
      "tests": []
     },
     "symbol": [
@@ -29061,6 +29531,22 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.List",
+        "method",
+        21
+       ],
+       [
+        "symbol",
+        "route:api/dogs/all"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ]
      ],
      "incoming": [
@@ -29090,30 +29576,6 @@
       ]
      ],
      "outgoing": [
-      [
-       1,
-       "calls",
-       [
-        "csharp/Api/Controllers.cs",
-        "Api.Controllers.DogsController.List",
-        "method",
-        24
-       ],
-       [
-        "go/svc/svc.go",
-        "svc.Run",
-        "function",
-        16
-       ],
-       "medium",
-       "name_only",
-       [
-        "go/svc/svc.go",
-        "svc.Run",
-        "function",
-        16
-       ]
-      ],
       [
        1,
        "references",
@@ -29147,6 +29609,47 @@
        "heuristic",
        "framework:csharp_route_attribute",
        null
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.List",
+        "method",
+        21
+       ],
+       [
+        "symbol",
+        "route:api/dogs/all"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
+       null
+      ],
+      [
+       1,
+       "calls",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.List",
+        "method",
+        24
+       ],
+       [
+        "go/svc/svc.go",
+        "svc.Run",
+        "function",
+        16
+       ],
+       "medium",
+       "name_only",
+       [
+        "go/svc/svc.go",
+        "svc.Run",
+        "function",
+        16
+       ]
       ]
      ],
      "tests": []
@@ -29345,6 +29848,22 @@
        "framework:csharp_route_attribute"
       ],
       [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.List",
+        "method",
+        21
+       ],
+       [
+        "symbol",
+        "route:api/dogs/all"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
+      ],
+      [
        2,
        "calls",
        [
@@ -29474,6 +29993,57 @@
       ]
      ],
      "outgoing": [
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.List",
+        "method",
+        21
+       ],
+       [
+        "symbol",
+        "Route"
+       ],
+       "medium",
+       "unresolved",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.List",
+        "method",
+        21
+       ],
+       [
+        "symbol",
+        "http_endpoint:ANY:api/dogs/all"
+       ],
+       "heuristic",
+       "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.List",
+        "method",
+        21
+       ],
+       [
+        "symbol",
+        "route:api/dogs/all"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
+       null
+      ],
       [
        1,
        "calls",
@@ -29619,40 +30189,6 @@
        ],
        "medium",
        "unresolved",
-       null
-      ],
-      [
-       1,
-       "references",
-       [
-        "csharp/Api/Controllers.cs",
-        "Api.Controllers.DogsController.List",
-        "method",
-        21
-       ],
-       [
-        "symbol",
-        "Route"
-       ],
-       "medium",
-       "unresolved",
-       null
-      ],
-      [
-       1,
-       "references",
-       [
-        "csharp/Api/Controllers.cs",
-        "Api.Controllers.DogsController.List",
-        "method",
-        21
-       ],
-       [
-        "symbol",
-        "http_endpoint:ANY:api/dogs/all"
-       ],
-       "heuristic",
-       "framework:csharp_route_attribute",
        null
       ]
      ],
@@ -31027,6 +31563,24 @@
        1,
        "calls",
        [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       "medium",
+       "name_only"
+      ],
+      [
+       1,
+       "calls",
+       [
         "csharp/Animals.cs",
         "Animals.Dog.Speak",
         "method",
@@ -31056,24 +31610,6 @@
        ],
        "medium",
        "unresolved"
-      ],
-      [
-       1,
-       "calls",
-       [
-        "csharp/Api/Controllers.cs",
-        "Api.Controllers.DogsController.Create",
-        "method",
-        11
-       ],
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog.Speak",
-        "method",
-        20
-       ],
-       "medium",
-       "name_only"
       ],
       [
        1,
@@ -31138,6 +31674,22 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       [
+        "symbol",
+        "route:api/dogs/{}"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ]
      ],
      "incoming": [
@@ -31257,6 +31809,23 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       [
+        "symbol",
+        "route:api/dogs/{}"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
        null
       ],
       [
@@ -31341,6 +31910,24 @@
        1,
        "calls",
        [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.Create",
+        "method",
+        11
+       ],
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       "medium",
+       "name_only"
+      ],
+      [
+       1,
+       "calls",
+       [
         "csharp/Animals.cs",
         "Animals.Dog.Speak",
         "method",
@@ -31370,24 +31957,6 @@
        ],
        "medium",
        "unresolved"
-      ],
-      [
-       1,
-       "calls",
-       [
-        "csharp/Api/Controllers.cs",
-        "Api.Controllers.DogsController.Create",
-        "method",
-        11
-       ],
-       [
-        "csharp/Animals.cs",
-        "Animals.Dog.Speak",
-        "method",
-        20
-       ],
-       "medium",
-       "name_only"
       ],
       [
        1,
@@ -31452,6 +32021,22 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       [
+        "symbol",
+        "route:api/dogs/{}"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ]
      ],
      "incoming": [
@@ -31571,6 +32156,23 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "csharp/Animals.cs",
+        "Animals.Dog.Speak",
+        "method",
+        20
+       ],
+       [
+        "symbol",
+        "route:api/dogs/{}"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
        null
       ],
       [
@@ -36264,6 +36866,22 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       2,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.List",
+        "method",
+        21
+       ],
+       [
+        "symbol",
+        "route:api/dogs/all"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ]
      ],
      "incoming": [],
@@ -36341,6 +36959,23 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       2,
+       "references",
+       [
+        "csharp/Api/Controllers.cs",
+        "Api.Controllers.DogsController.List",
+        "method",
+        21
+       ],
+       [
+        "symbol",
+        "route:api/dogs/all"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
        null
       ]
      ],
@@ -38974,6 +39609,22 @@
        ],
        "medium",
        "unresolved"
+      ],
+      [
+       1,
+       "references",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.create_kennel",
+        "function",
+        26
+       ],
+       [
+        "symbol",
+        "route:kennels"
+       ],
+       "heuristic",
+       "framework:python_composed_route"
       ]
      ],
      "incoming": [],
@@ -39027,6 +39678,23 @@
        ],
        "medium",
        "unresolved",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.create_kennel",
+        "function",
+        26
+       ],
+       [
+        "symbol",
+        "route:kennels"
+       ],
+       "heuristic",
+       "framework:python_composed_route",
        null
       ]
      ],
@@ -39100,6 +39768,22 @@
        ],
        "medium",
        "unresolved"
+      ],
+      [
+       1,
+       "references",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.create_kennel",
+        "function",
+        26
+       ],
+       [
+        "symbol",
+        "route:kennels"
+       ],
+       "heuristic",
+       "framework:python_composed_route"
       ]
      ],
      "incoming": [],
@@ -39153,6 +39837,23 @@
        ],
        "medium",
        "unresolved",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.create_kennel",
+        "function",
+        26
+       ],
+       [
+        "symbol",
+        "route:kennels"
+       ],
+       "heuristic",
+       "framework:python_composed_route",
        null
       ]
      ],
@@ -39248,12 +39949,12 @@
        ],
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel",
-        "class",
-        7
+        "python.pkg.service.Kennel.add",
+        "method",
+        10
        ],
-       "exact",
-       "same_file_name"
+       "high",
+       "same_file_name_ambiguous"
       ],
       [
        1,
@@ -39266,12 +39967,12 @@
        ],
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel.add",
-        "method",
-        10
+        "python.pkg.service.Kennel",
+        "class",
+        7
        ],
-       "high",
-       "same_file_name_ambiguous"
+       "exact",
+       "same_file_name"
       ],
       [
        1,
@@ -39320,13 +40021,10 @@
        ],
        "medium",
        "unresolved"
-      ]
-     ],
-     "incoming": [],
-     "outgoing": [
+      ],
       [
        1,
-       "calls",
+       "references",
        [
         "python/pkg/service.py",
         "python.pkg.service.get_kennel",
@@ -39334,20 +40032,15 @@
         21
        ],
        [
-        "python/pkg/service.py",
-        "python.pkg.service.Kennel",
-        "class",
-        7
+        "symbol",
+        "route:kennels/{}"
        ],
-       "exact",
-       "same_file_name",
-       [
-        "python/pkg/service.py",
-        "python.pkg.service.Kennel",
-        "class",
-        7
-       ]
-      ],
+       "heuristic",
+       "framework:python_composed_route"
+      ]
+     ],
+     "incoming": [],
+     "outgoing": [
       [
        1,
        "calls",
@@ -39370,6 +40063,30 @@
         "python.pkg.service.Kennel.add",
         "method",
         10
+       ]
+      ],
+      [
+       1,
+       "calls",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.get_kennel",
+        "function",
+        21
+       ],
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.Kennel",
+        "class",
+        7
+       ],
+       "exact",
+       "same_file_name",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.Kennel",
+        "class",
+        7
        ]
       ],
       [
@@ -39421,6 +40138,23 @@
        ],
        "medium",
        "unresolved",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.get_kennel",
+        "function",
+        21
+       ],
+       [
+        "symbol",
+        "route:kennels/{}"
+       ],
+       "heuristic",
+       "framework:python_composed_route",
        null
       ]
      ],
@@ -39550,12 +40284,12 @@
        ],
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel",
-        "class",
-        7
+        "python.pkg.service.Kennel.add",
+        "method",
+        10
        ],
-       "exact",
-       "same_file_name"
+       "high",
+       "same_file_name_ambiguous"
       ],
       [
        1,
@@ -39568,12 +40302,12 @@
        ],
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel.add",
-        "method",
-        10
+        "python.pkg.service.Kennel",
+        "class",
+        7
        ],
-       "high",
-       "same_file_name_ambiguous"
+       "exact",
+       "same_file_name"
       ],
       [
        1,
@@ -39624,22 +40358,20 @@
        "unresolved"
       ],
       [
-       2,
-       "calls",
+       1,
+       "references",
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel.add",
-        "method",
-        10
-       ],
-       [
-        "java/Animals.java",
-        "com.example.animals.Dog.bark",
-        "method",
+        "python.pkg.service.get_kennel",
+        "function",
         21
        ],
-       "medium",
-       "name_only"
+       [
+        "symbol",
+        "route:kennels/{}"
+       ],
+       "heuristic",
+       "framework:python_composed_route"
       ],
       [
        2,
@@ -39678,6 +40410,24 @@
        "cross_file_qualified"
       ],
       [
+       2,
+       "calls",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.Kennel.add",
+        "method",
+        10
+       ],
+       [
+        "java/Animals.java",
+        "com.example.animals.Dog.bark",
+        "method",
+        21
+       ],
+       "medium",
+       "name_only"
+      ],
+      [
        3,
        "calls",
        [
@@ -39709,17 +40459,17 @@
        ],
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel",
-        "class",
-        7
+        "python.pkg.service.Kennel.add",
+        "method",
+        10
        ],
-       "exact",
-       "same_file_name",
+       "high",
+       "same_file_name_ambiguous",
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel",
-        "class",
-        7
+        "python.pkg.service.Kennel.add",
+        "method",
+        10
        ]
       ],
       [
@@ -39733,17 +40483,17 @@
        ],
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel.add",
-        "method",
-        10
+        "python.pkg.service.Kennel",
+        "class",
+        7
        ],
-       "high",
-       "same_file_name_ambiguous",
+       "exact",
+       "same_file_name",
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel.add",
-        "method",
-        10
+        "python.pkg.service.Kennel",
+        "class",
+        7
        ]
       ],
       [
@@ -39798,28 +40548,21 @@
        null
       ],
       [
-       2,
-       "calls",
+       1,
+       "references",
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel.add",
-        "method",
-        10
-       ],
-       [
-        "java/Animals.java",
-        "com.example.animals.Dog.bark",
-        "method",
+        "python.pkg.service.get_kennel",
+        "function",
         21
        ],
-       "medium",
-       "name_only",
        [
-        "java/Animals.java",
-        "com.example.animals.Dog.bark",
-        "method",
-        21
-       ]
+        "symbol",
+        "route:kennels/{}"
+       ],
+       "heuristic",
+       "framework:python_composed_route",
+       null
       ],
       [
        2,
@@ -39867,6 +40610,30 @@
         "animals.Dog",
         "struct",
         12
+       ]
+      ],
+      [
+       2,
+       "calls",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.Kennel.add",
+        "method",
+        10
+       ],
+       [
+        "java/Animals.java",
+        "com.example.animals.Dog.bark",
+        "method",
+        21
+       ],
+       "medium",
+       "name_only",
+       [
+        "java/Animals.java",
+        "com.example.animals.Dog.bark",
+        "method",
+        21
        ]
       ],
       [
@@ -44381,9 +45148,9 @@
        ],
        [
         "python/animals.py",
-        "python.animals.Dog.bark",
-        "method",
-        17
+        "python.animals.Dog",
+        "class",
+        9
        ],
        "exact",
        "same_file_name"
@@ -44399,9 +45166,9 @@
        ],
        [
         "python/animals.py",
-        "python.animals.Dog",
-        "class",
-        9
+        "python.animals.Dog.bark",
+        "method",
+        17
        ],
        "exact",
        "same_file_name"
@@ -44437,6 +45204,22 @@
        ],
        "medium",
        "unresolved"
+      ],
+      [
+       1,
+       "references",
+       [
+        "python/animals.py",
+        "python.animals.list_dogs",
+        "function",
+        25
+       ],
+       [
+        "symbol",
+        "route:dogs"
+       ],
+       "heuristic",
+       "framework:python_composed_route"
       ]
      ],
      "incoming": [],
@@ -44452,17 +45235,17 @@
        ],
        [
         "python/animals.py",
-        "python.animals.Dog.bark",
-        "method",
-        17
+        "python.animals.Dog",
+        "class",
+        9
        ],
        "exact",
        "same_file_name",
        [
         "python/animals.py",
-        "python.animals.Dog.bark",
-        "method",
-        17
+        "python.animals.Dog",
+        "class",
+        9
        ]
       ],
       [
@@ -44476,17 +45259,17 @@
        ],
        [
         "python/animals.py",
-        "python.animals.Dog",
-        "class",
-        9
+        "python.animals.Dog.bark",
+        "method",
+        17
        ],
        "exact",
        "same_file_name",
        [
         "python/animals.py",
-        "python.animals.Dog",
-        "class",
-        9
+        "python.animals.Dog.bark",
+        "method",
+        17
        ]
       ],
       [
@@ -44521,6 +45304,23 @@
        ],
        "medium",
        "unresolved",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "python/animals.py",
+        "python.animals.list_dogs",
+        "function",
+        25
+       ],
+       [
+        "symbol",
+        "route:dogs"
+       ],
+       "heuristic",
+       "framework:python_composed_route",
        null
       ]
      ],
@@ -44596,9 +45396,9 @@
        ],
        [
         "python/animals.py",
-        "python.animals.Dog.bark",
-        "method",
-        17
+        "python.animals.Dog",
+        "class",
+        9
        ],
        "exact",
        "same_file_name"
@@ -44614,9 +45414,9 @@
        ],
        [
         "python/animals.py",
-        "python.animals.Dog",
-        "class",
-        9
+        "python.animals.Dog.bark",
+        "method",
+        17
        ],
        "exact",
        "same_file_name"
@@ -44654,6 +45454,22 @@
        "unresolved"
       ],
       [
+       1,
+       "references",
+       [
+        "python/animals.py",
+        "python.animals.list_dogs",
+        "function",
+        25
+       ],
+       [
+        "symbol",
+        "route:dogs"
+       ],
+       "heuristic",
+       "framework:python_composed_route"
+      ],
+      [
        2,
        "calls",
        [
@@ -44685,17 +45501,17 @@
        ],
        [
         "python/animals.py",
-        "python.animals.Dog.bark",
-        "method",
-        17
+        "python.animals.Dog",
+        "class",
+        9
        ],
        "exact",
        "same_file_name",
        [
         "python/animals.py",
-        "python.animals.Dog.bark",
-        "method",
-        17
+        "python.animals.Dog",
+        "class",
+        9
        ]
       ],
       [
@@ -44709,17 +45525,17 @@
        ],
        [
         "python/animals.py",
-        "python.animals.Dog",
-        "class",
-        9
+        "python.animals.Dog.bark",
+        "method",
+        17
        ],
        "exact",
        "same_file_name",
        [
         "python/animals.py",
-        "python.animals.Dog",
-        "class",
-        9
+        "python.animals.Dog.bark",
+        "method",
+        17
        ]
       ],
       [
@@ -44754,6 +45570,23 @@
        ],
        "medium",
        "unresolved",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "python/animals.py",
+        "python.animals.list_dogs",
+        "function",
+        25
+       ],
+       [
+        "symbol",
+        "route:dogs"
+       ],
+       "heuristic",
+       "framework:python_composed_route",
        null
       ],
       [
@@ -47884,9 +48717,9 @@
        ],
        [
         "python/animals.py",
-        "python.animals.Dog.bark",
-        "method",
-        17
+        "python.animals.Dog",
+        "class",
+        9
        ],
        "exact",
        "same_file_name"
@@ -47902,9 +48735,9 @@
        ],
        [
         "python/animals.py",
-        "python.animals.Dog",
-        "class",
-        9
+        "python.animals.Dog.bark",
+        "method",
+        17
        ],
        "exact",
        "same_file_name"
@@ -47940,6 +48773,22 @@
        ],
        "medium",
        "unresolved"
+      ],
+      [
+       1,
+       "references",
+       [
+        "python/animals.py",
+        "python.animals.list_dogs",
+        "function",
+        25
+       ],
+       [
+        "symbol",
+        "route:dogs"
+       ],
+       "heuristic",
+       "framework:python_composed_route"
       ]
      ],
      "incoming": [],
@@ -47955,17 +48804,17 @@
        ],
        [
         "python/animals.py",
-        "python.animals.Dog.bark",
-        "method",
-        17
+        "python.animals.Dog",
+        "class",
+        9
        ],
        "exact",
        "same_file_name",
        [
         "python/animals.py",
-        "python.animals.Dog.bark",
-        "method",
-        17
+        "python.animals.Dog",
+        "class",
+        9
        ]
       ],
       [
@@ -47979,17 +48828,17 @@
        ],
        [
         "python/animals.py",
-        "python.animals.Dog",
-        "class",
-        9
+        "python.animals.Dog.bark",
+        "method",
+        17
        ],
        "exact",
        "same_file_name",
        [
         "python/animals.py",
-        "python.animals.Dog",
-        "class",
-        9
+        "python.animals.Dog.bark",
+        "method",
+        17
        ]
       ],
       [
@@ -48024,6 +48873,23 @@
        ],
        "medium",
        "unresolved",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "python/animals.py",
+        "python.animals.list_dogs",
+        "function",
+        25
+       ],
+       [
+        "symbol",
+        "route:dogs"
+       ],
+       "heuristic",
+       "framework:python_composed_route",
        null
       ]
      ],
@@ -48099,9 +48965,9 @@
        ],
        [
         "python/animals.py",
-        "python.animals.Dog.bark",
-        "method",
-        17
+        "python.animals.Dog",
+        "class",
+        9
        ],
        "exact",
        "same_file_name"
@@ -48117,9 +48983,9 @@
        ],
        [
         "python/animals.py",
-        "python.animals.Dog",
-        "class",
-        9
+        "python.animals.Dog.bark",
+        "method",
+        17
        ],
        "exact",
        "same_file_name"
@@ -48157,6 +49023,22 @@
        "unresolved"
       ],
       [
+       1,
+       "references",
+       [
+        "python/animals.py",
+        "python.animals.list_dogs",
+        "function",
+        25
+       ],
+       [
+        "symbol",
+        "route:dogs"
+       ],
+       "heuristic",
+       "framework:python_composed_route"
+      ],
+      [
        2,
        "calls",
        [
@@ -48188,17 +49070,17 @@
        ],
        [
         "python/animals.py",
-        "python.animals.Dog.bark",
-        "method",
-        17
+        "python.animals.Dog",
+        "class",
+        9
        ],
        "exact",
        "same_file_name",
        [
         "python/animals.py",
-        "python.animals.Dog.bark",
-        "method",
-        17
+        "python.animals.Dog",
+        "class",
+        9
        ]
       ],
       [
@@ -48212,17 +49094,17 @@
        ],
        [
         "python/animals.py",
-        "python.animals.Dog",
-        "class",
-        9
+        "python.animals.Dog.bark",
+        "method",
+        17
        ],
        "exact",
        "same_file_name",
        [
         "python/animals.py",
-        "python.animals.Dog",
-        "class",
-        9
+        "python.animals.Dog.bark",
+        "method",
+        17
        ]
       ],
       [
@@ -48257,6 +49139,23 @@
        ],
        "medium",
        "unresolved",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "python/animals.py",
+        "python.animals.list_dogs",
+        "function",
+        25
+       ],
+       [
+        "symbol",
+        "route:dogs"
+       ],
+       "heuristic",
+       "framework:python_composed_route",
        null
       ],
       [
@@ -49845,6 +50744,22 @@
        ],
        "medium",
        "unresolved"
+      ],
+      [
+       1,
+       "references",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.create_kennel",
+        "function",
+        26
+       ],
+       [
+        "symbol",
+        "route:kennels"
+       ],
+       "heuristic",
+       "framework:python_composed_route"
       ]
      ],
      "incoming": [],
@@ -49898,6 +50813,23 @@
        ],
        "medium",
        "unresolved",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.create_kennel",
+        "function",
+        26
+       ],
+       [
+        "symbol",
+        "route:kennels"
+       ],
+       "heuristic",
+       "framework:python_composed_route",
        null
       ]
      ],
@@ -49971,6 +50903,22 @@
        ],
        "medium",
        "unresolved"
+      ],
+      [
+       1,
+       "references",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.create_kennel",
+        "function",
+        26
+       ],
+       [
+        "symbol",
+        "route:kennels"
+       ],
+       "heuristic",
+       "framework:python_composed_route"
       ]
      ],
      "incoming": [],
@@ -50024,6 +50972,23 @@
        ],
        "medium",
        "unresolved",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.create_kennel",
+        "function",
+        26
+       ],
+       [
+        "symbol",
+        "route:kennels"
+       ],
+       "heuristic",
+       "framework:python_composed_route",
        null
       ]
      ],
@@ -50092,12 +51057,12 @@
        ],
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel",
-        "class",
-        7
+        "python.pkg.service.Kennel.add",
+        "method",
+        10
        ],
-       "exact",
-       "same_file_name"
+       "high",
+       "same_file_name_ambiguous"
       ],
       [
        1,
@@ -50110,12 +51075,12 @@
        ],
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel.add",
-        "method",
-        10
+        "python.pkg.service.Kennel",
+        "class",
+        7
        ],
-       "high",
-       "same_file_name_ambiguous"
+       "exact",
+       "same_file_name"
       ],
       [
        1,
@@ -50164,13 +51129,10 @@
        ],
        "medium",
        "unresolved"
-      ]
-     ],
-     "incoming": [],
-     "outgoing": [
+      ],
       [
        1,
-       "calls",
+       "references",
        [
         "python/pkg/service.py",
         "python.pkg.service.get_kennel",
@@ -50178,20 +51140,15 @@
         21
        ],
        [
-        "python/pkg/service.py",
-        "python.pkg.service.Kennel",
-        "class",
-        7
+        "symbol",
+        "route:kennels/{}"
        ],
-       "exact",
-       "same_file_name",
-       [
-        "python/pkg/service.py",
-        "python.pkg.service.Kennel",
-        "class",
-        7
-       ]
-      ],
+       "heuristic",
+       "framework:python_composed_route"
+      ]
+     ],
+     "incoming": [],
+     "outgoing": [
       [
        1,
        "calls",
@@ -50214,6 +51171,30 @@
         "python.pkg.service.Kennel.add",
         "method",
         10
+       ]
+      ],
+      [
+       1,
+       "calls",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.get_kennel",
+        "function",
+        21
+       ],
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.Kennel",
+        "class",
+        7
+       ],
+       "exact",
+       "same_file_name",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.Kennel",
+        "class",
+        7
        ]
       ],
       [
@@ -50265,6 +51246,23 @@
        ],
        "medium",
        "unresolved",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.get_kennel",
+        "function",
+        21
+       ],
+       [
+        "symbol",
+        "route:kennels/{}"
+       ],
+       "heuristic",
+       "framework:python_composed_route",
        null
       ]
      ],
@@ -50394,12 +51392,12 @@
        ],
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel",
-        "class",
-        7
+        "python.pkg.service.Kennel.add",
+        "method",
+        10
        ],
-       "exact",
-       "same_file_name"
+       "high",
+       "same_file_name_ambiguous"
       ],
       [
        1,
@@ -50412,12 +51410,12 @@
        ],
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel.add",
-        "method",
-        10
+        "python.pkg.service.Kennel",
+        "class",
+        7
        ],
-       "high",
-       "same_file_name_ambiguous"
+       "exact",
+       "same_file_name"
       ],
       [
        1,
@@ -50468,22 +51466,20 @@
        "unresolved"
       ],
       [
-       2,
-       "calls",
+       1,
+       "references",
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel.add",
-        "method",
-        10
-       ],
-       [
-        "java/Animals.java",
-        "com.example.animals.Dog.bark",
-        "method",
+        "python.pkg.service.get_kennel",
+        "function",
         21
        ],
-       "medium",
-       "name_only"
+       [
+        "symbol",
+        "route:kennels/{}"
+       ],
+       "heuristic",
+       "framework:python_composed_route"
       ],
       [
        2,
@@ -50522,6 +51518,24 @@
        "cross_file_qualified"
       ],
       [
+       2,
+       "calls",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.Kennel.add",
+        "method",
+        10
+       ],
+       [
+        "java/Animals.java",
+        "com.example.animals.Dog.bark",
+        "method",
+        21
+       ],
+       "medium",
+       "name_only"
+      ],
+      [
        3,
        "calls",
        [
@@ -50553,17 +51567,17 @@
        ],
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel",
-        "class",
-        7
+        "python.pkg.service.Kennel.add",
+        "method",
+        10
        ],
-       "exact",
-       "same_file_name",
+       "high",
+       "same_file_name_ambiguous",
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel",
-        "class",
-        7
+        "python.pkg.service.Kennel.add",
+        "method",
+        10
        ]
       ],
       [
@@ -50577,17 +51591,17 @@
        ],
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel.add",
-        "method",
-        10
+        "python.pkg.service.Kennel",
+        "class",
+        7
        ],
-       "high",
-       "same_file_name_ambiguous",
+       "exact",
+       "same_file_name",
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel.add",
-        "method",
-        10
+        "python.pkg.service.Kennel",
+        "class",
+        7
        ]
       ],
       [
@@ -50642,28 +51656,21 @@
        null
       ],
       [
-       2,
-       "calls",
+       1,
+       "references",
        [
         "python/pkg/service.py",
-        "python.pkg.service.Kennel.add",
-        "method",
-        10
-       ],
-       [
-        "java/Animals.java",
-        "com.example.animals.Dog.bark",
-        "method",
+        "python.pkg.service.get_kennel",
+        "function",
         21
        ],
-       "medium",
-       "name_only",
        [
-        "java/Animals.java",
-        "com.example.animals.Dog.bark",
-        "method",
-        21
-       ]
+        "symbol",
+        "route:kennels/{}"
+       ],
+       "heuristic",
+       "framework:python_composed_route",
+       null
       ],
       [
        2,
@@ -50711,6 +51718,30 @@
         "animals.Dog",
         "struct",
         12
+       ]
+      ],
+      [
+       2,
+       "calls",
+       [
+        "python/pkg/service.py",
+        "python.pkg.service.Kennel.add",
+        "method",
+        10
+       ],
+       [
+        "java/Animals.java",
+        "com.example.animals.Dog.bark",
+        "method",
+        21
+       ],
+       "medium",
+       "name_only",
+       [
+        "java/Animals.java",
+        "com.example.animals.Dog.bark",
+        "method",
+        21
        ]
       ],
       [
@@ -59675,6 +60706,22 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       1,
+       "references",
+       [
+        "web/Payments.cs",
+        "Shop.Payments.PaymentGateway.Charge",
+        "method",
+        5
+       ],
+       [
+        "symbol",
+        "route:api/payments/charge"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ]
      ],
      "incoming": [],
@@ -59711,6 +60758,23 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "web/Payments.cs",
+        "Shop.Payments.PaymentGateway.Charge",
+        "method",
+        5
+       ],
+       [
+        "symbol",
+        "route:api/payments/charge"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
        null
       ]
      ],
@@ -59751,6 +60815,22 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       1,
+       "references",
+       [
+        "web/Payments.cs",
+        "Shop.Payments.PaymentGateway.Charge",
+        "method",
+        5
+       ],
+       [
+        "symbol",
+        "route:api/payments/charge"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ]
      ],
      "incoming": [],
@@ -59787,6 +60867,23 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "web/Payments.cs",
+        "Shop.Payments.PaymentGateway.Charge",
+        "method",
+        5
+       ],
+       [
+        "symbol",
+        "route:api/payments/charge"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
        null
       ]
      ],
@@ -60027,6 +61124,22 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       1,
+       "references",
+       [
+        "web/Payments.cs",
+        "Shop.Payments.PaymentGateway.Charge",
+        "method",
+        5
+       ],
+       [
+        "symbol",
+        "route:api/payments/charge"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ]
      ],
      "incoming": [],
@@ -60063,6 +61176,23 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "web/Payments.cs",
+        "Shop.Payments.PaymentGateway.Charge",
+        "method",
+        5
+       ],
+       [
+        "symbol",
+        "route:api/payments/charge"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
        null
       ]
      ],
@@ -60103,6 +61233,22 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute"
+      ],
+      [
+       1,
+       "references",
+       [
+        "web/Payments.cs",
+        "Shop.Payments.PaymentGateway.Charge",
+        "method",
+        5
+       ],
+       [
+        "symbol",
+        "route:api/payments/charge"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route"
       ]
      ],
      "incoming": [],
@@ -60139,6 +61285,23 @@
        ],
        "heuristic",
        "framework:csharp_route_attribute",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "web/Payments.cs",
+        "Shop.Payments.PaymentGateway.Charge",
+        "method",
+        5
+       ],
+       [
+        "symbol",
+        "route:api/payments/charge"
+       ],
+       "heuristic",
+       "framework:csharp_composed_route",
        null
       ]
      ],
@@ -61092,6 +62255,22 @@
        ],
        "medium",
        "unresolved"
+      ],
+      [
+       1,
+       "references",
+       [
+        "src/billing/invoice_service.py",
+        "src.billing.invoice_service.void_endpoint",
+        "function",
+        17
+       ],
+       [
+        "symbol",
+        "route:api/invoices/{}/void"
+       ],
+       "heuristic",
+       "framework:python_composed_route"
       ]
      ],
      "incoming": [],
@@ -61128,6 +62307,23 @@
        ],
        "medium",
        "unresolved",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "src/billing/invoice_service.py",
+        "src.billing.invoice_service.void_endpoint",
+        "function",
+        17
+       ],
+       [
+        "symbol",
+        "route:api/invoices/{}/void"
+       ],
+       "heuristic",
+       "framework:python_composed_route",
        null
       ]
      ],
@@ -61168,6 +62364,22 @@
        ],
        "medium",
        "unresolved"
+      ],
+      [
+       1,
+       "references",
+       [
+        "src/billing/invoice_service.py",
+        "src.billing.invoice_service.void_endpoint",
+        "function",
+        17
+       ],
+       [
+        "symbol",
+        "route:api/invoices/{}/void"
+       ],
+       "heuristic",
+       "framework:python_composed_route"
       ]
      ],
      "incoming": [],
@@ -61204,6 +62416,23 @@
        ],
        "medium",
        "unresolved",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "src/billing/invoice_service.py",
+        "src.billing.invoice_service.void_endpoint",
+        "function",
+        17
+       ],
+       [
+        "symbol",
+        "route:api/invoices/{}/void"
+       ],
+       "heuristic",
+       "framework:python_composed_route",
        null
       ]
      ],
@@ -61548,6 +62777,22 @@
        ],
        "medium",
        "unresolved"
+      ],
+      [
+       1,
+       "references",
+       [
+        "src/billing/invoice_service.py",
+        "src.billing.invoice_service.void_endpoint",
+        "function",
+        17
+       ],
+       [
+        "symbol",
+        "route:api/invoices/{}/void"
+       ],
+       "heuristic",
+       "framework:python_composed_route"
       ]
      ],
      "incoming": [],
@@ -61584,6 +62829,23 @@
        ],
        "medium",
        "unresolved",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "src/billing/invoice_service.py",
+        "src.billing.invoice_service.void_endpoint",
+        "function",
+        17
+       ],
+       [
+        "symbol",
+        "route:api/invoices/{}/void"
+       ],
+       "heuristic",
+       "framework:python_composed_route",
        null
       ]
      ],
@@ -61624,6 +62886,22 @@
        ],
        "medium",
        "unresolved"
+      ],
+      [
+       1,
+       "references",
+       [
+        "src/billing/invoice_service.py",
+        "src.billing.invoice_service.void_endpoint",
+        "function",
+        17
+       ],
+       [
+        "symbol",
+        "route:api/invoices/{}/void"
+       ],
+       "heuristic",
+       "framework:python_composed_route"
       ]
      ],
      "incoming": [],
@@ -61660,6 +62938,23 @@
        ],
        "medium",
        "unresolved",
+       null
+      ],
+      [
+       1,
+       "references",
+       [
+        "src/billing/invoice_service.py",
+        "src.billing.invoice_service.void_endpoint",
+        "function",
+        17
+       ],
+       [
+        "symbol",
+        "route:api/invoices/{}/void"
+       ],
+       "heuristic",
+       "framework:python_composed_route",
        null
       ]
      ],

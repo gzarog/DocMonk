@@ -7,6 +7,7 @@ pub mod ids;
 pub mod models;
 pub mod paths;
 pub mod security;
+pub mod urls;
 pub mod version;
 
 pub use errors::{DocMonkError, ErrorKind};
