@@ -41,7 +41,10 @@ against its first parent) and decides:
 - **cross_platform** (Windows/macOS Rust jobs): everything selected for
   **installer**, plus the Rust sources with platform-conditional code
   (`cfg(windows)`, `cfg(unix)`, `target_os`, ...), listed in the
-  classifier's `platform_source`
+  classifier's `platform_source`, **and** path-sensitive endpoint/retrieval
+  components and fixtures even when they contain no platform-specific `cfg`
+  guards. These use filesystem paths whose canonical representation differs
+  on Windows, macOS, and Linux
 - **all three**: `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, any crate
   manifest, `.github/workflows/**`, `.github/actions/**`, the classifier itself
 
@@ -52,6 +55,11 @@ platform-conditional code and fails when one is missing from
 Windows/macOS jobs. Any error (diff, classifier, self-test) fails
 `Detect changes`, and the CI gate fails with it. A broken filter cannot
 skip a job and still go green.
+
+Endpoint and exact-occurrence retrieval changes (including source/query paths
+and `fixtures/endpoints/**`) select Windows and macOS Rust checks on pull
+requests. This catches cross-platform temporary-directory alias and
+canonicalization mistakes before merging; classifier self-tests cover the paths.
 
 ## CI gate
 

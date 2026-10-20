@@ -40,6 +40,22 @@ classify() {
     case "$path" in
       Dockerfile | .dockerignore | docker/* | scripts/fetch_models.sh) docker=true ;;
     esac
+    # Endpoint/exact-occurrence retrieval uses portable source paths and
+    # filesystem fixtures without platform-specific cfg guards. Changes here
+    # must run Windows/macOS PR tests, not only the Linux suite.
+    case "$path" in
+      crates/docmonk-service/src/query.rs | crates/docmonk-service/src/evidence.rs \
+        | crates/docmonk-service/tests/endpoints.rs \
+        | crates/docmonk-service/tests/exact_parity.rs \
+        | crates/docmonk-retrieval/src/exact.rs \
+        | crates/docmonk-retrieval/src/explore.rs \
+        | crates/docmonk-retrieval/tests/endpoints.rs \
+        | crates/docmonk-code/src/extract.rs \
+        | crates/docmonk-code/src/framework.rs \
+        | crates/docmonk-code/src/process.rs \
+        | crates/docmonk-core/src/urls.rs | fixtures/endpoints/*)
+        cross_platform=true ;;
+    esac
     if platform_source "$path"; then
       cross_platform=true
     fi
@@ -76,6 +92,11 @@ expect "crates/docmonk-cli/Cargo.toml" "installer=true docker=true cross_platfor
 expect ".github/workflows/rust.yml" "installer=true docker=true cross_platform=true"
 expect "crates/docmonk-core/src/paths.rs" "installer=false docker=false cross_platform=true"
 expect "crates/docmonk-service/src/daemon.rs" "installer=false docker=false cross_platform=true"
+expect "crates/docmonk-service/tests/endpoints.rs" "installer=false docker=false cross_platform=true"
+expect "crates/docmonk-retrieval/src/exact.rs" "installer=false docker=false cross_platform=true"
+expect "crates/docmonk-retrieval/src/explore.rs" "installer=false docker=false cross_platform=true"
+expect "crates/docmonk-code/src/framework.rs" "installer=false docker=false cross_platform=true"
+expect "fixtures/endpoints/src/Clients/ImageClient.cs" "installer=false docker=false cross_platform=true"
 expect "src/a.rs\nDockerfile\ninstall.sh" "installer=true docker=true cross_platform=true"
 
 # Every tracked Rust file with platform-conditional code selects

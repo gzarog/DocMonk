@@ -60,14 +60,18 @@ fn setup() -> Env {
     )
     .unwrap();
     let mut c = docmonk_service::sources::catalog(&home).unwrap();
-    let a = c.add(ra.to_str().unwrap(), vec![], vec![]).unwrap().id;
+    let registered_a = c.add(ra.to_str().unwrap(), vec![], vec![]).unwrap();
+    // Registration resolves symlinks (for example /var -> /private/var on macOS).
+    // Compare explore paths against the same canonical source root.
+    let root_a = std::path::PathBuf::from(&registered_a.path);
+    let a = registered_a.id;
     c.add(rb.to_str().unwrap(), vec![], vec![]).unwrap();
     index(&home);
     Env {
         _d: d,
         home,
         a,
-        root_a: ra,
+        root_a,
     }
 }
 
@@ -167,9 +171,14 @@ fn explore_explain_is_opt_in_and_reconciles() {
     assert!(plain.get("diagnostics").is_none());
     assert_eq!(plain["intent"], "endpoint_reference");
     // Paths are absolute, under the right source.
-    assert!(classes(&plain)
-        .iter()
-        .any(|(c, p)| c == "direct_exact_literal" && Path::new(p).starts_with(&env.root_a)));
+    let occurrences = classes(&plain);
+    assert!(
+        occurrences
+            .iter()
+            .any(|(c, p)| { c == "direct_exact_literal" && Path::new(p).starts_with(&env.root_a) }),
+        "expected a direct literal under canonical source {:?}; got {occurrences:?}",
+        env.root_a,
+    );
     let v = explore(&env, &cfg, Q01, true);
     let d = &v["diagnostics"];
     let service: Vec<&str> = d["service_stages"]
