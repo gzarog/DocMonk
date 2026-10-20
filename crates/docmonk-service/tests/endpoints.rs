@@ -173,9 +173,9 @@ fn explore_explain_is_opt_in_and_reconciles() {
     // Paths are absolute, under the right source.
     let occurrences = classes(&plain);
     assert!(
-        occurrences.iter().any(|(c, p)| {
-            c == "direct_exact_literal" && Path::new(p).starts_with(&env.root_a)
-        }),
+        occurrences
+            .iter()
+            .any(|(c, p)| { c == "direct_exact_literal" && Path::new(p).starts_with(&env.root_a) }),
         "expected a direct literal under canonical source {:?}; got {occurrences:?}",
         env.root_a,
     );
