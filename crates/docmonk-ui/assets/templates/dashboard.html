@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-<h1>Dashboard</h1>
+<div class="spread dashboard-heading"><div><h1>Overview</h1><p class="muted">Your knowledge workspace at a glance</p></div><a class="btn primary" href="/search">Search knowledge →</a></div>
 
 {% set sm = status.summary %}
 {% set hc = {"healthy": "ok", "degraded": "warn", "failed": "danger"} %}
@@ -27,7 +27,7 @@
 
 <div class="panel">
   <div class="spread">
-    <h2 style="margin:0">Runtime</h2>
+    <h2 style="margin:0">Live indexing activity</h2>
     {% if daemon.running %}
       <span class="badge ok">Daemon running (pid {{ daemon.pid }})</span>
     {% else %}
@@ -54,7 +54,7 @@
   {% endif %}
 </div>
 
-<h2>Sources</h2>
+<div class="spread"><h2>Sources</h2><a class="btn small" href="/sources">Manage sources →</a></div>
 <div class="panel">
   <table>
     <thead><tr><th>Source</th><th>State</th><th>Published</th><th>Failed</th><th>Retrying</th><th>Last scan</th></tr></thead>
@@ -94,7 +94,7 @@
 </div>
 {% endif %}
 
-<h2>Latest indexing errors</h2>
+<div class="spread"><h2>Latest indexing errors</h2><a class="btn small" href="/indexing">Indexing details →</a></div>
 <div class="panel">
   {% if status.recent_errors %}
   <table>

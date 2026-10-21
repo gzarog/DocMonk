@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
   <title>{% block title %}DocMonk Admin{% endblock %} — DocMonk</title>
   <link rel="stylesheet" href="/static/css/app.css">
   <script src="/static/js/htmx.min.js" defer></script>
@@ -10,22 +11,47 @@
 <!-- Every HTMX request carries the CSRF token as X-CSRF-Token;
      the server validates it against the double-submit cookie. -->
 <body hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <div class="layout">
     <nav class="sidebar">
       <div class="brand">
-        <span>DocMonk</span>
+        <span class="brand-mark" aria-hidden="true">D</span><span>DocMonk</span>
         <span class="ver">v{{ docmonk_version }}</span>
       </div>
-      <ul class="nav">
+      <div class="nav-heading">Workspace</div>
+      <ul class="nav" aria-label="Main navigation">
         {% for slug, label, url in nav_items %}
-        <li><a href="{{ url }}" class="{{ 'active' if active == slug else '' }}">{{ label }}</a></li>
+        <li><a href="{{ url }}" {% if active == slug %}aria-current="page"{% endif %} class="{{ 'active' if active == slug else '' }}">{{ label }}</a></li>
         {% endfor %}
       </ul>
+      <div class="sidebar-footer">Local-first knowledge intelligence</div>
     </nav>
-    <main class="main">
+    <main class="main" id="main-content">
+      <header class="topbar"><div class="topbar-title">Knowledge workspace <span class="topbar-separator">/</span> {{ active }}</div><div class="topbar-actions"><a class="quick-search" href="/search">⌕ <span>Search knowledge</span></a><button class="theme-toggle" type="button" aria-label="Toggle color theme" aria-pressed="false">◐ <span>Theme</span></button></div></header>
       {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
       {% block content %}{% endblock %}
     </main>
   </div>
+<script>
+  (() => {
+    const root = document.documentElement;
+    const button = document.querySelector(".theme-toggle");
+    const key = "docmonk-theme";
+    let saved = null;
+    try { saved = localStorage.getItem(key); } catch (_) {}
+    const preferred = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    function apply(theme) {
+      root.dataset.theme = theme;
+      button.setAttribute("aria-pressed", String(theme === "light"));
+      button.setAttribute("aria-label", "Switch to " + (theme === "light" ? "dark" : "light") + " theme");
+    }
+    apply(saved === "light" || saved === "dark" ? saved : preferred);
+    button.addEventListener("click", () => {
+      const next = root.dataset.theme === "dark" ? "light" : "dark";
+      apply(next);
+      try { localStorage.setItem(key, next); } catch (_) {}
+    });
+  })();
+</script>
 </body>
 </html>
