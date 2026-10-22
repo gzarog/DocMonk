@@ -109,6 +109,9 @@ const ALLOWED_PATHS: &[(&str, &str)] = &[
     ("python", "fixtures/"),
     ("migration", "fixtures/"),
     ("version-naming", "fixtures/"),
+    // Held-out evaluation reports record what was indexed from those
+    // fixtures (source languages, extraction messages): data, not tooling.
+    ("python", "benchmarks/heldout-eval/"),
     // The vendored WordPiece vocabulary of the pinned embedding model:
     // English word pieces, not DocMonk text.
     ("*", "crates/docmonk-documents/assets/all-MiniLM-L6-v2/"),

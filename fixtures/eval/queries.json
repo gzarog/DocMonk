@@ -375,7 +375,7 @@
    "query": "index on settled_at for the nightly settlement report",
    "expected": [
     {
-     "path": "migrations/0007_orders_index.sql",
+     "path": "db/0007_orders_index.sql",
      "line": 2
     }
    ],
@@ -1285,7 +1285,7 @@
      "path": "docs/mixed/runbook-payments.md"
     },
     {
-     "path": "migrations/0007_orders_index.sql"
+     "path": "db/0007_orders_index.sql"
     }
    ],
    "answerable": true,

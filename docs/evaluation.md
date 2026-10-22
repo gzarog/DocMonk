@@ -15,11 +15,16 @@ the repository.
 
 `fixtures/eval/corpus` is a small versioned corpus with:
 
+<!-- clean-slate-audit: allow-start (indexed source languages) -->
+
 * code in Python, TypeScript, C# and Rust where the answers sit in function
   bodies, comments and constants (not in names or signatures), plus
   distractor files with overlapping vocabulary;
-* a Ruby script and a SQL migration (code extensions without a grammar) and
+* a Ruby script and a SQL script (code extensions without a grammar) and
   a Python file with syntax errors;
+
+<!-- clean-slate-audit: allow-end -->
+
 * English, Greek, German, French, Japanese, Chinese and Arabic documents, a
   mixed English/Greek runbook, a Markdown and a CSV table and a scanned PDF
   (OCR).

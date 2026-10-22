@@ -1,6 +1,8 @@
 //! Held-out retrieval evaluation (local-model retrieval plan, phase 0).
 //!
+// clean-slate-audit: allow-start (indexed source languages)
 //! A versioned corpus (`fixtures/eval/corpus`: Python, TypeScript, C# and
+// clean-slate-audit: allow-end
 //! Rust code with implementation details in function bodies, an
 //! unsupported-language script, a file with syntax errors, English, Greek,
 //! German, French, Japanese, Chinese and Arabic documents, a mixed-language
@@ -211,8 +213,14 @@ struct Backend {
 impl Drop for Backend {
     fn drop(&mut self) {
         if let Some((base, prefix)) = &self.cleanup {
+            // By name: Elasticsearch refuses wildcard deletes by default.
+            use docmonk_backends::schema::{index_name, IndexKind};
             let c = reqwest::blocking::Client::new();
-            let _ = c.delete(format!("{base}/{prefix}-*")).send();
+            for kind in IndexKind::ALL {
+                let _ = c
+                    .delete(format!("{base}/{}", index_name(prefix, kind)))
+                    .send();
+            }
         }
     }
 }
