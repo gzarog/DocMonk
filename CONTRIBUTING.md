@@ -45,6 +45,9 @@ Never point them at a real deployment.
 languages, documents, emails, OCR images). `fixtures/expected/` holds the
 expected results tests compare against, and
 `fixtures/search_quality/gates.json` the retrieval quality floors.
+`fixtures/eval/` holds the held-out retrieval evaluation's corpus and
+labels (see [`docs/evaluation.md`](docs/evaluation.md)); its labels are
+pending human review and are never rewritten by a test run.
 `benchmarks/` holds benchmark records.
 
 Expected results are DocMonk's own specification. A deliberate behaviour

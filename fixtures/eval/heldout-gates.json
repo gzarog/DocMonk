@@ -1,0 +1,4 @@
+{
+ "description": "Floors for the held-out evaluation (crates/docmonk-service/tests/heldout_eval.rs). They apply only to queries whose review_status is 'approved' in fixtures/eval/queries.json (metrics_approved_only); model-authored labels pending review are reported, never gated. A reviewer who approves labels adds floors here per backend and arm, e.g. {\"sqlite\": {\"evidence\": {\"recall@10\": 0.8}}}. Floors are never lowered to make a change pass.",
+ "floors": {}
+}

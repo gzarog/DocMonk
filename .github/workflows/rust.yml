@@ -200,6 +200,10 @@ jobs:
       # the no-local-fallback guarantee, on both engines.
       - name: Server mode end-to-end tests
         run: cargo test -p docmonk-service --test server_live -- --nocapture
+      # The held-out retrieval evaluation on SQLite and both engines: the
+      # same corpus and labels through every backend (docs/evaluation.md).
+      - name: Held-out retrieval evaluation
+        run: cargo test -p docmonk-service --test heldout_eval -- --nocapture
       # Status (ADR 0034) on both engines: 150 sources in <= 30 requests,
       # a watch refresh in < 10, pending builds invisible, global error
       # order, two-host run visibility, fencing and expired leases; the

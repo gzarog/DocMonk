@@ -1,0 +1,1453 @@
+{
+ "schema_version": 1,
+ "corpus": "fixtures/eval/corpus",
+ "description": "Held-out retrieval evaluation (plan phase 0). Labels were written by a model from the planted corpus facts and are NOT human-reviewed: every query is review_status=pending_human_review, so the harness reports their metrics but does not gate on them until a reviewer sets review_status=approved (and adds reviewed_by). The harness never writes this file.",
+ "label_policy": {
+  "expected": "Relevant source-relative paths. For code, 'line' is a line the cited span must cover (implementation provenance).",
+  "answerable": "false: no indexed passage answers the query; the correct outcome is abstention (insufficient_evidence).",
+  "requires": "Optional capabilities (e.g. 'ocr'); when one is unavailable the query is reported as skipped, never silently scored."
+ },
+ "queries": [
+  {
+   "id": "h001",
+   "category": "code_implementation",
+   "query_language": "en",
+   "query": "which function caps the late fee at a quarter of the invoice total",
+   "expected": [
+    {
+     "path": "services/billing/invoices.py",
+     "line": 20
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h002",
+   "category": "code_implementation",
+   "query_language": "en",
+   "query": "where is the 1.5 percent monthly late fee rate applied",
+   "expected": [
+    {
+     "path": "services/billing/invoices.py",
+     "line": 19
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h003",
+   "category": "code_implementation",
+   "query_language": "en",
+   "query": "how are dunning reminders moved off weekends",
+   "expected": [
+    {
+     "path": "services/billing/invoices.py",
+     "line": 28
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h004",
+   "category": "code_implementation",
+   "query_language": "en",
+   "query": "what resolution are invoice PDFs rendered at",
+   "expected": [
+    {
+     "path": "services/billing/invoices.py",
+     "line": 47
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h005",
+   "category": "code_implementation",
+   "query_language": "en",
+   "query": "where are yen amounts rounded to whole units during reconciliation",
+   "expected": [
+    {
+     "path": "services/billing/invoices.py",
+     "line": 111
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h006",
+   "category": "code_implementation",
+   "query_language": "en",
+   "query": "where are duplicate ledger entries with the same reference and amount detected",
+   "expected": [
+    {
+     "path": "services/billing/invoices.py",
+     "line": 135
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h007",
+   "category": "code_implementation",
+   "query_language": "en",
+   "query": "which code rejects a coupon combination above the maximum discount",
+   "expected": [
+    {
+     "path": "web/src/cart.ts",
+     "line": 26
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h008",
+   "category": "code_implementation",
+   "query_language": "en",
+   "query": "when do two coupons combine",
+   "expected": [
+    {
+     "path": "web/src/cart.ts",
+     "line": 21
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h009",
+   "category": "code_implementation",
+   "query_language": "en",
+   "query": "where is the shopping cart saved in browser local storage",
+   "expected": [
+    {
+     "path": "web/src/cart.ts",
+     "line": 36
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h010",
+   "category": "code_implementation",
+   "query_language": "en",
+   "query": "which header prevents a retried refund request from refunding twice",
+   "expected": [
+    {
+     "path": "Payments/RefundService.cs",
+     "line": 32
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h011",
+   "category": "code_implementation",
+   "query_language": "en",
+   "query": "refunds above which amount wait for a manager",
+   "expected": [
+    {
+     "path": "Payments/RefundService.cs",
+     "line": 27
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h012",
+   "category": "code_implementation",
+   "query_language": "en",
+   "query": "how many days after capture can an order still be refunded",
+   "expected": [
+    {
+     "path": "Payments/RefundService.cs",
+     "line": 39
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h013",
+   "category": "code_implementation",
+   "query_language": "en",
+   "query": "what tolerance in cents is allowed when matching bank lines",
+   "expected": [
+    {
+     "path": "ledger/src/reconcile.rs",
+     "line": 23
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h014",
+   "category": "code_implementation",
+   "query_language": "en",
+   "query": "bank line matching date window in days",
+   "expected": [
+    {
+     "path": "ledger/src/reconcile.rs",
+     "line": 24
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h015",
+   "category": "code_implementation",
+   "query_language": "en",
+   "query": "why do exact cent matches score higher",
+   "expected": [
+    {
+     "path": "ledger/src/reconcile.rs",
+     "line": 40
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h016",
+   "category": "code_implementation",
+   "query_language": "en",
+   "query": "what happens when a refund exceeds the captured amount",
+   "expected": [
+    {
+     "path": "Payments/RefundService.cs",
+     "line": 25
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h017",
+   "category": "code_symbol",
+   "query_language": "en",
+   "query": "compute_late_fee",
+   "expected": [
+    {
+     "path": "services/billing/invoices.py",
+     "line": 9
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h018",
+   "category": "code_symbol",
+   "query_language": "en",
+   "query": "InvoiceRenderer",
+   "expected": [
+    {
+     "path": "services/billing/invoices.py",
+     "line": 38
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h019",
+   "category": "code_symbol",
+   "query_language": "en",
+   "query": "applyCoupon",
+   "expected": [
+    {
+     "path": "web/src/cart.ts",
+     "line": 19
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h020",
+   "category": "code_symbol",
+   "query_language": "en",
+   "query": "RefundService",
+   "expected": [
+    {
+     "path": "Payments/RefundService.cs",
+     "line": 6
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h021",
+   "category": "code_symbol",
+   "query_language": "en",
+   "query": "match_bank_lines",
+   "expected": [
+    {
+     "path": "ledger/src/reconcile.rs",
+     "line": 17
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h022",
+   "category": "code_symbol",
+   "query_language": "en",
+   "query": "Matcher.score",
+   "expected": [
+    {
+     "path": "ledger/src/reconcile.rs",
+     "line": 39
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h023",
+   "category": "code_fallback",
+   "query_language": "en",
+   "query": "which script deletes redis sessions not seen for thirty days",
+   "expected": [
+    {
+     "path": "scripts/cleanup.rb",
+     "line": 6
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h024",
+   "category": "code_fallback",
+   "query_language": "en",
+   "query": "purge_stale_sessions",
+   "expected": [
+    {
+     "path": "scripts/cleanup.rb",
+     "line": 4
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h025",
+   "category": "code_fallback",
+   "query_language": "en",
+   "query": "index on settled_at for the nightly settlement report",
+   "expected": [
+    {
+     "path": "migrations/0007_orders_index.sql",
+     "line": 2
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h026",
+   "category": "code_fallback",
+   "query_language": "en",
+   "query": "where is the quarterly VAT export uploaded over SFTP",
+   "expected": [
+    {
+     "path": "services/billing/tax_export.py",
+     "line": 6
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "note": "file has syntax errors"
+  },
+  {
+   "id": "h027",
+   "category": "code_fallback",
+   "query_language": "en",
+   "query": "tax-dropbox.example.internal",
+   "expected": [
+    {
+     "path": "services/billing/tax_export.py",
+     "line": 6
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "note": "file has syntax errors"
+  },
+  {
+   "id": "h028",
+   "category": "document_fact",
+   "query_language": "en",
+   "query": "who must approve business class flights",
+   "expected": [
+    {
+     "path": "docs/en/travel-policy.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h029",
+   "category": "document_fact",
+   "query_language": "en",
+   "query": "how are flights booked",
+   "expected": [
+    {
+     "path": "docs/en/travel-policy.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h030",
+   "category": "document_fact",
+   "query_language": "en",
+   "query": "how quickly must on-call acknowledge a SEV1 page",
+   "expected": [
+    {
+     "path": "docs/en/incident-response.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h031",
+   "category": "document_fact",
+   "query_language": "en",
+   "query": "deadline for a blameless postmortem",
+   "expected": [
+    {
+     "path": "docs/en/incident-response.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h032",
+   "category": "document_fact",
+   "query_language": "en",
+   "query": "what does the daily allowance cover",
+   "expected": [
+    {
+     "path": "docs/en/travel-policy.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h033",
+   "category": "table",
+   "query_language": "en",
+   "query": "daily allowance in Berlin",
+   "expected": [
+    {
+     "path": "docs/en/travel-policy.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h034",
+   "category": "table",
+   "query_language": "en",
+   "query": "hotel cap per night in Tokyo",
+   "expected": [
+    {
+     "path": "docs/en/travel-policy.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h035",
+   "category": "table",
+   "query_language": "en",
+   "query": "uptime target of the checkout service",
+   "expected": [
+    {
+     "path": "docs/tables/service-levels.csv"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h036",
+   "category": "table",
+   "query_language": "en",
+   "query": "p95 latency target for search",
+   "expected": [
+    {
+     "path": "docs/tables/service-levels.csv"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h037",
+   "category": "table",
+   "query_language": "en",
+   "query": "support hours for reporting",
+   "expected": [
+    {
+     "path": "docs/tables/service-levels.csv"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h038",
+   "category": "numeric",
+   "query_language": "en",
+   "query": "within how many days must expense claims be submitted",
+   "expected": [
+    {
+     "path": "docs/en/travel-policy.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h039",
+   "category": "numeric",
+   "query_language": "en",
+   "query": "which receipts below 25 EUR can be replaced by a signed statement",
+   "expected": [
+    {
+     "path": "docs/en/travel-policy.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h040",
+   "category": "numeric",
+   "query_language": "en",
+   "query": "SEV1 bridge call within 15 minutes",
+   "expected": [
+    {
+     "path": "docs/en/incident-response.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h041",
+   "category": "numeric",
+   "query_language": "en",
+   "query": "daily allowance of 70 EUR",
+   "expected": [
+    {
+     "path": "docs/en/travel-policy.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h042",
+   "category": "numeric",
+   "query_language": "en",
+   "query": "99.95 uptime",
+   "expected": [
+    {
+     "path": "docs/tables/service-levels.csv"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h043",
+   "category": "negation",
+   "query_language": "en",
+   "query": "is premium economy reimbursed on short flights",
+   "expected": [
+    {
+     "path": "docs/en/travel-policy.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h044",
+   "category": "negation",
+   "query_language": "en",
+   "query": "which expenses are never reimbursed even with a receipt",
+   "expected": [
+    {
+     "path": "docs/en/travel-policy.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h045",
+   "category": "negation",
+   "query_language": "en",
+   "query": "do SEV3 incidents require a postmortem",
+   "expected": [
+    {
+     "path": "docs/en/incident-response.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h046",
+   "category": "negation",
+   "query_language": "en",
+   "query": "is customer data transfer to third countries allowed",
+   "expected": [
+    {
+     "path": "docs/de/datenschutz.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "de",
+   "note": "cross-language negation"
+  },
+  {
+   "id": "h047",
+   "category": "negation",
+   "query_language": "en",
+   "query": "are alcohol costs reimbursable",
+   "expected": [
+    {
+     "path": "docs/en/travel-policy.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h048",
+   "category": "multilingual",
+   "query_language": "el",
+   "query": "πόσες εβδομάδες διαρκεί η γονική άδεια",
+   "expected": [
+    {
+     "path": "docs/el/goniki-adeia.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "el"
+  },
+  {
+   "id": "h049",
+   "category": "multilingual",
+   "query_language": "el",
+   "query": "διάρκεια γονικής αδείας",
+   "expected": [
+    {
+     "path": "docs/el/goniki-adeia.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "el",
+   "note": "genitive form differs from the document's nominative"
+  },
+  {
+   "id": "h050",
+   "category": "multilingual",
+   "query_language": "el",
+   "query": "πότε υποβάλλεται η αίτηση άδειας",
+   "expected": [
+    {
+     "path": "docs/el/goniki-adeia.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "el"
+  },
+  {
+   "id": "h051",
+   "category": "multilingual",
+   "query_language": "el",
+   "query": "τηλεργασια μετα την επιστροφη",
+   "expected": [
+    {
+     "path": "docs/el/goniki-adeia.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "el",
+   "note": "written without accents"
+  },
+  {
+   "id": "h052",
+   "category": "multilingual",
+   "query_language": "el",
+   "query": "πόσους χαρακτήρες πρέπει να έχει ο κωδικός",
+   "expected": [
+    {
+     "path": "docs/el/asfaleia-kodikon.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "el"
+  },
+  {
+   "id": "h053",
+   "category": "multilingual",
+   "query_language": "el",
+   "query": "κλείδωμα λογαριασμού μετά από αποτυχημένες συνδέσεις",
+   "expected": [
+    {
+     "path": "docs/el/asfaleia-kodikon.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "el"
+  },
+  {
+   "id": "h054",
+   "category": "multilingual",
+   "query_language": "de",
+   "query": "wann werden Anwendungsprotokolle gelöscht",
+   "expected": [
+    {
+     "path": "docs/de/datenschutz.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "de"
+  },
+  {
+   "id": "h055",
+   "category": "multilingual",
+   "query_language": "de",
+   "query": "Aufbewahrungsfrist Sicherheitsprotokolle",
+   "expected": [
+    {
+     "path": "docs/de/datenschutz.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "de"
+  },
+  {
+   "id": "h056",
+   "category": "multilingual",
+   "query_language": "de",
+   "query": "wo dürfen Kundendaten gespeichert werden",
+   "expected": [
+    {
+     "path": "docs/de/datenschutz.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "de"
+  },
+  {
+   "id": "h057",
+   "category": "multilingual",
+   "query_language": "fr",
+   "query": "délai de soumission des notes de frais",
+   "expected": [
+    {
+     "path": "docs/fr/notes-de-frais.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "fr"
+  },
+  {
+   "id": "h058",
+   "category": "multilingual",
+   "query_language": "fr",
+   "query": "accord préalable pour les dépenses supérieures",
+   "expected": [
+    {
+     "path": "docs/fr/notes-de-frais.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "fr"
+  },
+  {
+   "id": "h059",
+   "category": "multilingual",
+   "query_language": "fr",
+   "query": "remboursement taxi de nuit",
+   "expected": [
+    {
+     "path": "docs/fr/notes-de-frais.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "fr"
+  },
+  {
+   "id": "h060",
+   "category": "multilingual",
+   "query_language": "ja",
+   "query": "セキュリティ研修の所要時間",
+   "expected": [
+    {
+     "path": "docs/ja/onboarding.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "ja"
+  },
+  {
+   "id": "h061",
+   "category": "multilingual",
+   "query_language": "ja",
+   "query": "社員証はどこで受け取りますか",
+   "expected": [
+    {
+     "path": "docs/ja/onboarding.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "ja"
+  },
+  {
+   "id": "h062",
+   "category": "multilingual",
+   "query_language": "zh",
+   "query": "备份文件保留多少天",
+   "expected": [
+    {
+     "path": "docs/zh/backup.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "zh"
+  },
+  {
+   "id": "h063",
+   "category": "multilingual",
+   "query_language": "zh",
+   "query": "恢复演练",
+   "expected": [
+    {
+     "path": "docs/zh/backup.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "zh"
+  },
+  {
+   "id": "h064",
+   "category": "multilingual",
+   "query_language": "ar",
+   "query": "المصادقة الثنائية",
+   "expected": [
+    {
+     "path": "docs/ar/security.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "ar"
+  },
+  {
+   "id": "h065",
+   "category": "multilingual",
+   "query_language": "ar",
+   "query": "قفل الجهاز تلقائيا",
+   "expected": [
+    {
+     "path": "docs/ar/security.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "ar"
+  },
+  {
+   "id": "h066",
+   "category": "cross_language",
+   "query_language": "en",
+   "query": "how long is parental leave",
+   "expected": [
+    {
+     "path": "docs/el/goniki-adeia.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "el"
+  },
+  {
+   "id": "h067",
+   "category": "cross_language",
+   "query_language": "en",
+   "query": "remote work after returning from parental leave",
+   "expected": [
+    {
+     "path": "docs/el/goniki-adeia.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "el"
+  },
+  {
+   "id": "h068",
+   "category": "cross_language",
+   "query_language": "en",
+   "query": "minimum password length",
+   "expected": [
+    {
+     "path": "docs/el/asfaleia-kodikon.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "el"
+  },
+  {
+   "id": "h069",
+   "category": "cross_language",
+   "query_language": "en",
+   "query": "account lockout after failed login attempts",
+   "expected": [
+    {
+     "path": "docs/el/asfaleia-kodikon.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "el"
+  },
+  {
+   "id": "h070",
+   "category": "cross_language",
+   "query_language": "en",
+   "query": "when are application logs deleted",
+   "expected": [
+    {
+     "path": "docs/de/datenschutz.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "de"
+  },
+  {
+   "id": "h071",
+   "category": "cross_language",
+   "query_language": "en",
+   "query": "where may customer data be stored",
+   "expected": [
+    {
+     "path": "docs/de/datenschutz.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "de"
+  },
+  {
+   "id": "h072",
+   "category": "cross_language",
+   "query_language": "en",
+   "query": "deadline for submitting expense reports",
+   "expected": [
+    {
+     "path": "docs/fr/notes-de-frais.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "fr"
+  },
+  {
+   "id": "h073",
+   "category": "cross_language",
+   "query_language": "en",
+   "query": "night taxi reimbursement",
+   "expected": [
+    {
+     "path": "docs/fr/notes-de-frais.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "fr"
+  },
+  {
+   "id": "h074",
+   "category": "cross_language",
+   "query_language": "en",
+   "query": "how long is the security training for new hires",
+   "expected": [
+    {
+     "path": "docs/ja/onboarding.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "ja"
+  },
+  {
+   "id": "h075",
+   "category": "cross_language",
+   "query_language": "en",
+   "query": "how long are database backups kept",
+   "expected": [
+    {
+     "path": "docs/zh/backup.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "zh"
+  },
+  {
+   "id": "h076",
+   "category": "cross_language",
+   "query_language": "en",
+   "query": "two-factor authentication for email accounts",
+   "expected": [
+    {
+     "path": "docs/ar/security.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "ar"
+  },
+  {
+   "id": "h077",
+   "category": "cross_language",
+   "query_language": "el",
+   "query": "πόσες μέρες έχω για να υποβάλω αίτηση εξόδων ταξιδιού",
+   "expected": [
+    {
+     "path": "docs/en/travel-policy.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "en"
+  },
+  {
+   "id": "h078",
+   "category": "cross_language",
+   "query_language": "de",
+   "query": "Tagespauschale in Athen",
+   "expected": [
+    {
+     "path": "docs/en/travel-policy.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "en"
+  },
+  {
+   "id": "h079",
+   "category": "mixed_language",
+   "query_language": "en",
+   "query": "payment provider failover",
+   "expected": [
+    {
+     "path": "docs/mixed/runbook-payments.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "mixed"
+  },
+  {
+   "id": "h080",
+   "category": "mixed_language",
+   "query_language": "el",
+   "query": "εφεδρικός πάροχος πληρωμών",
+   "expected": [
+    {
+     "path": "docs/mixed/runbook-payments.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "mixed"
+  },
+  {
+   "id": "h081",
+   "category": "mixed_language",
+   "query_language": "en",
+   "query": "payments-cli failover --to secondary",
+   "expected": [
+    {
+     "path": "docs/mixed/runbook-payments.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "mixed"
+  },
+  {
+   "id": "h082",
+   "category": "mixed_language",
+   "query_language": "en",
+   "query": "what happens when the settlement file is more than an hour late",
+   "expected": [
+    {
+     "path": "docs/mixed/runbook-payments.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "document_language": "mixed"
+  },
+  {
+   "id": "h083",
+   "category": "ocr",
+   "query_language": "en",
+   "query": "sample image title",
+   "expected": [
+    {
+     "path": "docs/scans/scanned-notice.pdf"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "requires": [
+    "ocr"
+   ]
+  },
+  {
+   "id": "h084",
+   "category": "ocr",
+   "query_language": "en",
+   "query": "OCR body text",
+   "expected": [
+    {
+     "path": "docs/scans/scanned-notice.pdf"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review",
+   "requires": [
+    "ocr"
+   ]
+  },
+  {
+   "id": "h085",
+   "category": "ambiguity",
+   "query_language": "en",
+   "query": "refund",
+   "expected": [
+    {
+     "path": "Payments/RefundService.cs"
+    },
+    {
+     "path": "docs/fr/notes-de-frais.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h086",
+   "category": "ambiguity",
+   "query_language": "en",
+   "query": "settlement",
+   "expected": [
+    {
+     "path": "docs/mixed/runbook-payments.md"
+    },
+    {
+     "path": "migrations/0007_orders_index.sql"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h087",
+   "category": "ambiguity",
+   "query_language": "en",
+   "query": "retention",
+   "expected": [
+    {
+     "path": "docs/de/datenschutz.md"
+    },
+    {
+     "path": "docs/zh/backup.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h088",
+   "category": "ambiguity",
+   "query_language": "en",
+   "query": "approval",
+   "expected": [
+    {
+     "path": "docs/en/travel-policy.md"
+    },
+    {
+     "path": "Payments/RefundService.cs"
+    },
+    {
+     "path": "docs/fr/notes-de-frais.md"
+    }
+   ],
+   "answerable": true,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h089",
+   "category": "unanswerable",
+   "query_language": "en",
+   "query": "what is the company's parental leave policy for pets",
+   "expected": [],
+   "answerable": false,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h090",
+   "category": "unanswerable",
+   "query_language": "en",
+   "query": "how many vacation days do interns get",
+   "expected": [],
+   "answerable": false,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h091",
+   "category": "unanswerable",
+   "query_language": "en",
+   "query": "which kubernetes cluster runs the billing service",
+   "expected": [],
+   "answerable": false,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h092",
+   "category": "unanswerable",
+   "query_language": "en",
+   "query": "what is the dental insurance reimbursement limit",
+   "expected": [],
+   "answerable": false,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h093",
+   "category": "unanswerable",
+   "query_language": "en",
+   "query": "who is the chief executive officer",
+   "expected": [],
+   "answerable": false,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h094",
+   "category": "unanswerable",
+   "query_language": "en",
+   "query": "how do I reset the coffee machine",
+   "expected": [],
+   "answerable": false,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h095",
+   "category": "unanswerable",
+   "query_language": "en",
+   "query": "what is the maximum crypto withdrawal per day",
+   "expected": [],
+   "answerable": false,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h096",
+   "category": "unanswerable",
+   "query_language": "el",
+   "query": "ποια είναι η πολιτική για τα κατοικίδια στο γραφείο",
+   "expected": [],
+   "answerable": false,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h097",
+   "category": "unanswerable",
+   "query_language": "de",
+   "query": "wie hoch ist das Weihnachtsgeld",
+   "expected": [],
+   "answerable": false,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h098",
+   "category": "unanswerable",
+   "query_language": "fr",
+   "query": "quelle est la politique de télétravail le vendredi",
+   "expected": [],
+   "answerable": false,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h099",
+   "category": "unanswerable",
+   "query_language": "en",
+   "query": "what is the GraphQL rate limit per minute",
+   "expected": [],
+   "answerable": false,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  },
+  {
+   "id": "h100",
+   "category": "unanswerable",
+   "query_language": "en",
+   "query": "which data center hosts the mainframe",
+   "expected": [],
+   "answerable": false,
+   "origin": "model_authored",
+   "review_status": "pending_human_review"
+  }
+ ]
+}
