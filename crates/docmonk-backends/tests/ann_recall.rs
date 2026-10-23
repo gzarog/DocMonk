@@ -4,7 +4,10 @@
 //! vectors and garbage-collects the first), so the indexes hold deleted
 //! documents and a retired generation, as after a real update. Then the
 //! engine's filtered kNN is compared with exact cosine search over the
-//! same visible, filtered vectors.
+//! same visible, filtered vectors. The gated recall is that of the
+//! request semantic search makes with the default settings
+//! ([`REQUEST_K`] hits, of which the top 10 are compared); the recall of
+//! a bare `k = 10` request is reported next to it.
 //!
 //! Set `DOCMONK_TEST_OPENSEARCH_URL` / `DOCMONK_TEST_ELASTICSEARCH_URL`
 //! (skipped otherwise), `DOCMONK_ANN_RECALL_N` for the corpus size
@@ -25,6 +28,10 @@ use serde_json::{json, Value};
 
 const DIMS: usize = 384;
 const K: usize = 10;
+/// The kNN request of a default semantic search: `search.semantic_top_k`
+/// (30) candidates, doubled because an entity's signature and body
+/// passages collapse into one hit (`PER_RECORD_OVERFETCH`).
+const REQUEST_K: usize = 60;
 const QUERIES: usize = 40;
 const FILES: usize = 40;
 
@@ -186,6 +193,7 @@ fn run(base: &str, engine: Engine, n: usize) -> Value {
             ..Default::default()
         };
         let mut recalls = Vec::new();
+        let mut bare = Vec::new();
         let mut ms = Vec::new();
         for q in &queries {
             let mut exact: Vec<(&str, f32)> = second
@@ -197,20 +205,26 @@ fn run(base: &str, engine: Engine, n: usize) -> Value {
                 .collect();
             exact.sort_by(|a, b| b.1.total_cmp(&a.1));
             let want: Vec<&str> = exact.iter().take(K).map(|(id, _)| *id).collect();
+            let recall_of = |k: usize| {
+                let got = r
+                    .vector_search_filtered("annb2", "fp", q, k, 0, &vf)
+                    .unwrap()
+                    .expect("the server pushes filters into kNN");
+                let hits = got
+                    .iter()
+                    .take(K)
+                    .filter(|(_, id, _)| want.contains(&id.as_str()))
+                    .count();
+                hits as f64 / want.len().max(1) as f64
+            };
             let t = Instant::now();
-            let got = r
-                .vector_search_filtered("annb2", "fp", q, K, 0, &vf)
-                .unwrap()
-                .expect("the server pushes filters into kNN");
+            recalls.push(recall_of(REQUEST_K));
             ms.push(t.elapsed().as_secs_f64() * 1000.0);
-            let hits = got
-                .iter()
-                .filter(|(_, id, _)| want.contains(&id.as_str()))
-                .count();
-            recalls.push(hits as f64 / want.len().max(1) as f64);
+            bare.push(recall_of(K));
         }
         ms.sort_by(f64::total_cmp);
-        let recall = recalls.iter().sum::<f64>() / recalls.len() as f64;
+        let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
+        let recall = mean(&recalls);
         assert!(
             recall >= MIN_RECALL,
             "{engine:?} {label}: recall@{K} {recall:.3} < {MIN_RECALL}"
@@ -219,6 +233,7 @@ fn run(base: &str, engine: Engine, n: usize) -> Value {
             label.into(),
             json!({
                 "recall@10": (recall * 1000.0).round() / 1000.0,
+                "recall@10_bare_k10": (mean(&bare) * 1000.0).round() / 1000.0,
                 "p50_ms": (percentile(&ms, 0.5) * 10.0).round() / 10.0,
                 "p95_ms": (percentile(&ms, 0.95) * 10.0).round() / 10.0,
             }),
@@ -239,6 +254,7 @@ fn run(base: &str, engine: Engine, n: usize) -> Value {
         "dims": DIMS,
         "queries": QUERIES,
         "k": K,
+        "request_k": REQUEST_K,
         "publish_two_builds_s": (publish_s * 10.0).round() / 10.0,
         "filters": out,
     })
