@@ -30,8 +30,20 @@ pub fn registry_with_facts(facts: Option<Arc<docmonk_storage::facts::FactCache>>
     let mut r = Registry::raw();
     r.code = Arc::new(process::CodeProcessor { facts });
     r.document = Arc::new(RawProcessor);
-    r.versions.parser_version = process::CODE_DERIVATION_VERSION.into();
+    r.versions.parser_version = code_parser_version();
     r
+}
+
+/// The code files' `parser_version`: the extraction identity and the
+/// normalized lexical projection their FTS rows carry (ADR 0039). The
+/// graph identity includes only the extraction: entity ids do not depend
+/// on the projection.
+pub fn code_parser_version() -> String {
+    format!(
+        "{}+{}",
+        process::CODE_DERIVATION_VERSION,
+        docmonk_core::lexnorm::LEXICAL_PROJECTION_VERSION
+    )
 }
 
 #[cfg(test)]
@@ -42,6 +54,6 @@ mod tests {
     fn primary_registry_has_no_graph_finalizers() {
         let r = registry();
         assert!(r.finalizers.is_empty());
-        assert_eq!(r.versions.parser_version, process::CODE_DERIVATION_VERSION);
+        assert_eq!(r.versions.parser_version, "rust-code-3+lexnorm-1");
     }
 }

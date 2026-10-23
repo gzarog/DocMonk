@@ -1941,6 +1941,43 @@
           "is_scanned": {
            "title": "Is Scanned",
            "type": "boolean"
+          },
+          "language": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null,
+           "title": "Language"
+          },
+          "script": {
+           "anyOf": [
+            {
+             "type": "string"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null,
+           "title": "Script"
+          },
+          "pages": {
+           "anyOf": [
+            {
+             "additionalProperties": true,
+             "type": "object"
+            },
+            {
+             "type": "null"
+            }
+           ],
+           "default": null,
+           "title": "Pages"
           }
          },
          "required": [
@@ -5178,7 +5215,10 @@
        "section_count": 1,
        "paragraph_count": 1,
        "table_count": 0,
-       "is_scanned": false
+       "is_scanned": false,
+       "language": null,
+       "script": "Latn",
+       "pages": null
       },
       {
        "source_id": "<SOURCE>",
@@ -5190,7 +5230,10 @@
        "section_count": 0,
        "paragraph_count": 0,
        "table_count": 1,
-       "is_scanned": false
+       "is_scanned": false,
+       "language": null,
+       "script": "Latn",
+       "pages": null
       },
       {
        "source_id": "<SOURCE>",
@@ -5202,7 +5245,10 @@
        "section_count": 2,
        "paragraph_count": 2,
        "table_count": 1,
-       "is_scanned": false
+       "is_scanned": false,
+       "language": null,
+       "script": "Latn",
+       "pages": null
       },
       {
        "source_id": "<SOURCE>",
@@ -5214,7 +5260,10 @@
        "section_count": 2,
        "paragraph_count": 2,
        "table_count": 1,
-       "is_scanned": false
+       "is_scanned": false,
+       "language": null,
+       "script": "Latn",
+       "pages": null
       },
       {
        "source_id": "<SOURCE>",
@@ -5226,7 +5275,10 @@
        "section_count": 0,
        "paragraph_count": 1,
        "table_count": 0,
-       "is_scanned": false
+       "is_scanned": false,
+       "language": null,
+       "script": "Latn",
+       "pages": null
       }
      ]
     },

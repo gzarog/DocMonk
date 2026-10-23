@@ -194,6 +194,15 @@ CREATE TABLE documents (
     attachment_content_type TEXT,
     attachment_index INTEGER,
     attachment_content_id TEXT,
+    -- Detected language (ISO 639-1) and script (ISO 15924), where reliable.
+    language TEXT,
+    script TEXT,
+    -- How a PDF's pages were read (not_needed, applied, no_images,
+    -- unavailable, failed, disabled), pages that gained OCR text, pages
+    -- still without text. NULL for other formats.
+    ocr TEXT,
+    ocr_pages INTEGER,
+    empty_pages INTEGER,
     PRIMARY KEY (build_id, id),
     CHECK ((parent_document_id IS NULL) = (attachment_index IS NULL))
 );
@@ -221,6 +230,8 @@ CREATE TABLE chunks (
     -- Ordinal of the enclosing heading chunk in the same document; siblings
     -- share it (search context expansion).
     parent_ordinal INTEGER,
+    -- Detected language of the chunk, where reliable.
+    language TEXT,
     PRIMARY KEY (build_id, id)
 );
 CREATE INDEX idx_chunks_document ON chunks(build_id, document_id, ordinal);

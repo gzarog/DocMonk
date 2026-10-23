@@ -6,7 +6,7 @@ Detail behind the [README](../README.md) pitch deck.
 
 | Format | What you get |
 |---|---|
-| **PDF** | Layout model: headings, tables, page numbers · OCR for scanned pages (`documents.ocr: auto`) |
+| **PDF** | Layout model: headings, tables, page numbers · OCR for pages without a text layer (`documents.ocr: auto`), merged page by page with the text layer |
 | **DOCX / ODT** | Heading structure with page provenance |
 | **PPTX / ODP** | Slide titles and body text, slide-number provenance |
 | **XLSX / ODS / CSV** | Tables rendered and chunked row-by-row |
@@ -18,6 +18,7 @@ Detail behind the [README](../README.md) pitch deck.
 - A corrupt or unsupported file is isolated and recorded as failed; the run continues.
 - Older binary `.doc` / `.ppt` / `.xls` files and `.rtf` are detected but not converted.
 - PDF conversions are cached by content hash; unchanged PDFs skip the layout model.
+- **PDF pages** (ADR 0039): with `documents.ocr: auto`, every page whose text layer is (nearly) empty is OCR'd, and `always` OCRs every page. The recognized text joins its page: it never replaces the text layer, and a block the text layer already holds is not added twice. `docmonk documents --json` reports per PDF `pages.ocr`: `not_needed`, `applied`, `no_images`, `unavailable`, `failed` or `disabled`. It also gives the pages that gained OCR text (`ocr_pages`) and the pages still without text (`empty_pages`). When the OCR a page needed could not run, the PDF is indexed with a notice in its `last_error` and the error feed (`ocr_unavailable`, `ocr_failed`), and `status` counts it as degraded. Blank pages and pages left unread by `documents.ocr: off` are only recorded. OCR runs only on the local pinned `ocrs` models and never calls a service.
 - Chunk sizes follow the embedding model's real tokenizer (`documents.chunking.max_tokens: auto`); tables split at row boundaries.
 
 ## Email attachments
@@ -136,6 +137,27 @@ a prose query ("cancel orders") finds `cancelOrder`. A multi-word query
 first requires every term, then falls back to "most terms" before any
 looser match. A path typed exactly ranks first. Hard filters are pushed
 into the SQL (server: the query), not applied afterwards.
+
+**Normalized forms** (ADR 0039). Next to the original text, every chunk,
+passage and symbol name is indexed with its normalized forms. These are
+computed by DocMonk itself, identically for SQLite and both server
+engines:
+
+- accents, case and full-width forms folded (`café` → `cafe`, `ΆΔΕΙΑ` →
+  `αδεια`);
+- Greek and Arabic inflections reduced to a light stem (`άδεια`,
+  `άδειας`, `άδειες`; `الإجازة`, `إجازات`);
+- Chinese and Japanese, which do not separate words with spaces, indexed
+  by characters and character pairs.
+
+A query whose words have such forms also runs every lexical tier over the
+normalized words. Greek and Arabic function words are not content terms.
+Plain English queries plan exactly as before. Evidence support and the
+term-coverage order accept a normalized match: `άδεια` is supported by
+`άδειας`. Snippets, citations and exact symbol and path matching always
+use the original text. Each document and chunk records its detected
+language and script where detection is reliable; `docmonk documents
+--json` shows them.
 
 **Warm queries.** A long-lived process (MCP, Admin UI, daemon) keeps the
 embedder, the reranker and each project's vector index in memory, embeds
@@ -311,7 +333,7 @@ docmonk init --storage-mode server --storage-engine opensearch \
 - An unreachable or uninitialized cluster is an error (exit code 4 / 3, typed `BackendUnavailableError` / `BackendSchemaMismatchError` in MCP); DocMonk never falls back to local data.
 - Every pass publishes a new generation atomically (compare-and-swap of the source state, the only visibility switch). Records are immutable and carry the generations they are valid for (ADR 0035): files whose derived knowledge did not change are **not touched** (nothing is rewritten, reconverted or re-uploaded); changed and new files are written as the new generation and the records they replace (and deleted files' records) are closed. A failed, interrupted or superseded pass never becomes visible, whatever it wrote; the replaced generation stays readable for `storage.server.gc_grace_seconds` (default `60`) and is then garbage-collected.
 - Closing replaced records, sweeping an aborted attempt and garbage collection run as server tasks (`wait_for_completion=false`, `slices=auto`) that DocMonk polls with short requests, so no request waits longer than `storage.server.request_timeout_seconds`. Each touches only the changed files' records. A task still running after `storage.server.task_timeout_seconds` (default `3600`) is cancelled and the pass fails, leaving the previous generation visible.
-- **Schema version 6.** Schema 6 adds the `{prefix}-passages` index (implementation passages, ADR 0037); schema 5 introduced generation-numbered records. Both are breaking server schema changes: `docmonk server init` refuses indexes of an older schema and never alters them. Create the new indexes under a fresh `storage.server.index_prefix` (or delete the old prefix explicitly once you no longer need it for rollback) and run a full `docmonk index`. Manual links live in the old indexes: save them first (`docmonk link list --json`) and re-add them after the reindex if you want to keep them.
+- **Schema version 7.** Schema 7 adds the `norm` field of normalized lexical forms (with its whitespace analyzer) and the detected document and chunk languages (ADR 0039); schema 6 added the `{prefix}-passages` index (implementation passages, ADR 0037); schema 5 introduced generation-numbered records. All are breaking server schema changes: `docmonk server init` refuses indexes of an older schema and never alters them. Create the new indexes under a fresh `storage.server.index_prefix` (or delete the old prefix explicitly once you no longer need it for rollback) and run a full `docmonk index`. Manual links live in the old indexes: save them first (`docmonk link list --json`) and re-add them after the reindex if you want to keep them.
 - Search requests per source are batched (`_msearch`): one lexical round trip per source instead of one per tier.
 - Source roots are paths on the host that indexes them.
 - Dev clusters: `docker compose -f docker/docker-compose.opensearch.yml up -d` (or `docker-compose.elasticsearch.yml`).

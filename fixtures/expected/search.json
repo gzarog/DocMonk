@@ -871,6 +871,12 @@
      "Settlement Guide"
     ],
     [
+     "entity",
+     "hybrid",
+     "services/settlement_service.py",
+     "services.settlement_service.SettlementService"
+    ],
+    [
      "document",
      "hybrid",
      "docs/settlement_guide.md",
@@ -881,12 +887,6 @@
      "hybrid",
      "docs/payment_provider_notes.md",
      "Payment Provider Notes"
-    ],
-    [
-     "entity",
-     "hybrid",
-     "services/settlement_service.py",
-     "services.settlement_service.SettlementService"
     ],
     [
      "document",
@@ -2693,16 +2693,16 @@
      "consumers.payment_consumer"
     ],
     [
-     "document",
-     "hybrid",
-     "docs/settlement_guide.md",
-     "Settlement Guide"
-    ],
-    [
      "entity",
      "hybrid",
      "consumers/payment_consumer.py",
      "consumers.payment_consumer.PaymentConsumer"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/settlement_guide.md",
+     "Settlement Guide"
     ],
     [
      "document",
@@ -5507,24 +5507,6 @@
      "services.settlement_service"
     ],
     [
-     "document",
-     "hybrid",
-     "docs/settlement_guide.md",
-     "Settlement Guide"
-    ],
-    [
-     "document",
-     "hybrid",
-     "docs/payment_provider_notes.md",
-     "Payment Provider Notes"
-    ],
-    [
-     "document",
-     "hybrid",
-     "docs/settlement_guide.md",
-     "Settlement Guide"
-    ],
-    [
      "entity",
      "hybrid",
      "workers/retry_worker.py",
@@ -5537,6 +5519,18 @@
      "consumers.payment_consumer.PaymentConsumer.handle"
     ],
     [
+     "document",
+     "hybrid",
+     "docs/settlement_guide.md",
+     "Settlement Guide"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/settlement_guide.md",
+     "Settlement Guide"
+    ],
+    [
      "entity",
      "hybrid",
      "services/settlement_service.py",
@@ -5547,6 +5541,12 @@
      "hybrid",
      "docs/settlement_guide.md",
      "Settlement Guide"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/payment_provider_notes.md",
+     "Payment Provider Notes"
     ],
     [
      "entity",
@@ -5978,12 +5978,6 @@
     [
      "document",
      "hybrid",
-     "docs/settlement_guide.md",
-     "Settlement Guide"
-    ],
-    [
-     "document",
-     "hybrid",
      "docs/payment_provider_notes.md",
      "Payment Provider Notes"
     ],
@@ -5992,6 +5986,12 @@
      "hybrid",
      "consumers/payment_consumer.py",
      "consumers.payment_consumer.PaymentConsumer"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/settlement_guide.md",
+     "Settlement Guide"
     ],
     [
      "entity",
@@ -6481,16 +6481,16 @@
      "Settlement Guide"
     ],
     [
-     "document",
-     "hybrid",
-     "docs/settlement_guide.md",
-     "Settlement Guide"
-    ],
-    [
      "entity",
      "hybrid",
      "workers/retry_worker.py",
      "workers.retry_worker.RetryWorker"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/settlement_guide.md",
+     "Settlement Guide"
     ],
     [
      "document",
@@ -26442,16 +26442,16 @@
      "workers/retry_worker.py"
     ],
     [
-     "document",
-     "hybrid",
-     "docs/settlement_guide.md",
-     "Settlement Guide"
-    ],
-    [
      "entity",
      "hybrid",
      "workers/retry_worker.py",
      "workers.retry_worker.RetryWorker"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/settlement_guide.md",
+     "Settlement Guide"
     ],
     [
      "document",
@@ -37250,25 +37250,25 @@
     [
      "entity",
      "fts",
-     "src/billing/ledger.py",
-     "src.billing.ledger.Λογαριασμός",
-     [
-      5,
-      3,
-      2,
-      5
-     ]
-    ],
-    [
-     "entity",
-     "fts",
      "src/billing/invoice_service.py",
      "src.billing.invoice_service",
      [
       5,
       3,
-      3,
+      2,
       0
+     ]
+    ],
+    [
+     "entity",
+     "fts",
+     "src/billing/ledger.py",
+     "src.billing.ledger.Λογαριασμός",
+     [
+      5,
+      3,
+      3,
+      5
      ]
     ],
     [
@@ -37298,8 +37298,8 @@
     [
      "entity",
      "fts",
-     "src/billing/ledger.py",
-     "src.billing.ledger.café_total",
+     "src/billing/invoice_service.py",
+     "src.billing.invoice_service.calculate_tax",
      [
       5,
       3,
@@ -37311,23 +37311,11 @@
      "entity",
      "fts",
      "src/billing/invoice_service.py",
-     "src.billing.invoice_service.calculate_tax",
-     [
-      5,
-      3,
-      7,
-      5
-     ]
-    ],
-    [
-     "entity",
-     "fts",
-     "src/billing/invoice_service.py",
      "src.billing.invoice_service.void_endpoint",
      [
       5,
       3,
-      8,
+      7,
       5
      ]
     ],
@@ -37339,8 +37327,20 @@
      [
       5,
       3,
-      9,
+      8,
       6
+     ]
+    ],
+    [
+     "entity",
+     "fts",
+     "src/billing/ledger.py",
+     "src.billing.ledger.café_total",
+     [
+      5,
+      3,
+      9,
+      5
      ]
     ],
     [
@@ -37502,9 +37502,9 @@
      "src.billing.invoice_service",
      [
       "hybrid",
-      0.028594771,
+      0.028790389,
       3,
-      3,
+      2,
       0,
       0.52227
      ]
@@ -37555,6 +37555,20 @@
      "entity",
      "hybrid",
      "src/billing/invoice_service.py",
+     "src.billing.invoice_service.calculate_tax",
+     [
+      "hybrid",
+      0.026153846,
+      3,
+      6,
+      5,
+      0.37574
+     ]
+    ],
+    [
+     "entity",
+     "hybrid",
+     "src/billing/invoice_service.py",
      "src.billing.invoice_service.InvoiceService.create_invoice",
      [
       "hybrid",
@@ -37563,20 +37577,6 @@
       11,
       6,
       0.39472
-     ]
-    ],
-    [
-     "entity",
-     "hybrid",
-     "src/billing/invoice_service.py",
-     "src.billing.invoice_service.calculate_tax",
-     [
-      "hybrid",
-      0.025978408,
-      3,
-      7,
-      5,
-      0.37574
      ]
     ],
     [
@@ -37600,9 +37600,9 @@
      "src.billing.invoice_service.void_endpoint",
      [
       "hybrid",
-      0.025487013,
+      0.025657895,
       3,
-      8,
+      7,
       5,
       0.32419
      ]
@@ -37611,28 +37611,14 @@
      "entity",
      "hybrid",
      "src/billing/ledger.py",
-     "src.billing.ledger.Λογαριασμός",
+     "src.billing.ledger.Ledger.post_entry",
      [
       "hybrid",
-      0.025448143,
+      0.025332692,
       3,
-      2,
-      5,
-      0.28148
-     ]
-    ],
-    [
-     "entity",
-     "hybrid",
-     "src/billing/ledger.py",
-     "src.billing.ledger.café_total",
-     [
-      "hybrid",
-      0.025381526,
-      3,
+      8,
       6,
-      5,
-      0.29865
+      0.32226
      ]
     ],
     [
@@ -37647,6 +37633,20 @@
       12,
       6,
       0.37729
+     ]
+    ],
+    [
+     "entity",
+     "hybrid",
+     "src/billing/ledger.py",
+     "src.billing.ledger.Λογαριασμός",
+     [
+      "hybrid",
+      0.025252525,
+      3,
+      3,
+      5,
+      0.28148
      ]
     ]
    ],
@@ -37756,6 +37756,12 @@
     [
      "entity",
      "hybrid",
+     "src/billing/ledger.py",
+     "src.billing.ledger.Ledger.post_entry"
+    ],
+    [
+     "entity",
+     "hybrid",
      "src/billing/invoice_service.py",
      "src.billing.invoice_service.void_endpoint"
     ],
@@ -37764,12 +37770,6 @@
      "hybrid",
      "src/billing/invoice_service.py",
      "src.billing.invoice_service.calculate_tax"
-    ],
-    [
-     "entity",
-     "hybrid",
-     "src/billing/ledger.py",
-     "src.billing.ledger.café_total"
     ]
    ]
   },
@@ -37899,25 +37899,25 @@
     [
      "entity",
      "fts",
-     "src/billing/ledger.py",
-     "src.billing.ledger.Λογαριασμός",
-     [
-      5,
-      3,
-      2,
-      5
-     ]
-    ],
-    [
-     "entity",
-     "fts",
      "src/billing/invoice_service.py",
      "src.billing.invoice_service",
      [
       5,
       3,
-      3,
+      2,
       0
+     ]
+    ],
+    [
+     "entity",
+     "fts",
+     "src/billing/ledger.py",
+     "src.billing.ledger.Λογαριασμός",
+     [
+      5,
+      3,
+      3,
+      5
      ]
     ],
     [
@@ -37947,8 +37947,8 @@
     [
      "entity",
      "fts",
-     "src/billing/ledger.py",
-     "src.billing.ledger.café_total",
+     "src/billing/invoice_service.py",
+     "src.billing.invoice_service.calculate_tax",
      [
       5,
       3,
@@ -37960,23 +37960,11 @@
      "entity",
      "fts",
      "src/billing/invoice_service.py",
-     "src.billing.invoice_service.calculate_tax",
-     [
-      5,
-      3,
-      7,
-      5
-     ]
-    ],
-    [
-     "entity",
-     "fts",
-     "src/billing/invoice_service.py",
      "src.billing.invoice_service.void_endpoint",
      [
       5,
       3,
-      8,
+      7,
       5
      ]
     ],
@@ -37988,8 +37976,20 @@
      [
       5,
       3,
-      9,
+      8,
       6
+     ]
+    ],
+    [
+     "entity",
+     "fts",
+     "src/billing/ledger.py",
+     "src.billing.ledger.café_total",
+     [
+      5,
+      3,
+      9,
+      5
      ]
     ],
     [
@@ -38151,9 +38151,9 @@
      "src.billing.invoice_service",
      [
       "hybrid",
-      0.028594771,
+      0.028790389,
       3,
-      3,
+      2,
       0,
       0.52227
      ]
@@ -38204,6 +38204,20 @@
      "entity",
      "hybrid",
      "src/billing/invoice_service.py",
+     "src.billing.invoice_service.calculate_tax",
+     [
+      "hybrid",
+      0.026153846,
+      3,
+      6,
+      5,
+      0.37574
+     ]
+    ],
+    [
+     "entity",
+     "hybrid",
+     "src/billing/invoice_service.py",
      "src.billing.invoice_service.InvoiceService.create_invoice",
      [
       "hybrid",
@@ -38212,20 +38226,6 @@
       11,
       6,
       0.39472
-     ]
-    ],
-    [
-     "entity",
-     "hybrid",
-     "src/billing/invoice_service.py",
-     "src.billing.invoice_service.calculate_tax",
-     [
-      "hybrid",
-      0.025978408,
-      3,
-      7,
-      5,
-      0.37574
      ]
     ],
     [
@@ -38249,9 +38249,9 @@
      "src.billing.invoice_service.void_endpoint",
      [
       "hybrid",
-      0.025487013,
+      0.025657895,
       3,
-      8,
+      7,
       5,
       0.32419
      ]
@@ -38260,28 +38260,14 @@
      "entity",
      "hybrid",
      "src/billing/ledger.py",
-     "src.billing.ledger.Λογαριασμός",
+     "src.billing.ledger.Ledger.post_entry",
      [
       "hybrid",
-      0.025448143,
+      0.025332692,
       3,
-      2,
-      5,
-      0.28148
-     ]
-    ],
-    [
-     "entity",
-     "hybrid",
-     "src/billing/ledger.py",
-     "src.billing.ledger.café_total",
-     [
-      "hybrid",
-      0.025381526,
-      3,
+      8,
       6,
-      5,
-      0.29865
+      0.32226
      ]
     ],
     [
@@ -38296,6 +38282,20 @@
       12,
       6,
       0.37729
+     ]
+    ],
+    [
+     "entity",
+     "hybrid",
+     "src/billing/ledger.py",
+     "src.billing.ledger.Λογαριασμός",
+     [
+      "hybrid",
+      0.025252525,
+      3,
+      3,
+      5,
+      0.28148
      ]
     ]
    ],
@@ -38405,6 +38405,12 @@
     [
      "entity",
      "hybrid",
+     "src/billing/ledger.py",
+     "src.billing.ledger.Ledger.post_entry"
+    ],
+    [
+     "entity",
+     "hybrid",
      "src/billing/invoice_service.py",
      "src.billing.invoice_service.void_endpoint"
     ],
@@ -38413,12 +38419,6 @@
      "hybrid",
      "src/billing/invoice_service.py",
      "src.billing.invoice_service.calculate_tax"
-    ],
-    [
-     "entity",
-     "hybrid",
-     "src/billing/ledger.py",
-     "src.billing.ledger.café_total"
     ]
    ]
   },
@@ -41872,12 +41872,6 @@
      "Shop.Payments.PaymentGateway"
     ],
     [
-     "document",
-     "hybrid",
-     "docs/billing.md",
-     "Billing guide"
-    ],
-    [
      "entity",
      "hybrid",
      "src/billing/invoice_service.py",
@@ -41918,6 +41912,12 @@
      "hybrid",
      "src/billing/invoice_service.py",
      "src.billing.invoice_service.InvoiceService"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/billing.md",
+     "Billing guide"
     ],
     [
      "entity",
@@ -42822,12 +42822,6 @@
      "Billing guide"
     ],
     [
-     "document",
-     "hybrid",
-     "docs/unicode.txt",
-     "unicode"
-    ],
-    [
      "path",
      "hybrid",
      "src/billing/invoice_service.py",
@@ -42844,6 +42838,12 @@
      "hybrid",
      "src/billing/invoice_service.py",
      "src.billing.invoice_service.InvoiceService"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/unicode.txt",
+     "unicode"
     ],
     [
      "document",
@@ -43357,12 +43357,6 @@
      "Billing guide"
     ],
     [
-     "document",
-     "hybrid",
-     "docs/unicode.txt",
-     "unicode"
-    ],
-    [
      "entity",
      "hybrid",
      "src/billing/invoice_service.py",
@@ -43373,6 +43367,12 @@
      "hybrid",
      "src/billing/invoice_service.py",
      "src.billing.invoice_service.InvoiceService"
+    ],
+    [
+     "document",
+     "hybrid",
+     "docs/unicode.txt",
+     "unicode"
     ],
     [
      "document",
@@ -43503,24 +43503,24 @@
      "entity",
      "fts",
      "src/billing/ledger.py",
-     "src.billing.ledger.café_total",
+     "src.billing.ledger.Ledger.post_entry",
      [
       5,
       0,
       3,
-      5
+      6
      ]
     ],
     [
      "entity",
      "fts",
      "src/billing/ledger.py",
-     "src.billing.ledger.Ledger.post_entry",
+     "src.billing.ledger.café_total",
      [
       5,
       0,
       4,
-      6
+      5
      ]
     ],
     [
@@ -43734,6 +43734,20 @@
      ]
     ],
     [
+     "entity",
+     "hybrid",
+     "src/billing/ledger.py",
+     "src.billing.ledger.Ledger.post_entry",
+     [
+      "hybrid",
+      0.031498016,
+      0,
+      3,
+      6,
+      0.64003
+     ]
+    ],
+    [
      "document",
      "hybrid",
      "docs/billing.md",
@@ -43745,20 +43759,6 @@
       0,
       99,
       0.72235
-     ]
-    ],
-    [
-     "entity",
-     "hybrid",
-     "src/billing/ledger.py",
-     "src.billing.ledger.Ledger.post_entry",
-     [
-      "hybrid",
-      0.031257631,
-      0,
-      4,
-      6,
-      0.64003
      ]
     ],
     [
@@ -43790,20 +43790,6 @@
      ]
     ],
     [
-     "entity",
-     "hybrid",
-     "src/billing/ledger.py",
-     "src.billing.ledger.café_total",
-     [
-      "hybrid",
-      0.029709507,
-      0,
-      3,
-      5,
-      0.50634
-     ]
-    ],
-    [
      "document",
      "hybrid",
      "docs/orders.html",
@@ -43815,6 +43801,20 @@
       3,
       99,
       0.55201
+     ]
+    ],
+    [
+     "entity",
+     "hybrid",
+     "src/billing/ledger.py",
+     "src.billing.ledger.café_total",
+     [
+      "hybrid",
+      0.029469122,
+      0,
+      4,
+      5,
+      0.50634
      ]
     ],
     [

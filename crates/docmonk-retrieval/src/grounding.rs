@@ -22,6 +22,7 @@
 use std::collections::HashSet;
 use std::sync::OnceLock;
 
+use docmonk_core::lexnorm::{is_function_word, TermMatcher};
 use regex::Regex;
 use serde::Serialize;
 
@@ -55,6 +56,8 @@ pub struct EvidenceRef {
     /// citation was made ([`canonical_content`]); [`verify`] rejects the
     /// citation when the record's content no longer matches it.
     pub content_fingerprint: Option<String>,
+    /// Detected language of a cited chunk (ADR 0039).
+    pub language: Option<String>,
     /// The cited text (snippet), as data.
     pub text: String,
 }
@@ -72,6 +75,8 @@ pub struct Canonical {
     pub pages: Option<(i64, i64)>,
     /// The document a chunk (or title hit) belongs to.
     pub document_id: Option<String>,
+    /// Detected language of a chunk.
+    pub language: Option<String>,
 }
 
 /// Reloads the canonical content of `kind`/`record_id` from `c`, the
@@ -114,6 +119,7 @@ pub fn canonical_content(
                     lines: Some(span),
                     pages: None,
                     document_id: None,
+                    language: None,
                 })
             }
         },
@@ -122,6 +128,7 @@ pub fn canonical_content(
             lines: Some((p.start_line, p.end_line)),
             pages: None,
             document_id: None,
+            language: None,
         }),
         "document" => match store.chunk(b, record_id)? {
             Some(ch) => Some(Canonical {
@@ -131,6 +138,7 @@ pub fn canonical_content(
                     (Some(s), e) => Some((s, e.unwrap_or(s))),
                     _ => None,
                 },
+                language: ch.language.clone(),
                 document_id: Some(ch.document_id),
             }),
             // A title hit cites the document itself (its first chunk).
@@ -139,6 +147,7 @@ pub fn canonical_content(
                 lines: None,
                 pages: None,
                 document_id: Some(record_id.to_owned()),
+                language: ch.language.clone(),
             }),
         },
         "path" => store.file_rel_path(b, record_id)?.map(|p| Canonical {
@@ -146,6 +155,7 @@ pub fn canonical_content(
             lines: None,
             pages: None,
             document_id: None,
+            language: None,
         }),
         _ => None,
     })
@@ -167,8 +177,10 @@ pub fn evidence_refs_canonical(
             continue;
         };
         let lines = r.line_start.map(|s| (s, r.line_end.unwrap_or(s)));
-        r.content_fingerprint =
-            canonical_content(c, &r.kind, &r.record_id, lines)?.map(|k| fingerprint(&k.text));
+        if let Some(k) = canonical_content(c, &r.kind, &r.record_id, lines)? {
+            r.content_fingerprint = Some(fingerprint(&k.text));
+            r.language = k.language;
+        }
     }
     Ok(refs)
 }
@@ -199,6 +211,7 @@ pub fn evidence_refs(
                 heading: loc.and_then(|l| l.section.clone()),
                 fingerprint: fingerprint(&text),
                 content_fingerprint: None,
+                language: None,
                 text,
             })
         })
@@ -380,12 +393,15 @@ const STOPWORDS: &[&str] = &[
     "ποια",
 ];
 
-/// Content terms of a query (lowercased words of 3+ chars, no stopwords).
+/// Content terms of a query (lowercased words of 3+ chars, no stopwords
+/// or Greek and Arabic function words).
 pub fn content_terms(q: &str) -> Vec<String> {
     let mut seen = HashSet::new();
     q.split(|c: char| !c.is_alphanumeric() && c != '_')
         .map(str::to_lowercase)
-        .filter(|w| w.chars().count() >= 3 && !STOPWORDS.contains(&w.as_str()))
+        .filter(|w| {
+            w.chars().count() >= 3 && !STOPWORDS.contains(&w.as_str()) && !is_function_word(w)
+        })
         .filter(|w| seen.insert(w.clone()))
         .collect()
 }
@@ -406,7 +422,10 @@ pub struct Support {
 /// Term coverage of `query` by the verified `refs`.
 pub fn support(query: &str, refs: &[&EvidenceRef], min_coverage: f64) -> Support {
     let terms = content_terms(query);
-    let texts: Vec<(String, String)> = refs
+    // Terms match as written or by their normal forms (ADR 0039):
+    // `άδεια` is supported by `άδειας`, `経費精算の期限` by most of its
+    // character pairs.
+    let texts: Vec<(String, TermMatcher)> = refs
         .iter()
         .map(|r| {
             let t = format!(
@@ -415,7 +434,7 @@ pub fn support(query: &str, refs: &[&EvidenceRef], min_coverage: f64) -> Support
                 r.path,
                 r.heading.as_deref().unwrap_or("")
             );
-            (r.id.clone(), t.to_lowercase())
+            (r.id.clone(), TermMatcher::new(&t))
         })
         .collect();
     let mut found = Vec::new();
@@ -424,7 +443,7 @@ pub fn support(query: &str, refs: &[&EvidenceRef], min_coverage: f64) -> Support
     for t in &terms {
         let hits: Vec<&String> = texts
             .iter()
-            .filter(|(_, x)| x.contains(t.as_str()))
+            .filter(|(_, m)| m.contains(t))
             .map(|(id, _)| id)
             .collect();
         if hits.is_empty() {
@@ -577,6 +596,7 @@ mod tests {
             heading: Some("Refunds".into()),
             fingerprint: fingerprint(text),
             content_fingerprint: None,
+            language: None,
             text: text.into(),
         }
     }

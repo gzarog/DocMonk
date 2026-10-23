@@ -90,27 +90,12 @@ impl DoclingConverter {
         Ok(v)
     }
 
-    /// The PDF policy: plain text layer; OCR when
-    /// `always`, or when `auto` and the plain result looks scanned; OCR
-    /// failure or unavailability keeps the plain result.
+    /// The PDF policy (ADR 0039): the text layer, then OCR for every page
+    /// whose text layer is (nearly) empty (`auto`), or for all pages
+    /// (`always`), merged page by page ([`crate::pdf::merge_ocr`]): OCR
+    /// adds the missing text and never replaces the text layer. How the
+    /// pages were read is recorded under [`EXTRACTION_KEY`].
     fn convert_pdf(&self, path: &Path, hash: &str) -> Result<Value, ConversionError> {
-        let ocr_result = |this: &Self| -> Result<Option<Value>, ConversionError> {
-            let Some(engine) = this.ocr_engine() else {
-                return Ok(None);
-            };
-            this.cached(hash, "ocr:on", || match crate::pdf::ocr_pdf(path, engine) {
-                Ok(v) => Ok(v),
-                Err(e) => {
-                    tracing::warn!(component = "ocr", event = "ocr_conversion_failed", error = %e);
-                    Ok(None)
-                }
-            })
-        };
-        if self.pdf.ocr == "always" {
-            if let Some(v) = ocr_result(self)? {
-                return Ok(v);
-            }
-        }
         let plain = self
             .cached(hash, "ocr:off", || {
                 crate::pdf::text_layer(path)
@@ -118,12 +103,106 @@ impl DoclingConverter {
                     .map_err(ConversionError::Failed)
             })?
             .unwrap_or(Value::Null);
-        if self.pdf.ocr == "auto" && crate::normalize::normalize(&plain, true).is_scanned {
-            if let Some(v) = ocr_result(self)? {
-                return Ok(v);
+        let (chars, pages) = crate::pdf::page_text_chars(&plain);
+        let sparse_pages: std::collections::BTreeSet<usize> = chars
+            .iter()
+            .filter(|(_, n)| (**n as f64) < crate::normalize::SCANNED_CHARS_PER_PAGE_THRESHOLD)
+            .map(|(p, _)| *p)
+            .collect();
+        let sparse = sparse_pages.len();
+        let wanted = match self.pdf.ocr.as_str() {
+            "always" => pages > 0,
+            "auto" => sparse > 0,
+            _ => false,
+        };
+        let mut report = PdfExtraction {
+            pages,
+            text_layer_pages: pages - sparse,
+            ..PdfExtraction::default()
+        };
+        let mut doc = plain;
+        report.ocr = if !wanted {
+            if sparse > 0 && self.pdf.ocr == "off" {
+                "disabled"
+            } else {
+                "not_needed"
             }
+        } else if let Some(engine) = self.ocr_engine() {
+            // `auto` reads only the pages without a text layer.
+            let (key, only) = if self.pdf.ocr == "always" || sparse == pages {
+                ("ocr:on".to_owned(), None)
+            } else {
+                use sha2::{Digest, Sha256};
+                let list: Vec<String> = sparse_pages.iter().map(usize::to_string).collect();
+                let digest = format!("{:x}", Sha256::digest(list.join(",").as_bytes()));
+                (format!("ocr:pages:{}", &digest[..16]), Some(&sparse_pages))
+            };
+            let ocr = self.cached(hash, &key, || match crate::pdf::ocr_pdf(path, engine, only) {
+                Ok(v) => Ok(Some(v.unwrap_or(Value::Null))),
+                Err(e) => {
+                    tracing::warn!(component = "ocr", event = "ocr_conversion_failed", error = %e);
+                    Ok(None)
+                }
+            })?;
+            match ocr {
+                None => "failed",
+                Some(v) if v.is_null() => "no_images",
+                Some(v) => {
+                    let (merged, stats) = crate::pdf::merge_ocr(doc, &v);
+                    doc = merged;
+                    report.ocr_pages = stats.ocr_pages;
+                    report.ocr_duplicate_blocks = stats.duplicate_blocks;
+                    "applied"
+                }
+            }
+        } else {
+            "unavailable"
+        };
+        let (after, _) = crate::pdf::page_text_chars(&doc);
+        report.empty_pages = after.values().filter(|n| **n == 0).count();
+        if doc.is_object() {
+            doc[EXTRACTION_KEY] = report.to_json();
         }
-        Ok(plain)
+        Ok(doc)
+    }
+}
+
+/// Docling-JSON key under which the PDF policy records how a PDF's pages
+/// were read ([`PdfExtraction`]); the normalizer ignores it.
+pub const EXTRACTION_KEY: &str = "docmonk_extraction";
+
+/// Identity of the PDF page policy, part of `parser_version`. (1: per-page
+/// OCR merged with the text layer, extraction report.)
+pub const PDF_PAGES_VERSION: &str = "pdf-pages-1";
+
+/// How one PDF's pages were read.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PdfExtraction {
+    pub pages: usize,
+    /// Pages whose text layer has text.
+    pub text_layer_pages: usize,
+    /// `not_needed`, `applied`, `no_images` (nothing to recognize),
+    /// `unavailable` (no verified OCR models), `failed`, or `disabled`
+    /// (`documents.ocr off` while pages lack text).
+    pub ocr: &'static str,
+    /// Pages that gained OCR text.
+    pub ocr_pages: usize,
+    /// OCR blocks dropped as repeats of the text layer.
+    pub ocr_duplicate_blocks: usize,
+    /// Pages still without any text.
+    pub empty_pages: usize,
+}
+
+impl PdfExtraction {
+    fn to_json(&self) -> Value {
+        serde_json::json!({
+            "pages": self.pages,
+            "text_layer_pages": self.text_layer_pages,
+            "ocr": self.ocr,
+            "ocr_pages": self.ocr_pages,
+            "ocr_duplicate_blocks": self.ocr_duplicate_blocks,
+            "empty_pages": self.empty_pages,
+        })
     }
 }
 
@@ -187,6 +266,6 @@ impl DocumentConverter for DoclingConverter {
     }
 
     fn parser_version(&self) -> String {
-        DOCLING_PARSER_VERSION.into()
+        format!("{DOCLING_PARSER_VERSION}+{PDF_PAGES_VERSION}")
     }
 }

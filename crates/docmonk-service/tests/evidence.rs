@@ -132,6 +132,7 @@ fn refs_of(v: &Value) -> Vec<EvidenceRef> {
             heading: s(e, "heading"),
             fingerprint: s(e, "fingerprint").unwrap(),
             content_fingerprint: s(e, "content_fingerprint"),
+            language: s(e, "language"),
             text: s(e, "text").unwrap(),
         })
         .collect()

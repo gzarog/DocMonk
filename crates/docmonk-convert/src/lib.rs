@@ -104,10 +104,13 @@ pub fn registry_with(config: &DocMonkConfig, opts: &RegistryOptions) -> Registry
     } else {
         converter.parser_version()
     };
+    // The normalized lexical projection of chunk FTS rows and the detected
+    // languages (ADR 0039) are part of what chunks derive from.
     r.versions.chunker_version = format!(
-        "{}+{}",
+        "{}+{}+{}",
         docmonk_documents::chunker::chunker_version_stamp(),
-        docmonk_documents::version::CHUNK_PARENTS_VERSION
+        docmonk_documents::version::CHUNK_PARENTS_VERSION,
+        docmonk_core::lexnorm::LEXICAL_PROJECTION_VERSION
     );
     r.versions.embedding_text_version =
         Some(docmonk_documents::chunker::EMBEDDING_TEXT_VERSION.into());

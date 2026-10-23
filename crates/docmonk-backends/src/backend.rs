@@ -15,6 +15,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+use docmonk_core::lexnorm::projection;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 
@@ -1609,6 +1610,18 @@ pub struct DocumentDoc {
     pub parent_title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mtime: Option<f64>,
+    /// Detected language and script (ADR 0039).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub script: Option<String>,
+    /// How a PDF's pages were read (ADR 0039).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ocr: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ocr_pages: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub empty_pages: Option<i64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -1653,6 +1666,9 @@ pub struct ChunkDoc {
     pub parent_title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mtime: Option<f64>,
+    /// Detected language of the chunk (ADR 0039).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 }
 
 /// An implementation passage (ADR 0037), with its owner's display fields
@@ -1763,16 +1779,35 @@ impl BuildWriter<'_> {
         )
     }
     pub fn entity(&mut self, d: &EntityDoc) -> Result<()> {
-        self.put(IndexKind::Code, &d.entity_id.clone(), d, &[])
+        let norm = projection(&d.name);
+        self.put(IndexKind::Code, &d.entity_id.clone(), d, &norm_field(&norm))
     }
     pub fn document(&mut self, d: &DocumentDoc) -> Result<()> {
         self.put(IndexKind::Documents, &d.document_id.clone(), d, &[])
     }
     pub fn chunk(&mut self, d: &ChunkDoc) -> Result<()> {
-        self.put(IndexKind::Chunks, &d.chunk_id.clone(), d, &[])
+        // The text the local `words` column projects: heading, body, title.
+        let norm = projection(&format!(
+            "{} {} {}",
+            d.fts_heading.as_deref().unwrap_or_default(),
+            d.search_text,
+            d.title.as_deref().unwrap_or_default()
+        ));
+        self.put(
+            IndexKind::Chunks,
+            &d.chunk_id.clone(),
+            d,
+            &norm_field(&norm),
+        )
     }
     pub fn passage(&mut self, d: &PassageDoc) -> Result<()> {
-        self.put(IndexKind::Passages, &d.passage_id.clone(), d, &[])
+        let norm = projection(&d.text);
+        self.put(
+            IndexKind::Passages,
+            &d.passage_id.clone(),
+            d,
+            &norm_field(&norm),
+        )
     }
     pub fn edge(&mut self, d: &EdgeDoc) -> Result<()> {
         self.put(
@@ -1793,6 +1828,16 @@ impl BuildWriter<'_> {
 
     pub fn finish(self) -> Result<BulkReport> {
         self.bulk.finish()
+    }
+}
+
+/// The `norm` field of a record whose text has a normalized projection
+/// (ADR 0039); nothing for plain English text.
+fn norm_field(norm: &str) -> Vec<(&'static str, &str)> {
+    if norm.is_empty() {
+        Vec::new()
+    } else {
+        vec![("norm", norm)]
     }
 }
 

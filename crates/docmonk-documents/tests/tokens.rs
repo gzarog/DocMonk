@@ -63,3 +63,37 @@ fn counts_and_splits_are_as_expected() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+#[test]
+fn sentences_end_at_cjk_and_arabic_full_stops() {
+    assert_eq!(
+        split_sentences("経費精算は30日以内です。領収書を添付してください。次へ"),
+        [
+            "経費精算は30日以内です。",
+            "領収書を添付してください。",
+            "次へ"
+        ]
+    );
+    assert_eq!(
+        split_sentences("备份保留三十天！ 恢复演练每季度一次？是的"),
+        ["备份保留三十天！", "恢复演练每季度一次？", "是的"]
+    );
+    assert_eq!(
+        split_sentences("هل يجب تفعيل المصادقة؟ نعم، دائما."),
+        ["هل يجب تفعيل المصادقة؟", "نعم، دائما."]
+    );
+    // Latin text is unchanged: a full stop needs the following space.
+    assert_eq!(
+        split_sentences("Version 2.5 is out. Upgrade now!"),
+        ["Version 2.5 is out.", "Upgrade now!"]
+    );
+}
+
+#[test]
+fn budget_splits_never_insert_spaces_into_japanese() {
+    let text = "経費精算は三十日以内に提出してください。".repeat(40);
+    let pieces = split_by_token_budget(&text, 64);
+    assert!(pieces.len() > 1);
+    assert!(pieces.iter().all(|p| !p.contains(' ')), "{pieces:?}");
+    assert_eq!(pieces.concat(), text);
+}

@@ -182,3 +182,64 @@ fn walk(dir: &Path) -> Vec<PathBuf> {
     }
     out
 }
+
+fn processor(c: DoclingConverter) -> DocumentProcessor {
+    DocumentProcessor {
+        converter: Arc::new(c),
+        chunking: Default::default(),
+        max_pages: None,
+        attachments: None,
+        image_ocr: false,
+    }
+}
+
+/// How the pages of a PDF were read is recorded on its document, and a
+/// page left without text by a missing or failed OCR is a visible notice
+/// (ADR 0039), never a silently incomplete extraction.
+#[test]
+fn page_extraction_is_recorded_and_text_gaps_are_visible() {
+    let bogus = std::env::temp_dir().join("docmonk-no-ocr-models");
+    let k = processor(converter("auto", false, Some(&bogus), None))
+        .knowledge(&fixture("scanned_image.pdf"), "f", None)
+        .unwrap();
+    let pages = k.documents[0].pages.clone().unwrap();
+    assert_eq!(
+        (pages.ocr.as_str(), pages.ocr_pages, pages.empty_pages),
+        ("unavailable", 0, 1)
+    );
+    let notice = k.notice.unwrap();
+    assert_eq!(notice.code, "ocr_unavailable");
+    assert!(
+        notice.message.contains("1 of 1 page(s) have no text"),
+        "{notice:?}"
+    );
+
+    let k = processor(converter("off", false, None, None))
+        .knowledge(&fixture("scanned_image.pdf"), "f", None)
+        .unwrap();
+    // Turned off by configuration: recorded, not a degraded file.
+    assert_eq!(k.documents[0].pages.as_ref().unwrap().ocr, "disabled");
+    assert_eq!(k.documents[0].pages.as_ref().unwrap().empty_pages, 1);
+    assert!(k.notice.is_none());
+
+    // A complete text layer needs no OCR and raises nothing.
+    let k = processor(converter("auto", false, Some(&bogus), None))
+        .knowledge(&fixture("sample.pdf"), "f", None)
+        .unwrap();
+    let pages = k.documents[0].pages.clone().unwrap();
+    assert_eq!((pages.ocr.as_str(), pages.empty_pages), ("not_needed", 0));
+    assert!(k.notice.is_none());
+    assert_eq!(k.documents[0].language.as_deref(), Some("en"));
+    assert_eq!(k.documents[0].script.as_deref(), Some("Latn"));
+
+    let Some(m) = models() else { return };
+    let k = processor(converter("auto", false, Some(&m), None))
+        .knowledge(&fixture("scanned_image.pdf"), "f", None)
+        .unwrap();
+    let pages = k.documents[0].pages.clone().unwrap();
+    assert_eq!(
+        (pages.ocr.as_str(), pages.ocr_pages, pages.empty_pages),
+        ("applied", 1, 0)
+    );
+    assert!(k.notice.is_none());
+}

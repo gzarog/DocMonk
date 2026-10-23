@@ -95,6 +95,24 @@ pub struct DocumentRow {
     pub is_scanned: bool,
     pub content_hash: Option<String>,
     pub attachment: Option<AttachmentProvenance>,
+    /// Detected language (ISO 639-1) and script (ISO 15924) of the whole
+    /// document, where reliable (ADR 0039); chunks carry their own.
+    pub language: Option<String>,
+    pub script: Option<String>,
+    /// How a PDF's pages were read (ADR 0039); `None` for other formats.
+    pub pages: Option<PageExtraction>,
+}
+
+/// How a PDF's pages were read: from its text layer, by OCR, or not at all.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+pub struct PageExtraction {
+    /// `not_needed`, `applied`, `no_images`, `unavailable`, `failed` or
+    /// `disabled`.
+    pub ocr: String,
+    /// Pages that gained OCR text.
+    pub ocr_pages: i64,
+    /// Pages still without text.
+    pub empty_pages: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -116,6 +134,9 @@ pub struct ChunkRow {
     pub caption: Option<String>,
     /// Ordinal of the enclosing heading chunk in the same document.
     pub parent_ordinal: Option<i64>,
+    /// Detected language of this chunk where reliable (a mixed-language
+    /// document's chunks differ from it).
+    pub language: Option<String>,
 }
 
 /// An implementation passage of a code file: retrieval text over exact
@@ -678,7 +699,8 @@ impl ProjectStore {
             .prepare(
                 "SELECT id, file_id, format, title, author, page_count, is_scanned, content_hash,
                     parent_document_id, attachment_name, attachment_content_type,
-                    attachment_index, attachment_content_id
+                    attachment_index, attachment_content_id, language, script, ocr, ocr_pages,
+                    empty_pages
                  FROM documents WHERE build_id = ?1
                  ORDER BY file_id, COALESCE(attachment_index, -1)",
             )
@@ -706,6 +728,13 @@ impl ProjectStore {
                         }),
                         _ => None,
                     },
+                    language: r.get(13)?,
+                    script: r.get(14)?,
+                    pages: r.get::<_, Option<String>>(15)?.map(|ocr| PageExtraction {
+                        ocr,
+                        ocr_pages: r.get::<_, Option<i64>>(16).ok().flatten().unwrap_or(0),
+                        empty_pages: r.get::<_, Option<i64>>(17).ok().flatten().unwrap_or(0),
+                    }),
                 })
             })
             .map_err(StorageError::sqlite("list documents"))?;
@@ -1061,7 +1090,7 @@ fn insert_knowledge(tx: &Connection, build_id: &str, k: &FileKnowledge) -> Resul
                 e.qualified_name,
                 e.signature.clone().unwrap_or_else(|| e.name.clone()),
                 // The name's parts, weighted like the name itself.
-                crate::search::identifier_words(&e.name)
+                crate::search::lexical_words(&e.name)
             ],
         )
         .map_err(err("index entity"))?;
@@ -1097,8 +1126,10 @@ fn insert_knowledge(tx: &Connection, build_id: &str, k: &FileKnowledge) -> Resul
             tx,
             "INSERT INTO documents (id, build_id, file_id, format, title, author, page_count,
                 is_scanned, content_hash, parent_document_id, attachment_name,
-                attachment_content_type, attachment_index, attachment_content_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                attachment_content_type, attachment_index, attachment_content_id, language,
+                script, ocr, ocr_pages, empty_pages)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
+                ?18, ?19)",
             params![
                 d.id,
                 build_id,
@@ -1113,7 +1144,12 @@ fn insert_knowledge(tx: &Connection, build_id: &str, k: &FileKnowledge) -> Resul
                 a.and_then(|a| a.name.clone()),
                 a.and_then(|a| a.content_type.clone()),
                 a.map(|a| a.index),
-                a.and_then(|a| a.content_id.clone())
+                a.and_then(|a| a.content_id.clone()),
+                d.language,
+                d.script,
+                d.pages.as_ref().map(|p| p.ocr.clone()),
+                d.pages.as_ref().map(|p| p.ocr_pages),
+                d.pages.as_ref().map(|p| p.empty_pages)
             ],
         )
         .map_err(err("insert document"))?;
@@ -1128,8 +1164,9 @@ fn insert_knowledge(tx: &Connection, build_id: &str, k: &FileKnowledge) -> Resul
             tx,
             "INSERT INTO chunks (id, build_id, document_id, file_id, kind, ordinal, heading_path,
                 heading_level, text, search_text, embedding_text, token_count, page_start,
-                page_end, table_rows, caption, parent_ordinal)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                page_end, table_rows, caption, parent_ordinal, language)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
+                ?18)",
             params![
                 c.id,
                 build_id,
@@ -1147,7 +1184,8 @@ fn insert_knowledge(tx: &Connection, build_id: &str, k: &FileKnowledge) -> Resul
                 c.page_end,
                 rows,
                 c.caption,
-                c.parent_ordinal
+                c.parent_ordinal,
+                c.language
             ],
         )
         .map_err(err("insert chunk"))?;
@@ -1164,8 +1202,7 @@ fn insert_knowledge(tx: &Connection, build_id: &str, k: &FileKnowledge) -> Resul
             c.heading_path.join(" > ")
         };
         let title = title.unwrap_or_default();
-        let words =
-            crate::search::identifier_words(&format!("{heading} {} {title}", c.search_text));
+        let words = crate::search::lexical_words(&format!("{heading} {} {title}", c.search_text));
         cached(
             tx,
             "INSERT INTO chunk_fts (rowid, chunk_id, build_id, heading, body, title, words)
@@ -1207,8 +1244,9 @@ fn insert_knowledge(tx: &Connection, build_id: &str, k: &FileKnowledge) -> Resul
                 build_id,
                 p.header,
                 p.text,
-                // The parts of identifiers written in the passage.
-                crate::search::identifier_words(&p.text)
+                // The parts of identifiers written in the passage and its
+                // normalized projection.
+                crate::search::lexical_words(&p.text)
             ],
         )
         .map_err(err("index passage"))?;
@@ -1702,7 +1740,7 @@ impl ProjectStore {
 
 const CHUNK_COLUMNS: &str = "id, document_id, file_id, kind, ordinal, heading_path, heading_level,
     text, search_text, embedding_text, token_count, page_start, page_end, table_rows, caption,
-    parent_ordinal";
+    parent_ordinal, language";
 
 fn chunk_from_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<ChunkRow> {
     let heading_path: String = r.get(5)?;
@@ -1724,6 +1762,7 @@ fn chunk_from_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<ChunkRow> {
         table_rows: table_rows.and_then(|t| serde_json::from_str(&t).ok()),
         caption: r.get(14)?,
         parent_ordinal: r.get(15)?,
+        language: r.get(16)?,
     })
 }
 

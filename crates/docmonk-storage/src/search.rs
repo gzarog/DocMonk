@@ -386,9 +386,19 @@ impl ProjectStore {
                 let rel_path: String = r.get(5)?;
                 let heading_path: String = r.get(9)?;
                 let snippet: Option<String> = r.get(17)?;
+                // A snippet drawn from the `words` column (identifier parts,
+                // normalized forms) is not text a reader can cite: fall back
+                // to the body's start, as the server does when only its
+                // `norm` field matched.
                 let snippet = snippet
                     .map(|s| s.trim().to_owned())
-                    .filter(|s| !s.is_empty());
+                    .filter(|s| !s.is_empty())
+                    .filter(|s| {
+                        let core = s.trim_start_matches("...").trim_end_matches("...").trim();
+                        [&heading, &body, &fts_title]
+                            .iter()
+                            .any(|t| t.contains(core))
+                    });
                 let fallback: String = if body.is_empty() { &heading } else { &body }
                     .chars()
                     .take(crate::vectors::SNIPPET_CHARS)
@@ -606,6 +616,20 @@ pub fn identifier_words(text: &str) -> String {
         }
     }
     out.join(" ")
+}
+
+/// The `words` column of the chunk, code and passage FTS tables: the
+/// parts of identifiers ([`identifier_words`]) and the normalized lexical
+/// projection ([`docmonk_core::lexnorm::projection`], ADR 0039), which
+/// the server indexes as its `norm` field.
+pub fn lexical_words(text: &str) -> String {
+    let parts = identifier_words(text);
+    let norm = docmonk_core::lexnorm::projection(text);
+    match (parts.is_empty(), norm.is_empty()) {
+        (_, true) => parts,
+        (true, false) => norm,
+        (false, false) => format!("{parts} {norm}"),
+    }
 }
 
 /// Parts of one identifier token, lowercased (see [`identifier_words`]).

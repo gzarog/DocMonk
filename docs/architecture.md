@@ -78,6 +78,12 @@ Every citation carries a fingerprint of its record's stored content and is
 re-verified (source, build, scope, record, location, content) before it
 counts as support. See [ADR 0038](adr/0038-shared-ranking-and-citation-verification.md).
 
+Lexical matching of accented, inflected and unsegmented text goes through
+one normalization, computed by DocMonk itself (`docmonk_core::lexnorm`).
+It is indexed next to the original text by both backends, the local
+`words` column and the server `norm` field, and applied to queries the
+same way. See [ADR 0039](adr/0039-normalized-lexical-projection-and-pdf-pages.md).
+
 Every read goes through `KnowledgeRead`, pinned to each source's published
 build and graph generation. Backend-specific code only implements those
 reads. See [ADR 0036](adr/0036-retrieval-anchors-and-exact-occurrences.md).

@@ -86,6 +86,7 @@ tempfile = "3"
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "registry"] }
+unicode-normalization = "0.1"
 yaml-rust2 = "0.10"
 
 # Inference/decoding crates are unusably slow unoptimized; tests run in the

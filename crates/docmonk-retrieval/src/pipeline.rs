@@ -111,19 +111,19 @@ pub fn order_by_term_coverage(hits: &mut [RankedHit], query: &str) {
     if terms.is_empty() {
         return;
     }
+    // As written or by normal form (ADR 0039), like grounding support.
     let cover = |h: &RankedHit| {
         let c = &h.candidate;
-        let text = format!(
+        let text = docmonk_core::lexnorm::TermMatcher::new(&format!(
             "{} {} {}",
             c.title,
             c.path,
             c.snippet.as_deref().unwrap_or_default()
-        )
-        .to_lowercase();
-        terms.iter().filter(|t| text.contains(t.as_str())).count()
+        ));
+        terms.iter().filter(|t| text.contains(t)).count()
     };
     let pins = hits.iter().take_while(|h| h.candidate.exact_match).count();
-    hits[pins..].sort_by_key(|h| std::cmp::Reverse(cover(h)));
+    hits[pins..].sort_by_cached_key(|h| std::cmp::Reverse(cover(h)));
 }
 
 /// One fused ranking.

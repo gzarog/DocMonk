@@ -402,6 +402,11 @@ pub fn docs_rows(home: &Home, source_id: Option<&str>) -> Result<Vec<Value>, Doc
                 "paragraph_count": paragraphs,
                 "table_count": tables,
                 "is_scanned": doc.is_some_and(|d| d.is_scanned),
+                "language": doc.and_then(|d| d.language.clone()),
+                "script": doc.and_then(|d| d.script.clone()),
+                "pages": doc.and_then(|d| d.pages.as_ref()).map(|p| json!({
+                    "ocr": p.ocr, "ocr_pages": p.ocr_pages, "empty_pages": p.empty_pages,
+                })),
                 "attachments": attachments,
             }));
         }
@@ -457,6 +462,11 @@ fn server_docs_rows(home: &Home, source_id: Option<&str>) -> Result<Vec<Value>, 
                 "paragraph_count": paragraphs,
                 "table_count": tables,
                 "is_scanned": doc.is_some_and(|d| d["is_scanned"].as_bool() == Some(true)),
+                "language": doc.map(|d| d["language"].clone()),
+                "script": doc.map(|d| d["script"].clone()),
+                "pages": doc.filter(|d| d["ocr"].is_string()).map(|d| json!({
+                    "ocr": d["ocr"], "ocr_pages": d["ocr_pages"], "empty_pages": d["empty_pages"],
+                })),
                 "attachments": attachments,
             }));
         }

@@ -893,6 +893,13 @@ impl ServerReader {
                         content_id: opt_str(d, "attachment_content_id"),
                     }
                 }),
+                language: opt_str(d, "language"),
+                script: opt_str(d, "script"),
+                pages: opt_str(d, "ocr").map(|ocr| docmonk_storage::knowledge::PageExtraction {
+                    ocr,
+                    ocr_pages: d["ocr_pages"].as_i64().unwrap_or(0),
+                    empty_pages: d["empty_pages"].as_i64().unwrap_or(0),
+                }),
             })
             .collect())
     }
@@ -1121,6 +1128,7 @@ fn chunk_row(s: &Value) -> ChunkRow {
         table_rows: serde_json::from_value(s["table_rows"].clone()).ok(),
         caption: opt_str(s, "caption"),
         parent_ordinal: s["parent_ordinal"].as_i64(),
+        language: opt_str(s, "language"),
     }
 }
 
@@ -1363,7 +1371,8 @@ impl KnowledgeRead for ServerReader {
         if !filter.document_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let Some(must) = Self::fts_query(expression, &["name", "qualified_name", "signature"])
+        let Some(must) =
+            Self::fts_query(expression, &["name", "qualified_name", "signature", "norm"])
         else {
             return Ok(Vec::new());
         };
@@ -1439,8 +1448,10 @@ impl KnowledgeRead for ServerReader {
         snippet_tokens: i64,
         filter: &ReadFilter,
     ) -> Result<Vec<DocumentSearchRow>> {
-        let Some(must) = Self::fts_query(expression, &["fts_heading^5", "search_text", "title^8"])
-        else {
+        let Some(must) = Self::fts_query(
+            expression,
+            &["fts_heading^5", "search_text", "title^8", "norm^0.5"],
+        ) else {
             return Ok(Vec::new());
         };
         let mut f = self.scope(b)?;
@@ -1836,7 +1847,7 @@ impl KnowledgeRead for ServerReader {
         if !filter.document_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let Some(must) = Self::fts_query(expression, &["header^3", "text"]) else {
+        let Some(must) = Self::fts_query(expression, &["header^3", "text", "norm^0.5"]) else {
             return Ok(Vec::new());
         };
         let mut f = self.scope(b)?;

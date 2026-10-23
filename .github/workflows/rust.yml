@@ -204,6 +204,11 @@ jobs:
       # same corpus and labels through every backend (docs/evaluation.md).
       - name: Held-out retrieval evaluation
         run: cargo test -p docmonk-service --test heldout_eval -- --nocapture
+      # The normalized lexical projection (ADR 0039) as one contract for
+      # SQLite and both engines: accents, Greek and Arabic inflection,
+      # unsegmented Japanese and Chinese.
+      - name: Multilingual lexical contract
+        run: cargo test -p docmonk-service --test multilingual_lexical -- --nocapture
       # Status (ADR 0034) on both engines: 150 sources in <= 30 requests,
       # a watch refresh in < 10, pending builds invisible, global error
       # order, two-host run visibility, fencing and expired leases; the

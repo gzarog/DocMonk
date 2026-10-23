@@ -239,14 +239,89 @@ pub fn query_plan(text: &str) -> Option<Vec<QueryVariant>> {
 
 /// [`query_plan`] with options. Stopwords are dropped from every tier
 /// but the phrase (a query of nothing but stopwords keeps them).
+///
+/// When normalization (ADR 0039) gives some words other forms (accents,
+/// Greek and Arabic inflection, unsegmented Han/kana/Hangul runs), every
+/// tier is followed by the same tier over the normalized words, which the
+/// indexed projection matches; plain English plans are unchanged.
 pub fn query_plan_with(text: &str, opts: PlanOptions) -> Option<Vec<QueryVariant>> {
     let tokens = word_tokens(text);
     if tokens.is_empty() {
         return None;
     }
-    let mut content: Vec<String> = tokens.iter().filter(|t| !is_stopword(t)).cloned().collect();
+    let quote = |t: &String| format!("\"{t}\"");
+    let content = content_terms(&tokens);
+    let mut plan = plan_tiers(&tokens, &content, opts);
+    let normalized = |words: &[String]| -> Option<Vec<String>> {
+        let mut changed = false;
+        let mut out = Vec::new();
+        for w in words {
+            let forms = docmonk_core::lexnorm::query_forms(w);
+            if forms.is_empty() {
+                out.push(w.clone());
+            } else {
+                changed = true;
+                out.extend(forms);
+            }
+        }
+        changed.then_some(out)
+    };
+    if let Some(norm_tokens) = normalized(&tokens) {
+        let mut norm_content = normalized(&content).unwrap_or_else(|| content.clone());
+        let mut seen = HashSet::new();
+        norm_content.retain(|t| seen.insert(t.to_lowercase()));
+        if norm_content.len() > MAX_QUERY_TERMS {
+            norm_content = cap_terms(norm_content, MAX_QUERY_TERMS);
+        }
+        let extra = plan_tiers(&norm_tokens, &norm_content, opts);
+        // Each normalized tier right after the original tier.
+        let mut merged = Vec::with_capacity(plan.len() + extra.len());
+        let mut extra = extra.into_iter().peekable();
+        for v in plan {
+            while let Some(e) = extra.next_if(|e| e.tier < v.tier) {
+                merged.push(e);
+            }
+            let tier = v.tier;
+            merged.push(v);
+            while let Some(e) = extra.next_if(|e| e.tier == tier) {
+                merged.push(e);
+            }
+        }
+        merged.extend(extra);
+        plan = merged;
+    }
+    // Drop repeated expressions (a single content term makes several
+    // tiers identical), keeping the most precise tier, and any expression
+    // over the size budget (a 100-word phrase can't usefully match).
+    let mut seen = HashSet::new();
+    plan.retain(|v| {
+        v.expression.len() <= MAX_EXPRESSION_BYTES && seen.insert(v.expression.clone())
+    });
+    if plan.is_empty() {
+        // Every tier was over budget: the capped OR still finds candidates.
+        plan.push(QueryVariant {
+            tier: LexicalTier::OrFallback,
+            expression: cap_terms(content_terms(&tokens), MAX_OR_TERMS)
+                .iter()
+                .map(quote)
+                .collect::<Vec<_>>()
+                .join(" OR "),
+        });
+    }
+    Some(plan)
+}
+
+/// The content words of `tokens`: no stopwords (unless nothing else is
+/// left), no Greek or Arabic function words, no repeats, at most
+/// [`MAX_QUERY_TERMS`].
+fn content_terms(tokens: &[String]) -> Vec<String> {
+    let mut content: Vec<String> = tokens
+        .iter()
+        .filter(|t| !is_stopword(t) && !docmonk_core::lexnorm::is_function_word(t))
+        .cloned()
+        .collect();
     if content.is_empty() {
-        content = tokens.clone();
+        content = tokens.to_vec();
     }
     // FTS matching is case-insensitive: a repeated term adds nothing.
     let mut seen_terms = HashSet::new();
@@ -254,6 +329,11 @@ pub fn query_plan_with(text: &str, opts: PlanOptions) -> Option<Vec<QueryVariant
     if content.len() > MAX_QUERY_TERMS {
         content = cap_terms(content, MAX_QUERY_TERMS);
     }
+    content
+}
+
+/// The tiers of one word list (see [`query_plan_with`]).
+fn plan_tiers(tokens: &[String], content: &[String], opts: PlanOptions) -> Vec<QueryVariant> {
     let quote = |t: &String| format!("\"{t}\"");
     let quoted: Vec<String> = content.iter().map(quote).collect();
     let mut plan = vec![QueryVariant {
@@ -301,13 +381,13 @@ pub fn query_plan_with(text: &str, opts: PlanOptions) -> Option<Vec<QueryVariant
             if k == 1 || binomial_capped(content.len(), k, MAX_MSM_GROUPS) > MAX_MSM_GROUPS {
                 // Degraded plan for long questions: a plain OR of at most
                 // MAX_OR_TERMS terms (identifiers kept first).
-                cap_terms(content.clone(), MAX_OR_TERMS)
+                cap_terms(content.to_vec(), MAX_OR_TERMS)
                     .iter()
                     .map(quote)
                     .collect::<Vec<_>>()
                     .join(" OR ")
             } else {
-                combinations(&content, k)
+                combinations(content, k)
                     .iter()
                     .map(|g| {
                         format!(
@@ -337,25 +417,7 @@ pub fn query_plan_with(text: &str, opts: PlanOptions) -> Option<Vec<QueryVariant
             });
         }
     }
-    // Drop repeated expressions (a single content term makes several
-    // tiers identical), keeping the most precise tier, and any expression
-    // over the size budget (a 100-word phrase can't usefully match).
-    let mut seen = HashSet::new();
-    plan.retain(|v| {
-        v.expression.len() <= MAX_EXPRESSION_BYTES && seen.insert(v.expression.clone())
-    });
-    if plan.is_empty() {
-        // Every tier was over budget: the capped OR still finds candidates.
-        plan.push(QueryVariant {
-            tier: LexicalTier::OrFallback,
-            expression: cap_terms(content, MAX_OR_TERMS)
-                .iter()
-                .map(quote)
-                .collect::<Vec<_>>()
-                .join(" OR "),
-        });
-    }
-    Some(plan)
+    plan
 }
 
 /// At most `max` of `terms`: identifier-shaped terms first, then the

@@ -13,8 +13,10 @@ use crate::engine::{Engine, VectorSpec};
 /// Mapping identity, bumped on any mapping change. Existing indexes with
 /// another identity are refused: the operator uses a fresh prefix/cluster or
 /// resets the current indexes; nothing is ever mutated in place. (6: the
-/// `passages` index of implementation passages, ADR 0037.)
-pub const SCHEMA_VERSION: u64 = 6;
+/// `passages` index of implementation passages, ADR 0037; 7: the `norm`
+/// field of the normalized lexical projection and the detected document
+/// and chunk languages, ADR 0039.)
+pub const SCHEMA_VERSION: u64 = 7;
 pub const SCHEMA_TAG: &str = "docmonk";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
@@ -97,6 +99,13 @@ fn stored_text() -> Value {
 /// column and porter stemmer, so both storage modes match the same terms.
 pub const TEXT_ANALYZER: &str = "docmonk_text";
 
+/// The analyzer of the `norm` field (ADR 0039): DocMonk writes the
+/// normalized forms itself (`docmonk_core::lexnorm`), space-separated, so
+/// the field splits on whitespace only, then lowercases and stems like
+/// the local porter tokenizer does the `words` column. No engine plugin
+/// or language analyzer is involved, so both engines match the same forms.
+pub const NORM_ANALYZER: &str = "docmonk_norm";
+
 fn analysis() -> Value {
     json!({
         "filter": {
@@ -114,12 +123,20 @@ fn analysis() -> Value {
                 "tokenizer": "standard",
                 "filter": ["docmonk_word_parts", "flatten_graph", "lowercase", "docmonk_stem"],
             },
+            NORM_ANALYZER: {
+                "type": "custom",
+                "tokenizer": "whitespace",
+                "filter": ["lowercase", "docmonk_stem"],
+            },
         },
     })
 }
 
 fn text() -> Value {
     json!({ "type": "text", "analyzer": TEXT_ANALYZER })
+}
+fn norm() -> Value {
+    json!({ "type": "text", "analyzer": NORM_ANALYZER })
 }
 fn text_kw() -> Value {
     json!({
@@ -236,6 +253,7 @@ fn properties(kind: IndexKind, engine: Engine, vector: Option<&VectorSpec>) -> M
                 ("language", kw()),
                 ("parent_id", kw()),
                 ("signature", text()),
+                ("norm", norm()),
                 ("start_line", int()),
                 ("end_line", int()),
                 ("start_col", int()),
@@ -265,6 +283,11 @@ fn properties(kind: IndexKind, engine: Engine, vector: Option<&VectorSpec>) -> M
                 ("attachment_content_id", stored()),
                 ("parent_title", stored_text()),
                 ("mtime", double()),
+                ("language", kw()),
+                ("script", kw()),
+                ("ocr", kw()),
+                ("ocr_pages", int()),
+                ("empty_pages", int()),
             ]);
             f
         }
@@ -280,6 +303,7 @@ fn properties(kind: IndexKind, engine: Engine, vector: Option<&VectorSpec>) -> M
                 ("heading_level", int()),
                 ("title", text()),
                 ("search_text", text()),
+                ("norm", norm()),
                 ("text", stored_text()),
                 ("embedding_text", stored_text()),
                 ("token_count", int()),
@@ -296,6 +320,7 @@ fn properties(kind: IndexKind, engine: Engine, vector: Option<&VectorSpec>) -> M
                 ("parent_title", stored_text()),
                 ("mtime", double()),
                 ("embedding_fingerprint", kw()),
+                ("language", kw()),
             ]);
             if let Some(spec) = vector {
                 f.push(("embedding", engine.vector_field(spec)));
@@ -322,6 +347,7 @@ fn properties(kind: IndexKind, engine: Engine, vector: Option<&VectorSpec>) -> M
                 ("end_line", int()),
                 ("header", text()),
                 ("text", text()),
+                ("norm", norm()),
                 ("mtime", double()),
                 ("embedding_fingerprint", kw()),
             ]);

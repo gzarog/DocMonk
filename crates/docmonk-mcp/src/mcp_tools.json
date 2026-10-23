@@ -1872,6 +1872,43 @@
       "is_scanned": {
        "title": "Is Scanned",
        "type": "boolean"
+      },
+      "language": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Language"
+      },
+      "script": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Script"
+      },
+      "pages": {
+       "anyOf": [
+        {
+         "additionalProperties": true,
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Pages"
       }
      },
      "required": [

@@ -92,6 +92,9 @@ fn email_knowledge(f: &FileRow) -> FileKnowledge {
         is_scanned: false,
         content_hash: None,
         attachment,
+        language: None,
+        script: None,
+        pages: None,
     };
     let chunk = |doc_id: &str, ord: i64, text: &str| ChunkRow {
         id: record::chunk_id(doc_id, ord as u64),
@@ -110,6 +113,7 @@ fn email_knowledge(f: &FileRow) -> FileKnowledge {
         table_rows: None,
         caption: None,
         parent_ordinal: None,
+        language: None,
     };
     FileKnowledge {
         documents: vec![

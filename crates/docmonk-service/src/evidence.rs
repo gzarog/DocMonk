@@ -710,6 +710,7 @@ pub fn evidence_value(
                 "heading": r.heading,
                 "fingerprint": r.fingerprint,
                 "content_fingerprint": r.content_fingerprint,
+                "language": r.language,
                 "tier": h.tier_label,
                 "retrieval": retrieval_of(h),
                 "text": r.text,

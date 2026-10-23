@@ -8,16 +8,22 @@ use std::sync::Arc;
 
 use docmonk_config::model::ChunkingConfig;
 use docmonk_core::ids::record;
+use docmonk_core::lexnorm::{detect_language, detect_script};
 use docmonk_documents::chunker::chunk_document;
 use docmonk_documents::model::{DocumentMetadata, NormalizedDocument};
 use docmonk_indexing::coordinator::{PrepareInput, ProcessError, Processor};
-use docmonk_storage::knowledge::{AttachmentProvenance, ChunkRow, DocumentRow, FileKnowledge};
+use docmonk_storage::knowledge::{
+    AttachmentProvenance, ChunkRow, DocumentRow, FileKnowledge, FileNotice, PageExtraction,
+};
 use sha2::{Digest, Sha256};
 
 use crate::converter::{ConversionError, DocumentConverter};
 use crate::email::{self, AttachmentPart, AttachmentSettings};
 use crate::format::{detect_format, DocumentFormat};
 use crate::normalize::normalize;
+
+/// Characters of a document's text its language is detected from.
+const LANGUAGE_SAMPLE_CHARS: usize = 20_000;
 
 /// Error code a processor uses to record a file as `skipped_limit`.
 pub use docmonk_indexing::coordinator::SKIPPED_LIMIT;
@@ -36,6 +42,45 @@ pub struct DocumentProcessor {
 struct Converted {
     format: DocumentFormat,
     normalized: NormalizedDocument,
+    /// How a PDF's pages were read ([`crate::converter::EXTRACTION_KEY`]).
+    pages: Option<PageExtraction>,
+}
+
+/// The extraction report a PDF conversion recorded.
+fn page_extraction(json: &serde_json::Value) -> Option<PageExtraction> {
+    let r = json.get(crate::converter::EXTRACTION_KEY)?;
+    Some(PageExtraction {
+        ocr: r["ocr"].as_str()?.to_owned(),
+        ocr_pages: r["ocr_pages"].as_i64().unwrap_or(0),
+        empty_pages: r["empty_pages"].as_i64().unwrap_or(0),
+    })
+}
+
+/// A visible notice for a PDF whose pages kept no text because the OCR
+/// it needed could not run (ADR 0039): indexing never suggests a complete
+/// extraction it did not make. Pages that are blank (no image to read,
+/// or OCR found nothing) and pages left unread by `documents.ocr: off`
+/// are recorded on the document (`pages`) without a notice.
+fn pages_notice(p: &PageExtraction, page_count: Option<i64>) -> Option<FileNotice> {
+    let (code, why) = match p.ocr.as_str() {
+        "unavailable" => (
+            "ocr_unavailable",
+            "OCR models are unavailable (scripts/fetch_models.sh, DOCMONK_OCR_MODELS_DIR)",
+        ),
+        "failed" => ("ocr_failed", "OCR failed"),
+        _ => return None,
+    };
+    if p.empty_pages == 0 {
+        return None;
+    }
+    let of = page_count.map_or(String::new(), |n| format!(" of {n}"));
+    Some(FileNotice {
+        code: code.into(),
+        message: format!(
+            "{}{of} page(s) have no text: {why}; indexed what was readable",
+            p.empty_pages
+        ),
+    })
 }
 
 enum Outcome {
@@ -77,6 +122,7 @@ impl DocumentProcessor {
             Ok(json) => Ok(Outcome::Converted(Converted {
                 format,
                 normalized: normalize(&json, format == DocumentFormat::Pdf),
+                pages: page_extraction(&json),
             })),
             Err(ConversionError::Unsupported(_)) => Ok(Outcome::Nothing),
             Err(ConversionError::Failed(m)) => Err(conversion_error(path, m)),
@@ -93,27 +139,39 @@ impl DocumentProcessor {
         attachment: Option<AttachmentProvenance>,
     ) -> (DocumentRow, Vec<ChunkRow>) {
         let chunk_title = title.clone().unwrap_or_default();
-        let chunks = chunk_document(&c.normalized, &self.chunking, &chunk_title, None)
-            .into_iter()
-            .enumerate()
-            .map(|(i, ch)| ChunkRow {
-                id: record::chunk_id(&document_id, i as u64),
-                document_id: document_id.clone(),
-                file_id: file_id.to_owned(),
-                kind: ch.kind.as_str().to_owned(),
-                ordinal: i as i64,
-                heading_path: ch.heading_path,
-                heading_level: ch.heading_level,
-                text: ch.text,
-                search_text: ch.search_text,
-                embedding_text: Some(ch.contextual_text),
-                token_count: Some(ch.token_count),
-                page_start: ch.page_start,
-                page_end: ch.page_end,
-                table_rows: ch.table_rows,
-                caption: ch.caption,
-                parent_ordinal: ch.parent_index.map(|p| p as i64),
-            })
+        let chunks: Vec<ChunkRow> =
+            chunk_document(&c.normalized, &self.chunking, &chunk_title, None)
+                .into_iter()
+                .enumerate()
+                .map(|(i, ch)| ChunkRow {
+                    language: detect_language(&ch.search_text).map(str::to_owned),
+                    id: record::chunk_id(&document_id, i as u64),
+                    document_id: document_id.clone(),
+                    file_id: file_id.to_owned(),
+                    kind: ch.kind.as_str().to_owned(),
+                    ordinal: i as i64,
+                    heading_path: ch.heading_path,
+                    heading_level: ch.heading_level,
+                    text: ch.text,
+                    search_text: ch.search_text,
+                    embedding_text: Some(ch.contextual_text),
+                    token_count: Some(ch.token_count),
+                    page_start: ch.page_start,
+                    page_end: ch.page_end,
+                    table_rows: ch.table_rows,
+                    caption: ch.caption,
+                    parent_ordinal: ch.parent_index.map(|p| p as i64),
+                })
+                .collect();
+        // The document's language and script from its text (bounded); its
+        // chunks keep their own where they differ (mixed-language files).
+        let sample: String = chunks
+            .iter()
+            .map(|c| c.search_text.as_str())
+            .collect::<Vec<_>>()
+            .join("\n")
+            .chars()
+            .take(LANGUAGE_SAMPLE_CHARS)
             .collect();
         let doc = DocumentRow {
             id: document_id,
@@ -125,6 +183,9 @@ impl DocumentProcessor {
             is_scanned: c.normalized.is_scanned,
             content_hash,
             attachment,
+            language: detect_language(&sample).map(str::to_owned),
+            script: detect_script(&sample).map(str::to_owned),
+            pages: c.pages.clone(),
         };
         (doc, chunks)
     }
@@ -219,9 +280,14 @@ impl DocumentProcessor {
             content_hash.map(str::to_owned),
             None,
         );
+        let notice = doc
+            .pages
+            .as_ref()
+            .and_then(|p| pages_notice(p, doc.page_count));
         let mut knowledge = FileKnowledge {
             documents: vec![doc],
             chunks,
+            notice,
             ..FileKnowledge::default()
         };
         if format == DocumentFormat::Eml {

@@ -440,6 +440,11 @@ impl ServerBackend {
                     attachment_content_id: d.attachment.as_ref().and_then(|a| a.content_id.clone()),
                     parent_title,
                     mtime: Some(f.mtime),
+                    language: d.language.clone(),
+                    script: d.script.clone(),
+                    ocr: d.pages.as_ref().map(|p| p.ocr.clone()),
+                    ocr_pages: d.pages.as_ref().map(|p| p.ocr_pages),
+                    empty_pages: d.pages.as_ref().map(|p| p.empty_pages),
                 })?;
                 report.records_written += 1;
             }
@@ -483,6 +488,7 @@ impl ServerBackend {
                         .and_then(|a| docs_by_id.get(a.parent_document_id.as_str()))
                         .and_then(|p| p.title.clone()),
                     mtime: Some(f.mtime),
+                    language: c.language,
                 })?;
                 report.records_written += 1;
             }
