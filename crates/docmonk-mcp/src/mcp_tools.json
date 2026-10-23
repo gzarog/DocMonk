@@ -2496,6 +2496,17 @@
          ],
          "default": null
         },
+        "passages": {
+         "anyOf": [
+          {
+           "type": "integer"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null
+        },
         "relationships": {
          "anyOf": [
           {
@@ -2525,6 +2536,7 @@
         "entities",
         "documents",
         "chunks",
+        "passages",
         "relationships",
         "throughput_files_per_second"
        ]
@@ -3046,6 +3058,12 @@
       "chunks": {
        "type": "integer"
       },
+      "passages": {
+       "type": "integer"
+      },
+      "degraded": {
+       "type": "integer"
+      },
       "relationships": {
        "type": "integer"
       },
@@ -3075,6 +3093,8 @@
       "code_entities",
       "documents",
       "chunks",
+      "passages",
+      "degraded",
       "relationships",
       "links",
       "max_attempt_count",
