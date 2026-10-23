@@ -80,6 +80,16 @@ fn peak_rss_kib() -> Option<u64> {
         .and_then(|v| v.trim().trim_end_matches("kB").trim().parse().ok())
 }
 
+/// The embedding model under evaluation: `DOCMONK_EVAL_EMBEDDING_MODEL`
+/// (a `search.embedding_model` value), else the default.
+fn embedding_model() -> docmonk_ml::manifest::EmbeddingModelSpec {
+    match std::env::var("DOCMONK_EVAL_EMBEDDING_MODEL") {
+        Ok(slug) if !slug.is_empty() => docmonk_ml::manifest::embedding_model(&slug)
+            .unwrap_or_else(|| panic!("unknown DOCMONK_EVAL_EMBEDDING_MODEL {slug:?}")),
+        _ => docmonk_ml::manifest::DEFAULT_EMBEDDING_MODEL,
+    }
+}
+
 /// Which optional local models are installed (never downloaded).
 #[derive(Debug, Clone, Copy)]
 struct Models {
@@ -99,7 +109,7 @@ impl Models {
             .map(PathBuf::from)
             .is_some_and(|d| d.join("text-recognition.rten").is_file());
         Models {
-            embedding: has(docmonk_ml::manifest::DEFAULT_EMBEDDING_MODEL.slug),
+            embedding: has(embedding_model().slug),
             reranker: has(docmonk_ml::manifest::DEFAULT_RERANKER_MODEL.slug),
             ocr,
         }
@@ -114,6 +124,8 @@ impl Models {
             }
         };
         json!({
+            "embedding_model": embedding_model().hf_id,
+            "embedding_fingerprint": embedding_model().fingerprint(),
             "embedding": state(self.embedding, "DOCMONK_MODELS_DIR embedding model"),
             "reranker": state(self.reranker, "DOCMONK_MODELS_DIR reranker model"),
             "ocr": state(self.ocr, "DOCMONK_OCR_MODELS_DIR"),
@@ -229,6 +241,7 @@ fn base_config(models: Models) -> DocMonkConfig {
     let mut cfg = DocMonkConfig::default();
     cfg.updates.enabled = false;
     cfg.search.semantic = models.embedding;
+    cfg.search.embedding_model = embedding_model().slug.into();
     cfg
 }
 

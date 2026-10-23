@@ -42,6 +42,10 @@ pub struct EmbeddingModelSpec {
     /// Defensive pre-tokenizer cap in characters.
     pub max_chars: usize,
     pub pooling: Pooling,
+    /// Written before a query (`query: ` for E5 models), and before every
+    /// indexed text; empty for models trained without prefixes.
+    pub query_prefix: &'static str,
+    pub passage_prefix: &'static str,
     pub files: &'static [ModelFile],
 }
 
@@ -70,6 +74,14 @@ impl EmbeddingModelSpec {
             h.update(f.sha256.as_bytes());
             h.update([0]);
         }
+        // Prefixes change every vector; models without them keep the
+        // fingerprint they always had.
+        if !self.query_prefix.is_empty() || !self.passage_prefix.is_empty() {
+            for p in [self.query_prefix, self.passage_prefix] {
+                h.update(p.as_bytes());
+                h.update([0]);
+            }
+        }
         let digest = h.finalize();
         digest.iter().take(8).map(|b| format!("{b:02x}")).collect()
     }
@@ -93,6 +105,8 @@ pub const ALL_MINILM_L6_V2: EmbeddingModelSpec = EmbeddingModelSpec {
     max_tokens: 256,
     max_chars: 4000,
     pooling: Pooling::Mean,
+    query_prefix: "",
+    passage_prefix: "",
     files: &[
         ModelFile {
             name: "config.json",
@@ -111,6 +125,97 @@ pub const ALL_MINILM_L6_V2: EmbeddingModelSpec = EmbeddingModelSpec {
 
 /// The model DocMonk embeds with.
 pub const DEFAULT_EMBEDDING_MODEL: EmbeddingModelSpec = ALL_MINILM_L6_V2;
+
+/// `intfloat/multilingual-e5-small`: a 12-layer multilingual MiniLM
+/// (XLM-R vocabulary) trained with `query: ` / `passage: ` prefixes. The
+/// optional multilingual profile (`search.embedding_model`, ADR 0040).
+pub const MULTILINGUAL_E5_SMALL: EmbeddingModelSpec = EmbeddingModelSpec {
+    slug: "multilingual-e5-small",
+    hf_id: "intfloat/multilingual-e5-small",
+    revision: "614241f622f53c4eeff9890bdc4f31cfecc418b3",
+    dims: 384,
+    max_tokens: 512,
+    max_chars: 8000,
+    pooling: Pooling::Mean,
+    query_prefix: "query: ",
+    passage_prefix: "passage: ",
+    files: &[
+        ModelFile {
+            name: "config.json",
+            sha256: "69137736cab8b8903a07fe8afaafdda25aac55415a12a55d1bffa9f581abf959",
+        },
+        ModelFile {
+            name: "model.safetensors",
+            sha256: "1a55775f53449dac10a2bcbc312469fac40b96d53198c407081a831f81c98477",
+        },
+        ModelFile {
+            name: "tokenizer.json",
+            sha256: "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39",
+        },
+    ],
+};
+
+/// `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`: the same
+/// architecture distilled for paraphrase similarity, 128-token inputs, no
+/// prefixes. Evaluated as a multilingual candidate and not adopted: its
+/// semantic recall fell on code and same-language questions (ADR 0040).
+pub const PARAPHRASE_MULTILINGUAL_MINILM_L12_V2: EmbeddingModelSpec = EmbeddingModelSpec {
+    slug: "paraphrase-multilingual-minilm-l12-v2",
+    hf_id: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    revision: "e8f8c211226b894fcb81acc59f3b34ba3efd5f42",
+    dims: 384,
+    max_tokens: 128,
+    max_chars: 4000,
+    pooling: Pooling::Mean,
+    query_prefix: "",
+    passage_prefix: "",
+    files: &[
+        ModelFile {
+            name: "config.json",
+            sha256: "6300193cb75e01cf80c96decef7187dfb33094d97cc1490b7ead6ff134476e4e",
+        },
+        ModelFile {
+            name: "model.safetensors",
+            sha256: "eaa086f0ffee582aeb45b36e34cdd1fe2d6de2bef61f8a559a1bbc9bd955917b",
+        },
+        ModelFile {
+            name: "tokenizer.json",
+            sha256: "2c3387be76557bd40970cec13153b3bbf80407865484b209e655e5e4729076b8",
+        },
+    ],
+};
+
+/// The embedding models `search.embedding_model` can select, the default
+/// first (ADR 0040).
+pub const EMBEDDING_MODELS: &[EmbeddingModelSpec] = &[ALL_MINILM_L6_V2, MULTILINGUAL_E5_SMALL];
+
+/// Every pinned model the held-out evaluation and the embedding benchmark
+/// can measure: the selectable ones and candidates that were evaluated but
+/// not adopted (ADR 0040), kept so their measurements stay reproducible.
+pub const EVALUATED_EMBEDDING_MODELS: &[EmbeddingModelSpec] = &[
+    ALL_MINILM_L6_V2,
+    MULTILINGUAL_E5_SMALL,
+    PARAPHRASE_MULTILINGUAL_MINILM_L12_V2,
+];
+
+/// The selectable embedding model named `slug`.
+pub fn embedding_model(slug: &str) -> Option<EmbeddingModelSpec> {
+    EMBEDDING_MODELS.iter().find(|m| m.slug == slug).copied()
+}
+
+/// Any pinned (selectable or evaluated) embedding model named `slug`.
+pub fn evaluated_embedding_model(slug: &str) -> Option<EmbeddingModelSpec> {
+    EVALUATED_EMBEDDING_MODELS
+        .iter()
+        .find(|m| m.slug == slug)
+        .copied()
+}
+
+/// The model `search.embedding_model` names (the default for a name the
+/// configuration check would have rejected).
+pub fn configured_embedding_model(slug: &str) -> EmbeddingModelSpec {
+    embedding_model(slug).unwrap_or(DEFAULT_EMBEDDING_MODEL)
+}
 
 /// A pinned cross-encoder (`BertForSequenceClassification` with one
 /// relevance logit).
@@ -176,6 +281,25 @@ mod tests {
         let mut other = ALL_MINILM_L6_V2;
         other.revision = "main";
         assert_ne!(a, other.fingerprint());
+    }
+
+    #[test]
+    fn the_default_fingerprint_does_not_depend_on_empty_prefixes() {
+        // Vectors stored before prefixes existed stay valid.
+        assert_eq!(ALL_MINILM_L6_V2.fingerprint(), "0db613ee41822c8b");
+        let mut e5 = MULTILINGUAL_E5_SMALL;
+        let fp = e5.fingerprint();
+        e5.query_prefix = "";
+        assert_ne!(fp, e5.fingerprint());
+        assert_eq!(embedding_model("all-minilm-l6-v2"), Some(ALL_MINILM_L6_V2));
+        assert!(embedding_model("nope").is_none());
+    }
+
+    #[test]
+    fn the_configuration_accepts_exactly_the_pinned_models() {
+        let slugs: Vec<&str> = EMBEDDING_MODELS.iter().map(|m| m.slug).collect();
+        assert_eq!(slugs, docmonk_config::model::EMBEDDING_MODEL_SLUGS);
+        assert_eq!(EMBEDDING_MODELS[0], DEFAULT_EMBEDDING_MODEL);
     }
 
     #[test]

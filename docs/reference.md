@@ -71,6 +71,7 @@ docmonk search "refund policy" --path docs/ --kind document --no-attachments --e
 | `search.diversity.enabled` / `.lambda` / `.per_document_cap` / `.per_source_cap` | `false` / `0.7` / `3` / `0` |
 | `search.grounding.enabled` / `.min_coverage` | `true` / `0.5` |
 | `search.max_query_budget_ms` | `5000` |
+| `search.embedding_model` | `all-minilm-l6-v2`; `multilingual-e5-small` for questions in one language about documents in another (ADR 0040; about 3x the build time and 4x the memory; install with `scripts/fetch_models.sh <dir> --multilingual`). Changing it rebuilds every source. |
 | `search.candidate_pool` | `0` (automatic: `max(4 * limit, 40)`; at most 100, never below the limit) |
 | `search.ann.ef_search` / `.num_candidates` | `400` / `0` (automatic: `max(10 * k, 100)`) |
 | `search.anchors.enabled` | `true` |

@@ -120,7 +120,7 @@ pub fn embed_query(embedder: &Embedder, query: &str) -> Result<Option<QueryVecto
     let t = std::time::Instant::now();
     crate::counters::query_embedded();
     let vector = embedder
-        .embed(&[query])
+        .embed_queries(&[query])
         .map_err(|e| e.to_string())?
         .pop()
         .unwrap_or_default();

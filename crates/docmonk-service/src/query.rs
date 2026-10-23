@@ -498,7 +498,7 @@ pub fn lazy_embedder(
 ) -> std::sync::Arc<docmonk_ml::LazyEmbedder> {
     docmonk_ml::shared_embedder(
         docmonk_ml::embedder::models_root(Some(&home.root().join("models"))),
-        docmonk_ml::manifest::DEFAULT_EMBEDDING_MODEL,
+        docmonk_ml::manifest::configured_embedding_model(&cfg.search.embedding_model),
         cfg.indexing.embedding_batch_size,
     )
 }

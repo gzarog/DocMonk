@@ -3,11 +3,12 @@
 //! Generates a deterministic mix of code-signature and document-chunk texts
 //! and times `Embedder::embed` over them. `--emit-only <file>` writes the
 //! texts as JSON so other embedders can be timed on the same input.
+//! `--model <slug>` times another pinned model (`search.embedding_model`).
 
 use std::time::Instant;
 
 use docmonk_ml::embedder::{models_root, Embedder};
-use docmonk_ml::manifest::DEFAULT_EMBEDDING_MODEL;
+use docmonk_ml::manifest::{evaluated_embedding_model, DEFAULT_EMBEDDING_MODEL};
 
 fn arg(name: &str) -> Option<String> {
     let args: Vec<String> = std::env::args().collect();
@@ -36,6 +37,15 @@ fn texts(n: usize) -> Vec<String> {
         .collect()
 }
 
+/// The process's peak resident memory (Linux `VmHWM`), when known.
+fn peak_rss_kib() -> Option<u64> {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()?
+        .lines()
+        .find_map(|l| l.strip_prefix("VmHWM:"))
+        .and_then(|v| v.trim().trim_end_matches("kB").trim().parse().ok())
+}
+
 fn main() {
     let n: usize = arg("--texts").and_then(|v| v.parse().ok()).unwrap_or(1000);
     let batch: i64 = arg("--batch").and_then(|v| v.parse().ok()).unwrap_or(16);
@@ -44,9 +54,13 @@ fn main() {
         std::fs::write(path, serde_json::json!({ "texts": corpus }).to_string()).unwrap();
         return;
     }
-    let dir = models_root(None).join(DEFAULT_EMBEDDING_MODEL.slug);
+    let spec = match arg("--model") {
+        Some(slug) => evaluated_embedding_model(&slug).expect("a pinned model slug"),
+        None => DEFAULT_EMBEDDING_MODEL,
+    };
+    let dir = models_root(None).join(spec.slug);
     let t = Instant::now();
-    let embedder = Embedder::load(&dir, DEFAULT_EMBEDDING_MODEL)
+    let embedder = Embedder::load(&dir, spec)
         .expect("model (set DOCMONK_MODELS_DIR)")
         .with_batch_size(batch);
     let load = t.elapsed().as_secs_f64();
@@ -56,8 +70,8 @@ fn main() {
     let wall = t.elapsed().as_secs_f64();
     assert_eq!(vectors.len(), n);
     let report = serde_json::json!({
-
-        "model": DEFAULT_EMBEDDING_MODEL.hf_id,
+        "model": spec.hf_id,
+        "peak_rss_kib": peak_rss_kib(),
         "texts": n,
         "batch_size": batch,
         "model_load_s": load,

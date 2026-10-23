@@ -19,7 +19,8 @@ pub fn rebuild(home: &Home, source: Option<&str>) -> Result<Vec<Value>, DocMonkE
     // ANN index to maintain.
     require_local(home, "vectors rebuild")?;
     let layout = StorageLayout::new(home);
-    let spec = docmonk_ml::manifest::DEFAULT_EMBEDDING_MODEL;
+    let spec =
+        docmonk_ml::manifest::configured_embedding_model(&load(home)?.search.embedding_model);
     let fp = spec.fingerprint();
     let lock = index_lock(home, "vectors-rebuild")?;
     let mut rebuilt = Vec::new();
@@ -45,8 +46,8 @@ pub fn rebuild(home: &Home, source: Option<&str>) -> Result<Vec<Value>, DocMonkE
 pub fn backfill(home: &Home, source: Option<&str>) -> Result<Vec<Value>, DocMonkError> {
     require_local(home, "vectors backfill")?;
     let layout = StorageLayout::new(home);
-    let spec = docmonk_ml::manifest::DEFAULT_EMBEDDING_MODEL;
     let cfg = load(home)?;
+    let spec = docmonk_ml::manifest::configured_embedding_model(&cfg.search.embedding_model);
     let lazy = docmonk_ml::LazyEmbedder::new(
         docmonk_ml::embedder::models_root(Some(&home.models_dir())),
         spec,

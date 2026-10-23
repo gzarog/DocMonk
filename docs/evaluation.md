@@ -104,6 +104,10 @@ DOCMONK_EVAL_OUT=/tmp/heldout.json \
   cargo test --release -p docmonk-service --test heldout_eval
 ```
 
+`DOCMONK_EVAL_EMBEDDING_MODEL` evaluates another pinned embedding model
+(a `search.embedding_model` value, installed under `DOCMONK_MODELS_DIR`);
+the report names the model and its fingerprint under `models`.
+
 Without the models the semantic arm is skipped and the hybrid arms fall
 back to lexical-only fusion; the report says so under `models` and
 `degraded_stages`. Latency is only meaningful in a release build (the

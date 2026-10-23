@@ -7,10 +7,16 @@
 #   <dir>/ms-marco-minilm-l6-v2/ cross-encoder reranker
 #   <dir>/ocrs/                  OCR detection + recognition models
 #
-# Usage: fetch_models.sh <dir>. Files already present are re-verified,
-# not re-downloaded.
+# With --multilingual, also the optional multilingual embedding model
+# (`search.embedding_model: multilingual-e5-small`, ADR 0040):
+#
+#   <dir>/multilingual-e5-small/
+#
+# Usage: fetch_models.sh <dir> [--multilingual]. Files already present
+# are re-verified, not re-downloaded.
 set -eu
-ROOT="${1:?usage: fetch_models.sh <dir>}"
+ROOT="${1:?usage: fetch_models.sh <dir> [--multilingual]}"
+MULTILINGUAL="${2:-}"
 
 # Hashes stdin: Git Bash's sha256sum prefixes the digest with `\` when the
 # file name contains a backslash (Windows temp paths).
@@ -49,4 +55,11 @@ D="$ROOT/ocrs"
 B=https://ocrs-models.s3-accelerate.amazonaws.com
 fetch "$D" "$B" text-detection.rten f15cfb56bd02c4bf478a20343986504a1f01e1665c2b3a0ad66340f054b1b5ca
 fetch "$D" "$B" text-recognition.rten e484866d4cce403175bd8d00b128feb08ab42e208de30e42cd9889d8f1735a6e
+if [ "$MULTILINGUAL" = "--multilingual" ]; then
+    D="$ROOT/multilingual-e5-small"
+    B=https://huggingface.co/intfloat/multilingual-e5-small/resolve/614241f622f53c4eeff9890bdc4f31cfecc418b3
+    fetch "$D" "$B" config.json 69137736cab8b8903a07fe8afaafdda25aac55415a12a55d1bffa9f581abf959
+    fetch "$D" "$B" model.safetensors 1a55775f53449dac10a2bcbc312469fac40b96d53198c407081a831f81c98477
+    fetch "$D" "$B" tokenizer.json 0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39
+fi
 echo "models ready in $ROOT"

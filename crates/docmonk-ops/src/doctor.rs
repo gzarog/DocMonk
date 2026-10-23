@@ -205,7 +205,8 @@ pub fn run_checks(home: &Home) -> Result<Vec<Section>, DocMonkError> {
     }
 
     if cfg.search.semantic {
-        let fp = docmonk_ml::manifest::DEFAULT_EMBEDDING_MODEL.fingerprint();
+        let fp = docmonk_ml::manifest::configured_embedding_model(&cfg.search.embedding_model)
+            .fingerprint();
         let mut vectors = 0usize;
         let mut bytes = 0u64;
         for (pid, store, build) in &stores {

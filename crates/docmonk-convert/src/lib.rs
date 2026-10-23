@@ -114,6 +114,13 @@ pub fn registry_with(config: &DocMonkConfig, opts: &RegistryOptions) -> Registry
     );
     r.versions.embedding_text_version =
         Some(docmonk_documents::chunker::EMBEDDING_TEXT_VERSION.into());
+    // The configured embedding model is part of the identity (ADR 0040):
+    // changing `search.embedding_model` is a full rebuild on both
+    // backends, so no unchanged file keeps vectors of the old model (a
+    // server copies unchanged records forward as they are). Toggling
+    // `search.semantic` does not change it.
+    let model = docmonk_ml::manifest::configured_embedding_model(&config.search.embedding_model);
+    r.versions.embedding_model_id = Some(format!("{}@{}", model.slug, model.fingerprint()));
     // Semantic vectors: every entity/chunk without a vector under the
     // current model is embedded before publication. A missing model leaves them
     // pending (logged) instead of failing the build.
@@ -122,7 +129,7 @@ pub fn registry_with(config: &DocMonkConfig, opts: &RegistryOptions) -> Registry
             .push(Arc::new(docmonk_ml::EmbeddingFinalizer::new(
                 docmonk_ml::LazyEmbedder::new(
                     docmonk_ml::embedder::models_root(opts.models_root.as_deref()),
-                    docmonk_ml::manifest::DEFAULT_EMBEDDING_MODEL,
+                    model,
                     config.indexing.embedding_batch_size,
                 ),
             )));
