@@ -317,3 +317,87 @@ fn a_reader_pinned_to_a_retired_build_keeps_its_snapshot_until_the_grace_ends() 
     // Both versions are stored; each snapshot sees exactly one.
     assert_eq!(e.m.docs(CODE).len(), 205);
 }
+
+/// Implementation passages (ADR 0037) publish with their file: a one-file
+/// edit writes and closes that file's passages only, and unchanged files'
+/// passages are never rewritten.
+#[test]
+fn passages_publish_and_close_with_their_file_only() {
+    use docmonk_storage::knowledge::PassageRow;
+    let staged = |dir: &std::path::Path, edited: bool| {
+        let layout = StorageLayout::at(dir);
+        let mut s = ProjectStore::open(&layout, "p", "s1", 8).unwrap();
+        let v = IndexVersions {
+            parser_version: "p".into(),
+            chunker_version: "c".into(),
+            converter_version: "v".into(),
+            embedding_model_id: None,
+            embedding_text_version: None,
+        };
+        s.create_build("local", true, &v).unwrap();
+        for f in 0..10 {
+            let id = format!("f{f}");
+            let changed = edited && f == 3;
+            let row = FileRow {
+                id: id.clone(),
+                rel_path: format!("{id}.rb"),
+                kind: "code".into(),
+                status: "indexed".into(),
+                content_hash: Some(if changed { "h2" } else { "h1" }.into()),
+                ..FileRow::default()
+            };
+            let n = if changed { 3 } else { 2 };
+            let k = FileKnowledge {
+                passages: (0..n)
+                    .map(|i| PassageRow {
+                        id: format!("{id}-p{i}"),
+                        file_id: id.clone(),
+                        kind: "text".into(),
+                        extraction: "unsupported_language".into(),
+                        ordinal: i,
+                        part: 0,
+                        parts: 1,
+                        start_line: i * 40 + 1,
+                        end_line: i * 40 + 40,
+                        header: row.rel_path.clone(),
+                        text: format!("line {i} of {id}"),
+                        ..PassageRow::default()
+                    })
+                    .collect(),
+                ..FileKnowledge::default()
+            };
+            s.put_files("local", &[(&row, &k)]).unwrap();
+        }
+        s.mark_published("local").unwrap();
+        s
+    };
+    let e = Env::new();
+    let publish = |build: &str, edited: bool| {
+        let dir = tempfile::tempdir().unwrap();
+        let store = staged(dir.path(), edited);
+        e.b.publish_from_store(&PublishInput {
+            source_id: "s1",
+            path: "/src",
+            store: &store,
+            local_build: "local",
+            versions: json!({ "parser_version": "p" }),
+            full: false,
+            lease: None,
+            build_id: build,
+        })
+        .unwrap()
+    };
+    let first = publish("b1", false);
+    assert_eq!((first.files_written, first.records_written), (10, 30));
+    assert_eq!(e.b.count(IndexKind::Passages, Some("s1")).unwrap(), 20);
+    let before = e.m.touched();
+    let r = publish("b2", true);
+    let t = e.m.touched();
+    assert_eq!((r.files_written, r.files_kept), (1, 9), "{r:?}");
+    // The edited file's row and its 3 passages; its old row and 2
+    // passages are closed.
+    assert_eq!(t.indexed - before.indexed, 4);
+    assert_eq!(t.updated - before.updated, 3);
+    assert_eq!(e.b.count(IndexKind::Passages, Some("s1")).unwrap(), 21);
+    assert_eq!(e.stored("rm-passages"), 21, "replaced versions collected");
+}

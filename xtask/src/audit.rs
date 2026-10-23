@@ -80,6 +80,7 @@ const NEUTRAL_TOKENS: &[&str] = &[
     // Pinned model identifiers.
     r"(?i)all[-_]MiniLM[-_]L6[-_]v2",
     r"(?i)ms[-_]marco[-_]MiniLM[-_]L[-_]?6[-_]v2",
+    r"(?i)paraphrase[-_]multilingual[-_]MiniLM[-_]L12[-_]v2",
     // Pinned GitHub Action versions (`actions/cache@v2`).
     r"@v[0-9]+\b",
     // Third-party HTTP API versions (OpenAI-compatible and Anthropic).
@@ -109,6 +110,9 @@ const ALLOWED_PATHS: &[(&str, &str)] = &[
     ("python", "fixtures/"),
     ("migration", "fixtures/"),
     ("version-naming", "fixtures/"),
+    // Held-out evaluation reports record what was indexed from those
+    // fixtures (source languages, extraction messages): data, not tooling.
+    ("python", "benchmarks/heldout-eval/"),
     // The vendored WordPiece vocabulary of the pinned embedding model:
     // English word pieces, not DocMonk text.
     ("*", "crates/docmonk-documents/assets/all-MiniLM-L6-v2/"),
@@ -369,6 +373,14 @@ mod tests {
         assert!(!matches(
             "version-naming",
             "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        ));
+        assert!(!matches(
+            "version-naming",
+            "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+        ));
+        assert!(!matches(
+            "version-naming",
+            "pub const PARAPHRASE_MULTILINGUAL_MINILM_L12_V2: Spec"
         ));
         assert!(!matches("version-naming", "release v1.0.0"));
         assert!(!matches("version-naming", "uses: actions/checkout@v4"));

@@ -194,6 +194,15 @@ CREATE TABLE documents (
     attachment_content_type TEXT,
     attachment_index INTEGER,
     attachment_content_id TEXT,
+    -- Detected language (ISO 639-1) and script (ISO 15924), where reliable.
+    language TEXT,
+    script TEXT,
+    -- How a PDF's pages were read (not_needed, applied, no_images,
+    -- unavailable, failed, disabled), pages that gained OCR text, pages
+    -- still without text. NULL for other formats.
+    ocr TEXT,
+    ocr_pages INTEGER,
+    empty_pages INTEGER,
     PRIMARY KEY (build_id, id),
     CHECK ((parent_document_id IS NULL) = (attachment_index IS NULL))
 );
@@ -221,10 +230,39 @@ CREATE TABLE chunks (
     -- Ordinal of the enclosing heading chunk in the same document; siblings
     -- share it (search context expansion).
     parent_ordinal INTEGER,
+    -- Detected language of the chunk, where reliable.
+    language TEXT,
     PRIMARY KEY (build_id, id)
 );
 CREATE INDEX idx_chunks_document ON chunks(build_id, document_id, ordinal);
 CREATE INDEX idx_chunks_file ON chunks(build_id, file_id);
+
+-- Implementation passages of code files (code_passages, ADR 0037): exact
+-- source lines of function and method bodies ('body', owned by an entity)
+-- and plain-text line windows of files without symbol extraction ('text').
+-- Distinct from entities and relationships: a passage never adds a symbol
+-- or an edge.
+CREATE TABLE code_passages (
+    id TEXT NOT NULL,
+    build_id TEXT NOT NULL REFERENCES builds(id),
+    file_id TEXT NOT NULL,
+    entity_id TEXT,
+    kind TEXT NOT NULL CHECK (kind IN ('body', 'text')),
+    extraction TEXT NOT NULL
+        CHECK (extraction IN ('parsed', 'unsupported_language', 'parse_failed')),
+    language TEXT,
+    ordinal INTEGER NOT NULL,
+    part INTEGER NOT NULL,
+    parts INTEGER NOT NULL,
+    start_line INTEGER NOT NULL,
+    end_line INTEGER NOT NULL,
+    header TEXT NOT NULL,
+    text TEXT NOT NULL,
+    PRIMARY KEY (build_id, id),
+    CHECK ((kind = 'body') = (entity_id IS NOT NULL))
+);
+CREATE INDEX idx_passages_file ON code_passages(build_id, file_id, ordinal);
+CREATE INDEX idx_passages_entity ON code_passages(build_id, entity_id);
 
 CREATE TABLE cross_links (
     id TEXT NOT NULL,
@@ -321,6 +359,11 @@ CREATE VIRTUAL TABLE chunk_fts USING fts5(
 );
 CREATE VIRTUAL TABLE path_fts USING fts5(
     file_id UNINDEXED, build_id UNINDEXED, path, words,
+    tokenize = 'porter unicode61'
+);
+-- Passage text under its owner (qualified name and signature, or path).
+CREATE VIRTUAL TABLE passage_fts USING fts5(
+    passage_id UNINDEXED, build_id UNINDEXED, owner, body, words,
     tokenize = 'porter unicode61'
 );
 "#;
@@ -461,6 +504,8 @@ mod tests {
             "code_fts",
             "chunk_fts",
             "path_fts",
+            "code_passages",
+            "passage_fts",
             "idx_rel_symbol",
             "idx_links_resolver",
         ] {

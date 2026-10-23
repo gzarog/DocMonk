@@ -200,6 +200,21 @@ jobs:
       # the no-local-fallback guarantee, on both engines.
       - name: Server mode end-to-end tests
         run: cargo test -p docmonk-service --test server_live -- --nocapture
+      # The held-out retrieval evaluation on SQLite and both engines: the
+      # same corpus and labels through every backend (docs/evaluation.md).
+      - name: Held-out retrieval evaluation
+        run: cargo test -p docmonk-service --test heldout_eval -- --nocapture
+      # The normalized lexical projection (ADR 0039) as one contract for
+      # SQLite and both engines: accents, Greek and Arabic inflection,
+      # unsegmented Japanese and Chinese.
+      - name: Multilingual lexical contract
+        run: cargo test -p docmonk-service --test multilingual_lexical -- --nocapture
+      # Filtered kNN recall against exact search after publication and GC,
+      # and batched citation hydration (ADR 0041), on both engines.
+      - name: Live ANN recall and citation hydration
+        run: |
+          cargo test --release -p docmonk-backends --test ann_recall -- --nocapture
+          cargo test -p docmonk-service --test server_hydration -- --nocapture
       # Status (ADR 0034) on both engines: 150 sources in <= 30 requests,
       # a watch refresh in < 10, pending builds invisible, global error
       # order, two-host run visibility, fencing and expired leases; the

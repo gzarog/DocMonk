@@ -353,6 +353,17 @@ mod counting_impl {
             bump(&self.lexical);
             KnowledgeRead::search_entities_fts(self.inner, b, e, l)
         }
+        fn search_passages_fts_in(
+            &self,
+            b: &str,
+            e: &str,
+            l: i64,
+            s: i64,
+            f: &ReadFilter,
+        ) -> Result<Vec<docmonk_storage::search::PassageSearchRow>> {
+            bump(&self.lexical);
+            KnowledgeRead::search_passages_fts_in(self.inner, b, e, l, s, f)
+        }
         fn search_entities_fts_in(
             &self,
             b: &str,

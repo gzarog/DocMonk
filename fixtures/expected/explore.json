@@ -3453,7 +3453,22 @@
     "tests": [],
     "requirements": [],
     "incidents": [],
-    "evidence": [],
+    "evidence": [
+     {
+      "source": "symbol",
+      "path": "src/billing/invoice_service.py",
+      "location": {
+       "line_start": 4,
+       "line_end": 9,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.InvoiceService",
+      "relationship": "defines",
+      "confidence": "exact",
+      "snippet": "class InvoiceService:"
+     }
+    ],
     "evidence_truncated": false,
     "evidence_truncation_reasons": [],
     "semantic_results": [],
@@ -3500,7 +3515,22 @@
     "tests": [],
     "requirements": [],
     "incidents": [],
-    "evidence": [],
+    "evidence": [
+     {
+      "source": "symbol",
+      "path": "src/billing/invoice_service.py",
+      "location": {
+       "line_start": 8,
+       "line_end": 9,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.InvoiceService.void_invoice",
+      "relationship": "defines",
+      "confidence": "exact",
+      "snippet": "def void_invoice(self, invoice_id):"
+     }
+    ],
     "evidence_truncated": false,
     "evidence_truncation_reasons": [],
     "semantic_results": [],
@@ -3577,7 +3607,22 @@
     "tests": [],
     "requirements": [],
     "incidents": [],
-    "evidence": [],
+    "evidence": [
+     {
+      "source": "symbol",
+      "path": "src/billing/invoice_service.py",
+      "location": {
+       "line_start": 8,
+       "line_end": 9,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.InvoiceService.void_invoice",
+      "relationship": "defines",
+      "confidence": "exact",
+      "snippet": "def void_invoice(self, invoice_id):"
+     }
+    ],
     "evidence_truncated": false,
     "evidence_truncation_reasons": [],
     "semantic_results": [],
@@ -3624,7 +3669,22 @@
     "tests": [],
     "requirements": [],
     "incidents": [],
-    "evidence": [],
+    "evidence": [
+     {
+      "source": "symbol",
+      "path": "src/billing/invoice_service.py",
+      "location": {
+       "line_start": 8,
+       "line_end": 9,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.InvoiceService.void_invoice",
+      "relationship": "defines",
+      "confidence": "exact",
+      "snippet": "def void_invoice(self, invoice_id):"
+     }
+    ],
     "evidence_truncated": false,
     "evidence_truncation_reasons": [],
     "semantic_results": [],
@@ -3682,6 +3742,20 @@
     "incidents": [],
     "evidence": [
      {
+      "source": "lexical:entity",
+      "path": "src/billing/invoice_service.py",
+      "location": {
+       "line_start": 8,
+       "line_end": 9,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.InvoiceService.void_invoice",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "def void_invoice(self, invoice_id):"
+     },
+     {
       "source": "lexical:document",
       "path": "docs/billing.md",
       "location": {
@@ -3694,6 +3768,20 @@
       "relationship": "match",
       "confidence": "medium",
       "snippet": "Billing guide\nBilling guide\nThe\n\nInvoiceService\n\ncreates invoices through\n\ncreate_invoice\n\n. Fully qualified, that is\n\nsrc.billing.invoice_service.InvoiceService.create_invoice\n\n, and in short form\n\nInvoiceService.void_invoice\n\n."
+     },
+     {
+      "source": "lexical:entity",
+      "path": "src/billing/invoice_service.py",
+      "location": {
+       "line_start": 4,
+       "line_end": 9,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.InvoiceService",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "class InvoiceService:"
      },
      {
       "source": "lexical:document",
@@ -3713,20 +3801,6 @@
       "source": "lexical:entity",
       "path": "src/billing/invoice_service.py",
       "location": {
-       "line_start": 4,
-       "line_end": 9,
-       "page": null,
-       "section": null
-      },
-      "entity": "src.billing.invoice_service.InvoiceService",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "class InvoiceService:"
-     },
-     {
-      "source": "lexical:entity",
-      "path": "src/billing/invoice_service.py",
-      "location": {
        "line_start": 5,
        "line_end": 6,
        "page": null,
@@ -3736,20 +3810,6 @@
       "relationship": "match",
       "confidence": "medium",
       "snippet": "def create_invoice(self, order):"
-     },
-     {
-      "source": "lexical:entity",
-      "path": "src/billing/invoice_service.py",
-      "location": {
-       "line_start": 8,
-       "line_end": 9,
-       "page": null,
-       "section": null
-      },
-      "entity": "src.billing.invoice_service.InvoiceService.void_invoice",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "def void_invoice(self, invoice_id):"
      }
     ],
     "evidence_truncated": false,
@@ -3783,6 +3843,20 @@
     "requirements": [],
     "incidents": [],
     "evidence": [
+     {
+      "source": "symbol",
+      "path": "src/billing/ledger.py",
+      "location": {
+       "line_start": 1,
+       "line_end": 3,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.ledger.Ledger",
+      "relationship": "defines",
+      "confidence": "exact",
+      "snippet": "class Ledger:"
+     },
      {
       "source": "linker:exact_identifier",
       "path": "docs/billing.md",
@@ -3862,6 +3936,20 @@
     "requirements": [],
     "incidents": [],
     "evidence": [
+     {
+      "source": "symbol",
+      "path": "web/orders.ts",
+      "location": {
+       "line_start": 1,
+       "line_end": 4,
+       "page": null,
+       "section": null
+      },
+      "entity": "web.orders.OrderController",
+      "relationship": "defines",
+      "confidence": "exact",
+      "snippet": "class OrderController {"
+     },
      {
       "source": "linker:exact_identifier",
       "path": "docs/orders.html",
@@ -4050,6 +4138,20 @@
       "snippet": "Billing guide\nBilling guide"
      },
      {
+      "source": "lexical:entity",
+      "path": "src/billing/ledger.py",
+      "location": {
+       "line_start": 1,
+       "line_end": 3,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.ledger.Ledger",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "class Ledger:"
+     },
+     {
       "source": "lexical:document",
       "path": "docs/billing.md",
       "location": {
@@ -4078,6 +4180,20 @@
       "snippet": "Billing guide\nBilling guide\nEndpoints"
      },
      {
+      "source": "lexical:entity",
+      "path": "src/billing/ledger.py",
+      "location": {
+       "line_start": 10,
+       "line_end": 11,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.ledger.Λογαριασμός",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "def Λογαριασμός():"
+     },
+     {
       "source": "lexical:document",
       "path": "docs/billing.md",
       "location": {
@@ -4092,18 +4208,18 @@
       "snippet": "Billing guide\nBilling guide\nEndpoints\nComponent | Owner\nLedger | finance\nPaymentGateway | platform"
      },
      {
-      "source": "lexical:document",
-      "path": "docs/billing.md",
+      "source": "lexical:entity",
+      "path": "src/billing/my-helpers.v2.py",
       "location": {
-       "line_start": null,
-       "line_end": null,
+       "line_start": 1,
+       "line_end": 2,
        "page": null,
-       "section": "Billing guide > Tax"
+       "section": null
       },
-      "entity": "Billing guide",
+      "entity": "src.billing.my-helpers.v2.helper",
       "relationship": "match",
       "confidence": "medium",
-      "snippet": "Billing guide\nBilling guide\nTax\nUse calculate_tax for VAT. See invoice_service.py and the ledger module, and the helper in my-helpers.v2.py."
+      "snippet": "def helper():"
      },
      {
       "source": "lexical:entity",
@@ -4120,32 +4236,18 @@
       "snippet": "class InvoiceService:"
      },
      {
-      "source": "lexical:entity",
-      "path": "src/billing/invoice_service.py",
+      "source": "lexical:document",
+      "path": "docs/billing.md",
       "location": {
-       "line_start": 5,
-       "line_end": 6,
+       "line_start": null,
+       "line_end": null,
        "page": null,
-       "section": null
+       "section": "Billing guide > Tax"
       },
-      "entity": "src.billing.invoice_service.InvoiceService.create_invoice",
+      "entity": "Billing guide",
       "relationship": "match",
       "confidence": "medium",
-      "snippet": "def create_invoice(self, order):"
-     },
-     {
-      "source": "lexical:entity",
-      "path": "src/billing/invoice_service.py",
-      "location": {
-       "line_start": 8,
-       "line_end": 9,
-       "page": null,
-       "section": null
-      },
-      "entity": "src.billing.invoice_service.InvoiceService.void_invoice",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "def void_invoice(self, invoice_id):"
+      "snippet": "Billing guide\nBilling guide\nTax\nUse calculate_tax for VAT. See invoice_service.py and the ledger module, and the helper in my-helpers.v2.py."
      },
      {
       "source": "lexical:entity",
@@ -4179,20 +4281,6 @@
       "source": "lexical:entity",
       "path": "src/billing/ledger.py",
       "location": {
-       "line_start": 1,
-       "line_end": 3,
-       "page": null,
-       "section": null
-      },
-      "entity": "src.billing.ledger.Ledger",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "class Ledger:"
-     },
-     {
-      "source": "lexical:entity",
-      "path": "src/billing/ledger.py",
-      "location": {
        "line_start": 2,
        "line_end": 3,
        "page": null,
@@ -4219,31 +4307,31 @@
      },
      {
       "source": "lexical:entity",
-      "path": "src/billing/ledger.py",
+      "path": "src/billing/invoice_service.py",
       "location": {
-       "line_start": 10,
-       "line_end": 11,
+       "line_start": 5,
+       "line_end": 6,
        "page": null,
        "section": null
       },
-      "entity": "src.billing.ledger.Λογαριασμός",
+      "entity": "src.billing.invoice_service.InvoiceService.create_invoice",
       "relationship": "match",
       "confidence": "medium",
-      "snippet": "def Λογαριασμός():"
+      "snippet": "def create_invoice(self, order):"
      },
      {
       "source": "lexical:entity",
-      "path": "src/billing/my-helpers.v2.py",
+      "path": "src/billing/invoice_service.py",
       "location": {
-       "line_start": 1,
-       "line_end": 2,
+       "line_start": 8,
+       "line_end": 9,
        "page": null,
        "section": null
       },
-      "entity": "src.billing.my-helpers.v2.helper",
+      "entity": "src.billing.invoice_service.InvoiceService.void_invoice",
       "relationship": "match",
       "confidence": "medium",
-      "snippet": "def helper():"
+      "snippet": "def void_invoice(self, invoice_id):"
      }
     ],
     "evidence_truncated": false,
@@ -4337,6 +4425,20 @@
     "incidents": [],
     "evidence": [
      {
+      "source": "lexical:entity",
+      "path": "src/billing/invoice_service.py",
+      "location": {
+       "line_start": 8,
+       "line_end": 9,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.InvoiceService.void_invoice",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "def void_invoice(self, invoice_id):"
+     },
+     {
       "source": "lexical:document",
       "path": "docs/billing.md",
       "location": {
@@ -4366,20 +4468,6 @@
      },
      {
       "source": "lexical:document",
-      "path": "docs/billing.md",
-      "location": {
-       "line_start": null,
-       "line_end": null,
-       "page": null,
-       "section": "Billing guide > Tax"
-      },
-      "entity": "Billing guide",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "Billing guide\nBilling guide\nTax\nUse calculate_tax for VAT. See invoice_service.py and the ledger module, and the helper in my-helpers.v2.py."
-     },
-     {
-      "source": "lexical:document",
       "path": "docs/unicode.txt",
       "location": {
        "line_start": null,
@@ -4391,20 +4479,6 @@
       "relationship": "match",
       "confidence": "medium",
       "snippet": "unicode\nΤο σύνολο υπολογίζεται με café_total και Λογαριασμός.\n\nEdge: InvoiceService.create_invoice. Also (Ledger) and [post_entry] and \"helper\".\n\nPathological: a.b.c.d..e, ...,\n\ninit\n\n, $$$, ((())), Ledger.post_entry.extra"
-     },
-     {
-      "source": "lexical:entity",
-      "path": "src/billing/invoice_service.py",
-      "location": {
-       "line_start": 4,
-       "line_end": 9,
-       "page": null,
-       "section": null
-      },
-      "entity": "src.billing.invoice_service.InvoiceService",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "class InvoiceService:"
      },
      {
       "source": "lexical:entity",
@@ -4424,29 +4498,15 @@
       "source": "lexical:entity",
       "path": "src/billing/invoice_service.py",
       "location": {
-       "line_start": 8,
+       "line_start": 4,
        "line_end": 9,
        "page": null,
        "section": null
       },
-      "entity": "src.billing.invoice_service.InvoiceService.void_invoice",
+      "entity": "src.billing.invoice_service.InvoiceService",
       "relationship": "match",
       "confidence": "medium",
-      "snippet": "def void_invoice(self, invoice_id):"
-     },
-     {
-      "source": "lexical:entity",
-      "path": "src/billing/invoice_service.py",
-      "location": {
-       "line_start": 12,
-       "line_end": 13,
-       "page": null,
-       "section": null
-      },
-      "entity": "src.billing.invoice_service.calculate_tax",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "def calculate_tax(amount):"
+      "snippet": "class InvoiceService:"
      },
      {
       "source": "lexical:entity",
@@ -4475,6 +4535,48 @@
       "relationship": "match",
       "confidence": "medium",
       "snippet": "public void Refund(int amount) { }"
+     },
+     {
+      "source": "lexical:document",
+      "path": "docs/billing.md",
+      "location": {
+       "line_start": null,
+       "line_end": null,
+       "page": null,
+       "section": "Billing guide > Tax"
+      },
+      "entity": "Billing guide",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "Billing guide\nBilling guide\nTax\nUse calculate_tax for VAT. See invoice_service.py and the ledger module, and the helper in my-helpers.v2.py."
+     },
+     {
+      "source": "lexical:entity",
+      "path": "src/billing/invoice_service.py",
+      "location": {
+       "line_start": 12,
+       "line_end": 13,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.calculate_tax",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "def calculate_tax(amount):"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "web/Payments.cs",
+      "location": {
+       "line_start": 5,
+       "line_end": 6,
+       "page": null,
+       "section": null
+      },
+      "entity": "Shop.Payments.PaymentGateway.Charge",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "[HttpPost(\"api/payments/charge\")]\n        public void Charge(int amount) { }"
      }
     ],
     "evidence_truncated": false,
@@ -4506,7 +4608,7 @@
       "tier": "fts",
       "title": "Orders",
       "path": "docs/orders.html",
-      "snippet": "order controller place order cancel order format currency payment gateway place orders xformat currency order controller place order x entry 2",
+      "snippet": "Orders\nOrders\nThe OrderController exposes placeOrder and cancelOrder.\n\nFormatting uses formatCurrency; the Shop.Payments.PaymentGateway handles Charge and Refund.\n\nNot matches: placeOrders, xformatCurrency, OrderController.placeOrderX, Ledger.post_entry2.",
       "location": {
        "section": "Orders",
        "page_start": null,
@@ -4535,6 +4637,20 @@
     "incidents": [],
     "evidence": [
      {
+      "source": "lexical:entity",
+      "path": "web/orders.ts",
+      "location": {
+       "line_start": 3,
+       "line_end": 3,
+       "page": null,
+       "section": null
+      },
+      "entity": "web.orders.OrderController.cancelOrder",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "cancelOrder(id: string): string { return id; }"
+     },
+     {
       "source": "lexical:document",
       "path": "docs/orders.html",
       "location": {
@@ -4546,21 +4662,7 @@
       "entity": "Orders",
       "relationship": "match",
       "confidence": "medium",
-      "snippet": "order controller place order cancel order format currency payment gateway place orders xformat currency order controller place order x entry 2"
-     },
-     {
-      "source": "lexical:entity",
-      "path": "src/billing/invoice_service.py",
-      "location": {
-       "line_start": 5,
-       "line_end": 6,
-       "page": null,
-       "section": null
-      },
-      "entity": "src.billing.invoice_service.InvoiceService.create_invoice",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "def create_invoice(self, order):"
+      "snippet": "Orders\nOrders\nThe OrderController exposes placeOrder and cancelOrder.\n\nFormatting uses formatCurrency; the Shop.Payments.PaymentGateway handles Charge and Refund.\n\nNot matches: placeOrders, xformatCurrency, OrderController.placeOrderX, Ledger.post_entry2."
      },
      {
       "source": "lexical:entity",
@@ -4594,20 +4696,6 @@
       "source": "lexical:entity",
       "path": "web/orders.ts",
       "location": {
-       "line_start": 3,
-       "line_end": 3,
-       "page": null,
-       "section": null
-      },
-      "entity": "web.orders.OrderController.cancelOrder",
-      "relationship": "match",
-      "confidence": "medium",
-      "snippet": "cancelOrder(id: string): string { return id; }"
-     },
-     {
-      "source": "lexical:entity",
-      "path": "web/orders.ts",
-      "location": {
        "line_start": 6,
        "line_end": 8,
        "page": null,
@@ -4617,6 +4705,20 @@
       "relationship": "match",
       "confidence": "medium",
       "snippet": "function formatCurrency(value: number): string {"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "src/billing/invoice_service.py",
+      "location": {
+       "line_start": 5,
+       "line_end": 6,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.invoice_service.InvoiceService.create_invoice",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "def create_invoice(self, order):"
      }
     ],
     "evidence_truncated": false,
@@ -4664,7 +4766,22 @@
     "tests": [],
     "requirements": [],
     "incidents": [],
-    "evidence": [],
+    "evidence": [
+     {
+      "source": "symbol",
+      "path": "src/billing/ledger.py",
+      "location": {
+       "line_start": 10,
+       "line_end": 11,
+       "page": null,
+       "section": null
+      },
+      "entity": "src.billing.ledger.Λογαριασμός",
+      "relationship": "defines",
+      "confidence": "exact",
+      "snippet": "def Λογαριασμός():"
+     }
+    ],
     "evidence_truncated": false,
     "evidence_truncation_reasons": [],
     "semantic_results": [],
@@ -7609,24 +7726,15 @@
      }
     ],
     "paths": [
+     "app/core.py",
      "app/core_test.py",
      "app/util.py",
      "svc/svc.go",
-     "web/money.ts"
+     "tests/test_core.py",
+     "web/money.ts",
+     "web/orders.ts"
     ],
     "call_flows": [
-     {
-      "source": "app.util.unused",
-      "relationship": "calls",
-      "target": "app.util.normalize",
-      "confidence": "exact"
-     },
-     {
-      "source": "tests.test_core.test_settle",
-      "relationship": "calls",
-      "target": "app.util.normalize",
-      "confidence": "medium"
-     },
      {
       "source": "app.core.Ledger.validate",
       "relationship": "calls",
@@ -7640,7 +7748,19 @@
       "confidence": "medium"
      },
      {
+      "source": "app.util.unused",
+      "relationship": "calls",
+      "target": "app.util.normalize",
+      "confidence": "exact"
+     },
+     {
       "source": "app.core_test.test_normalize",
+      "relationship": "calls",
+      "target": "app.util.normalize",
+      "confidence": "medium"
+     },
+     {
+      "source": "tests.test_core.test_settle",
       "relationship": "calls",
       "target": "app.util.normalize",
       "confidence": "medium"
@@ -7828,6 +7948,12 @@
      {
       "source": "app.core.settle",
       "relationship": "calls",
+      "target": "app.util.normalize",
+      "confidence": "medium"
+     },
+     {
+      "source": "app.core.settle",
+      "relationship": "calls",
       "target": "app.core.Ledger.post",
       "confidence": "exact"
      },
@@ -7836,21 +7962,15 @@
       "relationship": "calls",
       "target": "audit_log",
       "confidence": "medium"
-     },
-     {
-      "source": "app.core.settle",
-      "relationship": "calls",
-      "target": "app.util.normalize",
-      "confidence": "medium"
      }
     ],
     "dependencies": [
      {
-      "qualified_name": "app.core.Ledger.post",
+      "qualified_name": "app.util.normalize",
       "relationship": "calls"
      },
      {
-      "qualified_name": "app.util.normalize",
+      "qualified_name": "app.core.Ledger.post",
       "relationship": "calls"
      }
     ],
@@ -7914,18 +8034,6 @@
     "paths": [],
     "call_flows": [
      {
-      "source": "app.util.unused",
-      "relationship": "calls",
-      "target": "app.util.normalize",
-      "confidence": "exact"
-     },
-     {
-      "source": "tests.test_core.test_settle",
-      "relationship": "calls",
-      "target": "app.util.normalize",
-      "confidence": "medium"
-     },
-     {
       "source": "app.core.Ledger.validate",
       "relationship": "calls",
       "target": "app.util.normalize",
@@ -7938,7 +8046,19 @@
       "confidence": "medium"
      },
      {
+      "source": "app.util.unused",
+      "relationship": "calls",
+      "target": "app.util.normalize",
+      "confidence": "exact"
+     },
+     {
       "source": "app.core_test.test_normalize",
+      "relationship": "calls",
+      "target": "app.util.normalize",
+      "confidence": "medium"
+     },
+     {
+      "source": "tests.test_core.test_settle",
       "relationship": "calls",
       "target": "app.util.normalize",
       "confidence": "medium"
@@ -8049,7 +8169,8 @@
     "summary": "Found 0 symbol(s) and 0 document(s) matching 'what depends on Ledger.post'; see below for details.",
     "symbols": [],
     "paths": [
-     "app/core.py"
+     "app/core.py",
+     "tests/test_core.py"
     ],
     "call_flows": [],
     "dependencies": [],
@@ -8071,6 +8192,34 @@
       "relationship": "match",
       "confidence": "medium",
       "snippet": "def post(self, amount):"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "tests/test_core.py",
+      "location": {
+       "line_start": 9,
+       "line_end": 10,
+       "page": null,
+       "section": null
+      },
+      "entity": "tests.test_core.test_post",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "def test_post():\n    Ledger().post(5)"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "app/core.py",
+      "location": {
+       "line_start": 20,
+       "line_end": 23,
+       "page": null,
+       "section": null
+      },
+      "entity": "app.core.settle",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "def settle(ledger, amount):\n    ledger.post(amount)\n    audit_log(amount)\n    return normalize(amount)"
      }
     ],
     "evidence_truncated": false,
@@ -8105,7 +8254,22 @@
     "tests": [],
     "requirements": [],
     "incidents": [],
-    "evidence": [],
+    "evidence": [
+     {
+      "source": "symbol",
+      "path": "svc/svc.go",
+      "location": {
+       "line_start": 5,
+       "line_end": 5,
+       "page": null,
+       "section": null
+      },
+      "entity": "svc.Settle",
+      "relationship": "defines",
+      "confidence": "exact",
+      "snippet": "func Settle(v float64) float64 { return Normalize(v) }"
+     }
+    ],
     "evidence_truncated": false,
     "evidence_truncation_reasons": [],
     "semantic_results": [],
@@ -8123,7 +8287,8 @@
     "summary": "Found 0 symbol(s) and 0 document(s) matching 'ledger post amount'; see below for details.",
     "symbols": [],
     "paths": [
-     "app/core.py"
+     "app/core.py",
+     "tests/test_core.py"
     ],
     "call_flows": [],
     "dependencies": [],
@@ -8132,6 +8297,20 @@
     "requirements": [],
     "incidents": [],
     "evidence": [
+     {
+      "source": "lexical:entity",
+      "path": "app/core.py",
+      "location": {
+       "line_start": 20,
+       "line_end": 23,
+       "page": null,
+       "section": null
+      },
+      "entity": "app.core.settle",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "def settle(ledger, amount):\n    ledger.post(amount)\n    audit_log(amount)\n    return normalize(amount)"
+     },
      {
       "source": "lexical:entity",
       "path": "app/core.py",
@@ -8162,17 +8341,17 @@
      },
      {
       "source": "lexical:entity",
-      "path": "app/core.py",
+      "path": "tests/test_core.py",
       "location": {
-       "line_start": 20,
-       "line_end": 23,
+       "line_start": 9,
+       "line_end": 10,
        "page": null,
        "section": null
       },
-      "entity": "app.core.settle",
+      "entity": "tests.test_core.test_post",
       "relationship": "match",
       "confidence": "medium",
-      "snippet": "def settle(ledger, amount):"
+      "snippet": "def test_post():\n    Ledger().post(5)"
      }
     ],
     "evidence_truncated": false,

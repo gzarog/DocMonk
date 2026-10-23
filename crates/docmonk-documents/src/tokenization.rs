@@ -25,7 +25,22 @@ pub fn count_tokens(text: &str) -> i64 {
     model_tokenizer().expect("tokenizer").count(text, false)
 }
 
-/// `re.split(r"(?<=[.!?])\s+", text.strip())`, dropping empty parts.
+/// Ends a sentence when followed by whitespace: `.`, `!`, `?`, the Arabic
+/// question mark and full stop, the Devanagari danda.
+fn ends_sentence_before_space(c: char) -> bool {
+    matches!(c, '.' | '!' | '?' | '؟' | '۔' | '।')
+}
+
+/// Ends a sentence by itself: the ideographic full stop and the full-width
+/// `!` / `?` / `.` (Chinese and Japanese write no space after them).
+fn ends_sentence(c: char) -> bool {
+    matches!(c, '。' | '！' | '？' | '．')
+}
+
+/// Sentences of `text`: split after `.`, `!`, `?` (and their Arabic and
+/// Devanagari counterparts) followed by whitespace, which is dropped, and
+/// after `。`, `！`, `？` with or without whitespace. Empty parts are
+/// dropped.
 pub fn split_sentences(text: &str) -> Vec<String> {
     let stripped = py_strip(text);
     if stripped.is_empty() {
@@ -36,7 +51,8 @@ pub fn split_sentences(text: &str) -> Vec<String> {
     let mut prev: Option<char> = None;
     let mut iter = stripped.char_indices().peekable();
     while let Some((i, c)) = iter.next() {
-        if py_isspace(c) && matches!(prev, Some('.' | '!' | '?')) {
+        if py_isspace(c) && prev.is_some_and(|p| ends_sentence_before_space(p) || ends_sentence(p))
+        {
             let mut end = i + c.len_utf8();
             while let Some(&(j, d)) = iter.peek() {
                 if !py_isspace(d) {
@@ -50,10 +66,41 @@ pub fn split_sentences(text: &str) -> Vec<String> {
             prev = None;
             continue;
         }
+        if ends_sentence(c) && iter.peek().is_some_and(|&(_, d)| !py_isspace(d)) {
+            let end = i + c.len_utf8();
+            out.push(stripped[start..end].to_owned());
+            start = end;
+            prev = None;
+            continue;
+        }
         prev = Some(c);
     }
     out.push(stripped[start..].to_owned());
     out.retain(|s| !s.is_empty());
+    out
+}
+
+/// Whether `c` belongs to a script written without spaces between words
+/// and sentences (Han, kana).
+fn is_unspaced(c: char) -> bool {
+    matches!(
+        docmonk_core::lexnorm::script_of(c),
+        Some(docmonk_core::lexnorm::Script::Han | docmonk_core::lexnorm::Script::Kana)
+    ) || ends_sentence(c)
+}
+
+/// Joins pieces of one text back together: with a space, except between
+/// Chinese or Japanese pieces, which were never separated by one.
+fn join_pieces(pieces: &[&str]) -> String {
+    let mut out = String::new();
+    for p in pieces {
+        let unspaced = out.chars().next_back().is_some_and(is_unspaced)
+            && p.chars().next().is_some_and(is_unspaced);
+        if !out.is_empty() && !unspaced {
+            out.push(' ');
+        }
+        out.push_str(p);
+    }
     out
 }
 
@@ -108,7 +155,7 @@ fn repack(pieces: &[String], max_tokens: i64) -> Vec<String> {
     for piece in pieces {
         let pt = count_tokens(piece);
         if !buf.is_empty() && buf_tokens + pt > max_tokens {
-            packed.push(buf.join(" "));
+            packed.push(join_pieces(&buf));
             buf.clear();
             buf_tokens = 0;
         }
@@ -116,7 +163,7 @@ fn repack(pieces: &[String], max_tokens: i64) -> Vec<String> {
         buf_tokens += pt;
     }
     if !buf.is_empty() {
-        packed.push(buf.join(" "));
+        packed.push(join_pieces(&buf));
     }
     packed
 }

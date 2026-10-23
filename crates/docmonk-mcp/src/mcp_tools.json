@@ -670,6 +670,11 @@
      "title": "Evidence",
      "type": "array"
     },
+    "provenance": {
+     "additionalProperties": true,
+     "title": "Provenance",
+     "type": "object"
+    },
     "support": {
      "items": {
       "additionalProperties": true,
@@ -684,6 +689,7 @@
     "verdict",
     "plan",
     "evidence",
+    "provenance",
     "support"
    ],
    "title": "docmonk_evidenceOutput",
@@ -1866,6 +1872,43 @@
       "is_scanned": {
        "title": "Is Scanned",
        "type": "boolean"
+      },
+      "language": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Language"
+      },
+      "script": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Script"
+      },
+      "pages": {
+       "anyOf": [
+        {
+         "additionalProperties": true,
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Pages"
       }
      },
      "required": [
@@ -2496,6 +2539,17 @@
          ],
          "default": null
         },
+        "passages": {
+         "anyOf": [
+          {
+           "type": "integer"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null
+        },
         "relationships": {
          "anyOf": [
           {
@@ -2525,6 +2579,7 @@
         "entities",
         "documents",
         "chunks",
+        "passages",
         "relationships",
         "throughput_files_per_second"
        ]
@@ -3046,6 +3101,12 @@
       "chunks": {
        "type": "integer"
       },
+      "passages": {
+       "type": "integer"
+      },
+      "degraded": {
+       "type": "integer"
+      },
       "relationships": {
        "type": "integer"
       },
@@ -3075,6 +3136,8 @@
       "code_entities",
       "documents",
       "chunks",
+      "passages",
+      "degraded",
       "relationships",
       "links",
       "max_attempt_count",

@@ -267,6 +267,10 @@ pub fn parse_dependency(d: &str) -> Option<(&str, &str)> {
     (!c.is_empty() && !p.is_empty() && c != p).then_some((c, p))
 }
 
+/// `search.embedding_model` values: the pinned models of docmonk-ml's
+/// manifest (`EMBEDDING_MODELS`, checked there).
+pub const EMBEDDING_MODEL_SLUGS: &[&str] = &["all-minilm-l6-v2", "multilingual-e5-small"];
+
 fn one_of(value: &str, allowed: &[&str]) -> Result<(), String> {
     if allowed.contains(&value) {
         return Ok(());
@@ -612,6 +616,15 @@ section! {
         semantic: bool = false;
         lazy_semantic: bool = false;
         semantic_top_k: i64 = 30;
+        // The pinned embedding model (docmonk-ml's manifest). Vectors of
+        // another model are never mixed in: changing it re-embeds.
+        embedding_model: String = "all-minilm-l6-v2".into(),
+            check = |v| one_of(v, EMBEDDING_MODEL_SLUGS);
+        // Candidates each stage (lexical, semantic) fetches before fusion,
+        // independent of the response size; 0 = max(4 * limit, 40).
+        candidate_pool: i64 = 0, check = |v| if (0..=1000).contains(v) { Ok(()) } else {
+            Err("must be between 0 and 1000 (0 = automatic)".into())
+        };
         output: SearchOutputConfig = SearchOutputConfig::default();
         context: SearchContextConfig = SearchContextConfig::default();
         reranker: SearchRerankerConfig = SearchRerankerConfig::default();

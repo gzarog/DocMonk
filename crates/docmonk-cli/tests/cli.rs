@@ -138,8 +138,9 @@ fn server_requires_server_mode() {
         .unwrap();
     assert!(out.status.success());
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(v["data"]["indexes"].as_array().unwrap().len(), 7);
+    assert_eq!(v["data"]["indexes"].as_array().unwrap().len(), 8);
     assert_eq!(v["data"]["indexes"][6]["name"], "docmonk-runtime");
+    assert_eq!(v["data"]["indexes"][7]["name"], "docmonk-passages");
     assert_eq!(v["data"]["indexes"][0]["name"], "docmonk-source-state");
 }
 

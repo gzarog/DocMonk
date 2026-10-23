@@ -1,0 +1,35 @@
+{
+  "benchmark": "crates/docmonk-ml/src/bin/docmonk-embed-bench.rs --texts 1000 --model <slug> (release, CPU only)",
+  "models": {
+    "all-minilm-l6-v2": {
+      "batch_size": 16,
+      "embed_wall_s": 28.764061938,
+      "model": "sentence-transformers/all-MiniLM-L6-v2",
+      "model_load_s": 0.266257406,
+      "peak_rss_kib": 324328,
+      "texts": 1000,
+      "texts_per_s": 34.765604460019155,
+      "threads": 4
+    },
+    "multilingual-e5-small": {
+      "batch_size": 16,
+      "embed_wall_s": 57.381071678,
+      "model": "intfloat/multilingual-e5-small",
+      "model_load_s": 3.9168929869999998,
+      "peak_rss_kib": 1219364,
+      "texts": 1000,
+      "texts_per_s": 17.427349660034352,
+      "threads": 4
+    },
+    "paraphrase-multilingual-minilm-l12-v2": {
+      "batch_size": 16,
+      "embed_wall_s": 41.681508091,
+      "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+      "model_load_s": 2.379385476,
+      "peak_rss_kib": 1218416,
+      "texts": 1000,
+      "texts_per_s": 23.991454383482903,
+      "threads": 4
+    }
+  }
+}

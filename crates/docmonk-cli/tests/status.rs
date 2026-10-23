@@ -176,6 +176,7 @@ fn server_mode_never_reads_local_sqlite() {
         "chunks",
         "relationships",
         "runtime",
+        "passages",
     ] {
         let _ = client.delete(format!("{url}/{prefix}-{kind}")).send();
     }

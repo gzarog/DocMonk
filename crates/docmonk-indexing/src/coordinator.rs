@@ -247,6 +247,9 @@ pub struct SourceResult {
     pub plan: String,
     pub counts: DiffCounts,
     pub indexed: usize,
+    /// Indexed files with a recoverable extraction problem (counted in
+    /// `indexed` too), e.g. source with syntax errors indexed as text.
+    pub degraded: usize,
     pub retrying: usize,
     pub failed: usize,
     pub skipped_limit: usize,
@@ -999,8 +1002,23 @@ fn build(
                 Ok(k) => {
                     result.indexed += 1;
                     result.attachments += k.attachments;
+                    // Indexed degraded (e.g. syntax errors indexed as plain
+                    // text): searchable, and visible as a problem.
+                    if let Some(n) = &k.notice {
+                        result.degraded += 1;
+                        store
+                            .record_error(
+                                Some(build_id),
+                                Some(&d.work.input.file_id),
+                                Some(&d.work.input.rel_path),
+                                &n.code,
+                                &n.message,
+                            )
+                            .map_err(db_err)?;
+                    }
+                    let notice = k.notice.as_ref().map(|n| n.message.clone());
                     (
-                        file_row(&d.work, versions, "indexed", 0, None, None),
+                        file_row(&d.work, versions, "indexed", 0, None, notice),
                         k,
                         FileOutcome::Indexed,
                     )

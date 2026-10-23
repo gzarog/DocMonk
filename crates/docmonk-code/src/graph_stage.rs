@@ -854,14 +854,9 @@ fn derive_file(
     let _cpu =
         docmonk_indexing::governor::global().acquire(docmonk_indexing::governor::Class::Cpu, 1);
     let parsing = Instant::now();
-    // The base index parsed these exact bytes; a parse failure here would
-    // be a derivation bug, recorded as a failure rather than hidden.
-    let rows = file_relationships(&f.rel_path, &f.id, &source).map_err(|p| {
-        failed(format!(
-            "{}: syntax error(s) in a {} file",
-            f.rel_path, p.language
-        ))
-    })?;
+    // The base index parsed these exact bytes: a file with syntax errors
+    // was indexed as plain text (no symbols), so it has no relationships.
+    let rows = file_relationships(&f.rel_path, &f.id, &source).unwrap_or_default();
     Ok(Derived {
         rows,
         bytes: source.len() as u64,

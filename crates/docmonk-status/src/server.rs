@@ -95,6 +95,8 @@ fn published(a: &PublishedAgg) -> PublishedCounts {
         code_entities: a.entities,
         documents: a.documents,
         chunks: a.chunks,
+        passages: a.passages,
+        degraded: a.degraded,
         relationships: a.relationships,
         links: a.links,
         max_attempt_count: a.max_attempt_count,

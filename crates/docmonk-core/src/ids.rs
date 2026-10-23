@@ -75,6 +75,11 @@ pub mod record {
         id("docmonk:chunk", &[document_id, &ordinal.to_string()])
     }
 
+    /// An implementation passage of a code file, by its order in the file.
+    pub fn passage_id(file_id: &str, ordinal: u64) -> String {
+        id("docmonk:passage", &[file_id, &ordinal.to_string()])
+    }
+
     /// `ordinal` disambiguates same-named overloads within one file.
     pub fn entity_id(file_id: &str, kind: &str, qualified_name: &str, ordinal: u64) -> String {
         id(

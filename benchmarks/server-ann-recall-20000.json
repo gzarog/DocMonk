@@ -1,0 +1,58 @@
+{
+  "elasticsearch": {
+    "dims": 384,
+    "filters": {
+      "one directory (25%)": {
+        "p50_ms": 15.3,
+        "p95_ms": 22.3,
+        "recall@10": 1.0,
+        "recall@10_bare_k10": 1.0
+      },
+      "one file (2.5%)": {
+        "p50_ms": 11.0,
+        "p95_ms": 16.2,
+        "recall@10": 1.0,
+        "recall@10_bare_k10": 1.0
+      },
+      "unfiltered": {
+        "p50_ms": 21.2,
+        "p95_ms": 26.3,
+        "recall@10": 1.0,
+        "recall@10_bare_k10": 0.93
+      }
+    },
+    "k": 10,
+    "publish_two_builds_s": 42.0,
+    "queries": 40,
+    "request_k": 60,
+    "vectors": 20000
+  },
+  "opensearch": {
+    "dims": 384,
+    "filters": {
+      "one directory (25%)": {
+        "p50_ms": 18.2,
+        "p95_ms": 22.2,
+        "recall@10": 1.0,
+        "recall@10_bare_k10": 1.0
+      },
+      "one file (2.5%)": {
+        "p50_ms": 10.6,
+        "p95_ms": 14.2,
+        "recall@10": 1.0,
+        "recall@10_bare_k10": 1.0
+      },
+      "unfiltered": {
+        "p50_ms": 23.7,
+        "p95_ms": 28.9,
+        "recall@10": 0.977,
+        "recall@10_bare_k10": 0.675
+      }
+    },
+    "k": 10,
+    "publish_two_builds_s": 46.9,
+    "queries": 40,
+    "request_k": 60,
+    "vectors": 20000
+  }
+}

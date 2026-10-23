@@ -363,6 +363,16 @@ fn one_embedding_per_query_and_per_corpus_availability() {
     assert_eq!(used.query_embeds, 1, "one forward pass for three corpora");
     assert!(s.available, "{}", s.reason);
     assert_eq!(s.degraded, ["no-knn: vector search unavailable"]);
+    // Diagnostics name how each corpus answered.
+    assert_eq!(s.engines.len(), 3);
+    assert_eq!(s.engines[0], ("no-knn".to_owned(), "unavailable"));
+    assert!(
+        s.engines[1..]
+            .iter()
+            .all(|(_, e)| ["hnsw", "exact"].contains(e)),
+        "{:?}",
+        s.engines
+    );
     assert_eq!(
         s.hits.iter().map(|h| &h.hit.id).collect::<Vec<_>>()[..1],
         alone.hits.iter().map(|h| &h.hit.id).collect::<Vec<_>>()[..1]

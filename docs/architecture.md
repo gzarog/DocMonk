@@ -14,7 +14,7 @@ helper for packaging and repository audits.
 | `docmonk-ui` | local Admin UI (`docmonk ui`), an axum server with embedded templates |
 | `docmonk-ai` | AI providers for `ask`: OpenAI, Anthropic, Ollama, OpenAI-compatible, Codex (stdio JSON-RPC) and Copilot (CLI) |
 | `docmonk-backends` | OpenSearch/Elasticsearch index set with strict mappings: the authoritative server catalog, writer leases with fencing, bounded adaptive bulk writes, generation-numbered immutable records (unchanged records are never rewritten), atomic per-source publication with grace-period GC, and the `ServerReader` implementation of the knowledge read port |
-| `docmonk-code` | tree-sitter code intelligence: `.scm` queries, entity extraction, resolution, framework rules, code graph, and the post-index graph stage (per-file edges, cross-file resolution, versioned graph generations) |
+| `docmonk-code` | tree-sitter code intelligence: `.scm` queries, entity extraction, implementation passages and the plain-text fallback for code without symbols, resolution, framework rules, code graph, and the post-index graph stage (per-file edges, cross-file resolution, versioned graph generations) |
 | `docmonk-documents` | normalized-document model, pinned tokenizer, token-budget splitting, row-aware tables, chunker |
 | `docmonk-convert` | Rust-native document conversion (docling.rs, no ML/network), Docling-JSON normalizer, email and attachments, document processor |
 | `docmonk-knowledge` | cross-domain linker (code entities <-> document chunks) and persistent manual links |
@@ -69,6 +69,20 @@ and classifies intent. The stages are then:
 4. semantic search, only when the earlier stages fall short;
 5. evidence assembly with evidence classes, budget truncation and
    freshness.
+
+Lexical and semantic candidates are fused by one ranking path
+(`docmonk_retrieval::pipeline`) for every surface: per-stage candidate
+budgets, exact pins, RRF, an optional cross-encoder pass on stored text
+with a reported state, and context around document and code hits alike.
+Every citation carries a fingerprint of its record's stored content and is
+re-verified (source, build, scope, record, location, content) before it
+counts as support. See [ADR 0038](adr/0038-shared-ranking-and-citation-verification.md).
+
+Lexical matching of accented, inflected and unsegmented text goes through
+one normalization, computed by DocMonk itself (`docmonk_core::lexnorm`).
+It is indexed next to the original text by both backends, the local
+`words` column and the server `norm` field, and applied to queries the
+same way. See [ADR 0039](adr/0039-normalized-lexical-projection-and-pdf-pages.md).
 
 Every read goes through `KnowledgeRead`, pinned to each source's published
 build and graph generation. Backend-specific code only implements those

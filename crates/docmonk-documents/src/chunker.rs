@@ -18,8 +18,10 @@ use crate::table::{self, Row};
 use crate::tokenization::{count_tokens, split_by_token_budget};
 use crate::tokenizer::{model_tokenizer, preprocessing_fingerprint, ModelTokenizer};
 
-/// Gates chunk boundaries and `search_text`.
-pub const CHUNKER_VERSION: &str = "2";
+/// Gates chunk boundaries and `search_text`. (3: sentences also end at
+/// `。！？` and the Arabic and Devanagari full stops, and Chinese and
+/// Japanese pieces are rejoined without inserted spaces.)
+pub const CHUNKER_VERSION: &str = "3";
 /// Gates `contextual_text` assembly.
 pub const EMBEDDING_TEXT_VERSION: &str = "2";
 

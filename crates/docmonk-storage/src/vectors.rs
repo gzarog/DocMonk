@@ -18,6 +18,8 @@ use crate::knowledge::{cached, ProjectStore};
 /// Subject kinds stored in `embeddings.subject_type`.
 pub const SUBJECT_ENTITY: &str = "entity";
 pub const SUBJECT_CHUNK: &str = "chunk";
+/// An implementation passage of a code file (ADR 0037).
+pub const SUBJECT_PASSAGE: &str = "passage";
 
 /// Something that still needs a vector under the current model.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,6 +30,53 @@ pub struct EmbeddingSubject {
     /// The exact text handed to the model.
     pub text: String,
 }
+
+/// Where a paged read of pending embedding subjects resumes: the subject
+/// kind (index into the read order: entities, chunks, passages) and the
+/// last row's order key.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SubjectCursor {
+    pub kind: usize,
+    pub file_id: String,
+    pub ordinal: i64,
+    pub id: String,
+}
+
+/// Pending-subject reads per kind, in order. Each selects `(id, file_id,
+/// ordinal, text)` after the keyset position `(?3, ?4, ?5)`, at most `?6`
+/// rows; entities have no ordinal (0).
+const PENDING_KINDS: [(&str, &str); 3] = [
+    (
+        SUBJECT_ENTITY,
+        "SELECT e.id, e.file_id, 0, COALESCE(NULLIF(e.signature, ''), e.qualified_name)
+         FROM entities e
+         LEFT JOIN embeddings v ON v.build_id = e.build_id AND v.subject_type = 'entity'
+            AND v.subject_id = e.id AND v.model_fingerprint = ?2
+         WHERE e.build_id = ?1 AND v.subject_id IS NULL
+           AND (e.file_id, 0, e.id) > (?3, ?4, ?5)
+         ORDER BY e.file_id, e.id LIMIT ?6",
+    ),
+    (
+        SUBJECT_CHUNK,
+        "SELECT c.id, c.file_id, c.ordinal, COALESCE(NULLIF(c.embedding_text, ''), c.text)
+         FROM chunks c
+         LEFT JOIN embeddings v ON v.build_id = c.build_id AND v.subject_type = 'chunk'
+            AND v.subject_id = c.id AND v.model_fingerprint = ?2
+         WHERE c.build_id = ?1 AND v.subject_id IS NULL
+           AND (c.file_id, c.ordinal, c.id) > (?3, ?4, ?5)
+         ORDER BY c.file_id, c.ordinal, c.id LIMIT ?6",
+    ),
+    (
+        SUBJECT_PASSAGE,
+        "SELECT p.id, p.file_id, p.ordinal, p.header || char(10) || p.text
+         FROM code_passages p
+         LEFT JOIN embeddings v ON v.build_id = p.build_id AND v.subject_type = 'passage'
+            AND v.subject_id = p.id AND v.model_fingerprint = ?2
+         WHERE p.build_id = ?1 AND v.subject_id IS NULL
+           AND (p.file_id, p.ordinal, p.id) > (?3, ?4, ?5)
+         ORDER BY p.file_id, p.ordinal, p.id LIMIT ?6",
+    ),
+];
 
 /// A computed vector ready to be written.
 #[derive(Debug, Clone, PartialEq)]
@@ -58,17 +107,21 @@ pub const SNIPPET_CHARS: usize = 280;
 pub struct SubjectMeta {
     pub subject_type: String,
     pub subject_id: String,
-    /// `entity` or `document` (the hit kinds).
+    /// `entity`, `document` or `passage` (the hit kinds). A body passage
+    /// is reported as a hit on its owning entity.
     pub kind: String,
+    /// The record the hit names: the subject itself, or the owning entity
+    /// of a body passage.
+    pub record_id: String,
     pub rel_path: String,
     /// Qualified name (entity) or document title / heading path (chunk).
     pub title: String,
     pub snippet: String,
     /// Heading path of a chunk (`A > B`), if any.
     pub section: Option<String>,
-    /// Entity start line, or chunk ordinal.
+    /// Entity or passage start line, or chunk ordinal.
     pub position: i64,
-    /// Entity end line (`None` for chunks).
+    /// Entity or passage end line (`None` for chunks).
     pub end_line: Option<i64>,
     /// Attachment index for chunks of an email attachment.
     pub attachment_index: Option<i64>,
@@ -109,52 +162,89 @@ pub fn decode_vector(bytes: &[u8]) -> Vec<f32> {
 }
 
 impl ProjectStore {
-    /// Entities (`signature`, else `qualified_name`) and chunks
-    /// (`embedding_text`, else `text`) of `build_id` that have no vector
-    /// under `fingerprint`, in a stable order. Blank texts are skipped.
+    /// Entities (`signature`, else `qualified_name`), chunks
+    /// (`embedding_text`, else `text`) and passages (header and lines) of
+    /// `build_id` that have no vector under `fingerprint`, in a stable
+    /// order. Blank texts are skipped. Reads every page of
+    /// [`Self::pending_embedding_subjects_page`]; the embedding pass itself
+    /// works page by page.
     pub fn pending_embedding_subjects(
         &self,
         build_id: &str,
         fingerprint: &str,
     ) -> Result<Vec<EmbeddingSubject>> {
-        let mut out = self.query_rows(
-            "pending entity embeddings",
-            "SELECT e.id, e.file_id, COALESCE(NULLIF(e.signature, ''), e.qualified_name)
-             FROM entities e
-             LEFT JOIN embeddings v ON v.build_id = e.build_id AND v.subject_type = 'entity'
-                AND v.subject_id = e.id AND v.model_fingerprint = ?2
-             WHERE e.build_id = ?1 AND v.subject_id IS NULL
-             ORDER BY e.file_id, e.id",
-            &[&build_id, &fingerprint],
-            |r| {
-                Ok(EmbeddingSubject {
-                    subject_type: SUBJECT_ENTITY,
-                    subject_id: r.get(0)?,
-                    file_id: r.get(1)?,
-                    text: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
-                })
-            },
-        )?;
-        out.extend(self.query_rows(
-            "pending chunk embeddings",
-            "SELECT c.id, c.file_id, COALESCE(NULLIF(c.embedding_text, ''), c.text)
-             FROM chunks c
-             LEFT JOIN embeddings v ON v.build_id = c.build_id AND v.subject_type = 'chunk'
-                AND v.subject_id = c.id AND v.model_fingerprint = ?2
-             WHERE c.build_id = ?1 AND v.subject_id IS NULL
-             ORDER BY c.file_id, c.ordinal, c.id",
-            &[&build_id, &fingerprint],
-            |r| {
-                Ok(EmbeddingSubject {
-                    subject_type: SUBJECT_CHUNK,
-                    subject_id: r.get(0)?,
-                    file_id: r.get(1)?,
-                    text: r.get(2)?,
-                })
-            },
-        )?);
-        out.retain(|s| !s.text.trim().is_empty());
-        Ok(out)
+        let mut out = Vec::new();
+        let mut cursor: Option<SubjectCursor> = None;
+        loop {
+            let (page, next) =
+                self.pending_embedding_subjects_page(build_id, fingerprint, cursor.as_ref(), 1024)?;
+            out.extend(page);
+            match next {
+                Some(c) => cursor = Some(c),
+                None => return Ok(out),
+            }
+        }
+    }
+
+    /// One page of [`Self::pending_embedding_subjects`] (ADR 0041): at
+    /// most `limit` rows after `after`, in the same order, and where the
+    /// next page starts (`None` after the last). The cursor is a keyset
+    /// position (kind, file, ordinal, id), never an offset: memory is
+    /// bounded by `limit`, and vectors written between pages cannot shift
+    /// the rows a later page reads. Blank texts are skipped but advance
+    /// the cursor.
+    pub fn pending_embedding_subjects_page(
+        &self,
+        build_id: &str,
+        fingerprint: &str,
+        after: Option<&SubjectCursor>,
+        limit: usize,
+    ) -> Result<(Vec<EmbeddingSubject>, Option<SubjectCursor>)> {
+        let limit = limit.max(1);
+        let mut out = Vec::new();
+        let start = after.map_or(0, |c| c.kind);
+        for (kind, &(subject_type, sql)) in PENDING_KINDS.iter().enumerate().skip(start) {
+            let (file, ordinal, id) = match after {
+                Some(c) if c.kind == kind => (c.file_id.as_str(), c.ordinal, c.id.as_str()),
+                // Before every row of this kind.
+                _ => ("", i64::MIN, ""),
+            };
+            let want = (limit - out.len()) as i64;
+            let rows = self.query_rows(
+                "pending embeddings",
+                sql,
+                &[&build_id, &fingerprint, &file, &ordinal, &id, &want],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, i64>(2)?,
+                        r.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                    ))
+                },
+            )?;
+            let full = rows.len() as i64 == want;
+            let last = rows.last().map(|(id, file, ord, _)| SubjectCursor {
+                kind,
+                file_id: file.clone(),
+                ordinal: *ord,
+                id: id.clone(),
+            });
+            for (subject_id, file_id, _, text) in rows {
+                if !text.trim().is_empty() {
+                    out.push(EmbeddingSubject {
+                        subject_type,
+                        subject_id,
+                        file_id,
+                        text,
+                    });
+                }
+            }
+            if full {
+                return Ok((out, last));
+            }
+        }
+        Ok((out, None))
     }
 
     /// Number of vectors in `build_id` stamped with a different model.
@@ -432,6 +522,7 @@ impl ProjectStore {
                         subject_type: t.clone(),
                         subject_id: id.clone(),
                         kind: "entity".into(),
+                        record_id: id.clone(),
                         rel_path: path,
                         title: qn,
                         snippet: sig,
@@ -441,6 +532,40 @@ impl ProjectStore {
                         attachment_index: None,
                         document_id: None,
                     });
+                }
+                continue;
+            }
+            if t == SUBJECT_PASSAGE {
+                let row = self
+                    .conn
+                    .prepare_cached(
+                        "SELECT f.rel_path, p.entity_id, e.qualified_name, p.text, p.start_line,
+                            p.end_line
+                         FROM code_passages p
+                         JOIN files f ON f.build_id = p.build_id AND f.id = p.file_id
+                         LEFT JOIN entities e ON e.build_id = p.build_id AND e.id = p.entity_id
+                         WHERE p.build_id = ?1 AND p.id = ?2",
+                    )
+                    .and_then(|mut st| {
+                        st.query_row(params![build_id, id], |r| {
+                            Ok((
+                                r.get::<_, String>(0)?,
+                                r.get::<_, Option<String>>(1)?,
+                                r.get::<_, Option<String>>(2)?,
+                                r.get::<_, String>(3)?,
+                                r.get::<_, i64>(4)?,
+                                r.get::<_, i64>(5)?,
+                            ))
+                        })
+                    })
+                    .map(Some)
+                    .or_else(|e| match e {
+                        rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                        e => Err(e),
+                    })
+                    .map_err(StorageError::sqlite("subject meta"))?;
+                if let Some((path, owner, qn, text, start, end)) = row {
+                    out.push(passage_meta(t, id, path, owner, qn, &text, start, end));
                 }
                 continue;
             }
@@ -499,6 +624,7 @@ impl ProjectStore {
                     subject_type: t.clone(),
                     subject_id: id.clone(),
                     kind: "document".into(),
+                    record_id: id.clone(),
                     title: if title.is_empty() {
                         path.clone()
                     } else {
@@ -515,5 +641,39 @@ impl ProjectStore {
             }
         }
         Ok(out)
+    }
+}
+
+/// Display metadata of a passage vector hit: a body passage is a hit on
+/// its owning entity located at the passage's lines; a text passage is a
+/// `passage` hit titled by its path. Shared by every backend.
+#[allow(clippy::too_many_arguments)]
+pub fn passage_meta(
+    subject_type: &str,
+    subject_id: &str,
+    rel_path: String,
+    owner: Option<String>,
+    owner_name: Option<String>,
+    text: &str,
+    start_line: i64,
+    end_line: i64,
+) -> SubjectMeta {
+    let (kind, record_id, title) = match owner {
+        Some(e) => ("entity", e, owner_name.unwrap_or_else(|| rel_path.clone())),
+        None => ("passage", subject_id.to_owned(), rel_path.clone()),
+    };
+    SubjectMeta {
+        subject_type: subject_type.to_owned(),
+        subject_id: subject_id.to_owned(),
+        kind: kind.into(),
+        record_id,
+        rel_path,
+        title,
+        snippet: text.chars().take(SNIPPET_CHARS).collect(),
+        section: None,
+        position: start_line,
+        end_line: Some(end_line),
+        attachment_index: None,
+        document_id: None,
     }
 }

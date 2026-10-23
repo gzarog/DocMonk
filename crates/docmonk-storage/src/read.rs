@@ -14,9 +14,10 @@
 use std::collections::HashMap;
 
 use crate::error::Result;
-use crate::knowledge::{ChunkRow, EntityRow, ProjectStore, RelationshipRow};
+use crate::knowledge::{ChunkRow, EntityRow, PassageRow, ProjectStore, RelationshipRow};
 use crate::search::{
-    AttachmentProvenance, DocumentSearchRow, EntityLinkRow, EntitySearchRow, PathSearchRow,
+    AttachmentProvenance, DocumentSearchRow, EntityLinkRow, EntitySearchRow, PassageSearchRow,
+    PathSearchRow,
 };
 use crate::vectors::SubjectMeta;
 
@@ -40,10 +41,13 @@ pub struct VectorFilter {
     pub path_prefixes: Vec<String>,
     /// Document ids (any); entities never match a document filter.
     pub document_ids: Vec<String>,
-    /// Search entity vectors (code index).
+    /// Search entity vectors (code index) and body passage vectors (owned
+    /// by entities).
     pub entities: bool,
     /// Search chunk vectors (chunks index).
     pub documents: bool,
+    /// Search plain-text passage vectors (code without symbols).
+    pub passages: bool,
     /// Leave out chunks of email attachments.
     pub exclude_attachments: bool,
 }
@@ -298,6 +302,61 @@ pub trait KnowledgeRead {
         Ok(rows)
     }
 
+    /// BM25-ranked implementation passages (ADR 0037) for an FTS
+    /// `expression` under `filter`, at most `limit` in scope, each with a
+    /// snippet of at most `snippet_tokens` tokens. A reader without the
+    /// passage projection returns none.
+    fn search_passages_fts_in(
+        &self,
+        _build_id: &str,
+        _expression: &str,
+        _limit: i64,
+        _snippet_tokens: i64,
+        _filter: &ReadFilter,
+    ) -> Result<Vec<PassageSearchRow>> {
+        Ok(Vec::new())
+    }
+
+    /// One passage by id.
+    fn passage(&self, _build_id: &str, _id: &str) -> Result<Option<PassageRow>> {
+        Ok(None)
+    }
+
+    /// The body passages of one function or method, in file order.
+    fn entity_passages(&self, _build_id: &str, _entity_id: &str) -> Result<Vec<PassageRow>> {
+        Ok(Vec::new())
+    }
+
+    /// The body passages of each of `entity_ids` (unknown ids map to
+    /// nothing), in file order: one round trip on a server.
+    fn entity_passages_many(
+        &self,
+        build_id: &str,
+        entity_ids: &[String],
+    ) -> Result<HashMap<String, Vec<PassageRow>>> {
+        let mut out = HashMap::new();
+        for id in entity_ids {
+            if !out.contains_key(id) {
+                let p = self.entity_passages(build_id, id)?;
+                if !p.is_empty() {
+                    out.insert(id.clone(), p);
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Passages of the same file and owner around `p`.
+    fn passage_siblings(
+        &self,
+        _build_id: &str,
+        _p: &PassageRow,
+        _previous: i64,
+        _next: i64,
+    ) -> Result<(Vec<PassageRow>, Vec<PassageRow>)> {
+        Ok((Vec::new(), Vec::new()))
+    }
+
     /// The reader can be shared across threads (a remote reader); `None`
     /// for a SQLite connection, which belongs to one thread.
     fn as_sync(&self) -> Option<&(dyn KnowledgeRead + Sync)> {
@@ -491,6 +550,31 @@ impl KnowledgeRead for ProjectStore {
         f: &ReadFilter,
     ) -> Result<Vec<PathSearchRow>> {
         ProjectStore::search_paths_projection_in(self, b, q, l, f)
+    }
+    fn search_passages_fts_in(
+        &self,
+        b: &str,
+        e: &str,
+        l: i64,
+        s: i64,
+        f: &ReadFilter,
+    ) -> Result<Vec<PassageSearchRow>> {
+        ProjectStore::search_passages_fts_in(self, b, e, l, s, f)
+    }
+    fn passage(&self, b: &str, id: &str) -> Result<Option<PassageRow>> {
+        ProjectStore::passage(self, b, id)
+    }
+    fn entity_passages(&self, b: &str, e: &str) -> Result<Vec<PassageRow>> {
+        ProjectStore::entity_passages(self, b, e)
+    }
+    fn passage_siblings(
+        &self,
+        b: &str,
+        p: &PassageRow,
+        prev: i64,
+        next: i64,
+    ) -> Result<(Vec<PassageRow>, Vec<PassageRow>)> {
+        ProjectStore::passage_siblings(self, b, p, prev, next)
     }
     fn symbol_entities(&self, b: &str, q: &str) -> Result<Vec<EntityRow>> {
         ProjectStore::symbol_entities(self, b, q)

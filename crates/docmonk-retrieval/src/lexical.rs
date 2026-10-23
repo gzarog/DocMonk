@@ -9,7 +9,7 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
-use docmonk_storage::search::{word_tokens, AttachmentProvenance};
+use docmonk_storage::search::{word_tokens, AttachmentProvenance, PassageSearchRow};
 use serde::Serialize;
 
 use crate::{Corpus, SearchError};
@@ -75,7 +75,9 @@ pub struct Location {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SearchResult {
-    /// `entity`, `document` or `path`.
+    /// `entity`, `document`, `passage` (code text without symbols) or
+    /// `path`. An implementation passage of a function or method is an
+    /// `entity` hit on its owner, located at the passage's lines.
     pub kind: &'static str,
     pub tier: RankTier,
     pub id: String,
@@ -92,6 +94,10 @@ pub struct SearchResult {
     pub bm25: Option<f64>,
     /// The document a `document` hit belongs to.
     pub document_id: Option<String>,
+    /// Found in a function's or method's body text (an implementation
+    /// passage), not in a name, a signature or a document: within one
+    /// query tier such hits rank after every other hit.
+    pub body: bool,
 }
 
 /// Options of one lexical search.
@@ -100,7 +106,8 @@ pub struct LexicalOptions {
     pub plan: PlanOptions,
     /// Hard filters pushed down into every FTS read.
     pub filter: docmonk_storage::read::ReadFilter,
-    /// Result kinds wanted (`entity`, `document`, `path`); empty = all.
+    /// Result kinds wanted (`entity`, `document`, `passage`, `path`);
+    /// empty = all.
     /// Stages of other kinds are skipped.
     pub kinds: Vec<String>,
 }
@@ -110,6 +117,10 @@ impl LexicalOptions {
         self.kinds.is_empty() || self.kinds.iter().any(|k| k == kind)
     }
 }
+
+/// Tie-break rank of a hit found in a function's or method's body text:
+/// after every match on a symbol's name, ahead of other text hits.
+pub const BODY_KIND_RANK: u32 = 98;
 
 /// Fixed structural-to-narrow ordering of entity kinds (99 = other).
 pub fn entity_kind_rank(kind: &str) -> u32 {
@@ -228,14 +239,89 @@ pub fn query_plan(text: &str) -> Option<Vec<QueryVariant>> {
 
 /// [`query_plan`] with options. Stopwords are dropped from every tier
 /// but the phrase (a query of nothing but stopwords keeps them).
+///
+/// When normalization (ADR 0039) gives some words other forms (accents,
+/// Greek and Arabic inflection, unsegmented Han/kana/Hangul runs), every
+/// tier is followed by the same tier over the normalized words, which the
+/// indexed projection matches; plain English plans are unchanged.
 pub fn query_plan_with(text: &str, opts: PlanOptions) -> Option<Vec<QueryVariant>> {
     let tokens = word_tokens(text);
     if tokens.is_empty() {
         return None;
     }
-    let mut content: Vec<String> = tokens.iter().filter(|t| !is_stopword(t)).cloned().collect();
+    let quote = |t: &String| format!("\"{t}\"");
+    let content = content_terms(&tokens);
+    let mut plan = plan_tiers(&tokens, &content, opts);
+    let normalized = |words: &[String]| -> Option<Vec<String>> {
+        let mut changed = false;
+        let mut out = Vec::new();
+        for w in words {
+            let forms = docmonk_core::lexnorm::query_forms(w);
+            if forms.is_empty() {
+                out.push(w.clone());
+            } else {
+                changed = true;
+                out.extend(forms);
+            }
+        }
+        changed.then_some(out)
+    };
+    if let Some(norm_tokens) = normalized(&tokens) {
+        let mut norm_content = normalized(&content).unwrap_or_else(|| content.clone());
+        let mut seen = HashSet::new();
+        norm_content.retain(|t| seen.insert(t.to_lowercase()));
+        if norm_content.len() > MAX_QUERY_TERMS {
+            norm_content = cap_terms(norm_content, MAX_QUERY_TERMS);
+        }
+        let extra = plan_tiers(&norm_tokens, &norm_content, opts);
+        // Each normalized tier right after the original tier.
+        let mut merged = Vec::with_capacity(plan.len() + extra.len());
+        let mut extra = extra.into_iter().peekable();
+        for v in plan {
+            while let Some(e) = extra.next_if(|e| e.tier < v.tier) {
+                merged.push(e);
+            }
+            let tier = v.tier;
+            merged.push(v);
+            while let Some(e) = extra.next_if(|e| e.tier == tier) {
+                merged.push(e);
+            }
+        }
+        merged.extend(extra);
+        plan = merged;
+    }
+    // Drop repeated expressions (a single content term makes several
+    // tiers identical), keeping the most precise tier, and any expression
+    // over the size budget (a 100-word phrase can't usefully match).
+    let mut seen = HashSet::new();
+    plan.retain(|v| {
+        v.expression.len() <= MAX_EXPRESSION_BYTES && seen.insert(v.expression.clone())
+    });
+    if plan.is_empty() {
+        // Every tier was over budget: the capped OR still finds candidates.
+        plan.push(QueryVariant {
+            tier: LexicalTier::OrFallback,
+            expression: cap_terms(content_terms(&tokens), MAX_OR_TERMS)
+                .iter()
+                .map(quote)
+                .collect::<Vec<_>>()
+                .join(" OR "),
+        });
+    }
+    Some(plan)
+}
+
+/// The content words of `tokens`: no stopwords (unless nothing else is
+/// left), no Greek or Arabic function words, no repeats, at most
+/// [`MAX_QUERY_TERMS`].
+fn content_terms(tokens: &[String]) -> Vec<String> {
+    let mut content: Vec<String> = tokens
+        .iter()
+        .filter(|t| !is_stopword(t) && !docmonk_core::lexnorm::is_function_word(t))
+        .cloned()
+        .collect();
     if content.is_empty() {
-        content = tokens.clone();
+        content = tokens.to_vec();
     }
     // FTS matching is case-insensitive: a repeated term adds nothing.
     let mut seen_terms = HashSet::new();
@@ -243,6 +329,11 @@ pub fn query_plan_with(text: &str, opts: PlanOptions) -> Option<Vec<QueryVariant
     if content.len() > MAX_QUERY_TERMS {
         content = cap_terms(content, MAX_QUERY_TERMS);
     }
+    content
+}
+
+/// The tiers of one word list (see [`query_plan_with`]).
+fn plan_tiers(tokens: &[String], content: &[String], opts: PlanOptions) -> Vec<QueryVariant> {
     let quote = |t: &String| format!("\"{t}\"");
     let quoted: Vec<String> = content.iter().map(quote).collect();
     let mut plan = vec![QueryVariant {
@@ -290,13 +381,13 @@ pub fn query_plan_with(text: &str, opts: PlanOptions) -> Option<Vec<QueryVariant
             if k == 1 || binomial_capped(content.len(), k, MAX_MSM_GROUPS) > MAX_MSM_GROUPS {
                 // Degraded plan for long questions: a plain OR of at most
                 // MAX_OR_TERMS terms (identifiers kept first).
-                cap_terms(content.clone(), MAX_OR_TERMS)
+                cap_terms(content.to_vec(), MAX_OR_TERMS)
                     .iter()
                     .map(quote)
                     .collect::<Vec<_>>()
                     .join(" OR ")
             } else {
-                combinations(&content, k)
+                combinations(content, k)
                     .iter()
                     .map(|g| {
                         format!(
@@ -326,25 +417,7 @@ pub fn query_plan_with(text: &str, opts: PlanOptions) -> Option<Vec<QueryVariant
             });
         }
     }
-    // Drop repeated expressions (a single content term makes several
-    // tiers identical), keeping the most precise tier, and any expression
-    // over the size budget (a 100-word phrase can't usefully match).
-    let mut seen = HashSet::new();
-    plan.retain(|v| {
-        v.expression.len() <= MAX_EXPRESSION_BYTES && seen.insert(v.expression.clone())
-    });
-    if plan.is_empty() {
-        // Every tier was over budget: the capped OR still finds candidates.
-        plan.push(QueryVariant {
-            tier: LexicalTier::OrFallback,
-            expression: cap_terms(content, MAX_OR_TERMS)
-                .iter()
-                .map(quote)
-                .collect::<Vec<_>>()
-                .join(" OR "),
-        });
-    }
-    Some(plan)
+    plan
 }
 
 /// At most `max` of `terms`: identifier-shaped terms first, then the
@@ -390,6 +463,7 @@ fn sort_key_cmp(a: &SearchResult, b: &SearchResult) -> Ordering {
     a.tier
         .cmp(&b.tier)
         .then(a.query_tier.cmp(&b.query_tier))
+        .then(a.body.cmp(&b.body))
         .then(a.fts_rank.cmp(&b.fts_rank))
         .then(a.entity_kind_rank.cmp(&b.entity_kind_rank))
         .then(b.mtime.total_cmp(&a.mtime))
@@ -423,6 +497,7 @@ fn entity_result(
         mtime: row.mtime,
         bm25: row.bm25,
         document_id: None,
+        body: false,
     }
 }
 
@@ -480,6 +555,73 @@ fn search_entities(
     Ok(out)
 }
 
+/// A passage hit: a body passage is a hit on its owning entity at the
+/// passage's lines; a text passage (no symbols) is a `passage` hit.
+fn passage_result(row: PassageSearchRow, query_tier: LexicalTier, source_id: &str) -> SearchResult {
+    let (kind, id, title) = match &row.entity {
+        Some(e) => ("entity", e.id.clone(), e.qualified_name.clone()),
+        None => ("passage", row.id.clone(), row.rel_path.clone()),
+    };
+    SearchResult {
+        kind,
+        tier: RankTier::Fts,
+        id,
+        title,
+        path: row.rel_path,
+        source_id: source_id.to_owned(),
+        snippet: row.snippet,
+        location: Some(Location {
+            line_start: Some(row.start_line),
+            line_end: Some(row.end_line),
+            ..Default::default()
+        }),
+        fts_rank: row.fts_rank,
+        query_tier,
+        entity_kind_rank: if row.entity.is_some() {
+            BODY_KIND_RANK
+        } else {
+            99
+        },
+        mtime: row.mtime,
+        bm25: row.bm25,
+        document_id: None,
+        body: row.entity.is_some(),
+    }
+}
+
+/// Implementation passages (ADR 0037): function bodies and the text of
+/// code files without symbols.
+fn search_passages(
+    c: Corpus<'_>,
+    q: &str,
+    limit: usize,
+    snippet_tokens: i64,
+    opts: &LexicalOptions,
+) -> Result<Vec<SearchResult>, SearchError> {
+    let f = &opts.filter;
+    if !f.document_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let Some(plan) = query_plan_with(q, opts.plan) else {
+        return Ok(Vec::new());
+    };
+    let src = c.store.source_id();
+    let rows = run_plan(
+        &plan,
+        limit,
+        |e| {
+            Ok(c.store
+                .search_passages_fts_in(c.build_id, e, limit as i64, snippet_tokens, f)?)
+        },
+        |r| r.id.as_str(),
+    )?;
+    Ok(rows
+        .into_iter()
+        .map(|(row, qt)| passage_result(row, qt, src))
+        .filter(|r| opts.wants(r.kind))
+        .collect())
+}
+
 fn search_documents(
     c: Corpus<'_>,
     q: &str,
@@ -515,6 +657,7 @@ fn search_documents(
             entity_kind_rank: 99,
             mtime: row.mtime,
             bm25: None,
+            body: false,
         });
     }
     let Some(plan) = query_plan_with(q, opts.plan) else {
@@ -560,6 +703,7 @@ fn search_documents(
             entity_kind_rank: 99,
             mtime: row.mtime,
             bm25: row.bm25,
+            body: false,
         });
     }
     Ok(out)
@@ -593,6 +737,7 @@ fn search_paths(
             mtime: row.mtime,
             bm25: None,
             document_id: None,
+            body: false,
         })
         .collect())
 }
@@ -628,6 +773,22 @@ pub fn heading_matches(heading: &str, query: &str) -> bool {
     }
     heading.trim().eq_ignore_ascii_case(query.trim())
         || h.windows(q.len()).any(|w| w == q.as_slice())
+}
+
+/// Drops body-passage hits when the query names a symbol exactly (an
+/// exact, qualified or alias symbol hit): for an identifier, the code that
+/// mentions it is its usages, which the graph answers (callers,
+/// references), not a text match. Body hits of the named symbol itself
+/// merge into its own hit.
+pub fn drop_usages_of_exact_symbols(results: &mut Vec<SearchResult>) {
+    let exact: HashSet<String> = results
+        .iter()
+        .filter(|r| r.kind == "entity" && r.tier <= RankTier::AliasSymbol)
+        .map(|r| r.id.clone())
+        .collect();
+    if !exact.is_empty() {
+        results.retain(|r| !r.body || exact.contains(&r.id));
+    }
 }
 
 /// Keeps each `(kind, id)`'s best-ranked hit and sorts best first.
@@ -725,6 +886,7 @@ pub fn search_with_options(
         timings.extend(t);
     }
     let t = std::time::Instant::now();
+    drop_usages_of_exact_symbols(&mut all);
     let mut merged = merge(all);
     merged.truncate(limit);
     timings.push(StageTiming {
@@ -790,6 +952,11 @@ fn corpus_search(
     }
     if opts.wants("entity") {
         stage("entities", &mut all, &|| search_entities(c, q, limit, opts))?;
+    }
+    if opts.wants("entity") || opts.wants("passage") {
+        stage("passages", &mut all, &|| {
+            search_passages(c, q, limit, snippet_tokens, opts)
+        })?;
     }
     if opts.wants("document") {
         stage("documents", &mut all, &|| {
@@ -990,6 +1157,7 @@ mod tests {
             mtime: 0.0,
             bm25: None,
             document_id: None,
+            body: false,
         };
         let out = merge(vec![
             mk(RankTier::Fts, "a"),

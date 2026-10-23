@@ -68,6 +68,7 @@ impl Line {
                 IndexKind::Code,
                 IndexKind::Documents,
                 IndexKind::Chunks,
+                IndexKind::Passages,
             ],
             Line::Graph => &[IndexKind::Relationships],
         }

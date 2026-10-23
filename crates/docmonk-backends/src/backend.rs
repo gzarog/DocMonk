@@ -15,6 +15,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+use docmonk_core::lexnorm::projection;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 
@@ -1225,7 +1226,9 @@ impl ServerBackend {
         loop {
             let resp = self.call(Method::Get, &poll, None)?;
             // A wait that times out is not a failure: the task still runs.
-            if resp.status != 408 {
+            // Elasticsearch answers 408; OpenSearch answers 500 with a
+            // `timeout_exception` ("Timed out waiting for completion").
+            if !is_wait_timeout(&resp) {
                 let s = ok(resp, "GET", &poll)?;
                 if s["completed"].as_bool() == Some(true) {
                     if !s["error"].is_null() {
@@ -1609,6 +1612,18 @@ pub struct DocumentDoc {
     pub parent_title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mtime: Option<f64>,
+    /// Detected language and script (ADR 0039).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub script: Option<String>,
+    /// How a PDF's pages were read (ADR 0039).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ocr: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ocr_pages: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub empty_pages: Option<i64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -1653,6 +1668,41 @@ pub struct ChunkDoc {
     pub parent_title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mtime: Option<f64>,
+    /// Detected language of the chunk (ADR 0039).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+}
+
+/// An implementation passage (ADR 0037), with its owner's display fields
+/// denormalized so a passage hit needs no entity lookup.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct PassageDoc {
+    pub passage_id: String,
+    pub file_id: String,
+    pub rel_path: String,
+    pub entity_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entity_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entity_qualified_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entity_kind: Option<String>,
+    pub kind: String,
+    pub extraction: String,
+    pub language: Option<String>,
+    pub ordinal: i64,
+    pub part: i64,
+    pub parts: i64,
+    pub start_line: i64,
+    pub end_line: i64,
+    pub header: String,
+    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mtime: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub embedding: Option<Vec<f32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub embedding_fingerprint: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -1731,13 +1781,35 @@ impl BuildWriter<'_> {
         )
     }
     pub fn entity(&mut self, d: &EntityDoc) -> Result<()> {
-        self.put(IndexKind::Code, &d.entity_id.clone(), d, &[])
+        let norm = projection(&d.name);
+        self.put(IndexKind::Code, &d.entity_id.clone(), d, &norm_field(&norm))
     }
     pub fn document(&mut self, d: &DocumentDoc) -> Result<()> {
         self.put(IndexKind::Documents, &d.document_id.clone(), d, &[])
     }
     pub fn chunk(&mut self, d: &ChunkDoc) -> Result<()> {
-        self.put(IndexKind::Chunks, &d.chunk_id.clone(), d, &[])
+        // The text the local `words` column projects: heading, body, title.
+        let norm = projection(&format!(
+            "{} {} {}",
+            d.fts_heading.as_deref().unwrap_or_default(),
+            d.search_text,
+            d.title.as_deref().unwrap_or_default()
+        ));
+        self.put(
+            IndexKind::Chunks,
+            &d.chunk_id.clone(),
+            d,
+            &norm_field(&norm),
+        )
+    }
+    pub fn passage(&mut self, d: &PassageDoc) -> Result<()> {
+        let norm = projection(&d.text);
+        self.put(
+            IndexKind::Passages,
+            &d.passage_id.clone(),
+            d,
+            &norm_field(&norm),
+        )
     }
     pub fn edge(&mut self, d: &EdgeDoc) -> Result<()> {
         self.put(
@@ -1759,6 +1831,30 @@ impl BuildWriter<'_> {
     pub fn finish(self) -> Result<BulkReport> {
         self.bulk.finish()
     }
+}
+
+/// The `norm` field of a record whose text has a normalized projection
+/// (ADR 0039); nothing for plain English text.
+fn norm_field(norm: &str) -> Vec<(&'static str, &str)> {
+    if norm.is_empty() {
+        Vec::new()
+    } else {
+        vec![("norm", norm)]
+    }
+}
+
+/// Whether a `GET /_tasks/<id>?wait_for_completion=true` answer only says
+/// the bounded wait ran out (the task is still running).
+fn is_wait_timeout(resp: &crate::transport::Response) -> bool {
+    if resp.status == 408 {
+        return true;
+    }
+    if resp.status < 500 {
+        return false;
+    }
+    let v: Value = serde_json::from_slice(&resp.body).unwrap_or(Value::Null);
+    v["error"]["type"] == "timeout_exception"
+        || v["error"]["root_cause"][0]["type"] == "timeout_exception"
 }
 
 /// Document IDs go into URL paths.
@@ -1880,6 +1976,61 @@ mod tests {
             "Get /_tasks/n1%3A42?wait_for_completion=true&timeout=2s"
         );
         assert_eq!(log.len(), 4);
+    }
+
+    /// OpenSearch reports a wait that ran out as a 500 `timeout_exception`
+    /// (a 20,000-vector republish hit it): the poll goes on.
+    #[test]
+    fn an_opensearch_wait_timeout_keeps_polling() {
+        let timeout = json!({"error": {
+            "root_cause": [{"type": "timeout_exception",
+                "reason": "Timed out waiting for completion of [BulkByScrollTask]"}],
+            "type": "timeout_exception",
+            "reason": "Timed out waiting for completion of [BulkByScrollTask]"},
+            "status": 500});
+        let script = vec![
+            (200, json!({"task": "n1:9"})),
+            (500, timeout),
+            (200, json!({"completed": true, "response": {"deleted": 3}})),
+        ];
+        let calls = std::sync::Arc::new(Tasks(script.into(), Default::default()));
+        struct Shared(std::sync::Arc<Tasks>);
+        impl crate::transport::Transport for Shared {
+            fn send(&self, m: Method, p: &str, b: Option<(&[u8], &str)>) -> Result<Response> {
+                self.0.send(m, p, b)
+            }
+        }
+        let b = ServerBackend::with_client(
+            Counting::new(Box::new(Shared(calls.clone()))),
+            Engine::OpenSearch,
+            "t",
+            None,
+            BulkLimits::from_config(&docmonk_config::model::BulkConfig::default()),
+        )
+        .with_task_limits(Duration::from_secs(60), Duration::from_secs(1));
+        let v = b
+            .by_query("/t-chunks/_delete_by_query", &json!({}))
+            .unwrap();
+        assert_eq!(v["deleted"], 3);
+        // Any other server error still fails.
+        let script = vec![
+            (200, json!({"task": "n1:10"})),
+            (
+                500,
+                json!({"error": {"type": "search_phase_execution_exception"}}),
+            ),
+        ];
+        let calls = std::sync::Arc::new(Tasks(script.into(), Default::default()));
+        let b = ServerBackend::with_client(
+            Counting::new(Box::new(Shared(calls))),
+            Engine::OpenSearch,
+            "t",
+            None,
+            BulkLimits::from_config(&docmonk_config::model::BulkConfig::default()),
+        );
+        assert!(b
+            .by_query("/t-chunks/_delete_by_query", &json!({}))
+            .is_err());
     }
 
     #[test]

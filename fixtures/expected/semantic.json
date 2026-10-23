@@ -1,5 +1,5 @@
 {
- "subjects": 32,
+ "subjects": 45,
  "results": [
   {
    "query": "how are invoices voided",
@@ -45,7 +45,16 @@
       "src.billing.invoice_service.InvoiceService.create_invoice",
       5
      ],
-     "score": 0.47572
+     "score": 0.47573
+    },
+    {
+     "key": [
+      "entity",
+      "src/billing/invoice_service.py",
+      "src.billing.invoice_service.void_endpoint",
+      16
+     ],
+     "score": 0.45069
     },
     {
      "key": [
@@ -75,19 +84,12 @@
     },
     {
      "key": [
-      "section",
-      "docs/billing.md",
-      3
+      "entity",
+      "src/billing/invoice_service.py",
+      "src.billing.invoice_service.calculate_tax",
+      12
      ],
-     "score": 0.31291
-    },
-    {
-     "key": [
-      "section",
-      "docs/orders.html",
-      1
-     ],
-     "score": 0.3074
+     "score": 0.33416
     }
    ]
   },
@@ -101,7 +103,7 @@
       "web.orders.OrderController.cancelOrder",
       3
      ],
-     "score": 0.52806
+     "score": 0.57745
     },
     {
      "key": [
@@ -132,6 +134,15 @@
      "key": [
       "entity",
       "web/orders.ts",
+      "web.orders.OrderController.placeOrder",
+      2
+     ],
+     "score": 0.3239
+    },
+    {
+     "key": [
+      "entity",
+      "web/orders.ts",
       "web.orders.OrderController",
       1
      ],
@@ -144,7 +155,16 @@
       "Shop.Payments.PaymentGateway.Refund",
       8
      ],
-     "score": 0.25816
+     "score": 0.28065
+    },
+    {
+     "key": [
+      "entity",
+      "src/billing/invoice_service.py",
+      "src.billing.invoice_service.InvoiceService.create_invoice",
+      5
+     ],
+     "score": 0.25409
     },
     {
      "key": [
@@ -158,29 +178,11 @@
     {
      "key": [
       "entity",
-      "src/billing/invoice_service.py",
-      "src.billing.invoice_service.InvoiceService.create_invoice",
-      5
-     ],
-     "score": 0.19965
-    },
-    {
-     "key": [
-      "entity",
       "web/orders.ts",
-      "web.orders.OrderController.placeOrder",
-      2
+      "web.orders.formatCurrency",
+      6
      ],
-     "score": 0.19037
-    },
-    {
-     "key": [
-      "entity",
-      "web/Payments.cs",
-      "Shop.Payments",
-      1
-     ],
-     "score": 0.16915
+     "score": 0.16918
     }
    ]
   },
@@ -195,6 +197,15 @@
       1
      ],
      "score": 0.66504
+    },
+    {
+     "key": [
+      "entity",
+      "src/billing/ledger.py",
+      "src.billing.ledger.Ledger.post_entry",
+      2
+     ],
+     "score": 0.64848
     },
     {
      "key": [
@@ -239,37 +250,29 @@
     },
     {
      "key": [
+      "entity",
+      "src/billing/ledger.py",
+      "src.billing.ledger.Λογαριασμός",
+      10
+     ],
+     "score": 0.4282
+    },
+    {
+     "key": [
+      "entity",
+      "src/billing/ledger.py",
+      "src.billing.ledger.café_total",
+      6
+     ],
+     "score": 0.42621
+    },
+    {
+     "key": [
       "section",
       "docs/billing.md",
       5
      ],
      "score": 0.42603
-    },
-    {
-     "key": [
-      "entity",
-      "web/Payments.cs",
-      "Shop.Payments",
-      1
-     ],
-     "score": 0.40429
-    },
-    {
-     "key": [
-      "entity",
-      "web/Payments.cs",
-      "Shop.Payments.PaymentGateway",
-      3
-     ],
-     "score": 0.37766
-    },
-    {
-     "key": [
-      "section",
-      "docs/billing.md",
-      0
-     ],
-     "score": 0.3708
     }
    ]
   },
@@ -347,19 +350,19 @@
      "key": [
       "entity",
       "src/billing/my-helpers.v2.py",
-      "src.billing.my-helpers.v2",
+      "src.billing.my-helpers.v2.helper",
       1
      ],
-     "score": 0.18859
+     "score": 0.18989
     },
     {
      "key": [
       "entity",
-      "web/orders.ts",
-      "web.orders",
+      "src/billing/my-helpers.v2.py",
+      "src.billing.my-helpers.v2",
       1
      ],
-     "score": 0.17905
+     "score": 0.18859
     }
    ]
   },
@@ -479,7 +482,7 @@
       "src.billing.ledger",
       1
      ],
-     "score": 0.12977
+     "score": 0.12976
     },
     {
      "key": [
@@ -489,6 +492,15 @@
       1
      ],
      "score": 0.11514
+    },
+    {
+     "key": [
+      "entity",
+      "web/Payments.cs",
+      "Shop.Payments.PaymentGateway.Charge",
+      5
+     ],
+     "score": 0.09671
     },
     {
      "key": [
@@ -532,15 +544,6 @@
       8
      ],
      "score": 0.08379
-    },
-    {
-     "key": [
-      "entity",
-      "src/billing/invoice_service.py",
-      "src.billing.invoice_service",
-      1
-     ],
-     "score": 0.08174
     }
    ]
   },
@@ -567,6 +570,15 @@
     {
      "key": [
       "entity",
+      "web/orders.ts",
+      "web.orders.OrderController.placeOrder",
+      2
+     ],
+     "score": 0.40831
+    },
+    {
+     "key": [
+      "entity",
       "web/Payments.cs",
       "Shop.Payments.PaymentGateway.Charge",
       5
@@ -580,6 +592,15 @@
       4
      ],
      "score": 0.39622
+    },
+    {
+     "key": [
+      "entity",
+      "web/orders.ts",
+      "web.orders.OrderController.cancelOrder",
+      3
+     ],
+     "score": 0.36792
     },
     {
      "key": [
@@ -599,38 +620,20 @@
     },
     {
      "key": [
-      "section",
-      "docs/billing.md",
-      6
-     ],
-     "score": 0.33179
-    },
-    {
-     "key": [
       "entity",
       "src/billing/invoice_service.py",
       "src.billing.invoice_service.InvoiceService.create_invoice",
       5
      ],
-     "score": 0.27685
+     "score": 0.34361
     },
     {
      "key": [
-      "entity",
-      "web/Payments.cs",
-      "Shop.Payments.PaymentGateway",
-      3
+      "section",
+      "docs/billing.md",
+      6
      ],
-     "score": 0.26571
-    },
-    {
-     "key": [
-      "entity",
-      "src/billing/invoice_service.py",
-      "src.billing.invoice_service",
-      1
-     ],
-     "score": 0.25131
+     "score": 0.33179
     }
    ]
   },

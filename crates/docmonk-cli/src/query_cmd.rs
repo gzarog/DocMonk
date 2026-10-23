@@ -7,7 +7,7 @@ use clap::Subcommand;
 use docmonk_core::errors::DocMonkError;
 use docmonk_retrieval::graph::{self, Direction, SourceMatch, TraversalEdge};
 use docmonk_retrieval::lexical::{self, SearchResult};
-use docmonk_retrieval::{classify, explore, hybrid};
+use docmonk_retrieval::{classify, explore};
 use docmonk_service::query::{
     config_budget, corpora, edge_json, explore_value_with, impact_value, link_add, link_list,
     link_remove, match_json, open_sources, run_search, search_err, semantic_json, symbol_value,
@@ -644,7 +644,16 @@ pub fn search(a: &SearchArgs) -> Result<(), DocMonkError> {
             payload["semantic"] = semantic_json(s);
         }
         if let Some(h) = &run.ranked {
-            payload["hybrid"] = json!(h.iter().map(hybrid::RankedHit::to_json).collect::<Vec<_>>());
+            payload["hybrid"] = json!(h
+                .iter()
+                .map(|h| {
+                    let mut v = h.to_json();
+                    if let Some(c) = run.expanded.get(&h.candidate.id) {
+                        v["context"] = c.clone();
+                    }
+                    v
+                })
+                .collect::<Vec<_>>());
         }
         payload["graph"] = docmonk_service::query::graph_json(&opened)?;
         if a.explain {
@@ -673,6 +682,11 @@ pub fn search(a: &SearchArgs) -> Result<(), DocMonkError> {
                 docmonk_service::query::route_options(&cfg),
             );
             payload["explain"]["plan"] = json!(plan);
+            // The neural pass's state (ADR 0038): applied, disabled,
+            // unavailable, failed or nothing_to_rescore.
+            if let Some(r) = &run.reranker {
+                payload["explain"]["reranker"] = json!(r);
+            }
             payload["explain"]["filters"] = json!(docmonk_retrieval::route::SearchFilters {
                 source_ids: a.sources.clone(),
                 path_prefixes: a.paths.clone(),

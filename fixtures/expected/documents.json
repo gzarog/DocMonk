@@ -21414,7 +21414,7 @@
   }
  },
  "identity": {
-  "chunker_version": "2+tok:1110a243fdf4706b3f48f1d95db1a4f5529b4d41:sha256:d833f6069cbbd4b89f378fce9ee59cf60e52cea9a6a5ad88b7b610842385ecb9:max256",
+  "chunker_version": "3+tok:1110a243fdf4706b3f48f1d95db1a4f5529b4d41:sha256:d833f6069cbbd4b89f378fce9ee59cf60e52cea9a6a5ad88b7b610842385ecb9:max256",
   "embedding_text_version": "2",
   "fingerprint": "sha256:d833f6069cbbd4b89f378fce9ee59cf60e52cea9a6a5ad88b7b610842385ecb9",
   "manifest": {

@@ -1279,6 +1279,9 @@ mod tests {
                 is_scanned: false,
                 content_hash: None,
                 attachment: None,
+                language: None,
+                script: None,
+                pages: None,
             }],
             ..FileKnowledge::default()
         };

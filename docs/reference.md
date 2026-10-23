@@ -6,7 +6,7 @@ Detail behind the [README](../README.md) pitch deck.
 
 | Format | What you get |
 |---|---|
-| **PDF** | Layout model: headings, tables, page numbers · OCR for scanned pages (`documents.ocr: auto`) |
+| **PDF** | Layout model: headings, tables, page numbers · OCR for pages without a text layer (`documents.ocr: auto`), merged page by page with the text layer |
 | **DOCX / ODT** | Heading structure with page provenance |
 | **PPTX / ODP** | Slide titles and body text, slide-number provenance |
 | **XLSX / ODS / CSV** | Tables rendered and chunked row-by-row |
@@ -18,6 +18,7 @@ Detail behind the [README](../README.md) pitch deck.
 - A corrupt or unsupported file is isolated and recorded as failed; the run continues.
 - Older binary `.doc` / `.ppt` / `.xls` files and `.rtf` are detected but not converted.
 - PDF conversions are cached by content hash; unchanged PDFs skip the layout model.
+- **PDF pages** (ADR 0039): with `documents.ocr: auto`, every page whose text layer is (nearly) empty is OCR'd, and `always` OCRs every page. The recognized text joins its page: it never replaces the text layer, and a block the text layer already holds is not added twice. `docmonk documents --json` reports per PDF `pages.ocr`: `not_needed`, `applied`, `no_images`, `unavailable`, `failed` or `disabled`. It also gives the pages that gained OCR text (`ocr_pages`) and the pages still without text (`empty_pages`). When the OCR a page needed could not run, the PDF is indexed with a notice in its `last_error` and the error feed (`ocr_unavailable`, `ocr_failed`), and `status` counts it as degraded. Blank pages and pages left unread by `documents.ocr: off` are only recorded. OCR runs only on the local pinned `ocrs` models and never calls a service.
 - Chunk sizes follow the embedding model's real tokenizer (`documents.chunking.max_tokens: auto`); tables split at row boundaries.
 
 ## Email attachments
@@ -58,9 +59,11 @@ docmonk search "refund policy" --path docs/ --kind document --no-attachments --e
 - **Hard filters** (`--source`, `--path`, `--kind`, `--document`, `--no-attachments`, also on `search`) are applied before retrieval and to every stage: lexical, semantic, graph callers, context and every subquery. No stage can widen them.
 - **Decomposition**: comparisons, flows and multi-part questions are split into at most `search.decomposition.max_subqueries` (default 4) subqueries; each comparison side keeps its best hit.
 - **Duplicates** are removed by provenance and content; at most `search.diversity.per_document_cap` chunks per file. `search.diversity.enabled` (MMR, off by default) is opt-in: on the P0 evaluation it lowered comparison coverage.
-- **Citations**: every result is an `[E#]` with source, build, record, path, line/page and a content fingerprint, re-verified against the same snapshot; a deleted file, a stale build or a filtered record is reported `valid: false`.
+- **One ranking path** (ADR 0038): `search --hybrid`, every `evidence` subquery, `explore` and `ask` fuse lexical and semantic candidates the same way: each stage fetches `search.candidate_pool` candidates (`0`: `max(4 * limit, 40)`), exact matches are pinned, RRF orders the rest and, with `search.reranker.enabled`, the cross-encoder rescores the hybrid tier on each hit's stored text; fact-seeking routes (`document_fact`, `conceptual`, `ambiguous`) then order unpinned hits by how many of the question's terms they contain. `diagnostics.reranker` (`explain.reranker` for `search`) reports `applied`, `disabled`, `unavailable` (no local model), `failed` or `nothing_to_rescore`. Context is expanded around document and code hits alike, semantic-only hits included.
+- **Citations**: every result is an `[E#]` with source, build, record, path, line/page, a fingerprint of the cited snippet and a `content_fingerprint` of the record's stored content, re-verified against the same snapshot. A citation from another source or build, outside the hard filters, of a record that is gone, at lines or pages outside its record, or whose stored content no longer matches is reported `valid: false` with that `invalid_reason` (`unknown_source`, `stale_build`, `filtered`, `missing_record`, `wrong_location`, `content_mismatch`); `provenance` counts them. Each result's `retrieval` says which stages found it (`pinned`, lexical and semantic ranks, RRF and neural scores).
 - **Verdict**: `supported`, `partial` (a part of a multi-part question has no support), or `insufficient_evidence` (nothing reaches `search.grounding.min_coverage` of the query's content terms). `docmonk ask` abstains without calling the provider on `insufficient_evidence`, gives the model only verified evidence as untrusted data, and reports uncited sentences and unknown citation ids under `grounding.answer_check`.
 - The whole run is bounded by `search.max_query_budget_ms` (default 5000); skipped stages are listed under `diagnostics.degraded`.
+- **Backend diagnostics** (ADR 0041): `diagnostics.backend` gives the backend kind and, on a server, the requests and bytes the answer cost. `diagnostics.semantic_engines` (the `engines` of the `semantic` timing for `search --explain`) says per source how semantic search answered: `hnsw` or `exact` (local index), `server` (engine kNN), `no_vectors` or `unavailable`. Citations are read once per answer, in batches, to fingerprint and verify them.
 
 | Setting | Default |
 |---|---|
@@ -69,6 +72,8 @@ docmonk search "refund policy" --path docs/ --kind document --no-attachments --e
 | `search.diversity.enabled` / `.lambda` / `.per_document_cap` / `.per_source_cap` | `false` / `0.7` / `3` / `0` |
 | `search.grounding.enabled` / `.min_coverage` | `true` / `0.5` |
 | `search.max_query_budget_ms` | `5000` |
+| `search.embedding_model` | `all-minilm-l6-v2`; `multilingual-e5-small` for questions in one language about documents in another (ADR 0040; about 3x the build time and 4x the memory; install with `scripts/fetch_models.sh <dir> --multilingual`). Changing it rebuilds every source. |
+| `search.candidate_pool` | `0` (automatic: `max(4 * limit, 40)`; at most 100, never below the limit) |
 | `search.ann.ef_search` / `.num_candidates` | `400` / `0` (automatic: `max(10 * k, 100)`) |
 | `search.anchors.enabled` | `true` |
 | `search.exact_occurrences.enabled` / `.max_results` | `true` / `50` |
@@ -126,7 +131,7 @@ Optional profiles (set with `docmonk config set`; none enables an expensive mode
 | document-heavy | `search.semantic true`, `search.lazy_semantic true`, `search.grounding.min_coverage 0.6` |
 | mixed | `search.semantic true`, `search.reranker.enabled true` (measure latency first: the reranker raised p95 in `benchmarks/semantic-quality.json`) |
 
-**Long questions.** The lexical planner is bounded. The "at least half the terms" tier is expanded into AND groups only while there are at most 20 groups. Beyond that it becomes an OR of at most 16 terms, identifiers first. At most 64 content terms are planned, and an expression longer than 4 KiB is dropped. Server readers prefetch only the precise tiers in one `_msearch` (at most 32 searches per request) and read looser tiers only when needed (`search.adaptive_lexical.enabled`). At most `search.max_concurrency` sources are read at once.
+**Long questions.** The lexical planner is bounded. The "at least half the terms" tier is expanded into AND groups only while there are at most 20 groups. Beyond that it becomes an OR of at most 16 terms, identifiers first. At most 64 content terms are planned, and an expression longer than 4 KiB is dropped. Server readers prefetch only the precise tiers in one `_msearch` (at most 32 searches per request) and read looser tiers only when needed (`search.adaptive_lexical.enabled`). At most `search.max_concurrency` sources are read at once, for lexical and semantic search alike.
 
 **Lexical matching.** Identifiers are also indexed as their words
 (`cancelOrder`, `CancelOrder2` → `cancel order 2`) with English stemming, so
@@ -135,11 +140,34 @@ first requires every term, then falls back to "most terms" before any
 looser match. A path typed exactly ranks first. Hard filters are pushed
 into the SQL (server: the query), not applied afterwards.
 
+**Normalized forms** (ADR 0039). Next to the original text, every chunk,
+passage and symbol name is indexed with its normalized forms. These are
+computed by DocMonk itself, identically for SQLite and both server
+engines:
+
+- accents, case and full-width forms folded (`café` → `cafe`, `ΆΔΕΙΑ` →
+  `αδεια`);
+- Greek and Arabic inflections reduced to a light stem (`άδεια`,
+  `άδειας`, `άδειες`; `الإجازة`, `إجازات`);
+- Chinese and Japanese, which do not separate words with spaces, indexed
+  by characters and character pairs.
+
+A query whose words have such forms also runs every lexical tier over the
+normalized words. Greek and Arabic function words are not content terms.
+Plain English queries plan exactly as before. Evidence support and the
+term-coverage order accept a normalized match: `άδεια` is supported by
+`άδειας`. Snippets, citations and exact symbol and path matching always
+use the original text. Each document and chunk records its detected
+language and script where detection is reliable; `docmonk documents
+--json` shows them.
+
 **Warm queries.** A long-lived process (MCP, Admin UI, daemon) keeps the
 embedder, the reranker and each project's vector index in memory, embeds
 a query once per request and reuses pooled read connections. The vector
 index is reused until the build's vectors change. The reranker scores
-only the hybrid tier, on passages of at most 256 words.
+only the hybrid tier, on each hit's stored text (a chunk under its
+headings, a code hit's body passages under their owner), at most 256
+words.
 
 Quality is gated in CI by the 72-query golden set and by a 250-query generated evaluation (`crates/docmonk-service/tests/p0_eval.rs`, held-out floors in `fixtures/p0/eval-gates.json`, last report in `benchmarks/p0-retrieval-eval.json`). Its labels come from the corpus generator, not from independent human labeling.
 
@@ -150,6 +178,10 @@ Quality is gated in CI by the 72-query golden set and by a 250-query generated e
 Full extraction for Python, JavaScript, TypeScript/TSX, Go, Java, Rust and C#; HTTP routes from Python decorators and C# route attributes. Other languages are indexed for full-text search only.
 
 <!-- clean-slate-audit: allow-end -->
+
+**Implementation passages** (ADR 0037). Every function and method body is also searchable, lexically and semantically, as one or more *passages*: the documentation comment and attributes above it, its signature and its implementation. A body longer than 40 lines or 2,400 characters is split at statement boundaries. A question about what code does ("which header prevents a retried refund from refunding twice") finds the owning function as an `entity` hit located at the passage's lines. When a query names a symbol exactly, the bodies that merely mention it are its usages (see `callers` and `references`) and are not returned as text matches.
+
+Code without a grammar (`.rb`, `.sql`, shell, ...) and source with syntax errors are indexed as plain-text `passage` hits in 40-line windows: searchable, but claiming no symbols or relationships. A file with syntax errors is recorded `indexed`, its `last_error` says it was indexed as plain text, and `status` counts it under `degraded`. A file contributes at most 256 passages, and `status` reports the passage count.
 
 ```bash
 docmonk symbol | callers | callees | references | impact  <Symbol>
@@ -299,11 +331,11 @@ docmonk init --storage-mode server --storage-engine opensearch \
 - Server support is built into every binary and the container image; there is nothing extra to install.
 - `init` validates the real cluster first (reachable, right engine, permissions) and creates the DocMonk indexes. Tested with OpenSearch 2.15 and Elasticsearch 8.15 in CI.
 - Credentials only via env vars: `DOCMONK_OPENSEARCH_{USERNAME,PASSWORD,API_KEY}` / `DOCMONK_ELASTICSEARCH_{USERNAME,PASSWORD,API_KEY}`. Never stored in `config.yaml`.
-- **The cluster is authoritative.** The source catalog (registration, include/exclude patterns, enabled flag), build lifecycle, writer leases and all indexed knowledge (files, code entities, documents, chunks, relationships, links, vectors) live in `{prefix}-*` indexes. No local SQLite registry or knowledge store is read or written. Local files are limited to `config.yaml`, logs, locks, models and a **disposable** extraction cache under `cache/server-staging/` (deleting it only costs reconversion).
+- **The cluster is authoritative.** The source catalog (registration, include/exclude patterns, enabled flag), build lifecycle, writer leases and all indexed knowledge (files, code entities, implementation passages, documents, chunks, relationships, links, vectors) live in `{prefix}-*` indexes. No local SQLite registry or knowledge store is read or written. Local files are limited to `config.yaml`, logs, locks, models and a **disposable** extraction cache under `cache/server-staging/` (deleting it only costs reconversion).
 - An unreachable or uninitialized cluster is an error (exit code 4 / 3, typed `BackendUnavailableError` / `BackendSchemaMismatchError` in MCP); DocMonk never falls back to local data.
 - Every pass publishes a new generation atomically (compare-and-swap of the source state, the only visibility switch). Records are immutable and carry the generations they are valid for (ADR 0035): files whose derived knowledge did not change are **not touched** (nothing is rewritten, reconverted or re-uploaded); changed and new files are written as the new generation and the records they replace (and deleted files' records) are closed. A failed, interrupted or superseded pass never becomes visible, whatever it wrote; the replaced generation stays readable for `storage.server.gc_grace_seconds` (default `60`) and is then garbage-collected.
 - Closing replaced records, sweeping an aborted attempt and garbage collection run as server tasks (`wait_for_completion=false`, `slices=auto`) that DocMonk polls with short requests, so no request waits longer than `storage.server.request_timeout_seconds`. Each touches only the changed files' records. A task still running after `storage.server.task_timeout_seconds` (default `3600`) is cancelled and the pass fails, leaving the previous generation visible.
-- **Schema version 5.** Generation-numbered records are a breaking server schema change: `docmonk server init` refuses indexes of an older schema and never alters them. Create the new indexes under a fresh `storage.server.index_prefix` (or delete the old prefix explicitly once you no longer need it for rollback) and run a full `docmonk index`. Manual links live in the old indexes: save them first (`docmonk link list --json`) and re-add them after the reindex if you want to keep them.
+- **Schema version 7.** Schema 7 adds the `norm` field of normalized lexical forms (with its whitespace analyzer) and the detected document and chunk languages (ADR 0039); schema 6 added the `{prefix}-passages` index (implementation passages, ADR 0037); schema 5 introduced generation-numbered records. All are breaking server schema changes: `docmonk server init` refuses indexes of an older schema and never alters them. Create the new indexes under a fresh `storage.server.index_prefix` (or delete the old prefix explicitly once you no longer need it for rollback) and run a full `docmonk index`. Manual links live in the old indexes: save them first (`docmonk link list --json`) and re-add them after the reindex if you want to keep them.
 - Search requests per source are batched (`_msearch`): one lexical round trip per source instead of one per tier.
 - Source roots are paths on the host that indexes them.
 - Dev clusters: `docker compose -f docker/docker-compose.opensearch.yml up -d` (or `docker-compose.elasticsearch.yml`).

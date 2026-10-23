@@ -21,7 +21,7 @@
 //! The whole run is bounded by `search.max_query_budget_ms`: once spent,
 //! remaining optional stages are skipped and reported as `degraded`.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::time::Instant;
 
@@ -33,7 +33,7 @@ use docmonk_retrieval::grounding::{self, EvidenceRef};
 use docmonk_retrieval::hybrid::{self, RankedHit, SourcedHit};
 use docmonk_retrieval::lexical::{self, SearchResult};
 use docmonk_retrieval::route::{route, QueryIntent, Route, RouteStrategy, SearchFilters};
-use docmonk_retrieval::{context, diversify, exact, graph, Corpus};
+use docmonk_retrieval::{context, diversify, exact, graph, pipeline, Corpus};
 use serde_json::{json, Value};
 
 use crate::query::{corpora, join_location, lazy_embedder, open_sources, search_err, Opened};
@@ -64,21 +64,17 @@ fn search_err_s(e: docmonk_storage::StorageError) -> DocMonkError {
 }
 
 fn semantic_allowed(h: &SourcedHit, f: &SearchFilters) -> bool {
-    let kind = if h.hit.kind == "entity" {
-        "entity"
-    } else {
-        "document"
-    };
     f.allows(
         &h.source_id,
         &h.hit.path,
-        kind,
+        hybrid::semantic_kind(&h.hit.kind),
         h.hit.document_id.as_deref(),
         h.attachment.is_some(),
     )
 }
 
-/// Ranked hits of one (sub)query, filtered before fusion.
+/// Ranked hits of one (sub)query, filtered before fusion, ranked by the
+/// shared path ([`docmonk_retrieval::pipeline::fuse`]).
 #[allow(clippy::too_many_arguments)]
 fn run_part(
     home: &Home,
@@ -90,9 +86,11 @@ fn run_part(
     limit: usize,
     exact_pins: bool,
     degraded: &mut Vec<String>,
+    reranker: &mut Option<pipeline::RerankerStatus>,
+    engines: &mut BTreeMap<String, &'static str>,
 ) -> Result<Vec<RankedHit>, DocMonkError> {
-    // Over-fetch so filtering still leaves enough candidates.
-    let fetch = (limit * 4).max(20);
+    // The candidate budget, independent of the response size.
+    let fetch = pipeline::candidate_budget(cfg.search.candidate_pool, limit);
     // Filters are pushed down into the reads; a conceptual question that
     // semantic search will answer skips the loosest lexical tier (its hits
     // are mostly common-word noise), and so does a question exact
@@ -135,13 +133,44 @@ fn run_part(
         for d in &s.degraded {
             degraded.push(format!("semantic unavailable for {d}"));
         }
+        engines.extend(s.engines.iter().cloned());
         sem = s
             .hits
             .into_iter()
             .filter(|h| semantic_allowed(h, filters))
             .collect();
     }
-    Ok(hybrid::rerank(hybrid::merge(&lex, &sem), fetch))
+    let sc = &cfg.search;
+    let encoder = sc
+        .reranker
+        .enabled
+        .then(|| crate::query::cross_encoder(home))
+        .flatten();
+    let fused = pipeline::fuse(
+        corp,
+        text,
+        &lex,
+        &sem,
+        pipeline::FuseOptions {
+            limit: fetch,
+            rerank_top_n: sc
+                .reranker
+                .enabled
+                .then_some(sc.reranker.top_n.max(1) as usize),
+            per_document_cap: None,
+            // Coverage orders the fused subqueries once, after sibling
+            // collapse (below), so the collapse keeps each file's best-
+            // ranked hits.
+            term_coverage: false,
+        },
+        encoder.as_deref(),
+    )
+    .map_err(search_err)?;
+    if fused.reranker.enabled && fused.reranker.state != "applied" {
+        degraded.push(format!("reranker {}", fused.reranker.state));
+    }
+    *reranker = Some(fused.reranker);
+    Ok(fused.hits)
 }
 
 /// A caller entity found by graph traversal, as a ranked hit.
@@ -285,6 +314,36 @@ fn absolute(opened: &[Opened], source_id: &str, rel: &str) -> String {
     }
 }
 
+/// How a hit was ranked: the stages that found it and the fused scores
+/// (ADR 0038). Every surface reports the same fields.
+fn retrieval_of(h: &RankedHit) -> Value {
+    let c = &h.candidate;
+    json!({
+        "pinned": c.exact_match,
+        "lexical_rank": c.lexical_rank,
+        "semantic_rank": c.semantic_rank,
+        "semantic_score": c.semantic_score.map(|s| (f64::from(s) * 1e4).round() / 1e4),
+        "rrf_score": c.rrf_score.map(|s| (s * 1e6).round() / 1e6),
+        "neural_score": h.neural_score.map(|s| (f64::from(s) * 1e4).round() / 1e4),
+    })
+}
+
+/// Counts of re-verified citations: `checked`, `valid`, `invalid` and the
+/// invalid ones by reason.
+fn provenance_summary(checks: &[grounding::Verification]) -> Value {
+    let mut by_reason: std::collections::BTreeMap<&str, usize> = Default::default();
+    for v in checks.iter().filter(|v| !v.valid) {
+        *by_reason.entry(v.reason.unwrap_or("unknown")).or_default() += 1;
+    }
+    let valid = checks.iter().filter(|v| v.valid).count();
+    json!({
+        "checked": checks.len(),
+        "valid": valid,
+        "invalid": checks.len() - valid,
+        "invalid_by_reason": by_reason,
+    })
+}
+
 /// The `evidence` payload (CLI `docmonk evidence --json`, MCP
 /// `docmonk_evidence`).
 pub fn evidence_value(
@@ -316,6 +375,11 @@ pub fn evidence_value(
     let mut opened = open_sources(home, None)?;
     opened.retain(|o| req.filters.allows_source(&o.source.id));
     let corp = corpora(&opened);
+    // Server requests this answer costs (diagnostics.backend).
+    let backend_before = opened
+        .iter()
+        .find_map(|o| o.store.server())
+        .map(docmonk_backends::reader::ServerReader::backend_stats);
     crate::query::apply_retrieval_settings(cfg);
     // Exact occurrences of URL anchors first (P03), within the filters.
     let endpoint = plan.intent == QueryIntent::EndpointReference;
@@ -382,6 +446,9 @@ pub fn evidence_value(
     let limit = req.limit.max(1);
     let t = Instant::now();
     let mut per_part = Vec::new();
+    let mut reranker: Option<pipeline::RerankerStatus> = None;
+    // How each source's semantic search answered (diagnostics.semantic_engines).
+    let mut engines: BTreeMap<String, &'static str> = BTreeMap::new();
     for (i, p) in parts.iter().enumerate() {
         if i > 0 && over(&started) {
             degraded.push(format!(
@@ -400,6 +467,8 @@ pub fn evidence_value(
             limit,
             !exact_pins.is_empty(),
             &mut degraded,
+            &mut reranker,
+            &mut engines,
         )?);
     }
     timings.push(json!({"stage": "retrieve", "ms": t.elapsed().as_millis()}));
@@ -428,31 +497,11 @@ pub fn evidence_value(
             }
         }
     }
-    // Fact-seeking routes: per-source lexical ranks are not comparable
-    // across sources, so order unpinned hits by how many of the query's
-    // content terms they actually contain (stable: rank breaks ties).
-    if sc.routing.enabled
-        && matches!(
-            plan.intent,
-            QueryIntent::DocumentFact | QueryIntent::Conceptual | QueryIntent::Ambiguous
-        )
-    {
-        let terms = grounding::content_terms(req.query);
-        if !terms.is_empty() {
-            let cover = |h: &RankedHit| {
-                let c = &h.candidate;
-                let text = format!(
-                    "{} {} {}",
-                    c.title,
-                    c.path,
-                    c.snippet.as_deref().unwrap_or_default()
-                )
-                .to_lowercase();
-                terms.iter().filter(|t| text.contains(t.as_str())).count()
-            };
-            let pins = hits.iter().take_while(|h| h.candidate.exact_match).count();
-            hits[pins..].sort_by_key(|h| std::cmp::Reverse(cover(h)));
-        }
+    // Fact-seeking routes: the shared term-coverage order (ADR 0038) over
+    // the fused subqueries.
+    let coverage = sc.routing.enabled && pipeline::orders_by_coverage(plan.intent);
+    if coverage {
+        pipeline::order_by_term_coverage(&mut hits, req.query);
     }
     if sc.diversity.enabled && !over(&started) {
         hits = diversify::mmr(hits, sc.diversity.lambda);
@@ -610,8 +659,13 @@ pub fn evidence_value(
         .iter()
         .map(|o| (o.source.id.clone(), o.build.clone()))
         .collect();
-    let refs = grounding::evidence_refs(&hits, |s| builds.get(s).cloned());
-    let checks = grounding::verify(&corp, &refs, &req.filters).map_err(search_err)?;
+    // Each record's canonical content is read once (batched per corpus),
+    // stamped on its citation and reused by the verification.
+    let mut refs = grounding::evidence_refs(&hits, |s| builds.get(s).cloned());
+    let contents = grounding::canonical_contents(&corp, &refs).map_err(search_err)?;
+    grounding::stamp_contents(&mut refs, &contents);
+    let checks =
+        grounding::verify_with(&corp, &refs, &req.filters, &contents).map_err(search_err)?;
     let valid: Vec<&EvidenceRef> = refs
         .iter()
         .zip(&checks)
@@ -629,30 +683,22 @@ pub fn evidence_value(
         "not_checked"
     };
 
-    // Context around the top document hits, within the token budget.
+    // Context around the top document and code hits (semantic-only ones
+    // included), within the token budget.
     let ctx_opts = context::ContextOptions::from_config(&sc.context);
     let mut contexts: HashMap<String, Value> = HashMap::new();
     if plan.strategies.contains(&RouteStrategy::ContextExpansion) && !ctx_opts.disabled() {
         for h in hits
             .iter()
-            .filter(|h| h.candidate.kind == "document")
+            .filter(|h| matches!(h.candidate.kind.as_str(), "document" | "entity" | "passage"))
             .take(3)
         {
             if over(&started) {
                 degraded.push("query budget reached: context expansion skipped".into());
                 break;
             }
-            if let Some(o) = opened.iter().find(|o| o.source.id == h.candidate.source_id) {
-                if let Some(c) = context::expand_chunk_context(
-                    o.store.read(),
-                    &o.build,
-                    &h.candidate.id,
-                    &ctx_opts,
-                )
-                .map_err(search_err)?
-                {
-                    contexts.insert(h.candidate.id.clone(), c);
-                }
+            if let Some(c) = pipeline::expand_context(&corp, h, &ctx_opts).map_err(search_err)? {
+                contexts.insert(h.candidate.id.clone(), c);
             }
         }
     }
@@ -677,13 +723,30 @@ pub fn evidence_value(
                 "page_end": r.page_end,
                 "heading": r.heading,
                 "fingerprint": r.fingerprint,
+                "content_fingerprint": r.content_fingerprint,
+                "language": r.language,
                 "tier": h.tier_label,
+                "retrieval": retrieval_of(h),
                 "text": r.text,
                 "context": contexts.get(&r.record_id),
             })
         })
         .collect();
+    let provenance = provenance_summary(&checks);
     timings.push(json!({"stage": "total", "ms": started.elapsed().as_millis()}));
+    let backend_after = opened
+        .iter()
+        .find_map(|o| o.store.server())
+        .map(docmonk_backends::reader::ServerReader::backend_stats);
+    let backend = match (&backend_before, &backend_after) {
+        (Some(b), Some(a)) => json!({
+            "kind": opened.first().map(|o| o.store.read().backend_kind()),
+            "requests": a.requests.saturating_sub(b.requests),
+            "bytes_sent": a.bytes_sent.saturating_sub(b.bytes_sent),
+            "bytes_received": a.bytes_received.saturating_sub(b.bytes_received),
+        }),
+        _ => json!({"kind": opened.first().map(|o| o.store.read().backend_kind()), "requests": 0}),
+    };
     let mut out = json!({
         "query": req.query,
         "verdict": verdict,
@@ -699,6 +762,7 @@ pub fn evidence_value(
             "budget_ms": budget_ms,
         },
         "evidence": evidence,
+        "provenance": provenance,
         "support": supports,
         "graph": graph_edges,
         "diagnostics": {
@@ -709,6 +773,9 @@ pub fn evidence_value(
             "sources_searched": opened.iter().map(|o| o.source.id.clone()).collect::<Vec<_>>(),
             "degraded": degraded,
             "timings": timings,
+            "reranker": reranker,
+            "semantic_engines": engines,
+            "backend": backend,
         },
     });
     // Additive keys, only when the route has anchors.

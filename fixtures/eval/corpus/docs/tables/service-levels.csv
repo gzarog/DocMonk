@@ -1,0 +1,4 @@
+service,uptime_target,p95_latency_ms,support_hours
+checkout,99.95,300,24x7
+search,99.9,450,24x7
+reporting,99.5,2000,business hours

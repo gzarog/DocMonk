@@ -32,6 +32,11 @@ pub struct BuildSummary {
     pub entities: i64,
     pub documents: i64,
     pub chunks: i64,
+    /// Implementation passages (ADR 0037).
+    pub passages: i64,
+    /// Indexed files with a recoverable extraction problem (e.g. syntax
+    /// errors indexed as text).
+    pub degraded: i64,
     pub relationships: i64,
     pub links: i64,
     /// When the build was published (`builds.finished_at`).
@@ -59,7 +64,10 @@ impl ProjectStore {
                     (SELECT COUNT(*) FROM relationships WHERE build_id = ?1),
                     (SELECT COUNT(*) FROM cross_links WHERE build_id = ?1),
                     (SELECT finished_at FROM builds WHERE id = ?1),
-                    (SELECT value FROM metadata WHERE key = 'graph_state')",
+                    (SELECT value FROM metadata WHERE key = 'graph_state'),
+                    (SELECT COUNT(*) FROM code_passages WHERE build_id = ?1),
+                    (SELECT COUNT(*) FROM files WHERE build_id = ?1 AND status = 'indexed'
+                        AND last_error IS NOT NULL)",
                 &[&build_id],
                 |r| {
                     Ok(BuildSummary {
@@ -76,6 +84,8 @@ impl ProjectStore {
                         links: r.get(10)?,
                         published_at: r.get(11)?,
                         graph_state: r.get(12)?,
+                        passages: r.get(13)?,
+                        degraded: r.get(14)?,
                     })
                 },
             )?

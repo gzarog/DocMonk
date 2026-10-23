@@ -7,7 +7,7 @@
 //! [`ServerBackend::publish_graph`](crate::graph)):
 //!
 //! 1. Every staged file gets a *knowledge digest* over its file row, its
-//!    entities, documents, chunks and vector keys.
+//!    entities, documents, chunks, passages and vector keys.
 //! 2. A new pending build is begun on the server (fenced by the writer
 //!    lease); it allocates the attempt's generation `g` of the source's
 //!    base lineage ([`crate::generations`]).
@@ -32,9 +32,9 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use docmonk_storage::knowledge::{DocumentRow, FileRow, ProjectStore};
-use docmonk_storage::vectors::SUBJECT_ENTITY;
+use docmonk_storage::vectors::{SUBJECT_ENTITY, SUBJECT_PASSAGE};
 
-use crate::backend::{ChunkDoc, DocumentDoc, EntityDoc, FileDoc, Lease, ServerBackend};
+use crate::backend::{ChunkDoc, DocumentDoc, EntityDoc, FileDoc, Lease, PassageDoc, ServerBackend};
 use crate::bulk::BulkReport;
 use crate::error::{BackendError, Result};
 use crate::generations::{Line, Lineage};
@@ -148,6 +148,13 @@ fn digests(
             feed(
                 &mut h,
                 &vec_keys.contains(&("chunk".to_owned(), c.id.clone())),
+            );
+        }
+        for p in store.file_passages(build, &f.id).map_err(storage)? {
+            feed(&mut h, &p);
+            feed(
+                &mut h,
+                &vec_keys.contains(&(SUBJECT_PASSAGE.to_owned(), p.id.clone())),
             );
         }
         feed(&mut h, &fingerprint);
@@ -327,6 +334,7 @@ impl ServerBackend {
             })?;
             report.records_written += 1;
             let entities = store.file_entities(build, &f.id).map_err(storage)?;
+            let passages = store.file_passages(build, &f.id).map_err(storage)?;
             let vectors = match fingerprint {
                 Some(fp) => {
                     let mut keys: Vec<(String, String)> = entities
@@ -335,6 +343,11 @@ impl ServerBackend {
                         .collect();
                     let chunks = store.file_chunks(build, &f.id).map_err(storage)?;
                     keys.extend(chunks.iter().map(|c| ("chunk".to_owned(), c.id.clone())));
+                    keys.extend(
+                        passages
+                            .iter()
+                            .map(|p| (SUBJECT_PASSAGE.to_owned(), p.id.clone())),
+                    );
                     store
                         .embedding_vectors(build, fp, &keys)
                         .map_err(storage)?
@@ -344,6 +357,38 @@ impl ServerBackend {
                 }
                 None => HashMap::new(),
             };
+            let owners: HashMap<&str, &docmonk_storage::knowledge::EntityRow> =
+                entities.iter().map(|e| (e.id.as_str(), e)).collect();
+            for p in &passages {
+                let owner = p.entity_id.as_deref().and_then(|e| owners.get(e));
+                let embedding = vectors
+                    .get(&(SUBJECT_PASSAGE.to_owned(), p.id.clone()))
+                    .cloned();
+                report.vectors_written += usize::from(embedding.is_some());
+                w.passage(&PassageDoc {
+                    passage_id: p.id.clone(),
+                    file_id: f.id.clone(),
+                    rel_path: f.rel_path.clone(),
+                    entity_id: p.entity_id.clone(),
+                    entity_name: owner.map(|e| e.name.clone()),
+                    entity_qualified_name: owner.map(|e| e.qualified_name.clone()),
+                    entity_kind: owner.map(|e| e.kind.clone()),
+                    kind: p.kind.clone(),
+                    extraction: p.extraction.clone(),
+                    language: p.language.clone(),
+                    ordinal: p.ordinal,
+                    part: p.part,
+                    parts: p.parts,
+                    start_line: p.start_line,
+                    end_line: p.end_line,
+                    header: p.header.clone(),
+                    text: p.text.clone(),
+                    mtime: Some(f.mtime),
+                    embedding_fingerprint: embedding.as_ref().and(fingerprint.map(str::to_owned)),
+                    embedding,
+                })?;
+                report.records_written += 1;
+            }
             for e in entities {
                 let embedding = vectors
                     .get(&(SUBJECT_ENTITY.to_owned(), e.id.clone()))
@@ -395,6 +440,11 @@ impl ServerBackend {
                     attachment_content_id: d.attachment.as_ref().and_then(|a| a.content_id.clone()),
                     parent_title,
                     mtime: Some(f.mtime),
+                    language: d.language.clone(),
+                    script: d.script.clone(),
+                    ocr: d.pages.as_ref().map(|p| p.ocr.clone()),
+                    ocr_pages: d.pages.as_ref().map(|p| p.ocr_pages),
+                    empty_pages: d.pages.as_ref().map(|p| p.empty_pages),
                 })?;
                 report.records_written += 1;
             }
@@ -438,6 +488,7 @@ impl ServerBackend {
                         .and_then(|a| docs_by_id.get(a.parent_document_id.as_str()))
                         .and_then(|p| p.title.clone()),
                     mtime: Some(f.mtime),
+                    language: c.language,
                 })?;
                 report.records_written += 1;
             }

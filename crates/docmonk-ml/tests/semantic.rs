@@ -21,11 +21,52 @@ fn embedder(models: &Path) -> Embedder {
 }
 
 fn key(h: &SemanticHit) -> Value {
-    if h.kind == "entity" {
-        json!(["entity", h.path, h.title, h.position])
-    } else {
-        json!(["section", h.path, h.position])
+    match h.kind.as_str() {
+        "entity" => json!(["entity", h.path, h.title, h.position]),
+        "passage" => json!(["passage", h.path, h.position]),
+        _ => json!(["section", h.path, h.position]),
     }
+}
+
+/// `DOCMONK_BLESS=1`: rewrites fixtures/expected/semantic.json from the
+/// exact cosine ranking of the current index (same queries).
+fn bless_exact(fx: &mut Fx, emb: &Embedder, models: &Path, golden: &Value) -> Value {
+    let (s, b) = fx.store();
+    let subjects = s.embeddings(&b).unwrap().len();
+    let dir = s.project_dir().unwrap();
+    drop(s);
+    let _ = std::fs::remove_file(ann::index_path(&dir));
+    ann::clear_cache();
+    let results: Vec<Value> = golden["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|g| {
+            let q = g["query"].as_str().unwrap();
+            let (engine, hits) = run(fx, emb, q, 10);
+            assert_eq!(engine, Engine::Exact);
+            json!({
+                "query": q,
+                "hits": hits.iter().map(|h| json!({
+                    "key": key(h),
+                    "score": (f64::from(h.score) * 1e5).round() / 1e5,
+                })).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    let out = json!({"subjects": subjects, "results": results});
+    let mut bytes = Vec::new();
+    let fmt = serde_json::ser::PrettyFormatter::with_indent(b" ");
+    serde::Serialize::serialize(
+        &out,
+        &mut serde_json::Serializer::with_formatter(&mut bytes, fmt),
+    )
+    .unwrap();
+    bytes.push(b'\n');
+    std::fs::write(repo_root().join("fixtures/expected/semantic.json"), bytes).unwrap();
+    // Rebuild the ANN index for the comparison below.
+    fx.index(models);
+    out
 }
 
 fn run(fx: &Fx, emb: &Embedder, q: &str, k: usize) -> (Engine, Vec<SemanticHit>) {
@@ -62,6 +103,11 @@ fn hnsw_and_exact_rankings_are_as_expected() {
     let mut fx = fixture();
     fx.index(&models);
     let emb = embedder(&models);
+    let golden = if std::env::var("DOCMONK_BLESS").as_deref() == Ok("1") {
+        bless_exact(&mut fx, &emb, &models, &golden)
+    } else {
+        golden
+    };
     let (s, b) = fx.store();
     assert_eq!(
         s.embeddings(&b).unwrap().len() as u64,

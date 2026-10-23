@@ -539,6 +539,17 @@ pub enum Engine {
     Server,
 }
 
+impl Engine {
+    /// `hnsw`, `exact` or `server`, for diagnostics.
+    pub fn name(self) -> &'static str {
+        match self {
+            Engine::Hnsw => "hnsw",
+            Engine::Exact => "exact",
+            Engine::Server => "server",
+        }
+    }
+}
+
 /// Where one ANN query spent its time (milliseconds).
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct AnnTimings {

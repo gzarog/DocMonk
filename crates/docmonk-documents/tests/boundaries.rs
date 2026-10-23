@@ -85,5 +85,5 @@ fn metadata_and_version_stamp() {
     assert_eq!(m.author, None);
     let s = document_version_stamp("1", true);
     assert_eq!(s.parser_version, "1+eml-attachments.1");
-    assert!(s.chunker_version.starts_with("2+tok:"));
+    assert!(s.chunker_version.starts_with("3+tok:"));
 }

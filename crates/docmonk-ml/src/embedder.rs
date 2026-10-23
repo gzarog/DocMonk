@@ -109,11 +109,16 @@ impl Embedder {
                 ..Default::default()
             }))
             .map_err(load_err)?;
-        let pad_id = tokenizer.token_to_id("[PAD]").unwrap_or(0);
+        // WordPiece vocabularies pad with `[PAD]`, SentencePiece (XLM-R)
+        // ones with `<pad>`; the attention mask hides padding either way.
+        let (pad_token, pad_id) = ["[PAD]", "<pad>"]
+            .iter()
+            .find_map(|t| tokenizer.token_to_id(t).map(|id| ((*t).to_owned(), id)))
+            .unwrap_or_else(|| ("[PAD]".into(), 0));
         tokenizer.with_padding(Some(PaddingParams {
             strategy: PaddingStrategy::BatchLongest,
             pad_id,
-            pad_token: "[PAD]".into(),
+            pad_token,
             ..Default::default()
         }));
         let device = Device::Cpu;
@@ -154,12 +159,30 @@ impl Embedder {
         self.batch_size
     }
 
-    /// One L2-normalized vector per text, in order.
+    /// One L2-normalized vector per indexed text, in order, each written
+    /// after the model's passage prefix.
     ///
     /// Texts are batched in order of length so each batch pads to a similar
     /// length (padding is masked out, so a vector does not depend on its
     /// batch), then returned in input order.
     pub fn embed(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>, MlError> {
+        self.embed_prefixed(texts, self.spec.passage_prefix)
+    }
+
+    /// [`Self::embed`] for queries (the model's query prefix).
+    pub fn embed_queries(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>, MlError> {
+        self.embed_prefixed(texts, self.spec.query_prefix)
+    }
+
+    fn embed_prefixed(&self, texts: &[&str], prefix: &str) -> Result<Vec<Vec<f32>>, MlError> {
+        let owned: Vec<String>;
+        let texts: Vec<&str> = if prefix.is_empty() {
+            texts.to_vec()
+        } else {
+            owned = texts.iter().map(|t| format!("{prefix}{t}")).collect();
+            owned.iter().map(String::as_str).collect()
+        };
+        let texts = texts.as_slice();
         let mut order: Vec<usize> = (0..texts.len()).collect();
         order.sort_by_key(|&i| texts[i].len());
         let mut out: Vec<Vec<f32>> = vec![Vec::new(); texts.len()];

@@ -431,6 +431,8 @@ pub struct Summary {
     pub entities: Option<u64>,
     pub documents: Option<u64>,
     pub chunks: Option<u64>,
+    #[serde(default)]
+    pub passages: Option<u64>,
     pub relationships: Option<u64>,
     /// Only from two comparable snapshots (`--watch`).
     pub throughput_files_per_second: Option<f64>,
@@ -454,6 +456,13 @@ pub struct PublishedCounts {
     pub code_entities: u64,
     pub documents: u64,
     pub chunks: u64,
+    /// Implementation passages of code files (ADR 0037).
+    #[serde(default)]
+    pub passages: u64,
+    /// Indexed files with a recoverable extraction problem (syntax errors
+    /// indexed as plain text, ADR 0037).
+    #[serde(default)]
+    pub degraded: u64,
     pub relationships: u64,
     pub links: u64,
     pub max_attempt_count: u64,
