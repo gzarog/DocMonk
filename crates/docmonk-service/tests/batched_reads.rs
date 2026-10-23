@@ -56,6 +56,16 @@ impl KnowledgeRead for Unbatched<'_> {
     fn search_paths_projection(&self, b: &str, q: &str, l: i64) -> Result<Vec<PathSearchRow>> {
         self.0.search_paths_projection(b, q, l)
     }
+    fn search_passages_fts_in(
+        &self,
+        b: &str,
+        e: &str,
+        l: i64,
+        s: i64,
+        f: &docmonk_storage::read::ReadFilter,
+    ) -> Result<Vec<docmonk_storage::search::PassageSearchRow>> {
+        self.0.search_passages_fts_in(b, e, l, s, f)
+    }
     fn symbol_entities(&self, b: &str, q: &str) -> Result<Vec<EntityRow>> {
         self.0.symbol_entities(b, q)
     }

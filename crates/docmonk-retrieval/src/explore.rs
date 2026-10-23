@@ -658,7 +658,7 @@ fn graph_path(e: &ResolvedEdge, incoming: bool, symbol: &str) -> GraphPath {
 /// A search result as JSON (location keys per hit kind).
 pub fn search_result_json(r: &SearchResult) -> Value {
     let location = r.location.as_ref().map(|l| match r.kind {
-        "entity" => json!({"line_start": l.line_start, "line_end": l.line_end}),
+        "entity" | "passage" => json!({"line_start": l.line_start, "line_end": l.line_end}),
         _ if r.tier == RankTier::TitleOrHeading
             && l.section.is_none()
             && l.heading_path.is_empty() =>
@@ -692,7 +692,7 @@ pub fn search_result_json(r: &SearchResult) -> Value {
 
 pub fn semantic_hit_json(h: &crate::hybrid::SourcedHit) -> Value {
     let s = &h.hit;
-    let location = if s.kind == "entity" {
+    let location = if s.kind == "entity" || s.kind == "passage" {
         json!({"line_start": s.position, "line_end": s.end_line})
     } else {
         let mut v = json!({"section": s.section});
@@ -720,7 +720,7 @@ fn semantic_evidence(h: &crate::hybrid::SourcedHit) -> EvidenceItem {
             source: format!("semantic:{}", s.kind),
             path: s.path.clone(),
             location: EvidenceLocation {
-                line_start: (s.kind == "entity").then_some(s.position),
+                line_start: (s.kind == "entity" || s.kind == "passage").then_some(s.position),
                 line_end: s.end_line,
                 page: None,
                 section: s.section.clone(),
@@ -1014,6 +1014,7 @@ pub fn explore_with(
                 t.stage = match t.stage {
                     "prefetch" => "lexical.prefetch",
                     "entities" => "lexical.entities",
+                    "passages" => "lexical.passages",
                     "documents" => "lexical.documents",
                     "paths" => "lexical.paths",
                     "merge" => "lexical.merge",

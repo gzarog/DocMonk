@@ -18,6 +18,8 @@ use crate::knowledge::{cached, ProjectStore};
 /// Subject kinds stored in `embeddings.subject_type`.
 pub const SUBJECT_ENTITY: &str = "entity";
 pub const SUBJECT_CHUNK: &str = "chunk";
+/// An implementation passage of a code file (ADR 0037).
+pub const SUBJECT_PASSAGE: &str = "passage";
 
 /// Something that still needs a vector under the current model.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,17 +60,21 @@ pub const SNIPPET_CHARS: usize = 280;
 pub struct SubjectMeta {
     pub subject_type: String,
     pub subject_id: String,
-    /// `entity` or `document` (the hit kinds).
+    /// `entity`, `document` or `passage` (the hit kinds). A body passage
+    /// is reported as a hit on its owning entity.
     pub kind: String,
+    /// The record the hit names: the subject itself, or the owning entity
+    /// of a body passage.
+    pub record_id: String,
     pub rel_path: String,
     /// Qualified name (entity) or document title / heading path (chunk).
     pub title: String,
     pub snippet: String,
     /// Heading path of a chunk (`A > B`), if any.
     pub section: Option<String>,
-    /// Entity start line, or chunk ordinal.
+    /// Entity or passage start line, or chunk ordinal.
     pub position: i64,
-    /// Entity end line (`None` for chunks).
+    /// Entity or passage end line (`None` for chunks).
     pub end_line: Option<i64>,
     /// Attachment index for chunks of an email attachment.
     pub attachment_index: Option<i64>,
@@ -147,6 +153,24 @@ impl ProjectStore {
             |r| {
                 Ok(EmbeddingSubject {
                     subject_type: SUBJECT_CHUNK,
+                    subject_id: r.get(0)?,
+                    file_id: r.get(1)?,
+                    text: r.get(2)?,
+                })
+            },
+        )?);
+        out.extend(self.query_rows(
+            "pending passage embeddings",
+            "SELECT p.id, p.file_id, p.header || char(10) || p.text
+             FROM code_passages p
+             LEFT JOIN embeddings v ON v.build_id = p.build_id AND v.subject_type = 'passage'
+                AND v.subject_id = p.id AND v.model_fingerprint = ?2
+             WHERE p.build_id = ?1 AND v.subject_id IS NULL
+             ORDER BY p.file_id, p.ordinal, p.id",
+            &[&build_id, &fingerprint],
+            |r| {
+                Ok(EmbeddingSubject {
+                    subject_type: SUBJECT_PASSAGE,
                     subject_id: r.get(0)?,
                     file_id: r.get(1)?,
                     text: r.get(2)?,
@@ -432,6 +456,7 @@ impl ProjectStore {
                         subject_type: t.clone(),
                         subject_id: id.clone(),
                         kind: "entity".into(),
+                        record_id: id.clone(),
                         rel_path: path,
                         title: qn,
                         snippet: sig,
@@ -441,6 +466,40 @@ impl ProjectStore {
                         attachment_index: None,
                         document_id: None,
                     });
+                }
+                continue;
+            }
+            if t == SUBJECT_PASSAGE {
+                let row = self
+                    .conn
+                    .prepare_cached(
+                        "SELECT f.rel_path, p.entity_id, e.qualified_name, p.text, p.start_line,
+                            p.end_line
+                         FROM code_passages p
+                         JOIN files f ON f.build_id = p.build_id AND f.id = p.file_id
+                         LEFT JOIN entities e ON e.build_id = p.build_id AND e.id = p.entity_id
+                         WHERE p.build_id = ?1 AND p.id = ?2",
+                    )
+                    .and_then(|mut st| {
+                        st.query_row(params![build_id, id], |r| {
+                            Ok((
+                                r.get::<_, String>(0)?,
+                                r.get::<_, Option<String>>(1)?,
+                                r.get::<_, Option<String>>(2)?,
+                                r.get::<_, String>(3)?,
+                                r.get::<_, i64>(4)?,
+                                r.get::<_, i64>(5)?,
+                            ))
+                        })
+                    })
+                    .map(Some)
+                    .or_else(|e| match e {
+                        rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                        e => Err(e),
+                    })
+                    .map_err(StorageError::sqlite("subject meta"))?;
+                if let Some((path, owner, qn, text, start, end)) = row {
+                    out.push(passage_meta(t, id, path, owner, qn, &text, start, end));
                 }
                 continue;
             }
@@ -499,6 +558,7 @@ impl ProjectStore {
                     subject_type: t.clone(),
                     subject_id: id.clone(),
                     kind: "document".into(),
+                    record_id: id.clone(),
                     title: if title.is_empty() {
                         path.clone()
                     } else {
@@ -515,5 +575,39 @@ impl ProjectStore {
             }
         }
         Ok(out)
+    }
+}
+
+/// Display metadata of a passage vector hit: a body passage is a hit on
+/// its owning entity located at the passage's lines; a text passage is a
+/// `passage` hit titled by its path. Shared by every backend.
+#[allow(clippy::too_many_arguments)]
+pub fn passage_meta(
+    subject_type: &str,
+    subject_id: &str,
+    rel_path: String,
+    owner: Option<String>,
+    owner_name: Option<String>,
+    text: &str,
+    start_line: i64,
+    end_line: i64,
+) -> SubjectMeta {
+    let (kind, record_id, title) = match owner {
+        Some(e) => ("entity", e, owner_name.unwrap_or_else(|| rel_path.clone())),
+        None => ("passage", subject_id.to_owned(), rel_path.clone()),
+    };
+    SubjectMeta {
+        subject_type: subject_type.to_owned(),
+        subject_id: subject_id.to_owned(),
+        kind: kind.into(),
+        record_id,
+        rel_path,
+        title,
+        snippet: text.chars().take(SNIPPET_CHARS).collect(),
+        section: None,
+        position: start_line,
+        end_line: Some(end_line),
+        attachment_index: None,
+        document_id: None,
     }
 }

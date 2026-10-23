@@ -51,6 +51,10 @@ pub struct PublishedAgg {
     pub entities: u64,
     pub documents: u64,
     pub chunks: u64,
+    /// Implementation passages (ADR 0037).
+    pub passages: u64,
+    /// Indexed files carrying an extraction problem.
+    pub degraded: u64,
     pub relationships: u64,
     pub links: u64,
 }
@@ -368,6 +372,11 @@ impl ServerBackend {
                             "retry": { "filter": { "term": { "status": "retry" } }, "aggs": {
                                 "next": { "terms": { "field": "next_attempt_at", "size": 1, "order": { "_key": "asc" } } },
                             } },
+                            // Indexed despite an error (a degraded file).
+                            "degraded": { "filter": { "bool": { "filter": [
+                                { "term": { "status": "indexed" } },
+                                { "exists": { "field": "last_error_at" } },
+                            ] } } },
                         },
                     } },
                 }),
@@ -386,6 +395,7 @@ impl ServerBackend {
                         _ => {}
                     }
                 }
+                agg.degraded = u(&b["degraded"]["doc_count"]);
                 agg.max_attempt_count = u(&b["max_attempt"]["value"]);
                 agg.last_error_at = millis(&b["last_error_at"]["value"]);
                 agg.next_retry_at = b
@@ -398,6 +408,7 @@ impl ServerBackend {
                 IndexKind::Documents,
                 IndexKind::Chunks,
                 IndexKind::Relationships,
+                IndexKind::Passages,
             ]
             .map(|k| self.index(k));
             let records = self.post_json(
@@ -408,7 +419,7 @@ impl ServerBackend {
                     "track_total_hits": false,
                     "query": { "bool": { "filter": [ Self::pairs_filter(chunk) ] } },
                     "aggs": { "by_index": {
-                        "terms": { "field": "_index", "size": 4 },
+                        "terms": { "field": "_index", "size": 5 },
                         "aggs": { "by_source": {
                             "terms": { "field": "source_id", "size": chunk.len() },
                             "aggs": { "kind": { "terms": { "field": "record_kind", "size": 8 } } },
@@ -429,6 +440,8 @@ impl ServerBackend {
                         agg.documents = n;
                     } else if index == names[2] {
                         agg.chunks = n;
+                    } else if index == names[4] {
+                        agg.passages = n;
                     } else if index == names[3] {
                         for k in buckets(b, "/kind/buckets") {
                             match k["key"].as_str() {

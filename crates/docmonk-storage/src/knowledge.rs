@@ -118,6 +118,57 @@ pub struct ChunkRow {
     pub parent_ordinal: Option<i64>,
 }
 
+/// An implementation passage of a code file: retrieval text over exact
+/// source lines, separate from the symbol and graph records.
+///
+/// A `body` passage covers (part of) one function or method, owned by
+/// `entity_id`; a `text` passage is a line window of a file whose symbols
+/// could not be extracted (`extraction` says why) and claims no symbol.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+pub struct PassageRow {
+    pub id: String,
+    pub file_id: String,
+    /// The function or method whose body this is; `None` for a `text`
+    /// passage.
+    pub entity_id: Option<String>,
+    /// `body` or `text`.
+    pub kind: String,
+    /// `parsed`, `unsupported_language` or `parse_failed`.
+    pub extraction: String,
+    pub language: Option<String>,
+    /// Order in the file.
+    pub ordinal: i64,
+    /// Part of the owner's body (0-based) and how many parts it has.
+    pub part: i64,
+    pub parts: i64,
+    pub start_line: i64,
+    pub end_line: i64,
+    /// What the passage belongs to: the owner's qualified name and
+    /// signature, or the file path for a `text` passage.
+    pub header: String,
+    /// The lines `start_line..=end_line` as written (line endings
+    /// normalized to `\n`; a single line longer than the passage budget
+    /// is kept as its prefix).
+    pub text: String,
+}
+
+impl PassageRow {
+    /// The text a passage is embedded from: its header, then its lines.
+    pub fn embedding_text(&self) -> String {
+        format!("{}\n{}", self.header, self.text)
+    }
+}
+
+/// A recoverable problem with one file whose knowledge was still indexed
+/// (for example source with syntax errors indexed as plain text). The
+/// file is recorded `indexed` with the message as its `last_error`, and
+/// the problem is logged in the error feed under `code`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FileNotice {
+    pub code: String,
+    pub message: String,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct LinkRow {
     pub id: String,
@@ -137,8 +188,12 @@ pub struct FileKnowledge {
     pub relationships: Vec<RelationshipRow>,
     pub documents: Vec<DocumentRow>,
     pub chunks: Vec<ChunkRow>,
+    /// Implementation passages of a code file.
+    pub passages: Vec<PassageRow>,
     /// Email attachment outcomes for this file (reported, not stored).
     pub attachments: AttachmentStats,
+    /// A recoverable extraction problem (reported with the file row).
+    pub notice: Option<FileNotice>,
 }
 
 /// Per-file email attachment outcomes (`AttachmentStats`).
@@ -753,6 +808,7 @@ impl ProjectStore {
             "relationships",
             "documents",
             "chunks",
+            "code_passages",
             "cross_links",
         ];
         if !ALLOWED.contains(&table) {
@@ -925,6 +981,8 @@ fn delete_build_rows(tx: &Connection, build_id: &str) -> Result<()> {
         "DELETE FROM code_fts WHERE rowid IN (SELECT rowid FROM entities WHERE build_id = ?1)",
         "DELETE FROM chunk_fts WHERE rowid IN (SELECT rowid FROM chunks WHERE build_id = ?1)",
         "DELETE FROM path_fts WHERE rowid IN (SELECT rowid FROM files WHERE build_id = ?1)",
+        "DELETE FROM passage_fts WHERE rowid IN (SELECT rowid FROM code_passages WHERE build_id = ?1)",
+        "DELETE FROM code_passages WHERE build_id = ?1",
         "DELETE FROM cross_links WHERE build_id = ?1",
         "DELETE FROM embeddings WHERE build_id = ?1",
         "DELETE FROM metadata WHERE key = 'embeddings_revision:' || ?1",
@@ -948,6 +1006,9 @@ fn delete_file_rows(tx: &Connection, build_id: &str, file_id: &str) -> Result<()
             (SELECT rowid FROM chunks WHERE build_id = ?1 AND file_id = ?2)",
         "DELETE FROM path_fts WHERE rowid IN
             (SELECT rowid FROM files WHERE build_id = ?1 AND id = ?2)",
+        "DELETE FROM passage_fts WHERE rowid IN
+            (SELECT rowid FROM code_passages WHERE build_id = ?1 AND file_id = ?2)",
+        "DELETE FROM code_passages WHERE build_id = ?1 AND file_id = ?2",
         // The file's relationships and links are left in place: they belong
         // to the last committed graph, which stays readable (flagged stale)
         // until the graph stage replaces them and clears orphans.
@@ -1112,6 +1173,45 @@ fn insert_knowledge(tx: &Connection, build_id: &str, k: &FileKnowledge) -> Resul
             params![c.id, build_id, heading, c.search_text, title, words],
         )
         .map_err(err("index chunk"))?;
+    }
+    for p in &k.passages {
+        cached(
+            tx,
+            "INSERT INTO code_passages (id, build_id, file_id, entity_id, kind, extraction,
+                language, ordinal, part, parts, start_line, end_line, header, text)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            params![
+                p.id,
+                build_id,
+                p.file_id,
+                p.entity_id,
+                p.kind,
+                p.extraction,
+                p.language,
+                p.ordinal,
+                p.part,
+                p.parts,
+                p.start_line,
+                p.end_line,
+                p.header,
+                p.text
+            ],
+        )
+        .map_err(err("insert passage"))?;
+        cached(
+            tx,
+            "INSERT INTO passage_fts (rowid, passage_id, build_id, owner, body, words)
+             VALUES (last_insert_rowid(), ?1, ?2, ?3, ?4, ?5)",
+            params![
+                p.id,
+                build_id,
+                p.header,
+                p.text,
+                // The parts of identifiers written in the passage.
+                crate::search::identifier_words(&p.text)
+            ],
+        )
+        .map_err(err("index passage"))?;
     }
     Ok(())
 }
@@ -1505,6 +1605,98 @@ impl ProjectStore {
             Vec::new()
         };
         Ok((before, after))
+    }
+}
+
+pub(crate) const PASSAGE_COLUMNS: &str = "id, file_id, entity_id, kind, extraction, language,
+    ordinal, part, parts, start_line, end_line, header, text";
+
+pub(crate) fn passage_from_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<PassageRow> {
+    Ok(PassageRow {
+        id: r.get(0)?,
+        file_id: r.get(1)?,
+        entity_id: r.get(2)?,
+        kind: r.get(3)?,
+        extraction: r.get(4)?,
+        language: r.get(5)?,
+        ordinal: r.get(6)?,
+        part: r.get(7)?,
+        parts: r.get(8)?,
+        start_line: r.get(9)?,
+        end_line: r.get(10)?,
+        header: r.get(11)?,
+        text: r.get(12)?,
+    })
+}
+
+impl ProjectStore {
+    /// A file's passages in file order.
+    pub fn file_passages(&self, build_id: &str, file_id: &str) -> Result<Vec<PassageRow>> {
+        self.query_rows(
+            "file passages",
+            &format!(
+                "SELECT {PASSAGE_COLUMNS} FROM code_passages WHERE build_id = ?1 AND file_id = ?2
+                 ORDER BY ordinal"
+            ),
+            &[&build_id, &file_id],
+            passage_from_row,
+        )
+    }
+
+    /// One passage by id.
+    pub fn passage(&self, build_id: &str, id: &str) -> Result<Option<PassageRow>> {
+        Ok(self
+            .query_rows(
+                "passage",
+                &format!(
+                    "SELECT {PASSAGE_COLUMNS} FROM code_passages WHERE build_id = ?1 AND id = ?2"
+                ),
+                &[&build_id, &id],
+                passage_from_row,
+            )?
+            .pop())
+    }
+
+    /// The body passages of `entity_id`, in part order.
+    pub fn entity_passages(&self, build_id: &str, entity_id: &str) -> Result<Vec<PassageRow>> {
+        self.query_rows(
+            "entity passages",
+            &format!(
+                "SELECT {PASSAGE_COLUMNS} FROM code_passages WHERE build_id = ?1 AND entity_id = ?2
+                 ORDER BY ordinal"
+            ),
+            &[&build_id, &entity_id],
+            passage_from_row,
+        )
+    }
+
+    /// Passages of the same file and owner around `p` (at most `previous`
+    /// before and `next` after it), each in file order.
+    pub fn passage_siblings(
+        &self,
+        build_id: &str,
+        p: &PassageRow,
+        previous: i64,
+        next: i64,
+    ) -> Result<(Vec<PassageRow>, Vec<PassageRow>)> {
+        let side = |op: &str, order: &str, n: i64| -> Result<Vec<PassageRow>> {
+            if n <= 0 {
+                return Ok(Vec::new());
+            }
+            self.query_rows(
+                "passage siblings",
+                &format!(
+                    "SELECT {PASSAGE_COLUMNS} FROM code_passages
+                     WHERE build_id = ?1 AND file_id = ?2 AND entity_id IS ?3 AND ordinal {op} ?4
+                     ORDER BY ordinal {order} LIMIT ?5"
+                ),
+                &[&build_id, &p.file_id, &p.entity_id, &p.ordinal, &n],
+                passage_from_row,
+            )
+        };
+        let mut before = side("<", "DESC", previous)?;
+        before.reverse();
+        Ok((before, side(">", "ASC", next)?))
     }
 }
 

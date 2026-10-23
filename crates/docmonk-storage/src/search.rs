@@ -19,6 +19,39 @@ const CHUNK_BM25: &str = "bm25(chunk_fts, 0.0, 0.0, 5.0, 1.0, 8.0, 0.5)";
 const CODE_BM25: &str = "bm25(code_fts, 0.0, 0.0, 10.0, 5.0, 2.0, 10.0)";
 /// Path-FTS weights: path 2, identifier parts 1.
 const PATH_BM25: &str = "bm25(path_fts, 0.0, 0.0, 2.0, 1.0)";
+/// Passage-FTS weights: owner (qualified name and signature) 3, body 1,
+/// identifier parts 0.5.
+const PASSAGE_BM25: &str = "bm25(passage_fts, 0.0, 0.0, 3.0, 1.0, 0.5)";
+
+/// An implementation passage hit with its file and owning entity joined in.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PassageSearchRow {
+    pub id: String,
+    pub file_id: String,
+    pub kind: String,
+    pub extraction: String,
+    pub language: Option<String>,
+    pub start_line: i64,
+    pub end_line: i64,
+    pub header: String,
+    pub rel_path: String,
+    pub mtime: f64,
+    /// A match-centred excerpt of the passage text.
+    pub snippet: Option<String>,
+    /// The owning entity of a `body` passage.
+    pub entity: Option<PassageOwner>,
+    pub fts_rank: u32,
+    pub bm25: Option<f64>,
+}
+
+/// The entity a body passage belongs to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PassageOwner {
+    pub id: String,
+    pub name: String,
+    pub qualified_name: String,
+    pub kind: String,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EntitySearchRow {
@@ -389,6 +422,79 @@ impl ProjectStore {
             row.fts_rank = i as u32;
         }
         Ok(out)
+    }
+
+    /// BM25-ranked implementation passages for an FTS5 `expression`,
+    /// restricted to `filter`'s paths in SQL (a document filter admits
+    /// none). Equal scores are ordered by path and file order; each hit
+    /// carries a match-centred snippet of at most `snippet_tokens` tokens.
+    pub fn search_passages_fts_in(
+        &self,
+        build_id: &str,
+        expression: &str,
+        limit: i64,
+        snippet_tokens: i64,
+        filter: &ReadFilter,
+    ) -> Result<Vec<PassageSearchRow>> {
+        if !filter.document_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let tokens = snippet_tokens.clamp(1, 64);
+        let patterns = filter.like_patterns();
+        let clause = path_clause("f.rel_path", patterns.len(), 5);
+        let mut args: Vec<&dyn rusqlite::ToSql> = vec![&tokens, &expression, &build_id, &limit];
+        args.extend(patterns.iter().map(|p| p as &dyn rusqlite::ToSql));
+        let mut rows = self.query_rows(
+            "passage fts search",
+            &format!(
+                "SELECT p.id, p.file_id, p.kind, p.extraction, p.language, p.start_line,
+                    p.end_line, p.header, f.rel_path, f.mtime,
+                    snippet(passage_fts, 3, '', '', '...', ?1), {PASSAGE_BM25},
+                    e.id, e.name, e.qualified_name, e.kind
+                 FROM passage_fts
+                 JOIN code_passages p ON p.rowid = passage_fts.rowid
+                 JOIN files f ON f.build_id = p.build_id AND f.id = p.file_id
+                 LEFT JOIN entities e ON e.build_id = p.build_id AND e.id = p.entity_id
+                 WHERE passage_fts MATCH ?2 AND passage_fts.build_id = ?3 {clause}
+                 ORDER BY {PASSAGE_BM25}, f.rel_path, p.ordinal, p.id
+                 LIMIT ?4"
+            ),
+            &args,
+            |r| {
+                let snippet: Option<String> = r.get(10)?;
+                let owner: Option<String> = r.get(12)?;
+                Ok(PassageSearchRow {
+                    id: r.get(0)?,
+                    file_id: r.get(1)?,
+                    kind: r.get(2)?,
+                    extraction: r.get(3)?,
+                    language: r.get(4)?,
+                    start_line: r.get(5)?,
+                    end_line: r.get(6)?,
+                    header: r.get(7)?,
+                    rel_path: r.get(8)?,
+                    mtime: r.get(9)?,
+                    snippet: snippet
+                        .map(|s| s.trim().to_owned())
+                        .filter(|s| !s.is_empty()),
+                    bm25: Some(r.get(11)?),
+                    entity: match owner {
+                        Some(id) => Some(PassageOwner {
+                            id,
+                            name: r.get(13)?,
+                            qualified_name: r.get(14)?,
+                            kind: r.get(15)?,
+                        }),
+                        None => None,
+                    },
+                    fts_rank: 0,
+                })
+            },
+        )?;
+        for (i, row) in rows.iter_mut().enumerate() {
+            row.fts_rank = i as u32;
+        }
+        Ok(rows)
     }
 
     /// Files whose path matches every token of `q` (FTS, BM25 then path

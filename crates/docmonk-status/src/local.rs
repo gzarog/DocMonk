@@ -123,6 +123,8 @@ pub fn collect_facts(
                             code_entities: u(b.entities),
                             documents: u(b.documents),
                             chunks: u(b.chunks),
+                            passages: u(b.passages),
+                            degraded: u(b.degraded),
                             relationships: u(b.relationships),
                             links: u(b.links),
                             max_attempt_count: u(b.max_attempt_count),

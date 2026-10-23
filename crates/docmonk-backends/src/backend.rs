@@ -1655,6 +1655,38 @@ pub struct ChunkDoc {
     pub mtime: Option<f64>,
 }
 
+/// An implementation passage (ADR 0037), with its owner's display fields
+/// denormalized so a passage hit needs no entity lookup.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct PassageDoc {
+    pub passage_id: String,
+    pub file_id: String,
+    pub rel_path: String,
+    pub entity_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entity_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entity_qualified_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entity_kind: Option<String>,
+    pub kind: String,
+    pub extraction: String,
+    pub language: Option<String>,
+    pub ordinal: i64,
+    pub part: i64,
+    pub parts: i64,
+    pub start_line: i64,
+    pub end_line: i64,
+    pub header: String,
+    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mtime: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub embedding: Option<Vec<f32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub embedding_fingerprint: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct EdgeDoc {
     pub relationship_id: String,
@@ -1738,6 +1770,9 @@ impl BuildWriter<'_> {
     }
     pub fn chunk(&mut self, d: &ChunkDoc) -> Result<()> {
         self.put(IndexKind::Chunks, &d.chunk_id.clone(), d, &[])
+    }
+    pub fn passage(&mut self, d: &PassageDoc) -> Result<()> {
+        self.put(IndexKind::Passages, &d.passage_id.clone(), d, &[])
     }
     pub fn edge(&mut self, d: &EdgeDoc) -> Result<()> {
         self.put(

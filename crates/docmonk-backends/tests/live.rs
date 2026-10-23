@@ -261,6 +261,7 @@ fn scenario(base: &str, engine: Engine) {
         "chunks",
         "relationships",
         "runtime",
+        "passages",
     ] {
         delete_index(&c, &format!("{foreign}-{kind}"));
     }
@@ -268,8 +269,8 @@ fn scenario(base: &str, engine: Engine) {
     // ---- empty init -----------------------------------------------------------
     let b = backend(base, engine, &prefix, 4, 40);
     let init = b.init().unwrap();
-    assert_eq!(init.created.len(), 7);
-    assert!(b.init().unwrap().existing.len() == 7, "init is idempotent");
+    assert_eq!(init.created.len(), 8);
+    assert!(b.init().unwrap().existing.len() == 8, "init is idempotent");
     assert!(b.check_schema().unwrap().is_empty());
     let wrong = backend(base, engine, &prefix, 8, 40);
     assert!(matches!(wrong.init(), Err(BackendError::SchemaMismatch(_))));
@@ -447,6 +448,7 @@ fn drop_prefix(base: &str, prefix: &str) {
         "chunks",
         "relationships",
         "runtime",
+        "passages",
     ] {
         delete_index(&c, &format!("{prefix}-{kind}"));
     }

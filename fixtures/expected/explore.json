@@ -4466,6 +4466,20 @@
       "source": "lexical:entity",
       "path": "web/Payments.cs",
       "location": {
+       "line_start": 5,
+       "line_end": 6,
+       "page": null,
+       "section": null
+      },
+      "entity": "Shop.Payments.PaymentGateway.Charge",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "[HttpPost(\"api/payments/charge\")]\n        public void Charge(int amount) { }"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "web/Payments.cs",
+      "location": {
        "line_start": 8,
        "line_end": 8,
        "page": null,
@@ -7609,12 +7623,27 @@
      }
     ],
     "paths": [
+     "app/core.py",
      "app/core_test.py",
      "app/util.py",
      "svc/svc.go",
-     "web/money.ts"
+     "tests/test_core.py",
+     "web/money.ts",
+     "web/orders.ts"
     ],
     "call_flows": [
+     {
+      "source": "app.core_test.test_normalize",
+      "relationship": "calls",
+      "target": "app.util.normalize",
+      "confidence": "medium"
+     },
+     {
+      "source": "app.core.Ledger.validate",
+      "relationship": "calls",
+      "target": "app.util.normalize",
+      "confidence": "medium"
+     },
      {
       "source": "app.util.unused",
       "relationship": "calls",
@@ -7628,19 +7657,7 @@
       "confidence": "medium"
      },
      {
-      "source": "app.core.Ledger.validate",
-      "relationship": "calls",
-      "target": "app.util.normalize",
-      "confidence": "medium"
-     },
-     {
       "source": "app.core.settle",
-      "relationship": "calls",
-      "target": "app.util.normalize",
-      "confidence": "medium"
-     },
-     {
-      "source": "app.core_test.test_normalize",
       "relationship": "calls",
       "target": "app.util.normalize",
       "confidence": "medium"
@@ -7751,16 +7768,16 @@
     ],
     "call_flows": [
      {
-      "source": "app.core.run",
-      "relationship": "calls",
-      "target": "app.core.settle",
-      "confidence": "exact"
-     },
-     {
       "source": "tests.test_core.test_settle",
       "relationship": "calls",
       "target": "app.core.settle",
       "confidence": "medium"
+     },
+     {
+      "source": "app.core.run",
+      "relationship": "calls",
+      "target": "app.core.settle",
+      "confidence": "exact"
      }
     ],
     "dependencies": [],
@@ -7828,12 +7845,6 @@
      {
       "source": "app.core.settle",
       "relationship": "calls",
-      "target": "app.core.Ledger.post",
-      "confidence": "exact"
-     },
-     {
-      "source": "app.core.settle",
-      "relationship": "calls",
       "target": "audit_log",
       "confidence": "medium"
      },
@@ -7842,15 +7853,21 @@
       "relationship": "calls",
       "target": "app.util.normalize",
       "confidence": "medium"
+     },
+     {
+      "source": "app.core.settle",
+      "relationship": "calls",
+      "target": "app.core.Ledger.post",
+      "confidence": "exact"
      }
     ],
     "dependencies": [
      {
-      "qualified_name": "app.core.Ledger.post",
+      "qualified_name": "app.util.normalize",
       "relationship": "calls"
      },
      {
-      "qualified_name": "app.util.normalize",
+      "qualified_name": "app.core.Ledger.post",
       "relationship": "calls"
      }
     ],
@@ -7914,6 +7931,18 @@
     "paths": [],
     "call_flows": [
      {
+      "source": "app.core_test.test_normalize",
+      "relationship": "calls",
+      "target": "app.util.normalize",
+      "confidence": "medium"
+     },
+     {
+      "source": "app.core.Ledger.validate",
+      "relationship": "calls",
+      "target": "app.util.normalize",
+      "confidence": "medium"
+     },
+     {
       "source": "app.util.unused",
       "relationship": "calls",
       "target": "app.util.normalize",
@@ -7926,19 +7955,7 @@
       "confidence": "medium"
      },
      {
-      "source": "app.core.Ledger.validate",
-      "relationship": "calls",
-      "target": "app.util.normalize",
-      "confidence": "medium"
-     },
-     {
       "source": "app.core.settle",
-      "relationship": "calls",
-      "target": "app.util.normalize",
-      "confidence": "medium"
-     },
-     {
-      "source": "app.core_test.test_normalize",
       "relationship": "calls",
       "target": "app.util.normalize",
       "confidence": "medium"
@@ -8049,7 +8066,8 @@
     "summary": "Found 0 symbol(s) and 0 document(s) matching 'what depends on Ledger.post'; see below for details.",
     "symbols": [],
     "paths": [
-     "app/core.py"
+     "app/core.py",
+     "tests/test_core.py"
     ],
     "call_flows": [],
     "dependencies": [],
@@ -8071,6 +8089,34 @@
       "relationship": "match",
       "confidence": "medium",
       "snippet": "def post(self, amount):"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "app/core.py",
+      "location": {
+       "line_start": 20,
+       "line_end": 23,
+       "page": null,
+       "section": null
+      },
+      "entity": "app.core.settle",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "def settle(ledger, amount):\n    ledger.post(amount)\n    audit_log(amount)\n    return normalize(amount)"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "tests/test_core.py",
+      "location": {
+       "line_start": 9,
+       "line_end": 10,
+       "page": null,
+       "section": null
+      },
+      "entity": "tests.test_core.test_post",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "def test_post():\n    Ledger().post(5)"
      }
     ],
     "evidence_truncated": false,
@@ -8123,7 +8169,8 @@
     "summary": "Found 0 symbol(s) and 0 document(s) matching 'ledger post amount'; see below for details.",
     "symbols": [],
     "paths": [
-     "app/core.py"
+     "app/core.py",
+     "tests/test_core.py"
     ],
     "call_flows": [],
     "dependencies": [],
@@ -8172,7 +8219,21 @@
       "entity": "app.core.settle",
       "relationship": "match",
       "confidence": "medium",
-      "snippet": "def settle(ledger, amount):"
+      "snippet": "def settle(ledger, amount):\n    ledger.post(amount)\n    audit_log(amount)\n    return normalize(amount)"
+     },
+     {
+      "source": "lexical:entity",
+      "path": "tests/test_core.py",
+      "location": {
+       "line_start": 9,
+       "line_end": 10,
+       "page": null,
+       "section": null
+      },
+      "entity": "tests.test_core.test_post",
+      "relationship": "match",
+      "confidence": "medium",
+      "snippet": "def test_post():\n    Ledger().post(5)"
      }
     ],
     "evidence_truncated": false,

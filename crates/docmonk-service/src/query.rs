@@ -1081,7 +1081,9 @@ fn rerank_passages(
                 Ok(Some(ch)) => hybrid::passage(&c.title, &ch.heading_path, &context::text_of(&ch)),
                 _ => continue,
             },
-            "entity" => hybrid::passage(&c.title, &[], c.snippet.as_deref().unwrap_or_default()),
+            "entity" | "passage" => {
+                hybrid::passage(&c.title, &[], c.snippet.as_deref().unwrap_or_default())
+            }
             _ => continue,
         };
         out.insert((c.source_id.clone(), c.id.clone()), text);
@@ -1217,15 +1219,10 @@ pub fn run_search(
             None => semantic_job(&corp)?,
         };
         s.hits.retain(|h| {
-            let kind = if h.hit.kind == "entity" {
-                "entity"
-            } else {
-                "document"
-            };
             f.allows(
                 &h.source_id,
                 &h.hit.path,
-                kind,
+                hybrid::semantic_kind(&h.hit.kind),
                 h.hit.document_id.as_deref(),
                 h.attachment.is_some(),
             )

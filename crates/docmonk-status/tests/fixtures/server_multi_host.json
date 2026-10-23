@@ -88,6 +88,7 @@
     "entities": 18000,
     "documents": 320,
     "chunks": 9100,
+    "passages": 0,
     "relationships": 41000,
     "throughput_files_per_second": null
   },
@@ -126,6 +127,8 @@
         "code_entities": 18000,
         "documents": 20,
         "chunks": 700,
+        "passages": 0,
+        "degraded": 0,
         "relationships": 41000,
         "links": 90,
         "max_attempt_count": 3,

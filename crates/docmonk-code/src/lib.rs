@@ -1,13 +1,14 @@
 //! Tree-sitter code intelligence: language detection, the
-//! query-driven extractor, reference resolution, framework heuristics,
-//! the code processor for the indexer, the post-index graph stage and
-//! graph traversal.
+//! query-driven extractor, implementation passages, reference
+//! resolution, framework heuristics, the code processor for the indexer,
+//! the post-index graph stage and graph traversal.
 
 pub mod extract;
 pub mod framework;
 pub mod graph;
 pub mod graph_stage;
 pub mod lang;
+pub mod passages;
 pub mod process;
 pub mod resolve;
 

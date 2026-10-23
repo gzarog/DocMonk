@@ -14,7 +14,7 @@ helper for packaging and repository audits.
 | `docmonk-ui` | local Admin UI (`docmonk ui`), an axum server with embedded templates |
 | `docmonk-ai` | AI providers for `ask`: OpenAI, Anthropic, Ollama, OpenAI-compatible, Codex (stdio JSON-RPC) and Copilot (CLI) |
 | `docmonk-backends` | OpenSearch/Elasticsearch index set with strict mappings: the authoritative server catalog, writer leases with fencing, bounded adaptive bulk writes, generation-numbered immutable records (unchanged records are never rewritten), atomic per-source publication with grace-period GC, and the `ServerReader` implementation of the knowledge read port |
-| `docmonk-code` | tree-sitter code intelligence: `.scm` queries, entity extraction, resolution, framework rules, code graph, and the post-index graph stage (per-file edges, cross-file resolution, versioned graph generations) |
+| `docmonk-code` | tree-sitter code intelligence: `.scm` queries, entity extraction, implementation passages and the plain-text fallback for code without symbols, resolution, framework rules, code graph, and the post-index graph stage (per-file edges, cross-file resolution, versioned graph generations) |
 | `docmonk-documents` | normalized-document model, pinned tokenizer, token-budget splitting, row-aware tables, chunker |
 | `docmonk-convert` | Rust-native document conversion (docling.rs, no ML/network), Docling-JSON normalizer, email and attachments, document processor |
 | `docmonk-knowledge` | cross-domain linker (code entities <-> document chunks) and persistent manual links |

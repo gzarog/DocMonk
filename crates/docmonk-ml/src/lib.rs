@@ -18,11 +18,11 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use docmonk_indexing::coordinator::{BuildFinalizer, ProcessError};
 use docmonk_storage::knowledge::ProjectStore;
-use docmonk_storage::vectors::{EmbeddingRow, SUBJECT_ENTITY};
+use docmonk_storage::vectors::{EmbeddingRow, SUBJECT_ENTITY, SUBJECT_PASSAGE};
 use sha2::{Digest, Sha256};
 
 use embedder::Embedder;
-use manifest::{EmbeddingModelSpec, CODE_EMBEDDING_TEXT_VERSION};
+use manifest::{EmbeddingModelSpec, CODE_EMBEDDING_TEXT_VERSION, PASSAGE_EMBEDDING_TEXT_VERSION};
 
 /// Texts embedded (and written) per window; bounds memory independently of
 /// build size.
@@ -131,8 +131,8 @@ pub fn shared_cross_encoder(
     Some(e)
 }
 
-/// Embeds every entity and chunk of the build that lacks a vector under the
-/// current model fingerprint.
+/// Embeds every entity, chunk and passage of the build that lacks a vector
+/// under the current model fingerprint.
 pub struct EmbeddingFinalizer {
     embedder: LazyEmbedder,
     document_text_version: String,
@@ -194,10 +194,10 @@ pub fn embed_build(
         let keyed: Vec<(String, String)> = window
             .iter()
             .map(|s| {
-                let version = if s.subject_type == SUBJECT_ENTITY {
-                    CODE_EMBEDDING_TEXT_VERSION
-                } else {
-                    document_text_version
+                let version = match s.subject_type {
+                    SUBJECT_ENTITY => CODE_EMBEDDING_TEXT_VERSION,
+                    SUBJECT_PASSAGE => PASSAGE_EMBEDDING_TEXT_VERSION,
+                    _ => document_text_version,
                 };
                 (text_hash(&s.text), version.to_owned())
             })

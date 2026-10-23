@@ -99,6 +99,15 @@ pub struct ExtractedLiteral {
     pub interpolated: bool,
 }
 
+/// Where a function's or method's top-level body statements start (the
+/// syntax-aware split points of its implementation passages).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtractedBody {
+    pub entity_local_id: usize,
+    /// 1-based start line of each top-level statement, in order.
+    pub statement_lines: Vec<i64>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Extraction {
     pub entities: Vec<ExtractedEntity>,
@@ -107,6 +116,8 @@ pub struct Extraction {
     pub inherits: Vec<ExtractedInherit>,
     pub decorators: Vec<ExtractedDecorator>,
     pub literals: Vec<ExtractedLiteral>,
+    /// Statement boundaries of every function and method with a body.
+    pub bodies: Vec<ExtractedBody>,
 }
 
 /// String literal node kinds of every supported grammar.
@@ -354,6 +365,7 @@ pub(crate) fn extract_tree(
     }
 
     let mut entities: Vec<ExtractedEntity> = Vec::new();
+    let mut bodies: Vec<ExtractedBody> = Vec::new();
     let mut known: HashMap<usize, usize> = HashMap::new();
     let mut namespace_local_id: Option<usize> = None;
 
@@ -434,6 +446,18 @@ pub(crate) fn extract_tree(
                 start_col: start.column as i64,
                 end_col: end.column as i64,
             });
+            if matches!(kind, EntityType::Function | EntityType::Method) {
+                if let Some(body) = def_node.child_by_field_name("body") {
+                    let mut c = body.walk();
+                    bodies.push(ExtractedBody {
+                        entity_local_id: local_id,
+                        statement_lines: body
+                            .named_children(&mut c)
+                            .map(|n| n.start_position().row as i64 + 1)
+                            .collect(),
+                    });
+                }
+            }
             known.insert(def_node.id(), local_id);
             if prefix == "namespace" && namespace_local_id.is_none() {
                 namespace_local_id = Some(local_id);
@@ -443,6 +467,7 @@ pub(crate) fn extract_tree(
 
     let mut out = Extraction {
         entities,
+        bodies,
         ..Extraction::default()
     };
 

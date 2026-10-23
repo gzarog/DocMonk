@@ -267,6 +267,7 @@ fn summarize(c: &Collected, sources: &[SourceStatus], active: &[&LiveRun]) -> Su
         entities: sum(&|p| p.code_entities),
         documents: sum(&|p| p.documents),
         chunks: sum(&|p| p.chunks),
+        passages: sum(&|p| p.passages),
         relationships: sum(&|p| p.relationships),
         throughput_files_per_second: None,
     }

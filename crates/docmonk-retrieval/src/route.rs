@@ -171,6 +171,7 @@ impl SearchFilters {
             document_ids: self.document_ids.clone(),
             entities: self.allows_kind("entity"),
             documents: self.allows_kind("document"),
+            passages: self.allows_kind("passage"),
             exclude_attachments: self.exclude_attachments,
         }
     }

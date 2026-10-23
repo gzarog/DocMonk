@@ -320,6 +320,7 @@ fn coverage(home: &Home, run: &docmonk_service::indexing::RunSummary, indexed: u
                 "entities": count(IndexKind::Code),
                 "chunks": count(IndexKind::Chunks),
                 "documents": count(IndexKind::Documents),
+                "passages": count(IndexKind::Passages),
             });
         }
         if let Ok(store) = o.store.local() {
@@ -334,6 +335,7 @@ fn coverage(home: &Home, run: &docmonk_service::indexing::RunSummary, indexed: u
                 "entities": count("entities"),
                 "chunks": count("chunks"),
                 "documents": count("documents"),
+                "passages": count("code_passages"),
                 "degraded_files": files
                     .iter()
                     .filter(|f| f.last_error.is_some())

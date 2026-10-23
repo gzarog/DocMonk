@@ -37,9 +37,10 @@ pub struct EvidenceRef {
     pub id: String,
     pub source_id: String,
     pub build_id: String,
-    /// `entity`, `document` or `path`.
+    /// `entity`, `document`, `passage` or `path`.
     pub kind: String,
-    /// Entity id, chunk id (or document id for a title hit), or file id.
+    /// Entity id, chunk id (or document id for a title hit), passage id or
+    /// file id.
     pub record_id: String,
     /// Source-relative path (the caller makes it absolute for display).
     pub path: String,
@@ -150,6 +151,7 @@ pub fn verify(
                     || c.store.chunk_at(c.build_id, &r.record_id, 0)?.is_some()
             }
             "path" => c.store.file_rel_path(c.build_id, &r.record_id)?.is_some(),
+            "passage" => c.store.passage(c.build_id, &r.record_id)?.is_some(),
             _ => false,
         };
         out.push(if exists {

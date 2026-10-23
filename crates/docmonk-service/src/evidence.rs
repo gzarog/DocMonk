@@ -64,15 +64,10 @@ fn search_err_s(e: docmonk_storage::StorageError) -> DocMonkError {
 }
 
 fn semantic_allowed(h: &SourcedHit, f: &SearchFilters) -> bool {
-    let kind = if h.hit.kind == "entity" {
-        "entity"
-    } else {
-        "document"
-    };
     f.allows(
         &h.source_id,
         &h.hit.path,
-        kind,
+        hybrid::semantic_kind(&h.hit.kind),
         h.hit.document_id.as_deref(),
         h.attachment.is_some(),
     )

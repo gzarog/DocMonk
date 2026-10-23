@@ -160,16 +160,46 @@ fn cold_build_resolves_as_expected_and_isolates_parse_failures() {
     let mut f = fixture();
     let r = f.index();
     assert!(r.published, "{r:?}");
-    assert_eq!(r.failed, 1, "only broken.py fails");
+    // Syntax errors degrade a file to plain text instead of failing it
+    // (ADR 0037): it stays searchable, without symbols, and the problem is
+    // visible on its row.
+    assert_eq!(r.failed, 0, "{r:?}");
+    assert_eq!(r.degraded, 1, "only broken.py is degraded");
     let (store, active) = f.store();
     let files = store.files(&active).unwrap();
     let status: HashMap<_, _> = files
         .iter()
         .map(|x| (x.rel_path.clone(), x.status.clone()))
         .collect();
-    assert_eq!(status["python/broken.py"], "failed");
+    assert_eq!(status["python/broken.py"], "indexed");
     assert_eq!(status["python/animals.py"], "indexed");
     assert_eq!(status["misc/script.rb"], "indexed");
+    let broken = files
+        .iter()
+        .find(|x| x.rel_path == "python/broken.py")
+        .unwrap();
+    assert!(
+        broken
+            .last_error
+            .as_deref()
+            .is_some_and(|e| e.contains("syntax error")),
+        "{broken:?}"
+    );
+    assert!(store.file_entities(&active, &broken.id).unwrap().is_empty());
+    let passages = store.file_passages(&active, &broken.id).unwrap();
+    assert!(!passages.is_empty());
+    assert!(passages
+        .iter()
+        .all(|p| p.kind == "text" && p.extraction == "parse_failed" && p.entity_id.is_none()));
+    let rb = files
+        .iter()
+        .find(|x| x.rel_path == "misc/script.rb")
+        .unwrap();
+    assert!(store
+        .file_passages(&active, &rb.id)
+        .unwrap()
+        .iter()
+        .all(|p| p.kind == "text" && p.extraction == "unsupported_language"));
 
     // Translate record ids back to the expected file's "<rel>#<local>" keys.
     let mut key_of: HashMap<String, String> = HashMap::new();

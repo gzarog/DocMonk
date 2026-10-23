@@ -16,14 +16,17 @@ use std::sync::Arc;
 use serde_json::{json, Value};
 
 use docmonk_storage::error::{Result, StorageError};
-use docmonk_storage::knowledge::{ChunkRow, EntityRow, RelationshipRow};
+use docmonk_storage::knowledge::{ChunkRow, EntityRow, PassageRow, RelationshipRow};
 use docmonk_storage::read::{
     parse_expression, FtsTerm, KnowledgeRead, ReadFilter, VectorFilter, VectorHit,
 };
 use docmonk_storage::search::{
-    AttachmentProvenance, DocumentSearchRow, EntityLinkRow, EntitySearchRow, PathSearchRow,
+    AttachmentProvenance, DocumentSearchRow, EntityLinkRow, EntitySearchRow, PassageOwner,
+    PassageSearchRow, PathSearchRow,
 };
-use docmonk_storage::vectors::{SubjectMeta, SNIPPET_CHARS, SUBJECT_CHUNK, SUBJECT_ENTITY};
+use docmonk_storage::vectors::{
+    passage_meta, SubjectMeta, SNIPPET_CHARS, SUBJECT_CHUNK, SUBJECT_ENTITY, SUBJECT_PASSAGE,
+};
 
 use crate::backend::{ServerBackend, MANUAL_BUILD, MANUAL_LINK};
 use crate::engine::Engine;
@@ -456,6 +459,20 @@ impl ServerReader {
             .collect())
     }
 
+    fn passages_where(
+        &self,
+        build_id: &str,
+        filter: Vec<Value>,
+        sort: Value,
+        size: usize,
+    ) -> Result<Vec<PassageRow>> {
+        Ok(self
+            .find(IndexKind::Passages, build_id, filter, None, sort, size)?
+            .iter()
+            .map(|h| passage_row(&h["_source"]))
+            .collect())
+    }
+
     fn one_document(&self, build_id: &str, document_id: &str) -> Result<Option<Value>> {
         Ok(self
             .find(
@@ -488,7 +505,7 @@ impl ServerReader {
         match self.backend.engine() {
             Engine::OpenSearch => json!({
                 "size": k,
-                "_source": ["chunk_id", "entity_id"],
+                "_source": ["chunk_id", "entity_id", "passage_id"],
                 "query": { "knn": { "embedding": {
                     "vector": query, "k": k,
                     "filter": { "bool": { "filter": field_filter } },
@@ -496,7 +513,7 @@ impl ServerReader {
             }),
             Engine::Elasticsearch => json!({
                 "size": k,
-                "_source": ["chunk_id", "entity_id"],
+                "_source": ["chunk_id", "entity_id", "passage_id"],
                 "knn": {
                     "field": "embedding", "query_vector": query, "k": k,
                     "num_candidates": candidates.min(MAX_READ),
@@ -538,10 +555,14 @@ impl ServerReader {
         filter.extend(vector_filter_clauses(vf));
         // A document filter excludes every entity.
         let entities = vf.entities && vf.document_ids.is_empty();
+        // Body passages count as entity hits; plain-text passages as their
+        // own kind.
+        let passages = vf.document_ids.is_empty() && (vf.entities || vf.passages);
         let mut out = Vec::new();
         for (kind, subject, id_field, on) in [
             (IndexKind::Chunks, SUBJECT_CHUNK, "chunk_id", vf.documents),
             (IndexKind::Code, SUBJECT_ENTITY, "entity_id", entities),
+            (IndexKind::Passages, SUBJECT_PASSAGE, "passage_id", passages),
         ] {
             if !on {
                 continue;
@@ -549,6 +570,9 @@ impl ServerReader {
             let mut f = filter.clone();
             if kind == IndexKind::Chunks {
                 f.extend(chunk_filter_clauses(vf));
+            }
+            if kind == IndexKind::Passages && !(vf.entities && vf.passages) {
+                f.push(json!({ "term": { "kind": if vf.entities { "body" } else { "text" } } }));
             }
             for h in self.hits(kind, self.knn_body(f, query, k, num_candidates))? {
                 out.push((
@@ -1060,6 +1084,25 @@ fn relationship_row(s: &Value) -> RelationshipRow {
     }
 }
 
+fn passage_row(s: &Value) -> PassageRow {
+    let int = |k: &str| s[k].as_i64().unwrap_or(0);
+    PassageRow {
+        id: str_of(s, "passage_id"),
+        file_id: str_of(s, "file_id"),
+        entity_id: opt_str(s, "entity_id"),
+        kind: str_of(s, "kind"),
+        extraction: str_of(s, "extraction"),
+        language: opt_str(s, "language"),
+        ordinal: int("ordinal"),
+        part: int("part"),
+        parts: int("parts"),
+        start_line: int("start_line"),
+        end_line: int("end_line"),
+        header: str_of(s, "header"),
+        text: str_of(s, "text"),
+    }
+}
+
 fn chunk_row(s: &Value) -> ChunkRow {
     ChunkRow {
         id: str_of(s, "chunk_id"),
@@ -1121,6 +1164,9 @@ impl KnowledgeRead for ServerReader {
             let _ = r.search_document_titles(b, q, limit);
             for e in expressions {
                 let _ = r.search_chunks_fts_in(b, e, limit, snippet_tokens, filter);
+            }
+            for e in expressions {
+                let _ = r.search_passages_fts_in(b, e, limit, snippet_tokens, filter);
             }
             let _ = r.search_paths_projection_in(b, q, limit, filter);
         })
@@ -1773,9 +1819,130 @@ impl KnowledgeRead for ServerReader {
             &VectorFilter {
                 entities: true,
                 documents: true,
+                passages: true,
                 ..VectorFilter::default()
             },
         )
+    }
+
+    fn search_passages_fts_in(
+        &self,
+        b: &str,
+        expression: &str,
+        limit: i64,
+        snippet_tokens: i64,
+        filter: &ReadFilter,
+    ) -> Result<Vec<PassageSearchRow>> {
+        if !filter.document_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let Some(must) = Self::fts_query(expression, &["header^3", "text"]) else {
+            return Ok(Vec::new());
+        };
+        let mut f = self.scope(b)?;
+        f.extend(path_filter(filter));
+        let tokens = snippet_tokens.clamp(1, 64) as usize;
+        let body = json!({
+            "size": (limit.max(0) as usize).min(MAX_READ),
+            "query": { "bool": { "filter": f, "must": [must] } },
+            "sort": [{ "_score": "desc" }, { "rel_path": "asc" }, { "ordinal": "asc" }, { "passage_id": "asc" }],
+            "track_scores": true,
+            "highlight": {
+                "fields": { "text": {
+                    "type": "unified", "number_of_fragments": 1,
+                    "fragment_size": tokens * 6,
+                    "pre_tags": [""], "post_tags": [""],
+                } },
+            },
+        });
+        let hits = self.hits(IndexKind::Passages, body)?;
+        Ok(hits
+            .iter()
+            .enumerate()
+            .map(|(i, h)| {
+                let s = &h["_source"];
+                let p = passage_row(s);
+                let snippet = h
+                    .pointer("/highlight/text/0")
+                    .and_then(Value::as_str)
+                    .map(|x| x.trim().to_owned())
+                    .filter(|x| !x.is_empty())
+                    .or_else(|| Some(p.text.chars().take(SNIPPET_CHARS).collect()));
+                PassageSearchRow {
+                    entity: p.entity_id.clone().map(|id| PassageOwner {
+                        id,
+                        name: str_of(s, "entity_name"),
+                        qualified_name: str_of(s, "entity_qualified_name"),
+                        kind: str_of(s, "entity_kind"),
+                    }),
+                    id: p.id,
+                    file_id: p.file_id,
+                    kind: p.kind,
+                    extraction: p.extraction,
+                    language: p.language,
+                    start_line: p.start_line,
+                    end_line: p.end_line,
+                    header: p.header,
+                    rel_path: str_of(s, "rel_path"),
+                    mtime: s["mtime"].as_f64().unwrap_or(0.0),
+                    snippet,
+                    fts_rank: i as u32,
+                    bm25: h["_score"].as_f64().map(|x| -x),
+                }
+            })
+            .collect())
+    }
+
+    fn passage(&self, b: &str, id: &str) -> Result<Option<PassageRow>> {
+        Ok(self
+            .passages_where(
+                b,
+                vec![json!({ "term": { "passage_id": id } })],
+                json!([{ "passage_id": "asc" }]),
+                1,
+            )?
+            .pop())
+    }
+
+    fn entity_passages(&self, b: &str, entity_id: &str) -> Result<Vec<PassageRow>> {
+        self.passages_where(
+            b,
+            vec![json!({ "term": { "entity_id": entity_id } })],
+            json!([{ "ordinal": "asc" }]),
+            MAX_READ,
+        )
+    }
+
+    fn passage_siblings(
+        &self,
+        b: &str,
+        p: &PassageRow,
+        previous: i64,
+        next: i64,
+    ) -> Result<(Vec<PassageRow>, Vec<PassageRow>)> {
+        let owner = match &p.entity_id {
+            Some(e) => json!({ "term": { "entity_id": e } }),
+            None => json!({ "bool": { "must_not": [ { "exists": { "field": "entity_id" } } ] } }),
+        };
+        let file = json!({ "term": { "file_id": p.file_id } });
+        let side = |cmp: &str, order: &str, n: i64| -> Result<Vec<PassageRow>> {
+            if n <= 0 {
+                return Ok(Vec::new());
+            }
+            self.passages_where(
+                b,
+                vec![
+                    file.clone(),
+                    owner.clone(),
+                    json!({ "range": { "ordinal": { cmp: p.ordinal } } }),
+                ],
+                json!([{ "ordinal": order }]),
+                n as usize,
+            )
+        };
+        let mut before = side("lt", "desc", previous)?;
+        before.reverse();
+        Ok((before, side("gt", "asc", next)?))
     }
 
     fn vector_search_filtered(
@@ -1800,9 +1967,28 @@ impl KnowledgeRead for ServerReader {
             .collect();
         let chunk_ids: Vec<&str> = keys
             .iter()
-            .filter(|(t, _)| t != SUBJECT_ENTITY)
+            .filter(|(t, _)| t == SUBJECT_CHUNK)
             .map(|(_, id)| id.as_str())
             .collect();
+        let passage_ids: Vec<&str> = keys
+            .iter()
+            .filter(|(t, _)| t == SUBJECT_PASSAGE)
+            .map(|(_, id)| id.as_str())
+            .collect();
+        let mut passages: std::collections::HashMap<String, Value> = Default::default();
+        for batch in passage_ids.chunks(MAX_READ) {
+            for h in self.find(
+                IndexKind::Passages,
+                b,
+                vec![json!({ "terms": { "passage_id": batch } })],
+                None,
+                json!([{ "passage_id": "asc" }]),
+                batch.len(),
+            )? {
+                let id = str_of(&h["_source"], "passage_id");
+                passages.entry(id).or_insert_with(|| h["_source"].clone());
+            }
+        }
         let mut entities: std::collections::HashMap<String, EntityRow> = Default::default();
         for batch in entity_ids.chunks(MAX_READ) {
             for h in self.find(
@@ -1842,6 +2028,7 @@ impl KnowledgeRead for ServerReader {
                         subject_type: t.clone(),
                         subject_id: id.clone(),
                         kind: "entity".into(),
+                        record_id: id.clone(),
                         rel_path: path,
                         title: e.qualified_name.clone(),
                         snippet: e
@@ -1854,6 +2041,22 @@ impl KnowledgeRead for ServerReader {
                         attachment_index: None,
                         document_id: None,
                     });
+                }
+                continue;
+            }
+            if t == SUBJECT_PASSAGE {
+                if let Some(s) = passages.get(id) {
+                    let p = passage_row(s);
+                    out.push(passage_meta(
+                        t,
+                        id,
+                        str_of(s, "rel_path"),
+                        p.entity_id,
+                        opt_str(s, "entity_qualified_name"),
+                        &p.text,
+                        p.start_line,
+                        p.end_line,
+                    ));
                 }
                 continue;
             }
@@ -1877,6 +2080,7 @@ impl KnowledgeRead for ServerReader {
                 subject_type: t.clone(),
                 subject_id: id.clone(),
                 kind: "document".into(),
+                record_id: id.clone(),
                 title,
                 rel_path: path,
                 snippet: text.chars().take(SNIPPET_CHARS).collect(),
@@ -1914,6 +2118,7 @@ mod tests {
             document_ids: vec!["d1".into()],
             entities: true,
             documents: true,
+            passages: false,
             exclude_attachments: true,
         };
         let common = vector_filter_clauses(&vf);

@@ -21,6 +21,10 @@ pub const PREPROCESSING_VERSION: &str = "1";
 /// `qualified_name`).
 pub const CODE_EMBEDDING_TEXT_VERSION: &str = "1";
 
+/// Text-assembly version for implementation passages (header line, then
+/// the passage's source lines).
+pub const PASSAGE_EMBEDDING_TEXT_VERSION: &str = "passage-1";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ModelFile {
     pub name: &'static str,

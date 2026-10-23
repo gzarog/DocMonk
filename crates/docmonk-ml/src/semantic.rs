@@ -11,9 +11,13 @@ use crate::embedder::Embedder;
 /// Default number of results.
 pub const DEFAULT_LIMIT: usize = 10;
 
+/// Vector candidates fetched per wanted hit before hits are deduplicated
+/// per record (an entity has a signature vector and body-passage vectors).
+pub const PER_RECORD_OVERFETCH: usize = 2;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SemanticHit {
-    /// `entity` or `document`.
+    /// `entity`, `document` or `passage`.
     pub kind: String,
     pub subject_type: String,
     pub id: String,
@@ -23,9 +27,9 @@ pub struct SemanticHit {
     pub snippet: String,
     /// Heading path of a chunk (`A > B`), if any.
     pub section: Option<String>,
-    /// Entity start line, or chunk ordinal.
+    /// Entity or passage start line, or chunk ordinal.
     pub position: i64,
-    /// Entity end line (`None` for chunks).
+    /// Entity or passage end line (`None` for chunks).
     pub end_line: Option<i64>,
     pub attachment_index: Option<i64>,
     /// Owning document of a chunk hit.
@@ -202,7 +206,12 @@ pub fn search_vector_filtered(
 ) -> Result<SemanticResult, String> {
     docmonk_core::deadline::check()?;
     let mut stages = SemanticStages::default();
-    let k = candidate_k.unwrap_or(limit).max(limit);
+    // Twice the candidates: an entity's signature and body-passage vectors
+    // collapse into one hit below, which must still leave `limit` hits.
+    let k = candidate_k
+        .unwrap_or(limit)
+        .max(limit)
+        .saturating_mul(PER_RECORD_OVERFETCH);
     let (engine, raw) = match store.as_project_store() {
         Some(local) => {
             let (engine, hits, t) = ann::search_timed(
@@ -274,7 +283,8 @@ pub fn search_vector_filtered(
             Some(SemanticHit {
                 kind: m.kind,
                 subject_type: m.subject_type,
-                id: m.subject_id,
+                // A body passage names its owning entity.
+                id: m.record_id,
                 title: m.title,
                 path: m.rel_path,
                 score,
@@ -293,6 +303,10 @@ pub fn search_vector_filtered(
             .then_with(|| a.path.cmp(&b.path))
             .then_with(|| a.id.cmp(&b.id))
     });
+    // One hit per record: an entity's signature vector and its body
+    // passages keep only the best-scoring one (with its location).
+    let mut seen = std::collections::HashSet::new();
+    hits.retain(|h| seen.insert((h.kind.clone(), h.id.clone())));
     hits.truncate(limit);
     stages.meta_join_ms = ms(t);
     Ok(SemanticResult {

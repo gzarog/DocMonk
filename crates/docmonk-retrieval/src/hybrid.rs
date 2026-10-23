@@ -134,18 +134,22 @@ pub const MAX_FILTERED_CANDIDATES: usize = 4096;
 
 /// Whether a semantic hit of `source_id` is inside `filter`.
 pub fn semantic_hit_allowed(filter: &SearchFilters, source_id: &str, h: &SemanticHit) -> bool {
-    let kind = if h.kind == "entity" {
-        "entity"
-    } else {
-        "document"
-    };
     filter.allows(
         source_id,
         &h.path,
-        kind,
+        semantic_kind(&h.kind),
         h.document_id.as_deref(),
         h.attachment_index.is_some(),
     )
+}
+
+/// The filter kind of a semantic hit (`entity`, `passage` or `document`).
+pub fn semantic_kind(kind: &str) -> &'static str {
+    match kind {
+        "entity" => "entity",
+        "passage" => "passage",
+        _ => "document",
+    }
 }
 
 /// Asks `fetch(k)` for the top `k` candidates, keeping those `keep`
@@ -372,7 +376,23 @@ pub struct Candidate {
 /// Deduplicates lexical results (already ranked) and semantic hits
 /// (re-sorted by score) into candidates, each input capped at its budget.
 pub fn merge(lexical: &[SearchResult], semantic_hits: &[SourcedHit]) -> Vec<Candidate> {
-    let mut sem: Vec<&SourcedHit> = semantic_hits.iter().collect();
+    // An exact symbol query's usages are graph data, not matches (see
+    // `lexical::drop_usages_of_exact_symbols`): body-passage vectors of
+    // other entities do not compete with the symbol and its documents.
+    let exact: std::collections::HashSet<(&str, &str)> = lexical
+        .iter()
+        .filter(|r| r.kind == "entity" && r.tier <= RankTier::AliasSymbol)
+        .map(|r| (r.source_id.as_str(), r.id.as_str()))
+        .collect();
+    let mut sem: Vec<&SourcedHit> = semantic_hits
+        .iter()
+        .filter(|s| {
+            exact.is_empty()
+                || !(s.hit.kind == "entity"
+                    && s.hit.subject_type == docmonk_storage::vectors::SUBJECT_PASSAGE)
+                || exact.contains(&(s.source_id.as_str(), s.hit.id.as_str()))
+        })
+        .collect();
     sem.sort_by(|a, b| semantic_order(&a.hit, &b.hit));
     sem.truncate(MAX_SEMANTIC_CANDIDATES);
     let mut order: Vec<(String, String)> = Vec::new();
@@ -416,7 +436,7 @@ pub fn merge(lexical: &[SearchResult], semantic_hits: &[SourcedHit]) -> Vec<Cand
             continue;
         }
         order.push(key.clone());
-        let location = if h.kind == "entity" {
+        let location = if h.kind == "entity" || h.kind == "passage" {
             Location {
                 line_start: Some(h.position),
                 line_end: h.end_line,

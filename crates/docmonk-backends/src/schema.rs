@@ -12,8 +12,9 @@ use crate::engine::{Engine, VectorSpec};
 
 /// Mapping identity, bumped on any mapping change. Existing indexes with
 /// another identity are refused: the operator uses a fresh prefix/cluster or
-/// resets the current indexes; nothing is ever mutated in place.
-pub const SCHEMA_VERSION: u64 = 5;
+/// resets the current indexes; nothing is ever mutated in place. (6: the
+/// `passages` index of implementation passages, ADR 0037.)
+pub const SCHEMA_VERSION: u64 = 6;
 pub const SCHEMA_TAG: &str = "docmonk";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
@@ -28,10 +29,12 @@ pub enum IndexKind {
     /// Live indexing runs: one heartbeat document per source, written by
     /// whichever host holds the source's writer lease.
     Runtime,
+    /// Implementation passages of code files (ADR 0037).
+    Passages,
 }
 
 impl IndexKind {
-    pub const ALL: [IndexKind; 7] = [
+    pub const ALL: [IndexKind; 8] = [
         IndexKind::SourceState,
         IndexKind::Files,
         IndexKind::Code,
@@ -39,16 +42,26 @@ impl IndexKind {
         IndexKind::Chunks,
         IndexKind::Relationships,
         IndexKind::Runtime,
+        IndexKind::Passages,
     ];
 
     /// Indexes holding build-scoped, index-derived records.
-    pub const BUILD_SCOPED: [IndexKind; 5] = [
+    pub const BUILD_SCOPED: [IndexKind; 6] = [
         IndexKind::Files,
         IndexKind::Code,
         IndexKind::Documents,
         IndexKind::Chunks,
         IndexKind::Relationships,
+        IndexKind::Passages,
     ];
+
+    /// Indexes carrying an `embedding` vector field.
+    pub fn has_vectors(self) -> bool {
+        matches!(
+            self,
+            IndexKind::Chunks | IndexKind::Code | IndexKind::Passages
+        )
+    }
 
     pub fn suffix(self) -> &'static str {
         match self {
@@ -59,6 +72,7 @@ impl IndexKind {
             IndexKind::Chunks => "chunks",
             IndexKind::Relationships => "relationships",
             IndexKind::Runtime => "runtime",
+            IndexKind::Passages => "passages",
         }
     }
 }
@@ -288,6 +302,34 @@ fn properties(kind: IndexKind, engine: Engine, vector: Option<&VectorSpec>) -> M
             }
             f
         }
+        // Passage text is searchable under its owner header; `text` is the
+        // exact source lines (searched and returned for citation).
+        IndexKind::Passages => {
+            let mut f = scoped();
+            f.extend([
+                ("passage_id", kw()),
+                ("entity_id", kw()),
+                ("entity_name", stored()),
+                ("entity_qualified_name", stored()),
+                ("entity_kind", stored()),
+                ("kind", kw()),
+                ("extraction", kw()),
+                ("language", kw()),
+                ("ordinal", int()),
+                ("part", int()),
+                ("parts", int()),
+                ("start_line", int()),
+                ("end_line", int()),
+                ("header", text()),
+                ("text", text()),
+                ("mtime", double()),
+                ("embedding_fingerprint", kw()),
+            ]);
+            if let Some(spec) = vector {
+                f.push(("embedding", engine.vector_field(spec)));
+            }
+            f
+        }
         IndexKind::Relationships => {
             let mut f = scoped();
             f.extend([
@@ -366,7 +408,7 @@ pub fn meta(kind: IndexKind, vector: Option<&VectorSpec>) -> Value {
         "schema": SCHEMA_TAG,
         "schema_version": SCHEMA_VERSION,
         "index_kind": kind,
-        "vector": if matches!(kind, IndexKind::Chunks | IndexKind::Code) { json!(vector) } else { Value::Null },
+        "vector": if kind.has_vectors() { json!(vector) } else { Value::Null },
     })
 }
 
@@ -381,7 +423,7 @@ pub fn create_body(
         "number_of_shards": settings.shards,
         "number_of_replicas": settings.replicas,
     });
-    if matches!(kind, IndexKind::Chunks | IndexKind::Code) && vector.is_some() {
+    if kind.has_vectors() && vector.is_some() {
         if let (Some(dst), Some(extra)) = (
             index_settings.as_object_mut(),
             engine.vector_index_settings().as_object().cloned(),
@@ -588,6 +630,22 @@ mod tests {
                 "attachment_index",
                 "parent_title",
                 "mtime",
+                "embedding_fingerprint",
+            ],
+        );
+        has(
+            IndexKind::Passages,
+            &[
+                "passage_id",
+                "entity_id",
+                "kind",
+                "extraction",
+                "start_line",
+                "end_line",
+                "header",
+                "text",
+                "mtime",
+                "embedding",
                 "embedding_fingerprint",
             ],
         );

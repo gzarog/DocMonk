@@ -17,18 +17,21 @@ use docmonk_core::ids::record;
 use docmonk_core::models::{Confidence, RelationshipType};
 use docmonk_indexing::coordinator::{PrepareInput, ProcessError, Processor};
 use docmonk_storage::knowledge::{
-    EntityRow, FileKnowledge, ProjectStore, RelationshipRow, Resolution,
+    EntityRow, FileKnowledge, FileNotice, ProjectStore, RelationshipRow, Resolution,
 };
 
 use crate::extract::{default_namespace_for_path, extract_tree, Extraction};
 use crate::framework;
 use crate::lang;
+use crate::passages;
 use crate::resolve::{self, Candidate, ResolvedTarget};
 
 /// Derivation identity of code extraction; part of `parser_version`, so a
 /// change forces a full rebuild of every source. (2: an entity without a
-/// signature is indexed in code FTS under its name.)
-pub const CODE_DERIVATION_VERSION: &str = "rust-code-2";
+/// signature is indexed in code FTS under its name. 3: implementation
+/// passages, and a plain-text fallback for files without symbols, see
+/// [`crate::passages`].)
+pub const CODE_DERIVATION_VERSION: &str = "rust-code-3";
 
 /// Derivation identity of the relationship graph (per-file edges, cross-file
 /// resolution and linking). Independent of the base index identity: a
@@ -50,7 +53,7 @@ pub const PENDING: &str = "pending";
 #[derive(Debug)]
 pub enum PreparedCode {
     /// A code extension without a grammar (`.rb`, `.sql`, ...): indexed
-    /// with no entities.
+    /// with no entities, searchable through text passages.
     Unsupported,
     Parsed {
         language: &'static str,
@@ -371,21 +374,70 @@ fn resolve_locally(text: &str, same_file: &[Candidate<'_>]) -> ResolvedTarget {
     })
 }
 
-/// Pure per-file knowledge of the primary index: entities only.
-pub fn file_knowledge(file_id: &str, prepared: &PreparedCode) -> FileKnowledge {
-    let PreparedCode::Parsed {
-        language,
-        extraction,
-    } = prepared
-    else {
-        return FileKnowledge::default();
-    };
-    let ids = entity_ids(file_id, extraction);
+/// Pure per-file knowledge of the primary index: entities and their body
+/// passages, or text passages for a file without a grammar.
+pub fn file_knowledge(
+    file_id: &str,
+    rel_path: &str,
+    source: &[u8],
+    prepared: &PreparedCode,
+) -> FileKnowledge {
+    let text = String::from_utf8_lossy(source);
+    match prepared {
+        PreparedCode::Unsupported => FileKnowledge {
+            passages: passages::text_passages(
+                file_id,
+                rel_path,
+                None,
+                passages::EXTRACTION_UNSUPPORTED,
+                &text,
+            ),
+            ..FileKnowledge::default()
+        },
+        PreparedCode::Parsed {
+            language,
+            extraction,
+        } => {
+            let ids = entity_ids(file_id, extraction);
+            FileKnowledge {
+                entities: entity_rows(file_id, language, extraction, &ids),
+                passages: passages::body_passages(file_id, language, &text, extraction, &ids),
+                ..FileKnowledge::default()
+            }
+        }
+    }
+}
+
+/// Knowledge of a file whose syntax errors stop symbol extraction: text
+/// passages only, with a notice that the file was indexed degraded (no
+/// symbols or relationships are claimed for it).
+pub fn degraded_knowledge(
+    file_id: &str,
+    rel_path: &str,
+    source: &[u8],
+    failure: &ParseFailure,
+) -> FileKnowledge {
     FileKnowledge {
-        entities: entity_rows(file_id, language, extraction, &ids),
+        passages: passages::text_passages(
+            file_id,
+            rel_path,
+            Some(failure.language),
+            passages::EXTRACTION_PARSE_FAILED,
+            &String::from_utf8_lossy(source),
+        ),
+        notice: Some(FileNotice {
+            code: PARSE_DEGRADED.into(),
+            message: format!(
+                "{rel_path}: syntax error(s) in a {} file; indexed as plain text without symbols",
+                failure.language
+            ),
+        }),
         ..FileKnowledge::default()
     }
 }
+
+/// Notice code of a file indexed as plain text because of syntax errors.
+pub const PARSE_DEGRADED: &str = "parse_degraded";
 
 /// A file's relationships (structural edges, references resolved within
 /// the file, the rest `pending`), derived by the graph stage from the
@@ -459,7 +511,7 @@ impl CodeProcessor {
     /// Stores the facts of these exact bytes when they are the content the
     /// scan hashed (a file rewritten in between is left to the graph
     /// stage's own parse). Failures only cost a later parse.
-    fn store_facts(&self, input: &PrepareInput, source: &[u8], prepared: &PreparedCode) {
+    fn store_facts(&self, input: &PrepareInput, source: &[u8], prepared: Option<&PreparedCode>) {
         let Some(cache) = &self.facts else {
             return;
         };
@@ -467,7 +519,10 @@ impl CodeProcessor {
         if input.content_hash.as_deref() != Some(hash.as_str()) {
             return;
         }
-        let rows = prepared_relationships(&input.rel_path, &input.file_id, prepared);
+        // A file with syntax errors (`None`) has no relationships.
+        let rows = prepared
+            .map(|p| prepared_relationships(&input.rel_path, &input.file_id, p))
+            .unwrap_or_default();
         let key = graph_fact_key(&input.file_id, &input.rel_path, &hash);
         if let Err(e) = cache.put(&input.source_id, &input.file_id, &key, &rows) {
             tracing::debug!(component = "relationships", event = "graph_facts_not_stored", error = %e);
@@ -482,16 +537,26 @@ impl Processor for CodeProcessor {
             message: e.to_string(),
             transient: true,
         })?;
-        let prepared = prepare_source(&source, &input.rel_path).map_err(|f| ProcessError {
-            code: "parse_error".into(),
-            message: format!(
-                "{}: syntax error(s) in a {} file",
-                input.rel_path, f.language
-            ),
-            transient: false,
-        })?;
-        self.store_facts(input, &source, &prepared);
-        Ok(file_knowledge(&input.file_id, &prepared))
+        let prepared = match prepare_source(&source, &input.rel_path) {
+            Ok(p) => p,
+            // Degraded, not failed: the file stays searchable as text.
+            Err(f) => {
+                self.store_facts(input, &source, None);
+                return Ok(degraded_knowledge(
+                    &input.file_id,
+                    &input.rel_path,
+                    &source,
+                    &f,
+                ));
+            }
+        };
+        self.store_facts(input, &source, Some(&prepared));
+        Ok(file_knowledge(
+            &input.file_id,
+            &input.rel_path,
+            &source,
+            &prepared,
+        ))
     }
 }
 
