@@ -327,6 +327,25 @@ pub trait KnowledgeRead {
         Ok(Vec::new())
     }
 
+    /// The body passages of each of `entity_ids` (unknown ids map to
+    /// nothing), in file order: one round trip on a server.
+    fn entity_passages_many(
+        &self,
+        build_id: &str,
+        entity_ids: &[String],
+    ) -> Result<HashMap<String, Vec<PassageRow>>> {
+        let mut out = HashMap::new();
+        for id in entity_ids {
+            if !out.contains_key(id) {
+                let p = self.entity_passages(build_id, id)?;
+                if !p.is_empty() {
+                    out.insert(id.clone(), p);
+                }
+            }
+        }
+        Ok(out)
+    }
+
     /// Passages of the same file and owner around `p`.
     fn passage_siblings(
         &self,

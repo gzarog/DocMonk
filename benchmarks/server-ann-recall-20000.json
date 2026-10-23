@@ -1,0 +1,50 @@
+{
+  "elasticsearch": {
+    "dims": 384,
+    "filters": {
+      "one directory (25%)": {
+        "p50_ms": 7.8,
+        "p95_ms": 12.7,
+        "recall@10": 1.0
+      },
+      "one file (2.5%)": {
+        "p50_ms": 4.6,
+        "p95_ms": 6.8,
+        "recall@10": 1.0
+      },
+      "unfiltered": {
+        "p50_ms": 15.2,
+        "p95_ms": 27.7,
+        "recall@10": 0.953
+      }
+    },
+    "k": 10,
+    "publish_two_builds_s": 39.6,
+    "queries": 40,
+    "vectors": 20000
+  },
+  "opensearch": {
+    "dims": 384,
+    "filters": {
+      "one directory (25%)": {
+        "p50_ms": 9.7,
+        "p95_ms": 15.0,
+        "recall@10": 1.0
+      },
+      "one file (2.5%)": {
+        "p50_ms": 5.0,
+        "p95_ms": 7.7,
+        "recall@10": 1.0
+      },
+      "unfiltered": {
+        "p50_ms": 12.6,
+        "p95_ms": 26.6,
+        "recall@10": 0.955
+      }
+    },
+    "k": 10,
+    "publish_two_builds_s": 40.8,
+    "queries": 40,
+    "vectors": 20000
+  }
+}

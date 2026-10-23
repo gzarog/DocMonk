@@ -113,3 +113,88 @@ fn vectors_lost_in_a_crash_are_recomputed_on_the_next_run() {
     let (s, b) = fx.store();
     assert_eq!(s.embeddings(&b).unwrap().len(), total);
 }
+
+/// Pending subjects are read in keyset pages (ADR 0041): a pass holds one
+/// page at a time, whatever the build's size, and computes exactly the
+/// vectors an unpaged pass would, in the same order, even when a pass
+/// stops between pages.
+#[test]
+fn paged_passes_hold_one_page_and_compute_the_same_vectors() {
+    let Some(models) = models_root() else { return };
+    let mut fx = fixture();
+    fx.index(&models);
+    let (mut s, b) = fx.store();
+    let mut reference = s.embeddings(&b).unwrap();
+    let total = reference.len();
+    assert!(total > 7, "the fixture needs several pages");
+    let embedder = Embedder::load(
+        &models.join(DEFAULT_EMBEDDING_MODEL.slug),
+        DEFAULT_EMBEDDING_MODEL,
+    )
+    .unwrap();
+    let fp = DEFAULT_EMBEDDING_MODEL.fingerprint();
+    let wipe = |s: &ProjectStore| {
+        s.connection()
+            .execute("DELETE FROM embeddings WHERE build_id = ?1", [&b])
+            .unwrap();
+    };
+
+    // The pages tile the pending subjects: same rows, same order.
+    wipe(&s);
+    let all = s.pending_embedding_subjects(&b, &fp).unwrap();
+    let mut paged = Vec::new();
+    let mut cursor = None;
+    loop {
+        let (page, next) = s
+            .pending_embedding_subjects_page(&b, &fp, cursor.as_ref(), 3)
+            .unwrap();
+        assert!(page.len() <= 3);
+        paged.extend(page);
+        match next {
+            Some(c) => cursor = Some(c),
+            None => break,
+        }
+    }
+    assert_eq!(paged, all);
+
+    // A pass with pages of 3 holds at most 3 subjects and writes every
+    // vector, identical to the unpaged pass's.
+    let stats = docmonk_ml::embed_build_paged(&mut s, &b, &embedder, "2", 3).unwrap();
+    assert_eq!(stats.subjects, total);
+    assert!(stats.max_window <= 3, "{stats:?}");
+    let mut after = s.embeddings(&b).unwrap();
+    let key = |e: &docmonk_storage::vectors::StoredEmbedding| {
+        (e.subject_type.clone(), e.subject_id.clone())
+    };
+    reference.sort_by_key(key);
+    after.sort_by_key(key);
+    assert_eq!(after.len(), reference.len());
+    for (a, r) in after.iter().zip(&reference) {
+        assert_eq!((key(a), &a.vector), (key(r), &r.vector));
+    }
+
+    // Stopped after one page (a crash between pages): the next pass
+    // embeds exactly what is left.
+    wipe(&s);
+    let (first, _) = s.pending_embedding_subjects_page(&b, &fp, None, 4).unwrap();
+    let rows: Vec<docmonk_storage::vectors::EmbeddingRow> = first
+        .iter()
+        .zip(
+            embedder
+                .embed(&first.iter().map(|x| x.text.as_str()).collect::<Vec<_>>())
+                .unwrap(),
+        )
+        .map(|(x, v)| docmonk_storage::vectors::EmbeddingRow {
+            subject_type: x.subject_type,
+            subject_id: x.subject_id.clone(),
+            file_id: x.file_id.clone(),
+            text_hash: docmonk_ml::text_hash(&x.text),
+            text_version: "2".into(),
+            vector: v,
+        })
+        .collect();
+    s.put_embeddings(&b, &fp, &rows).unwrap();
+    let stats = docmonk_ml::embed_build_paged(&mut s, &b, &embedder, "2", 3).unwrap();
+    assert_eq!(stats.subjects, total - first.len());
+    assert_eq!(s.embeddings(&b).unwrap().len(), total);
+}

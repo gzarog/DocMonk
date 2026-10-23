@@ -488,8 +488,12 @@ impl ServerReader {
             .map(|h| h["_source"].clone()))
     }
 
-    /// `num_candidates` 0 means `max(10 * k, 100)` (Elasticsearch only;
-    /// OpenSearch's HNSW search is exhaustive over `k` per segment).
+    /// `num_candidates` 0 means `max(10 * k, 100)`: the HNSW beam both
+    /// engines explore before keeping the best `k`. Elasticsearch takes it
+    /// as `num_candidates`; OpenSearch's Lucene engine explores a beam of
+    /// its `k`, so it is asked for the candidates and the response keeps
+    /// `k` (`size`). A beam of only `k` found under half of the true
+    /// nearest neighbours of 20,000 vectors (ADR 0041).
     fn knn_body(
         &self,
         field_filter: Vec<Value>,
@@ -507,7 +511,7 @@ impl ServerReader {
                 "size": k,
                 "_source": ["chunk_id", "entity_id", "passage_id"],
                 "query": { "knn": { "embedding": {
-                    "vector": query, "k": k,
+                    "vector": query, "k": candidates.min(MAX_READ),
                     "filter": { "bool": { "filter": field_filter } },
                 } } },
             }),
@@ -1922,6 +1926,41 @@ impl KnowledgeRead for ServerReader {
             json!([{ "ordinal": "asc" }]),
             MAX_READ,
         )
+    }
+
+    fn entity_passages_many(
+        &self,
+        b: &str,
+        entity_ids: &[String],
+    ) -> Result<std::collections::HashMap<String, Vec<PassageRow>>> {
+        let mut out: std::collections::HashMap<String, Vec<PassageRow>> = Default::default();
+        let mut uniq: Vec<&str> = entity_ids.iter().map(String::as_str).collect();
+        uniq.sort_unstable();
+        uniq.dedup();
+        for batch in uniq.chunks(256) {
+            let rows = self.passages_where(
+                b,
+                vec![json!({ "terms": { "entity_id": batch } })],
+                json!([{ "entity_id": "asc" }, { "ordinal": "asc" }]),
+                MAX_READ,
+            )?;
+            if rows.len() >= MAX_READ {
+                // Too many to be sure the window holds them all: per id.
+                for id in batch {
+                    let p = self.entity_passages(b, id)?;
+                    if !p.is_empty() {
+                        out.insert((*id).to_owned(), p);
+                    }
+                }
+                continue;
+            }
+            for p in rows {
+                if let Some(e) = p.entity_id.clone() {
+                    out.entry(e).or_default().push(p);
+                }
+            }
+        }
+        Ok(out)
     }
 
     fn passage_siblings(

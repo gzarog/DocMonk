@@ -31,6 +31,53 @@ pub struct EmbeddingSubject {
     pub text: String,
 }
 
+/// Where a paged read of pending embedding subjects resumes: the subject
+/// kind (index into the read order: entities, chunks, passages) and the
+/// last row's order key.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SubjectCursor {
+    pub kind: usize,
+    pub file_id: String,
+    pub ordinal: i64,
+    pub id: String,
+}
+
+/// Pending-subject reads per kind, in order. Each selects `(id, file_id,
+/// ordinal, text)` after the keyset position `(?3, ?4, ?5)`, at most `?6`
+/// rows; entities have no ordinal (0).
+const PENDING_KINDS: [(&str, &str); 3] = [
+    (
+        SUBJECT_ENTITY,
+        "SELECT e.id, e.file_id, 0, COALESCE(NULLIF(e.signature, ''), e.qualified_name)
+         FROM entities e
+         LEFT JOIN embeddings v ON v.build_id = e.build_id AND v.subject_type = 'entity'
+            AND v.subject_id = e.id AND v.model_fingerprint = ?2
+         WHERE e.build_id = ?1 AND v.subject_id IS NULL
+           AND (e.file_id, 0, e.id) > (?3, ?4, ?5)
+         ORDER BY e.file_id, e.id LIMIT ?6",
+    ),
+    (
+        SUBJECT_CHUNK,
+        "SELECT c.id, c.file_id, c.ordinal, COALESCE(NULLIF(c.embedding_text, ''), c.text)
+         FROM chunks c
+         LEFT JOIN embeddings v ON v.build_id = c.build_id AND v.subject_type = 'chunk'
+            AND v.subject_id = c.id AND v.model_fingerprint = ?2
+         WHERE c.build_id = ?1 AND v.subject_id IS NULL
+           AND (c.file_id, c.ordinal, c.id) > (?3, ?4, ?5)
+         ORDER BY c.file_id, c.ordinal, c.id LIMIT ?6",
+    ),
+    (
+        SUBJECT_PASSAGE,
+        "SELECT p.id, p.file_id, p.ordinal, p.header || char(10) || p.text
+         FROM code_passages p
+         LEFT JOIN embeddings v ON v.build_id = p.build_id AND v.subject_type = 'passage'
+            AND v.subject_id = p.id AND v.model_fingerprint = ?2
+         WHERE p.build_id = ?1 AND v.subject_id IS NULL
+           AND (p.file_id, p.ordinal, p.id) > (?3, ?4, ?5)
+         ORDER BY p.file_id, p.ordinal, p.id LIMIT ?6",
+    ),
+];
+
 /// A computed vector ready to be written.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EmbeddingRow {
@@ -115,70 +162,89 @@ pub fn decode_vector(bytes: &[u8]) -> Vec<f32> {
 }
 
 impl ProjectStore {
-    /// Entities (`signature`, else `qualified_name`) and chunks
-    /// (`embedding_text`, else `text`) of `build_id` that have no vector
-    /// under `fingerprint`, in a stable order. Blank texts are skipped.
+    /// Entities (`signature`, else `qualified_name`), chunks
+    /// (`embedding_text`, else `text`) and passages (header and lines) of
+    /// `build_id` that have no vector under `fingerprint`, in a stable
+    /// order. Blank texts are skipped. Reads every page of
+    /// [`Self::pending_embedding_subjects_page`]; the embedding pass itself
+    /// works page by page.
     pub fn pending_embedding_subjects(
         &self,
         build_id: &str,
         fingerprint: &str,
     ) -> Result<Vec<EmbeddingSubject>> {
-        let mut out = self.query_rows(
-            "pending entity embeddings",
-            "SELECT e.id, e.file_id, COALESCE(NULLIF(e.signature, ''), e.qualified_name)
-             FROM entities e
-             LEFT JOIN embeddings v ON v.build_id = e.build_id AND v.subject_type = 'entity'
-                AND v.subject_id = e.id AND v.model_fingerprint = ?2
-             WHERE e.build_id = ?1 AND v.subject_id IS NULL
-             ORDER BY e.file_id, e.id",
-            &[&build_id, &fingerprint],
-            |r| {
-                Ok(EmbeddingSubject {
-                    subject_type: SUBJECT_ENTITY,
-                    subject_id: r.get(0)?,
-                    file_id: r.get(1)?,
-                    text: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
-                })
-            },
-        )?;
-        out.extend(self.query_rows(
-            "pending chunk embeddings",
-            "SELECT c.id, c.file_id, COALESCE(NULLIF(c.embedding_text, ''), c.text)
-             FROM chunks c
-             LEFT JOIN embeddings v ON v.build_id = c.build_id AND v.subject_type = 'chunk'
-                AND v.subject_id = c.id AND v.model_fingerprint = ?2
-             WHERE c.build_id = ?1 AND v.subject_id IS NULL
-             ORDER BY c.file_id, c.ordinal, c.id",
-            &[&build_id, &fingerprint],
-            |r| {
-                Ok(EmbeddingSubject {
-                    subject_type: SUBJECT_CHUNK,
-                    subject_id: r.get(0)?,
-                    file_id: r.get(1)?,
-                    text: r.get(2)?,
-                })
-            },
-        )?);
-        out.extend(self.query_rows(
-            "pending passage embeddings",
-            "SELECT p.id, p.file_id, p.header || char(10) || p.text
-             FROM code_passages p
-             LEFT JOIN embeddings v ON v.build_id = p.build_id AND v.subject_type = 'passage'
-                AND v.subject_id = p.id AND v.model_fingerprint = ?2
-             WHERE p.build_id = ?1 AND v.subject_id IS NULL
-             ORDER BY p.file_id, p.ordinal, p.id",
-            &[&build_id, &fingerprint],
-            |r| {
-                Ok(EmbeddingSubject {
-                    subject_type: SUBJECT_PASSAGE,
-                    subject_id: r.get(0)?,
-                    file_id: r.get(1)?,
-                    text: r.get(2)?,
-                })
-            },
-        )?);
-        out.retain(|s| !s.text.trim().is_empty());
-        Ok(out)
+        let mut out = Vec::new();
+        let mut cursor: Option<SubjectCursor> = None;
+        loop {
+            let (page, next) =
+                self.pending_embedding_subjects_page(build_id, fingerprint, cursor.as_ref(), 1024)?;
+            out.extend(page);
+            match next {
+                Some(c) => cursor = Some(c),
+                None => return Ok(out),
+            }
+        }
+    }
+
+    /// One page of [`Self::pending_embedding_subjects`] (ADR 0041): at
+    /// most `limit` rows after `after`, in the same order, and where the
+    /// next page starts (`None` after the last). The cursor is a keyset
+    /// position (kind, file, ordinal, id), never an offset: memory is
+    /// bounded by `limit`, and vectors written between pages cannot shift
+    /// the rows a later page reads. Blank texts are skipped but advance
+    /// the cursor.
+    pub fn pending_embedding_subjects_page(
+        &self,
+        build_id: &str,
+        fingerprint: &str,
+        after: Option<&SubjectCursor>,
+        limit: usize,
+    ) -> Result<(Vec<EmbeddingSubject>, Option<SubjectCursor>)> {
+        let limit = limit.max(1);
+        let mut out = Vec::new();
+        let start = after.map_or(0, |c| c.kind);
+        for (kind, &(subject_type, sql)) in PENDING_KINDS.iter().enumerate().skip(start) {
+            let (file, ordinal, id) = match after {
+                Some(c) if c.kind == kind => (c.file_id.as_str(), c.ordinal, c.id.as_str()),
+                // Before every row of this kind.
+                _ => ("", i64::MIN, ""),
+            };
+            let want = (limit - out.len()) as i64;
+            let rows = self.query_rows(
+                "pending embeddings",
+                sql,
+                &[&build_id, &fingerprint, &file, &ordinal, &id, &want],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, i64>(2)?,
+                        r.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                    ))
+                },
+            )?;
+            let full = rows.len() as i64 == want;
+            let last = rows.last().map(|(id, file, ord, _)| SubjectCursor {
+                kind,
+                file_id: file.clone(),
+                ordinal: *ord,
+                id: id.clone(),
+            });
+            for (subject_id, file_id, _, text) in rows {
+                if !text.trim().is_empty() {
+                    out.push(EmbeddingSubject {
+                        subject_type,
+                        subject_id,
+                        file_id,
+                        text,
+                    });
+                }
+            }
+            if full {
+                return Ok((out, last));
+            }
+        }
+        Ok((out, None))
     }
 
     /// Number of vectors in `build_id` stamped with a different model.

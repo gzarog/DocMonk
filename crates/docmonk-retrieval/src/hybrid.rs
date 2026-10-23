@@ -53,6 +53,10 @@ pub struct SemanticOutcome {
     /// Sources whose hard filters ran inside the server kNN query (exact
     /// filtered top-k); the others widened and post-filtered (`--explain`).
     pub prefiltered: Vec<String>,
+    /// `(source_id, engine)` of every corpus searched: how it answered
+    /// (`hnsw`, `exact`, `server`) or why not (`no_vectors`,
+    /// `unavailable`), see [`semantic::SemanticResult::engine_label`].
+    pub engines: Vec<(String, &'static str)>,
 }
 
 impl SemanticOutcome {
@@ -65,7 +69,17 @@ impl SemanticOutcome {
             stages: SemanticStages::default(),
             attachments_ms: 0.0,
             prefiltered: Vec::new(),
+            engines: Vec::new(),
         }
+    }
+
+    /// `{source_id: engine}` of [`Self::engines`], for diagnostics.
+    pub fn engines_json(&self) -> serde_json::Value {
+        self.engines
+            .iter()
+            .map(|(sid, e)| (sid.clone(), serde_json::Value::from(*e)))
+            .collect::<serde_json::Map<_, _>>()
+            .into()
     }
 
     /// `[{stage, duration_ms}]` of every sub-stage, for `--explain`.
@@ -201,6 +215,24 @@ pub fn semantic_search_filtered(
             ..SemanticOutcome::unavailable("")
         });
     };
+    semantic_search_vector(corpora, &qv, limit, candidate_k, ann, filter)
+}
+
+/// [`semantic_search_filtered`] for a query embedded once. Each corpus is
+/// searched by at most [`crate::pool::max_concurrency`] workers (server
+/// readers; SQLite corpora run on this thread), and the results are
+/// merged in corpus order, so rankings never depend on scheduling.
+pub fn semantic_search_vector(
+    corpora: &[Corpus<'_>],
+    qv: &semantic::QueryVector,
+    limit: usize,
+    candidate_k: Option<usize>,
+    ann: AnnParams,
+    filter: &SearchFilters,
+) -> Result<SemanticOutcome, SearchError> {
+    let per_corpus = crate::pool::map_corpora(corpora, |_, c| {
+        corpus_semantic(c, qv, limit, candidate_k, ann, filter)
+    })?;
     let mut hits = Vec::new();
     let mut stages = SemanticStages {
         query_embed_ms: qv.embed_ms,
@@ -209,125 +241,45 @@ pub fn semantic_search_filtered(
     let mut attachments_ms = 0.0;
     let mut degraded = Vec::new();
     let mut prefiltered = Vec::new();
+    let mut engines = Vec::new();
     let mut first_reason = None;
     let mut answered = 0;
-    for c in corpora {
-        let dir = c
-            .store
-            .as_project_store()
-            .and_then(|s| s.project_dir())
-            .unwrap_or_else(|| Path::new(".").to_path_buf());
-        crate::check_deadline()?;
-        let sid = c.store.source_id().to_owned();
-        if !filter.allows_source(&sid) {
-            continue;
+    for r in per_corpus.into_iter().flatten() {
+        stages.add(&r.stages);
+        attachments_ms += r.attachments_ms;
+        if r.prefiltered {
+            prefiltered.push(r.source_id.clone());
         }
-        let base_k = candidate_k.unwrap_or(limit).max(limit);
-        let mut unavailable = None;
-        let (kept, capped) = if filter.is_empty() {
-            let r =
-                semantic::search_vector(c.store, &dir, c.build_id, &qv, limit, candidate_k, ann)
-                    .map_err(SearchError)?;
-            stages.add(&r.stages);
-            if r.available {
-                (Some(r.hits), false)
-            } else {
-                unavailable = Some(r.reason);
-                (None, false)
-            }
-        } else if c.store.as_project_store().is_none() {
-            // Server: the hard filters go into the kNN pre-filter, so the
-            // engine's top-k is already exact under them (F06). The
-            // post-filter stays as a second check.
-            let vf = filter.vector_filter();
-            let r = semantic::search_vector_filtered(
-                c.store,
-                &dir,
-                c.build_id,
-                &qv,
-                limit,
-                Some(base_k),
-                ann,
-                Some(&vf),
-            )
-            .map_err(SearchError)?;
-            stages.add(&r.stages);
-            prefiltered.push(sid.clone());
-            if r.available {
-                let kept = r
-                    .hits
-                    .into_iter()
-                    .filter(|h| semantic_hit_allowed(filter, &sid, h))
-                    .collect();
-                (Some(kept), false)
-            } else {
-                unavailable = Some(r.reason);
-                (None, false)
-            }
-        } else {
-            filtered_candidates::<SearchError>(
-                limit,
-                base_k,
-                MAX_FILTERED_CANDIDATES,
-                |k| {
-                    let r =
-                        semantic::search_vector(c.store, &dir, c.build_id, &qv, k, Some(k), ann)
-                            .map_err(SearchError)?;
-                    stages.add(&r.stages);
-                    if r.available {
-                        Ok(Some(r.hits))
-                    } else {
-                        unavailable = Some(r.reason);
-                        Ok(None)
-                    }
-                },
-                |h| semantic_hit_allowed(filter, &sid, h),
-            )?
-        };
-        if capped {
+        engines.push((r.source_id.clone(), r.engine));
+        if r.capped {
             degraded.push(format!(
-                "{sid}: filtered semantic search stopped at {MAX_FILTERED_CANDIDATES} candidates"
+                "{}: filtered semantic search stopped at {MAX_FILTERED_CANDIDATES} candidates",
+                r.source_id
             ));
         }
-        let Some(raw_hits) = kept else {
-            let reason = unavailable.unwrap_or_default();
-            degraded.push(format!("{sid}: {reason}"));
-            first_reason.get_or_insert(reason);
-            continue;
-        };
-
-        answered += 1;
-        let t = std::time::Instant::now();
-        let docs: Vec<String> = raw_hits
-            .iter()
-            .filter(|h| h.attachment_index.is_some())
-            .filter_map(|h| h.document_id.clone())
-            .collect();
-        let attachments = c.store.document_attachments(c.build_id, &docs)?;
-        attachments_ms += t.elapsed().as_secs_f64() * 1000.0;
-        for hit in raw_hits {
-            let attachment = match (&hit.document_id, hit.attachment_index) {
-                (Some(doc), Some(_)) => attachments.get(doc).cloned().flatten(),
-                _ => None,
-            };
-            hits.push(SourcedHit {
-                source_id: c.store.source_id().to_owned(),
-                hit,
-                attachment,
-            });
+        match r.hits {
+            Some(h) => {
+                answered += 1;
+                hits.extend(h);
+            }
+            None => {
+                degraded.push(format!("{}: {}", r.source_id, r.reason));
+                first_reason.get_or_insert(r.reason);
+            }
         }
     }
     if answered == 0 && !corpora.is_empty() {
         return Ok(SemanticOutcome {
             degraded,
             stages,
+            engines,
             ..SemanticOutcome::unavailable(first_reason.unwrap_or_default())
         });
     }
     hits.sort_by(|a, b| semantic_order(&a.hit, &b.hit));
     hits.truncate(limit);
     let reason = if hits.is_empty() {
-        "no embeddings computed for this project yet"
+        semantic::NO_VECTORS
     } else {
         "ok"
     }
@@ -340,7 +292,149 @@ pub fn semantic_search_filtered(
         stages,
         attachments_ms,
         prefiltered,
+        engines,
     })
+}
+
+/// What one corpus's semantic search returned.
+struct CorpusSemantic {
+    source_id: String,
+    /// The kept hits; `None` when the corpus could not answer (`reason`).
+    hits: Option<Vec<SourcedHit>>,
+    reason: String,
+    engine: &'static str,
+    stages: SemanticStages,
+    attachments_ms: f64,
+    /// The hard filters ran inside the server kNN query.
+    prefiltered: bool,
+    /// Widening stopped at [`MAX_FILTERED_CANDIDATES`].
+    capped: bool,
+}
+
+/// Semantic search of one corpus under `filter`; `None` when `filter`
+/// excludes the source.
+fn corpus_semantic(
+    c: Corpus<'_>,
+    qv: &semantic::QueryVector,
+    limit: usize,
+    candidate_k: Option<usize>,
+    ann: AnnParams,
+    filter: &SearchFilters,
+) -> Result<Option<CorpusSemantic>, SearchError> {
+    let dir = c
+        .store
+        .as_project_store()
+        .and_then(|s| s.project_dir())
+        .unwrap_or_else(|| Path::new(".").to_path_buf());
+    crate::check_deadline()?;
+    let sid = c.store.source_id().to_owned();
+    if !filter.allows_source(&sid) {
+        return Ok(None);
+    }
+    let base_k = candidate_k.unwrap_or(limit).max(limit);
+    let mut stages = SemanticStages::default();
+    let mut unavailable = None;
+    let mut engine = "unavailable";
+    let mut prefiltered = false;
+    let (kept, capped) = if filter.is_empty() {
+        let r = semantic::search_vector(c.store, &dir, c.build_id, qv, limit, candidate_k, ann)
+            .map_err(SearchError)?;
+        stages.add(&r.stages);
+        engine = r.engine_label();
+        if r.available {
+            (Some(r.hits), false)
+        } else {
+            unavailable = Some(r.reason);
+            (None, false)
+        }
+    } else if c.store.as_project_store().is_none() {
+        // Server: the hard filters go into the kNN pre-filter, so the
+        // engine's top-k is already exact under them (F06). The
+        // post-filter stays as a second check.
+        let vf = filter.vector_filter();
+        let r = semantic::search_vector_filtered(
+            c.store,
+            &dir,
+            c.build_id,
+            qv,
+            limit,
+            Some(base_k),
+            ann,
+            Some(&vf),
+        )
+        .map_err(SearchError)?;
+        stages.add(&r.stages);
+        engine = r.engine_label();
+        prefiltered = true;
+        if r.available {
+            let kept = r
+                .hits
+                .into_iter()
+                .filter(|h| semantic_hit_allowed(filter, &sid, h))
+                .collect();
+            (Some(kept), false)
+        } else {
+            unavailable = Some(r.reason);
+            (None, false)
+        }
+    } else {
+        filtered_candidates::<SearchError>(
+            limit,
+            base_k,
+            MAX_FILTERED_CANDIDATES,
+            |k| {
+                let r = semantic::search_vector(c.store, &dir, c.build_id, qv, k, Some(k), ann)
+                    .map_err(SearchError)?;
+                stages.add(&r.stages);
+                engine = r.engine_label();
+                if r.available {
+                    Ok(Some(r.hits))
+                } else {
+                    unavailable = Some(r.reason);
+                    Ok(None)
+                }
+            },
+            |h| semantic_hit_allowed(filter, &sid, h),
+        )?
+    };
+    let mut out = CorpusSemantic {
+        source_id: sid,
+        hits: None,
+        reason: unavailable.unwrap_or_default(),
+        engine,
+        stages,
+        attachments_ms: 0.0,
+        prefiltered,
+        capped,
+    };
+    let Some(raw_hits) = kept else {
+        return Ok(Some(out));
+    };
+    let t = std::time::Instant::now();
+    let docs: Vec<String> = raw_hits
+        .iter()
+        .filter(|h| h.attachment_index.is_some())
+        .filter_map(|h| h.document_id.clone())
+        .collect();
+    let attachments = c.store.document_attachments(c.build_id, &docs)?;
+    out.attachments_ms = t.elapsed().as_secs_f64() * 1000.0;
+    out.hits = Some(
+        raw_hits
+            .into_iter()
+            .map(|hit| {
+                let attachment = match (&hit.document_id, hit.attachment_index) {
+                    (Some(doc), Some(_)) => attachments.get(doc).cloned().flatten(),
+                    _ => None,
+                };
+                SourcedHit {
+                    source_id: out.source_id.clone(),
+                    hit,
+                    attachment,
+                }
+            })
+            .collect(),
+    );
+    Ok(Some(out))
 }
 
 fn semantic_order(a: &SemanticHit, b: &SemanticHit) -> Ordering {

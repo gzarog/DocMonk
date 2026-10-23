@@ -1215,6 +1215,7 @@ pub fn run_search(
             "duration_ms": duration_ms,
             "substages": s.substages_json(model_load_ms),
             "prefiltered_sources": s.prefiltered,
+            "engines": s.engines_json(),
         }));
         Some(s)
     } else {

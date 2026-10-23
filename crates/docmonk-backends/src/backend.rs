@@ -1226,7 +1226,9 @@ impl ServerBackend {
         loop {
             let resp = self.call(Method::Get, &poll, None)?;
             // A wait that times out is not a failure: the task still runs.
-            if resp.status != 408 {
+            // Elasticsearch answers 408; OpenSearch answers 500 with a
+            // `timeout_exception` ("Timed out waiting for completion").
+            if !is_wait_timeout(&resp) {
                 let s = ok(resp, "GET", &poll)?;
                 if s["completed"].as_bool() == Some(true) {
                     if !s["error"].is_null() {
@@ -1841,6 +1843,20 @@ fn norm_field(norm: &str) -> Vec<(&'static str, &str)> {
     }
 }
 
+/// Whether a `GET /_tasks/<id>?wait_for_completion=true` answer only says
+/// the bounded wait ran out (the task is still running).
+fn is_wait_timeout(resp: &crate::transport::Response) -> bool {
+    if resp.status == 408 {
+        return true;
+    }
+    if resp.status < 500 {
+        return false;
+    }
+    let v: Value = serde_json::from_slice(&resp.body).unwrap_or(Value::Null);
+    v["error"]["type"] == "timeout_exception"
+        || v["error"]["root_cause"][0]["type"] == "timeout_exception"
+}
+
 /// Document IDs go into URL paths.
 pub fn encode_id(id: &str) -> String {
     id.bytes()
@@ -1960,6 +1976,61 @@ mod tests {
             "Get /_tasks/n1%3A42?wait_for_completion=true&timeout=2s"
         );
         assert_eq!(log.len(), 4);
+    }
+
+    /// OpenSearch reports a wait that ran out as a 500 `timeout_exception`
+    /// (a 20,000-vector republish hit it): the poll goes on.
+    #[test]
+    fn an_opensearch_wait_timeout_keeps_polling() {
+        let timeout = json!({"error": {
+            "root_cause": [{"type": "timeout_exception",
+                "reason": "Timed out waiting for completion of [BulkByScrollTask]"}],
+            "type": "timeout_exception",
+            "reason": "Timed out waiting for completion of [BulkByScrollTask]"},
+            "status": 500});
+        let script = vec![
+            (200, json!({"task": "n1:9"})),
+            (500, timeout),
+            (200, json!({"completed": true, "response": {"deleted": 3}})),
+        ];
+        let calls = std::sync::Arc::new(Tasks(script.into(), Default::default()));
+        struct Shared(std::sync::Arc<Tasks>);
+        impl crate::transport::Transport for Shared {
+            fn send(&self, m: Method, p: &str, b: Option<(&[u8], &str)>) -> Result<Response> {
+                self.0.send(m, p, b)
+            }
+        }
+        let b = ServerBackend::with_client(
+            Counting::new(Box::new(Shared(calls.clone()))),
+            Engine::OpenSearch,
+            "t",
+            None,
+            BulkLimits::from_config(&docmonk_config::model::BulkConfig::default()),
+        )
+        .with_task_limits(Duration::from_secs(60), Duration::from_secs(1));
+        let v = b
+            .by_query("/t-chunks/_delete_by_query", &json!({}))
+            .unwrap();
+        assert_eq!(v["deleted"], 3);
+        // Any other server error still fails.
+        let script = vec![
+            (200, json!({"task": "n1:10"})),
+            (
+                500,
+                json!({"error": {"type": "search_phase_execution_exception"}}),
+            ),
+        ];
+        let calls = std::sync::Arc::new(Tasks(script.into(), Default::default()));
+        let b = ServerBackend::with_client(
+            Counting::new(Box::new(Shared(calls))),
+            Engine::OpenSearch,
+            "t",
+            None,
+            BulkLimits::from_config(&docmonk_config::model::BulkConfig::default()),
+        );
+        assert!(b
+            .by_query("/t-chunks/_delete_by_query", &json!({}))
+            .is_err());
     }
 
     #[test]

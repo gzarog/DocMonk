@@ -155,6 +155,8 @@ pub struct EmbedStats {
     pub cache_reused: usize,
     pub inferred: usize,
     pub stale_dropped: usize,
+    /// Most subjects held at once (one page, ADR 0041).
+    pub max_window: usize,
 }
 
 /// Brings `build_id`'s vectors up to date with `embedder`.
@@ -163,6 +165,26 @@ pub fn embed_build(
     build_id: &str,
     embedder: &Embedder,
     document_text_version: &str,
+) -> Result<EmbedStats, ProcessError> {
+    embed_build_paged(
+        store,
+        build_id,
+        embedder,
+        document_text_version,
+        EMBED_WINDOW,
+    )
+}
+
+/// [`embed_build`] reading pending subjects `page` at a time (keyset
+/// pages, ADR 0041): memory is bounded by the page and the model batch,
+/// not by the build's size, and every page's vectors are written before
+/// the next is read, so an interrupted pass resumes where it stopped.
+pub fn embed_build_paged(
+    store: &mut ProjectStore,
+    build_id: &str,
+    embedder: &Embedder,
+    document_text_version: &str,
+    page: usize,
 ) -> Result<EmbedStats, ProcessError> {
     let storage = |e: docmonk_storage::StorageError| ProcessError {
         code: "embedding_error".into(),
@@ -185,11 +207,14 @@ pub fn embed_build(
             .delete_stale_embeddings(build_id, &fingerprint)
             .map_err(storage)?;
     }
-    let subjects = store
-        .pending_embedding_subjects(build_id, &fingerprint)
-        .map_err(storage)?;
-    stats.subjects = subjects.len();
-    for window in subjects.chunks(EMBED_WINDOW) {
+    let mut cursor: Option<docmonk_storage::vectors::SubjectCursor> = None;
+    loop {
+        let (window, next) = store
+            .pending_embedding_subjects_page(build_id, &fingerprint, cursor.as_ref(), page)
+            .map_err(storage)?;
+        stats.subjects += window.len();
+        stats.max_window = stats.max_window.max(window.len());
+        let window = window.as_slice();
         docmonk_indexing::progress::heartbeat();
         let keyed: Vec<(String, String)> = window
             .iter()
@@ -250,6 +275,10 @@ pub fn embed_build(
         store
             .put_embeddings(build_id, &fingerprint, &rows)
             .map_err(storage)?;
+        match next {
+            Some(c) => cursor = Some(c),
+            None => break,
+        }
     }
     Ok(stats)
 }

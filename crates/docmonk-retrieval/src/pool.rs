@@ -89,12 +89,20 @@ mod tests {
     use super::*;
     use docmonk_storage::error::Result;
     use docmonk_storage::knowledge::{ChunkRow, EntityRow, RelationshipRow};
+    use docmonk_storage::read::VectorHit;
     use docmonk_storage::search::{
         AttachmentProvenance, DocumentSearchRow, EntityLinkRow, EntitySearchRow, PathSearchRow,
     };
     use docmonk_storage::vectors::SubjectMeta;
 
-    /// A thread-safe reader whose reads are never called.
+    /// Tests that set the process-wide worker cap run one at a time.
+    static SERIAL: Mutex<()> = Mutex::new(());
+    /// Vector searches running now, and the most at once.
+    static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
+    static PEAK: AtomicUsize = AtomicUsize::new(0);
+
+    /// A thread-safe reader with a server kNN: one hit per source, scored
+    /// by the source's number. Its other reads are never called.
     struct Remote(String);
 
     impl KnowledgeRead for Remote {
@@ -185,8 +193,43 @@ mod tests {
         ) -> Result<(Vec<ChunkRow>, Vec<ChunkRow>)> {
             unimplemented!()
         }
-        fn subject_meta(&self, _: &str, _: &[(String, String)]) -> Result<Vec<SubjectMeta>> {
-            unimplemented!()
+        fn vector_search(
+            &self,
+            _: &str,
+            _: &str,
+            _: &[f32],
+            _: usize,
+            _: usize,
+        ) -> Result<Option<Vec<VectorHit>>> {
+            let now = IN_FLIGHT.fetch_add(1, Ordering::SeqCst) + 1;
+            PEAK.fetch_max(now, Ordering::SeqCst);
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            IN_FLIGHT.fetch_sub(1, Ordering::SeqCst);
+            let n: f32 = self.0[1..].parse().unwrap();
+            Ok(Some(vec![(
+                "chunk".into(),
+                format!("{}-c", self.0),
+                n / 1000.0,
+            )]))
+        }
+        fn subject_meta(&self, _: &str, keys: &[(String, String)]) -> Result<Vec<SubjectMeta>> {
+            Ok(keys
+                .iter()
+                .map(|(t, id)| SubjectMeta {
+                    subject_type: t.clone(),
+                    subject_id: id.clone(),
+                    kind: "document".into(),
+                    record_id: id.clone(),
+                    rel_path: format!("{}.md", self.0),
+                    title: id.clone(),
+                    snippet: String::new(),
+                    section: None,
+                    position: 0,
+                    end_line: None,
+                    attachment_index: None,
+                    document_id: None,
+                })
+                .collect())
         }
     }
 
@@ -194,6 +237,7 @@ mod tests {
     /// cap running at once, the first error (in corpus order) returned.
     #[test]
     fn bounded_ordered_and_failing_in_order() {
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
         let readers: Vec<Remote> = (0..150).map(|i| Remote(format!("s{i:03}"))).collect();
         let corpora: Vec<Corpus<'_>> = readers
             .iter()
@@ -230,5 +274,54 @@ mod tests {
         .unwrap_err();
         assert_eq!(err.0, "fail 7");
         set_max_concurrency(DEFAULT_MAX_CONCURRENCY);
+    }
+
+    /// Semantic search over 150 server sources runs on the bounded pool,
+    /// reports the engine of every source, and ranks exactly as one worker
+    /// does.
+    #[test]
+    fn semantic_search_is_bounded_and_independent_of_scheduling() {
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        let readers: Vec<Remote> = (0..150).map(|i| Remote(format!("s{i:03}"))).collect();
+        let corpora: Vec<Corpus<'_>> = readers
+            .iter()
+            .map(|r| Corpus {
+                store: r,
+                build_id: "b",
+            })
+            .collect();
+        let qv = docmonk_ml::semantic::QueryVector {
+            vector: vec![1.0; 4],
+            fingerprint: "fp".into(),
+            embed_ms: 0.0,
+        };
+        let search = || {
+            crate::hybrid::semantic_search_vector(
+                &corpora,
+                &qv,
+                5,
+                None,
+                Default::default(),
+                &Default::default(),
+            )
+            .unwrap()
+        };
+        set_max_concurrency(1);
+        let one = search();
+        set_max_concurrency(4);
+        PEAK.store(0, Ordering::SeqCst);
+        let four = search();
+        let peak = PEAK.load(Ordering::SeqCst);
+        set_max_concurrency(DEFAULT_MAX_CONCURRENCY);
+        assert!((1..=4).contains(&peak), "peak {peak}");
+        assert_eq!(four.hits, one.hits);
+        let paths: Vec<&str> = four.hits.iter().map(|h| h.hit.path.as_str()).collect();
+        assert_eq!(
+            paths,
+            ["s149.md", "s148.md", "s147.md", "s146.md", "s145.md"]
+        );
+        assert_eq!(four.engines.len(), 150);
+        assert!(four.engines.iter().all(|(_, e)| *e == "server"));
+        assert_eq!(four.engines[7].0, "s007");
     }
 }

@@ -21,7 +21,7 @@
 //! The whole run is bounded by `search.max_query_budget_ms`: once spent,
 //! remaining optional stages are skipped and reported as `degraded`.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::time::Instant;
 
@@ -87,6 +87,7 @@ fn run_part(
     exact_pins: bool,
     degraded: &mut Vec<String>,
     reranker: &mut Option<pipeline::RerankerStatus>,
+    engines: &mut BTreeMap<String, &'static str>,
 ) -> Result<Vec<RankedHit>, DocMonkError> {
     // The candidate budget, independent of the response size.
     let fetch = pipeline::candidate_budget(cfg.search.candidate_pool, limit);
@@ -132,6 +133,7 @@ fn run_part(
         for d in &s.degraded {
             degraded.push(format!("semantic unavailable for {d}"));
         }
+        engines.extend(s.engines.iter().cloned());
         sem = s
             .hits
             .into_iter()
@@ -373,6 +375,11 @@ pub fn evidence_value(
     let mut opened = open_sources(home, None)?;
     opened.retain(|o| req.filters.allows_source(&o.source.id));
     let corp = corpora(&opened);
+    // Server requests this answer costs (diagnostics.backend).
+    let backend_before = opened
+        .iter()
+        .find_map(|o| o.store.server())
+        .map(docmonk_backends::reader::ServerReader::backend_stats);
     crate::query::apply_retrieval_settings(cfg);
     // Exact occurrences of URL anchors first (P03), within the filters.
     let endpoint = plan.intent == QueryIntent::EndpointReference;
@@ -440,6 +447,8 @@ pub fn evidence_value(
     let t = Instant::now();
     let mut per_part = Vec::new();
     let mut reranker: Option<pipeline::RerankerStatus> = None;
+    // How each source's semantic search answered (diagnostics.semantic_engines).
+    let mut engines: BTreeMap<String, &'static str> = BTreeMap::new();
     for (i, p) in parts.iter().enumerate() {
         if i > 0 && over(&started) {
             degraded.push(format!(
@@ -459,6 +468,7 @@ pub fn evidence_value(
             !exact_pins.is_empty(),
             &mut degraded,
             &mut reranker,
+            &mut engines,
         )?);
     }
     timings.push(json!({"stage": "retrieve", "ms": t.elapsed().as_millis()}));
@@ -649,9 +659,13 @@ pub fn evidence_value(
         .iter()
         .map(|o| (o.source.id.clone(), o.build.clone()))
         .collect();
-    let refs = grounding::evidence_refs_canonical(&corp, &hits, |s| builds.get(s).cloned())
-        .map_err(search_err)?;
-    let checks = grounding::verify(&corp, &refs, &req.filters).map_err(search_err)?;
+    // Each record's canonical content is read once (batched per corpus),
+    // stamped on its citation and reused by the verification.
+    let mut refs = grounding::evidence_refs(&hits, |s| builds.get(s).cloned());
+    let contents = grounding::canonical_contents(&corp, &refs).map_err(search_err)?;
+    grounding::stamp_contents(&mut refs, &contents);
+    let checks =
+        grounding::verify_with(&corp, &refs, &req.filters, &contents).map_err(search_err)?;
     let valid: Vec<&EvidenceRef> = refs
         .iter()
         .zip(&checks)
@@ -720,6 +734,19 @@ pub fn evidence_value(
         .collect();
     let provenance = provenance_summary(&checks);
     timings.push(json!({"stage": "total", "ms": started.elapsed().as_millis()}));
+    let backend_after = opened
+        .iter()
+        .find_map(|o| o.store.server())
+        .map(docmonk_backends::reader::ServerReader::backend_stats);
+    let backend = match (&backend_before, &backend_after) {
+        (Some(b), Some(a)) => json!({
+            "kind": opened.first().map(|o| o.store.read().backend_kind()),
+            "requests": a.requests.saturating_sub(b.requests),
+            "bytes_sent": a.bytes_sent.saturating_sub(b.bytes_sent),
+            "bytes_received": a.bytes_received.saturating_sub(b.bytes_received),
+        }),
+        _ => json!({"kind": opened.first().map(|o| o.store.read().backend_kind()), "requests": 0}),
+    };
     let mut out = json!({
         "query": req.query,
         "verdict": verdict,
@@ -747,6 +774,8 @@ pub fn evidence_value(
             "degraded": degraded,
             "timings": timings,
             "reranker": reranker,
+            "semantic_engines": engines,
+            "backend": backend,
         },
     });
     // Additive keys, only when the route has anchors.

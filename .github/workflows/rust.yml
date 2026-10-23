@@ -209,6 +209,12 @@ jobs:
       # unsegmented Japanese and Chinese.
       - name: Multilingual lexical contract
         run: cargo test -p docmonk-service --test multilingual_lexical -- --nocapture
+      # Filtered kNN recall against exact search after publication and GC,
+      # and batched citation hydration (ADR 0041), on both engines.
+      - name: Live ANN recall and citation hydration
+        run: |
+          cargo test --release -p docmonk-backends --test ann_recall -- --nocapture
+          cargo test -p docmonk-service --test server_hydration -- --nocapture
       # Status (ADR 0034) on both engines: 150 sources in <= 30 requests,
       # a watch refresh in < 10, pending builds invisible, global error
       # order, two-host run visibility, fencing and expired leases; the

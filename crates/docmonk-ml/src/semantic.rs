@@ -67,7 +67,21 @@ pub struct SemanticResult {
     pub stages: SemanticStages,
 }
 
+/// `reason` of a build that has no vectors for the query's model.
+pub const NO_VECTORS: &str = "no embeddings computed for this project yet";
+
 impl SemanticResult {
+    /// How the search was answered, for diagnostics: the engine
+    /// (`hnsw`, `exact`, `server`), `no_vectors` or `unavailable`.
+    pub fn engine_label(&self) -> &'static str {
+        match self.engine {
+            _ if !self.available => "unavailable",
+            _ if self.reason == NO_VECTORS => "no_vectors",
+            Some(e) => e.name(),
+            None => "none",
+        }
+    }
+
     fn unavailable(reason: impl Into<String>) -> Self {
         Self {
             available: false,
@@ -258,7 +272,7 @@ pub fn search_vector_filtered(
     if raw.is_empty() {
         return Ok(SemanticResult {
             available: true,
-            reason: "no embeddings computed for this project yet".into(),
+            reason: NO_VECTORS.into(),
             engine: Some(engine),
             hits: Vec::new(),
             stages,

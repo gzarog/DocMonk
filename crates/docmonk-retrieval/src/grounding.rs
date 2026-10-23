@@ -79,6 +79,87 @@ pub struct Canonical {
     pub language: Option<String>,
 }
 
+/// The canonical content of a code entity from its row and body passages.
+fn entity_canonical(
+    e: &docmonk_storage::knowledge::EntityRow,
+    passages: &[docmonk_storage::knowledge::PassageRow],
+    lines: Option<(i64, i64)>,
+) -> Canonical {
+    // A body passage starts at the documentation comments above its owner:
+    // the owner's span is its own lines plus theirs.
+    let span = passages
+        .iter()
+        .fold((e.start_line, e.end_line), |(s, t), p| {
+            (s.min(p.start_line), t.max(p.end_line))
+        });
+    let body: Vec<&str> = passages
+        .iter()
+        .filter(|p| lines.is_none_or(|(s, t)| p.start_line <= t && s <= p.end_line))
+        .map(|p| p.text.as_str())
+        .collect();
+    Canonical {
+        text: if body.is_empty() {
+            format!(
+                "{} {}",
+                e.qualified_name,
+                e.signature.as_deref().unwrap_or_default()
+            )
+        } else {
+            body.join("\n")
+        },
+        lines: Some(span),
+        pages: None,
+        document_id: None,
+        language: None,
+    }
+}
+
+/// The canonical content of every citation in `refs` whose source and build
+/// are among `corpora`, by citation id (`None` for a record that is gone).
+/// Entity citations of one corpus are read in two batched reads (rows and
+/// body passages; two requests on a server instead of two per citation).
+pub fn canonical_contents(
+    corpora: &[Corpus<'_>],
+    refs: &[EvidenceRef],
+) -> Result<std::collections::HashMap<String, Option<Canonical>>, SearchError> {
+    let mut out = std::collections::HashMap::new();
+    for c in corpora {
+        let mine: Vec<&EvidenceRef> = refs
+            .iter()
+            .filter(|r| r.source_id == c.store.source_id() && r.build_id == c.build_id)
+            .collect();
+        let ids: Vec<String> = mine
+            .iter()
+            .filter(|r| r.kind == "entity")
+            .map(|r| r.record_id.clone())
+            .collect();
+        let (entities, passages) = if ids.is_empty() {
+            Default::default()
+        } else {
+            (
+                c.store.entities_by_ids(c.build_id, &ids)?,
+                c.store.entity_passages_many(c.build_id, &ids)?,
+            )
+        };
+        for r in mine {
+            let lines = r.line_start.map(|s| (s, r.line_end.unwrap_or(s)));
+            let k = if r.kind == "entity" {
+                entities.get(&r.record_id).map(|e| {
+                    entity_canonical(
+                        e,
+                        passages.get(&r.record_id).map_or(&[][..], Vec::as_slice),
+                        lines,
+                    )
+                })
+            } else {
+                canonical_content(c, &r.kind, &r.record_id, lines)?
+            };
+            out.insert(r.id.clone(), k);
+        }
+    }
+    Ok(out)
+}
+
 /// Reloads the canonical content of `kind`/`record_id` from `c`, the
 /// cited `lines` selecting which body passages of an entity are meant.
 /// `None` when the record is not in the snapshot.
@@ -92,36 +173,11 @@ pub fn canonical_content(
     Ok(match kind {
         "entity" => match store.entity(b, record_id)? {
             None => None,
-            Some(e) => {
-                // A body passage starts at the documentation comments above
-                // its owner: the owner's span is its own lines plus theirs.
-                let passages = store.entity_passages(b, record_id)?;
-                let span = passages
-                    .iter()
-                    .fold((e.start_line, e.end_line), |(s, t), p| {
-                        (s.min(p.start_line), t.max(p.end_line))
-                    });
-                let body: Vec<&str> = passages
-                    .iter()
-                    .filter(|p| lines.is_none_or(|(s, t)| p.start_line <= t && s <= p.end_line))
-                    .map(|p| p.text.as_str())
-                    .collect();
-                Some(Canonical {
-                    text: if body.is_empty() {
-                        format!(
-                            "{} {}",
-                            e.qualified_name,
-                            e.signature.as_deref().unwrap_or_default()
-                        )
-                    } else {
-                        body.join("\n")
-                    },
-                    lines: Some(span),
-                    pages: None,
-                    document_id: None,
-                    language: None,
-                })
-            }
+            Some(e) => Some(entity_canonical(
+                &e,
+                &store.entity_passages(b, record_id)?,
+                lines,
+            )),
         },
         "passage" => store.passage(b, record_id)?.map(|p| Canonical {
             text: p.text,
@@ -169,20 +225,23 @@ pub fn evidence_refs_canonical(
     build_of: impl Fn(&str) -> Option<String>,
 ) -> Result<Vec<EvidenceRef>, SearchError> {
     let mut refs = evidence_refs(hits, build_of);
-    for r in &mut refs {
-        let Some(c) = corpora
-            .iter()
-            .find(|c| c.store.source_id() == r.source_id && c.build_id == r.build_id)
-        else {
-            continue;
-        };
-        let lines = r.line_start.map(|s| (s, r.line_end.unwrap_or(s)));
-        if let Some(k) = canonical_content(c, &r.kind, &r.record_id, lines)? {
+    let contents = canonical_contents(corpora, &refs)?;
+    stamp_contents(&mut refs, &contents);
+    Ok(refs)
+}
+
+/// Stamps each citation with its record's [`canonical_contents`]:
+/// content fingerprint and chunk language.
+pub fn stamp_contents(
+    refs: &mut [EvidenceRef],
+    contents: &std::collections::HashMap<String, Option<Canonical>>,
+) {
+    for r in refs {
+        if let Some(Some(k)) = contents.get(&r.id) {
             r.content_fingerprint = Some(fingerprint(&k.text));
-            r.language = k.language;
+            r.language = k.language.clone();
         }
     }
-    Ok(refs)
 }
 
 /// Builds citations for ranked hits; `build_of` maps a source to the build
@@ -244,6 +303,17 @@ pub fn verify(
     refs: &[EvidenceRef],
     filters: &SearchFilters,
 ) -> Result<Vec<Verification>, SearchError> {
+    verify_with(corpora, refs, filters, &Default::default())
+}
+
+/// [`verify`] reusing `contents` ([`canonical_contents`] read from the
+/// same corpora in this request) instead of reading each record again.
+pub fn verify_with(
+    corpora: &[Corpus<'_>],
+    refs: &[EvidenceRef],
+    filters: &SearchFilters,
+    contents: &std::collections::HashMap<String, Option<Canonical>>,
+) -> Result<Vec<Verification>, SearchError> {
     let mut out = Vec::with_capacity(refs.len());
     for r in refs {
         let bad = |reason| Verification {
@@ -261,7 +331,10 @@ pub fn verify(
         }
         let rel = r.path.as_str();
         let lines = r.line_start.map(|s| (s, r.line_end.unwrap_or(s)));
-        let canonical = canonical_content(c, &r.kind, &r.record_id, lines)?;
+        let canonical = match contents.get(&r.id) {
+            Some(k) => k.clone(),
+            None => canonical_content(c, &r.kind, &r.record_id, lines)?,
+        };
         let doc_id = if r.kind == "document" {
             canonical.as_ref().and_then(|k| k.document_id.clone())
         } else {
