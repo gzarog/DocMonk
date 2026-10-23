@@ -612,6 +612,11 @@ section! {
         semantic: bool = false;
         lazy_semantic: bool = false;
         semantic_top_k: i64 = 30;
+        // Candidates each stage (lexical, semantic) fetches before fusion,
+        // independent of the response size; 0 = max(4 * limit, 40).
+        candidate_pool: i64 = 0, check = |v| if (0..=1000).contains(v) { Ok(()) } else {
+            Err("must be between 0 and 1000 (0 = automatic)".into())
+        };
         output: SearchOutputConfig = SearchOutputConfig::default();
         context: SearchContextConfig = SearchContextConfig::default();
         reranker: SearchRerankerConfig = SearchRerankerConfig::default();

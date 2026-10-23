@@ -7,6 +7,9 @@
 //!   semantic candidates deduplicated per `(kind, id)`. Exact matches are
 //!   pinned; everything else is ordered by Reciprocal Rank Fusion. An
 //!   optional cross-encoder pass reorders the top of the list.
+//! * [`pipeline`]: the one ranking path search, evidence, explore and ask
+//!   share (candidate budgets, fusion, the neural pass on canonical text,
+//!   reranker status, context around final hits).
 //!
 //! Search runs over one or more [`Corpus`] values (a project store plus the
 //! build to read), so multi-source search is the caller's list.
@@ -21,6 +24,7 @@ pub mod graph;
 pub mod grounding;
 pub mod hybrid;
 pub mod lexical;
+pub mod pipeline;
 pub mod pool;
 pub mod route;
 

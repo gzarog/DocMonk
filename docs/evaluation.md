@@ -113,6 +113,13 @@ Server backends run when `DOCMONK_TEST_OPENSEARCH_URL` /
 `DOCMONK_TEST_ELASTICSEARCH_URL` point at disposable clusters (see
 `CONTRIBUTING.md`); each gets a fresh home and index prefix, the same
 corpus and the same labels. Otherwise the report lists them as `not_run`.
+After indexing, the harness force-merges the disposable test indexes.
+Garbage collection of the edited file's old records leaves deleted
+documents that Lucene still counts in its term statistics until a
+background merge removes them. A merge between the two passes would shift
+the BM25 scores of near-tied hits, which is engine behaviour, not
+DocMonk's. On a live cluster the order of near-tied hits can shift
+slightly after such a merge.
 
 ### Recorded results
 

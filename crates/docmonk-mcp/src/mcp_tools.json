@@ -670,6 +670,11 @@
      "title": "Evidence",
      "type": "array"
     },
+    "provenance": {
+     "additionalProperties": true,
+     "title": "Provenance",
+     "type": "object"
+    },
     "support": {
      "items": {
       "additionalProperties": true,
@@ -684,6 +689,7 @@
     "verdict",
     "plan",
     "evidence",
+    "provenance",
     "support"
    ],
    "title": "docmonk_evidenceOutput",

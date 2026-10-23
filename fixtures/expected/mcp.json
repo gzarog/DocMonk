@@ -739,6 +739,11 @@
          "title": "Evidence",
          "type": "array"
         },
+        "provenance": {
+         "additionalProperties": true,
+         "title": "Provenance",
+         "type": "object"
+        },
         "support": {
          "items": {
           "additionalProperties": true,
@@ -753,6 +758,7 @@
         "verdict",
         "plan",
         "evidence",
+        "provenance",
         "support"
        ],
        "title": "docmonk_evidenceOutput",
@@ -2565,6 +2571,17 @@
              ],
              "default": null
             },
+            "passages": {
+             "anyOf": [
+              {
+               "type": "integer"
+              },
+              {
+               "type": "null"
+              }
+             ],
+             "default": null
+            },
             "relationships": {
              "anyOf": [
               {
@@ -2594,6 +2611,7 @@
             "entities",
             "documents",
             "chunks",
+            "passages",
             "relationships",
             "throughput_files_per_second"
            ]
@@ -3115,6 +3133,12 @@
           "chunks": {
            "type": "integer"
           },
+          "passages": {
+           "type": "integer"
+          },
+          "degraded": {
+           "type": "integer"
+          },
           "relationships": {
            "type": "integer"
           },
@@ -3144,6 +3168,8 @@
           "code_entities",
           "documents",
           "chunks",
+          "passages",
+          "degraded",
           "relationships",
           "links",
           "max_attempt_count",
@@ -4832,7 +4858,120 @@
      "relationships": [],
      "documents": [],
      "tests": [],
-     "evidence": [],
+     "evidence": [
+      {
+       "source": "symbol",
+       "path": "<CORPUS>/code/csharp/Animals.cs",
+       "location": {
+        "line_start": 11,
+        "line_end": 31,
+        "page": null,
+        "section": null
+       },
+       "entity": "Animals.Dog",
+       "relationship": "defines",
+       "confidence": "exact",
+       "snippet": "public class Dog : IAnimal"
+      },
+      {
+       "source": "symbol",
+       "path": "<CORPUS>/code/csharp/Animals.cs",
+       "location": {
+        "line_start": 15,
+        "line_end": 18,
+        "page": null,
+        "section": null
+       },
+       "entity": "Animals.Dog.Dog",
+       "relationship": "defines",
+       "confidence": "exact",
+       "snippet": "public Dog(string name)"
+      },
+      {
+       "source": "symbol",
+       "path": "<CORPUS>/code/go/animals.go",
+       "location": {
+        "line_start": 12,
+        "line_end": 14,
+        "page": null,
+        "section": null
+       },
+       "entity": "animals.Dog",
+       "relationship": "defines",
+       "confidence": "exact",
+       "snippet": "Dog struct {"
+      },
+      {
+       "source": "symbol",
+       "path": "<CORPUS>/code/javascript/animals.js",
+       "location": {
+        "line_start": 8,
+        "line_end": 19,
+        "page": null,
+        "section": null
+       },
+       "entity": "code.javascript.animals.Dog",
+       "relationship": "defines",
+       "confidence": "exact",
+       "snippet": "class Dog extends Animal {"
+      },
+      {
+       "source": "symbol",
+       "path": "<CORPUS>/code/python/animals.py",
+       "location": {
+        "line_start": 9,
+        "line_end": 21,
+        "page": null,
+        "section": null
+       },
+       "entity": "code.python.animals.Dog",
+       "relationship": "defines",
+       "confidence": "exact",
+       "snippet": "class Dog(Animal):"
+      },
+      {
+       "source": "symbol",
+       "path": "<CORPUS>/code/rust/animals.rs",
+       "location": {
+        "line_start": 8,
+        "line_end": 10,
+        "page": null,
+        "section": null
+       },
+       "entity": "code.rust.animals.Dog",
+       "relationship": "defines",
+       "confidence": "exact",
+       "snippet": "pub struct Dog {"
+      },
+      {
+       "source": "symbol",
+       "path": "<CORPUS>/code/java/Animals.java",
+       "location": {
+        "line_start": 10,
+        "line_end": 24,
+        "page": null,
+        "section": null
+       },
+       "entity": "com.example.animals.Dog",
+       "relationship": "defines",
+       "confidence": "exact",
+       "snippet": "public class Dog implements Animal {"
+      },
+      {
+       "source": "symbol",
+       "path": "<CORPUS>/code/java/Animals.java",
+       "location": {
+        "line_start": 13,
+        "line_end": 15,
+        "page": null,
+        "section": null
+       },
+       "entity": "com.example.animals.Dog.Dog",
+       "relationship": "defines",
+       "confidence": "exact",
+       "snippet": "public Dog(String name) {"
+      }
+     ],
      "warnings": [
       "Requirements/Incidents are always empty: DocMonk has no document classifier yet to populate these categories."
      ]
@@ -4921,8 +5060,38 @@
      "relationships": [],
      "documents": [],
      "tests": [],
-     "evidence": [],
+     "evidence": [
+      {
+       "source": "symbol",
+       "path": "<CORPUS>/code/csharp/Animals.cs",
+       "location": {
+        "line_start": 11,
+        "line_end": 31,
+        "page": null,
+        "section": null
+       },
+       "entity": "Animals.Dog",
+       "relationship": "defines",
+       "confidence": "exact",
+       "snippet": "public class Dog : IAnimal"
+      },
+      {
+       "source": "symbol",
+       "path": "<CORPUS>/code/csharp/Animals.cs",
+       "location": {
+        "line_start": 15,
+        "line_end": 18,
+        "page": null,
+        "section": null
+       },
+       "entity": "Animals.Dog.Dog",
+       "relationship": "defines",
+       "confidence": "exact",
+       "snippet": "public Dog(string name)"
+      }
+     ],
      "warnings": [
+      "evidence truncated: max_files=1 reached",
       "Requirements/Incidents are always empty: DocMonk has no document classifier yet to populate these categories."
      ]
     },
@@ -5185,6 +5354,7 @@
        "entities": 61,
        "documents": 9,
        "chunks": 19,
+       "passages": 29,
        "relationships": 153,
        "throughput_files_per_second": null
       },
@@ -5223,6 +5393,8 @@
          "code_entities": 61,
          "documents": 9,
          "chunks": 19,
+         "passages": 29,
+         "degraded": 0,
          "relationships": 153,
          "links": 0,
          "max_attempt_count": 0,

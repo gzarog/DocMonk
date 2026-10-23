@@ -58,7 +58,8 @@ docmonk search "refund policy" --path docs/ --kind document --no-attachments --e
 - **Hard filters** (`--source`, `--path`, `--kind`, `--document`, `--no-attachments`, also on `search`) are applied before retrieval and to every stage: lexical, semantic, graph callers, context and every subquery. No stage can widen them.
 - **Decomposition**: comparisons, flows and multi-part questions are split into at most `search.decomposition.max_subqueries` (default 4) subqueries; each comparison side keeps its best hit.
 - **Duplicates** are removed by provenance and content; at most `search.diversity.per_document_cap` chunks per file. `search.diversity.enabled` (MMR, off by default) is opt-in: on the P0 evaluation it lowered comparison coverage.
-- **Citations**: every result is an `[E#]` with source, build, record, path, line/page and a content fingerprint, re-verified against the same snapshot; a deleted file, a stale build or a filtered record is reported `valid: false`.
+- **One ranking path** (ADR 0038): `search --hybrid`, every `evidence` subquery, `explore` and `ask` fuse lexical and semantic candidates the same way: each stage fetches `search.candidate_pool` candidates (`0`: `max(4 * limit, 40)`), exact matches are pinned, RRF orders the rest and, with `search.reranker.enabled`, the cross-encoder rescores the hybrid tier on each hit's stored text; fact-seeking routes (`document_fact`, `conceptual`, `ambiguous`) then order unpinned hits by how many of the question's terms they contain. `diagnostics.reranker` (`explain.reranker` for `search`) reports `applied`, `disabled`, `unavailable` (no local model), `failed` or `nothing_to_rescore`. Context is expanded around document and code hits alike, semantic-only hits included.
+- **Citations**: every result is an `[E#]` with source, build, record, path, line/page, a fingerprint of the cited snippet and a `content_fingerprint` of the record's stored content, re-verified against the same snapshot. A citation from another source or build, outside the hard filters, of a record that is gone, at lines or pages outside its record, or whose stored content no longer matches is reported `valid: false` with that `invalid_reason` (`unknown_source`, `stale_build`, `filtered`, `missing_record`, `wrong_location`, `content_mismatch`); `provenance` counts them. Each result's `retrieval` says which stages found it (`pinned`, lexical and semantic ranks, RRF and neural scores).
 - **Verdict**: `supported`, `partial` (a part of a multi-part question has no support), or `insufficient_evidence` (nothing reaches `search.grounding.min_coverage` of the query's content terms). `docmonk ask` abstains without calling the provider on `insufficient_evidence`, gives the model only verified evidence as untrusted data, and reports uncited sentences and unknown citation ids under `grounding.answer_check`.
 - The whole run is bounded by `search.max_query_budget_ms` (default 5000); skipped stages are listed under `diagnostics.degraded`.
 
@@ -69,6 +70,7 @@ docmonk search "refund policy" --path docs/ --kind document --no-attachments --e
 | `search.diversity.enabled` / `.lambda` / `.per_document_cap` / `.per_source_cap` | `false` / `0.7` / `3` / `0` |
 | `search.grounding.enabled` / `.min_coverage` | `true` / `0.5` |
 | `search.max_query_budget_ms` | `5000` |
+| `search.candidate_pool` | `0` (automatic: `max(4 * limit, 40)`; at most 100, never below the limit) |
 | `search.ann.ef_search` / `.num_candidates` | `400` / `0` (automatic: `max(10 * k, 100)`) |
 | `search.anchors.enabled` | `true` |
 | `search.exact_occurrences.enabled` / `.max_results` | `true` / `50` |
@@ -139,7 +141,9 @@ into the SQL (server: the query), not applied afterwards.
 embedder, the reranker and each project's vector index in memory, embeds
 a query once per request and reuses pooled read connections. The vector
 index is reused until the build's vectors change. The reranker scores
-only the hybrid tier, on passages of at most 256 words.
+only the hybrid tier, on each hit's stored text (a chunk under its
+headings, a code hit's body passages under their owner), at most 256
+words.
 
 Quality is gated in CI by the 72-query golden set and by a 250-query generated evaluation (`crates/docmonk-service/tests/p0_eval.rs`, held-out floors in `fixtures/p0/eval-gates.json`, last report in `benchmarks/p0-retrieval-eval.json`). Its labels come from the corpus generator, not from independent human labeling.
 

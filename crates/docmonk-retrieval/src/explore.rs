@@ -374,24 +374,18 @@ fn dedupe(items: Vec<EvidenceItem>) -> Vec<EvidenceItem> {
     order.into_iter().filter_map(|k| best.remove(&k)).collect()
 }
 
-/// Dedupes, sorts (confidence desc, then path, line, page, entity; `None`
-/// last) and caps `items` to the budget's files and snippet characters;
-/// caps `graph_paths` to `max_graph_nodes` distinct endpoints.
+/// Dedupes, sorts by confidence (descending; equal confidence keeps the
+/// order the items were given in, which for ranked matches is the shared
+/// fused ranking) and caps `items` to the budget's files and snippet
+/// characters; caps `graph_paths` to `max_graph_nodes` distinct endpoints.
 pub fn build_context(
     items: Vec<EvidenceItem>,
     graph_paths: Vec<GraphPath>,
     budget: Budget,
 ) -> ContextResult {
     let mut ordered = dedupe(items);
-    let none_last = |v: Option<i64>| (v.is_none(), v.unwrap_or(0));
     ordered.sort_by(|a, b| {
-        let (la, lb) = (&a.evidence.location, &b.evidence.location);
-        confidence_rank(&b.evidence.confidence)
-            .cmp(&confidence_rank(&a.evidence.confidence))
-            .then_with(|| a.evidence.path.cmp(&b.evidence.path))
-            .then(none_last(la.line_start).cmp(&none_last(lb.line_start)))
-            .then(none_last(la.page).cmp(&none_last(lb.page)))
-            .then_with(|| a.evidence.entity.cmp(&b.evidence.entity))
+        confidence_rank(&b.evidence.confidence).cmp(&confidence_rank(&a.evidence.confidence))
     });
     let mut included = Vec::new();
     let mut files: HashSet<String> = HashSet::new();
@@ -591,23 +585,65 @@ fn tier_confidence(tier: RankTier) -> &'static str {
     }
 }
 
-fn lexical_evidence(r: &SearchResult) -> EvidenceItem {
-    let loc = r.location.clone().unwrap_or_default();
+/// A hit of the shared fused ranking as evidence: pinned hits keep their
+/// tier's confidence; every other ranked hit is a `medium` match (its
+/// place in the ranking already weighs its signals), a semantic-only one
+/// related as `similar_to`.
+fn ranked_evidence(h: &crate::hybrid::RankedHit) -> EvidenceItem {
+    let c = &h.candidate;
+    let loc = c.location.clone().unwrap_or_default();
+    let lexical = c.lexical_rank.is_some();
     EvidenceItem {
         evidence: Evidence {
-            source: format!("lexical:{}", r.kind),
-            path: r.path.clone(),
+            source: format!(
+                "{}:{}",
+                if lexical { "lexical" } else { "semantic" },
+                c.kind
+            ),
+            path: c.path.clone(),
             location: EvidenceLocation {
                 line_start: loc.line_start,
                 line_end: loc.line_end,
-                page: None,
+                page: loc.page_start,
                 section: loc.section,
             },
-            entity: r.title.clone(),
-            relationship: "match".into(),
-            confidence: tier_confidence(r.tier).into(),
+            entity: c.title.clone(),
+            relationship: if lexical { "match" } else { "similar_to" }.into(),
+            confidence: match (c.exact_match, c.lexical_tier) {
+                (true, Some(t)) => tier_confidence(t),
+                _ => "medium",
+            }
+            .into(),
         },
-        snippet: r.snippet.clone().unwrap_or_default(),
+        snippet: c.snippet.clone().unwrap_or_default(),
+    }
+}
+
+/// Where a matched symbol is defined (its own evidence, ahead of the graph
+/// around it).
+fn definition_evidence(m: &SourceMatch) -> EvidenceItem {
+    let e = &m.entity;
+    EvidenceItem {
+        evidence: Evidence {
+            source: "symbol".into(),
+            path: if m.rel_path.is_empty() {
+                e.file_id.clone()
+            } else {
+                m.rel_path.clone()
+            },
+            location: EvidenceLocation {
+                line_start: Some(e.start_line),
+                line_end: Some(e.end_line),
+                ..Default::default()
+            },
+            entity: e.qualified_name.clone(),
+            relationship: "defines".into(),
+            confidence: "exact".into(),
+        },
+        snippet: e
+            .signature
+            .clone()
+            .unwrap_or_else(|| e.qualified_name.clone()),
     }
 }
 
@@ -772,7 +808,16 @@ pub struct ExploreOptions {
     pub max_seed_entities: usize,
     /// Collect the `explain` diagnostics payload.
     pub explain: bool,
+    /// `search.reranker.top_n` when the neural pass is enabled.
+    pub rerank_top_n: Option<usize>,
+    /// Lexical candidates the shared fusion ranks
+    /// ([`crate::pipeline::candidate_budget`]); listings keep the first
+    /// [`LEXICAL_LISTING`].
+    pub candidates: usize,
 }
+
+/// Lexical hits explore lists (documents, symbols' files).
+pub const LEXICAL_LISTING: usize = 25;
 
 impl Default for ExploreOptions {
     fn default() -> Self {
@@ -784,6 +829,8 @@ impl Default for ExploreOptions {
             selective_graph: true,
             max_seed_entities: 25,
             explain: false,
+            rerank_top_n: None,
+            candidates: crate::pipeline::candidate_budget(0, 10),
         }
     }
 }
@@ -928,6 +975,18 @@ pub fn explore_with(
     semantic: &mut dyn FnMut(&ExploreProgress<'_>) -> Result<Option<SemanticOutcome>, SearchError>,
     opts: ExploreOptions,
 ) -> Result<Value, SearchError> {
+    explore_ranked(corpora, query_plan, semantic, opts, None)
+}
+
+/// [`explore_with`] with the cross-encoder of the shared ranking path
+/// (used when `opts.rerank_top_n` is set).
+pub fn explore_ranked(
+    corpora: &[Corpus<'_>],
+    query_plan: &QueryPlan,
+    semantic: &mut dyn FnMut(&ExploreProgress<'_>) -> Result<Option<SemanticOutcome>, SearchError>,
+    opts: ExploreOptions,
+    encoder: Option<&docmonk_ml::reranker::CrossEncoder>,
+) -> Result<Value, SearchError> {
     use Strategy::*;
     let has = |s: Strategy| query_plan.strategies.contains(&s);
     let mut diag = Diagnostics {
@@ -993,7 +1052,7 @@ pub fn explore_with(
     let mut lex_opts = lexical::LexicalOptions::default();
     lex_opts.plan.or_fallback = !(opts.adaptive_lexical && exact_found);
     diag.lexical_or_fallback = lex_opts.plan.or_fallback;
-    let lexical_results = if has(Fts) || has(Identifier) {
+    let (lexical_results, lexical_candidates) = if has(Fts) || has(Identifier) {
         diag.lexical_query = Some(lexical_text.clone());
         diag.source_count_searched = scoped.len();
         let (mut rows, stages) = diag.time(
@@ -1003,7 +1062,7 @@ pub fn explore_with(
                 lexical::search_with_options(
                     &scoped,
                     &lexical_text,
-                    25,
+                    opts.candidates.max(LEXICAL_LISTING),
                     opts.snippet_tokens,
                     &lex_opts,
                 )
@@ -1023,10 +1082,11 @@ pub fn explore_with(
                 t
             }));
         }
-        rows.truncate(25);
-        rows
+        let candidates = rows.clone();
+        rows.truncate(LEXICAL_LISTING);
+        (rows, candidates)
     } else {
-        Vec::new()
+        (Vec::new(), Vec::new())
     };
 
     // 3. Symbols: exact seeds' owners (endpoint), else the named symbol.
@@ -1167,6 +1227,30 @@ pub fn explore_with(
         None
     };
     let semantic = semantic.as_ref();
+    // The shared ranking (ADR 0038): lexical and semantic candidates fused
+    // exactly as `search --hybrid` and `evidence` fuse them.
+    let fused = diag.time(
+        "fuse",
+        |f: &crate::pipeline::Fused| f.hits.len(),
+        || {
+            crate::pipeline::fuse(
+                corpora,
+                &lexical_text,
+                &lexical_candidates,
+                semantic.map_or(&[][..], |s| s.hits.as_slice()),
+                crate::pipeline::FuseOptions {
+                    limit: 25,
+                    rerank_top_n: opts.rerank_top_n,
+                    per_document_cap: None,
+                    term_coverage: query_plan
+                        .route
+                        .as_ref()
+                        .is_some_and(|r| crate::pipeline::orders_by_coverage(r.intent)),
+                },
+                encoder,
+            )
+        },
+    )?;
 
     // 6. Evidence and context.
     let names: HashMap<(usize, &str), &str> = matches
@@ -1193,6 +1277,11 @@ pub fn explore_with(
     if let Some(o) = &outcome {
         items.extend(o.occurrences.iter().map(occurrence_evidence));
     }
+    // The matched symbols' own definitions, when the graph has no edges to
+    // answer with (a navigation question's callers stay its evidence).
+    if callers.is_empty() && callees.is_empty() && references.is_empty() {
+        items.extend(matches.iter().map(definition_evidence));
+    }
     for e in &callers {
         items.extend(edge_evidence(e));
         let target = if endpoint {
@@ -1217,14 +1306,20 @@ pub fn explore_with(
         });
     }
     if matches.is_empty() && !exact_found {
+        // No symbol or exact anchor: the fused ranking is the evidence.
         items.extend(
-            lexical_results
+            fused
+                .hits
                 .iter()
-                .filter(|r| r.snippet.as_deref().is_some_and(|s| !s.is_empty()))
-                .map(lexical_evidence),
+                .filter(|h| {
+                    h.candidate
+                        .snippet
+                        .as_deref()
+                        .is_some_and(|s| !s.is_empty())
+                })
+                .map(ranked_evidence),
         );
-    }
-    if let Some(s) = semantic {
+    } else if let Some(s) = semantic {
         items.extend(s.hits.iter().map(semantic_evidence));
     }
     let ctx = build_context(items, paths.clone(), opts.budget);
@@ -1327,6 +1422,7 @@ pub fn explore_with(
         if let Some(r) = &query_plan.route {
             d["route"] = json!(r);
         }
+        d["reranker"] = json!(fused.reranker);
         out["diagnostics"] = d;
     }
     Ok(out)

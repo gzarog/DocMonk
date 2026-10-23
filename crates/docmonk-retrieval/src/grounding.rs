@@ -51,8 +51,126 @@ pub struct EvidenceRef {
     pub heading: Option<String>,
     /// [`fingerprint`] of the cited text.
     pub fingerprint: String,
+    /// [`fingerprint`] of the record's canonical stored content when the
+    /// citation was made ([`canonical_content`]); [`verify`] rejects the
+    /// citation when the record's content no longer matches it.
+    pub content_fingerprint: Option<String>,
     /// The cited text (snippet), as data.
     pub text: String,
+}
+
+/// The stored content a citation stands for, reloaded from the snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Canonical {
+    /// The record's text: a chunk's text, a passage's lines, a code
+    /// entity's body passages overlapping the cited lines (else its
+    /// qualified name and signature), or a file's path.
+    pub text: String,
+    /// Line span of a code record.
+    pub lines: Option<(i64, i64)>,
+    /// Page span of a chunk.
+    pub pages: Option<(i64, i64)>,
+    /// The document a chunk (or title hit) belongs to.
+    pub document_id: Option<String>,
+}
+
+/// Reloads the canonical content of `kind`/`record_id` from `c`, the
+/// cited `lines` selecting which body passages of an entity are meant.
+/// `None` when the record is not in the snapshot.
+pub fn canonical_content(
+    c: &Corpus<'_>,
+    kind: &str,
+    record_id: &str,
+    lines: Option<(i64, i64)>,
+) -> Result<Option<Canonical>, SearchError> {
+    let (store, b) = (c.store, c.build_id);
+    Ok(match kind {
+        "entity" => match store.entity(b, record_id)? {
+            None => None,
+            Some(e) => {
+                // A body passage starts at the documentation comments above
+                // its owner: the owner's span is its own lines plus theirs.
+                let passages = store.entity_passages(b, record_id)?;
+                let span = passages
+                    .iter()
+                    .fold((e.start_line, e.end_line), |(s, t), p| {
+                        (s.min(p.start_line), t.max(p.end_line))
+                    });
+                let body: Vec<&str> = passages
+                    .iter()
+                    .filter(|p| lines.is_none_or(|(s, t)| p.start_line <= t && s <= p.end_line))
+                    .map(|p| p.text.as_str())
+                    .collect();
+                Some(Canonical {
+                    text: if body.is_empty() {
+                        format!(
+                            "{} {}",
+                            e.qualified_name,
+                            e.signature.as_deref().unwrap_or_default()
+                        )
+                    } else {
+                        body.join("\n")
+                    },
+                    lines: Some(span),
+                    pages: None,
+                    document_id: None,
+                })
+            }
+        },
+        "passage" => store.passage(b, record_id)?.map(|p| Canonical {
+            text: p.text,
+            lines: Some((p.start_line, p.end_line)),
+            pages: None,
+            document_id: None,
+        }),
+        "document" => match store.chunk(b, record_id)? {
+            Some(ch) => Some(Canonical {
+                text: crate::context::text_of(&ch),
+                lines: None,
+                pages: match (ch.page_start, ch.page_end) {
+                    (Some(s), e) => Some((s, e.unwrap_or(s))),
+                    _ => None,
+                },
+                document_id: Some(ch.document_id),
+            }),
+            // A title hit cites the document itself (its first chunk).
+            None => store.chunk_at(b, record_id, 0)?.map(|ch| Canonical {
+                text: crate::context::text_of(&ch),
+                lines: None,
+                pages: None,
+                document_id: Some(record_id.to_owned()),
+            }),
+        },
+        "path" => store.file_rel_path(b, record_id)?.map(|p| Canonical {
+            text: p,
+            lines: None,
+            pages: None,
+            document_id: None,
+        }),
+        _ => None,
+    })
+}
+
+/// [`evidence_refs`] with each citation's canonical content fingerprint
+/// read from `corpora` (so a later [`verify`] detects changed content).
+pub fn evidence_refs_canonical(
+    corpora: &[Corpus<'_>],
+    hits: &[RankedHit],
+    build_of: impl Fn(&str) -> Option<String>,
+) -> Result<Vec<EvidenceRef>, SearchError> {
+    let mut refs = evidence_refs(hits, build_of);
+    for r in &mut refs {
+        let Some(c) = corpora
+            .iter()
+            .find(|c| c.store.source_id() == r.source_id && c.build_id == r.build_id)
+        else {
+            continue;
+        };
+        let lines = r.line_start.map(|s| (s, r.line_end.unwrap_or(s)));
+        r.content_fingerprint =
+            canonical_content(c, &r.kind, &r.record_id, lines)?.map(|k| fingerprint(&k.text));
+    }
+    Ok(refs)
 }
 
 /// Builds citations for ranked hits; `build_of` maps a source to the build
@@ -80,6 +198,7 @@ pub fn evidence_refs(
                 page_end: loc.and_then(|l| l.page_end),
                 heading: loc.and_then(|l| l.section.clone()),
                 fingerprint: fingerprint(&text),
+                content_fingerprint: None,
                 text,
             })
         })
@@ -91,12 +210,22 @@ pub fn evidence_refs(
 pub struct Verification {
     pub id: String,
     pub valid: bool,
-    /// Why it is invalid (`unknown_source`, `stale_build`, `filtered`,
-    /// `missing_record`, `wrong_source`).
+    /// Why it is invalid: `unknown_source` (not in this request),
+    /// `stale_build` (another build or generation), `filtered` (outside the
+    /// hard filters), `missing_record`, `wrong_location` (the cited lines
+    /// or pages are outside the record) or `content_mismatch` (the record's
+    /// stored content changed since it was cited).
     pub reason: Option<&'static str>,
 }
 
-/// Re-resolves `refs` against `corpora` (the request's snapshot).
+/// Whether `inner` lies inside `outer`.
+fn within(inner: (i64, i64), outer: (i64, i64)) -> bool {
+    outer.0 <= inner.0 && inner.1 <= outer.1 && inner.0 <= inner.1
+}
+
+/// Re-resolves `refs` against `corpora` (the request's snapshot): identity,
+/// source, build (generation), hard filters, location and, when the
+/// citation carries one, its canonical content fingerprint.
 pub fn verify(
     corpora: &[Corpus<'_>],
     refs: &[EvidenceRef],
@@ -118,10 +247,10 @@ pub fn verify(
             continue;
         }
         let rel = r.path.as_str();
+        let lines = r.line_start.map(|s| (s, r.line_end.unwrap_or(s)));
+        let canonical = canonical_content(c, &r.kind, &r.record_id, lines)?;
         let doc_id = if r.kind == "document" {
-            c.store
-                .chunk(c.build_id, &r.record_id)?
-                .map(|ch| ch.document_id)
+            canonical.as_ref().and_then(|k| k.document_id.clone())
         } else {
             None
         };
@@ -143,25 +272,28 @@ pub fn verify(
             out.push(bad("filtered"));
             continue;
         }
-        let exists = match r.kind.as_str() {
-            "entity" => c.store.entity(c.build_id, &r.record_id)?.is_some(),
-            "document" => {
-                doc_id.is_some()
-                    // A title hit cites the document itself.
-                    || c.store.chunk_at(c.build_id, &r.record_id, 0)?.is_some()
-            }
-            "path" => c.store.file_rel_path(c.build_id, &r.record_id)?.is_some(),
-            "passage" => c.store.passage(c.build_id, &r.record_id)?.is_some(),
-            _ => false,
+        let Some(k) = canonical else {
+            out.push(bad("missing_record"));
+            continue;
         };
-        out.push(if exists {
-            Verification {
-                id: r.id.clone(),
-                valid: true,
-                reason: None,
-            }
-        } else {
-            bad("missing_record")
+        let pages = r.page_start.map(|s| (s, r.page_end.unwrap_or(s)));
+        let misplaced = matches!((lines, k.lines), (Some(l), Some(span)) if !within(l, span))
+            || matches!((pages, k.pages), (Some(p), Some(span)) if !within(p, span));
+        if misplaced {
+            out.push(bad("wrong_location"));
+            continue;
+        }
+        if r.content_fingerprint
+            .as_ref()
+            .is_some_and(|f| *f != fingerprint(&k.text))
+        {
+            out.push(bad("content_mismatch"));
+            continue;
+        }
+        out.push(Verification {
+            id: r.id.clone(),
+            valid: true,
+            reason: None,
         });
     }
     Ok(out)
@@ -444,6 +576,7 @@ mod tests {
             page_end: Some(2),
             heading: Some("Refunds".into()),
             fingerprint: fingerprint(text),
+            content_fingerprint: None,
             text: text.into(),
         }
     }

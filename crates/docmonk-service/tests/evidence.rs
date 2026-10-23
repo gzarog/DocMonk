@@ -1,7 +1,8 @@
 //! Evidence pipeline guarantees (ADR 0033, P0-R01..R03): hard filters
 //! cannot be bypassed by graph expansion, decomposition or attachments;
 //! citations are re-verified against the current snapshot (stale build,
-//! deleted file); explain plans are stable.
+//! deleted file, changed content, wrong location, another scope); explain
+//! plans are stable.
 
 use std::path::Path;
 
@@ -110,6 +111,32 @@ fn sources_of(v: &Value) -> Vec<String> {
     s
 }
 
+/// The citations of an `evidence` payload, as the caller would keep them.
+fn refs_of(v: &Value) -> Vec<EvidenceRef> {
+    let s = |e: &Value, k: &str| e[k].as_str().map(str::to_owned);
+    v["evidence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| EvidenceRef {
+            id: s(e, "id").unwrap(),
+            source_id: s(e, "source_id").unwrap(),
+            build_id: s(e, "build_id").unwrap(),
+            kind: s(e, "kind").unwrap(),
+            record_id: s(e, "record_id").unwrap(),
+            path: s(e, "path").unwrap(),
+            line_start: e["line_start"].as_i64(),
+            line_end: e["line_end"].as_i64(),
+            page_start: e["page_start"].as_i64(),
+            page_end: e["page_end"].as_i64(),
+            heading: s(e, "heading"),
+            fingerprint: s(e, "fingerprint").unwrap(),
+            content_fingerprint: s(e, "content_fingerprint"),
+            text: s(e, "text").unwrap(),
+        })
+        .collect()
+}
+
 #[test]
 fn hard_filters_hold_across_every_stage() {
     let env = setup();
@@ -191,26 +218,7 @@ fn citations_are_verified_against_the_current_snapshot() {
     let env = setup();
     let v = ev(&env, "refunds finance approval", SearchFilters::default());
     assert_ne!(v["verdict"], "insufficient_evidence");
-    let refs: Vec<EvidenceRef> = v["evidence"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|e| EvidenceRef {
-            id: e["id"].as_str().unwrap().into(),
-            source_id: e["source_id"].as_str().unwrap().into(),
-            build_id: e["build_id"].as_str().unwrap().into(),
-            kind: e["kind"].as_str().unwrap().into(),
-            record_id: e["record_id"].as_str().unwrap().into(),
-            path: e["path"].as_str().unwrap().into(),
-            line_start: None,
-            line_end: None,
-            page_start: None,
-            page_end: None,
-            heading: None,
-            fingerprint: e["fingerprint"].as_str().unwrap().into(),
-            text: e["text"].as_str().unwrap().into(),
-        })
-        .collect();
+    let refs = refs_of(&v);
     assert!(v["evidence"]
         .as_array()
         .unwrap()
@@ -249,6 +257,80 @@ fn citations_are_verified_against_the_current_snapshot() {
             "{c:?}"
         );
     }
+}
+
+#[test]
+fn verification_rejects_changed_content_wrong_locations_and_other_scopes() {
+    let env = setup();
+    let v = ev(&env, "refunds finance approval", SearchFilters::default());
+    let docs = refs_of(&v);
+    let v = ev(&env, "Charge", SearchFilters::default());
+    let code = refs_of(&v);
+    let entity = code
+        .iter()
+        .find(|r| r.kind == "entity" && r.line_start.is_some())
+        .expect("a located code citation")
+        .clone();
+    let doc = docs
+        .iter()
+        .find(|r| r.kind == "document" && r.source_id == env.a)
+        .expect("a document citation")
+        .clone();
+    // Every citation carries the fingerprint of its record's stored content.
+    assert!(entity.content_fingerprint.is_some() && doc.content_fingerprint.is_some());
+    assert_eq!(v["provenance"]["invalid"], 0, "{}", v["provenance"]);
+    assert_eq!(
+        v["provenance"]["checked"],
+        v["evidence"].as_array().unwrap().len()
+    );
+
+    let mut changed = doc.clone();
+    changed.content_fingerprint = Some("0000000000000000".into());
+    let mut misplaced = entity.clone();
+    misplaced.line_start = Some(900);
+    misplaced.line_end = Some(905);
+    let mut stale = entity.clone();
+    stale.build_id = "build_elsewhere".into();
+    let mut gone = doc.clone();
+    gone.record_id = "0000".into();
+    let opened = open_sources(&env.home, None).unwrap();
+    let corp = corpora(&opened);
+    let checks = grounding::verify(
+        &corp,
+        &[entity.clone(), doc.clone(), changed, misplaced, stale, gone],
+        &SearchFilters::default(),
+    )
+    .unwrap();
+    let reasons: Vec<Option<&str>> = checks.iter().map(|c| c.reason).collect();
+    assert_eq!(
+        reasons,
+        [
+            None,
+            None,
+            Some("content_mismatch"),
+            Some("wrong_location"),
+            Some("stale_build"),
+            Some("missing_record"),
+        ]
+    );
+    // Outside the request's scope: a citation from A is not valid for a
+    // B-scoped request, nor for a kind it excludes.
+    let only_b = SearchFilters {
+        source_ids: vec![env.b.clone()],
+        ..Default::default()
+    };
+    let only_docs = SearchFilters {
+        kinds: vec!["document".into()],
+        ..Default::default()
+    };
+    assert_eq!(
+        grounding::verify(&corp, std::slice::from_ref(&doc), &only_b).unwrap()[0].reason,
+        Some("filtered")
+    );
+    assert_eq!(
+        grounding::verify(&corp, std::slice::from_ref(&entity), &only_docs).unwrap()[0].reason,
+        Some("filtered")
+    );
 }
 
 #[test]

@@ -70,6 +70,14 @@ and classifies intent. The stages are then:
 5. evidence assembly with evidence classes, budget truncation and
    freshness.
 
+Lexical and semantic candidates are fused by one ranking path
+(`docmonk_retrieval::pipeline`) for every surface: per-stage candidate
+budgets, exact pins, RRF, an optional cross-encoder pass on stored text
+with a reported state, and context around document and code hits alike.
+Every citation carries a fingerprint of its record's stored content and is
+re-verified (source, build, scope, record, location, content) before it
+counts as support. See [ADR 0038](adr/0038-shared-ranking-and-citation-verification.md).
+
 Every read goes through `KnowledgeRead`, pinned to each source's published
 build and graph generation. Backend-specific code only implements those
 reads. See [ADR 0036](adr/0036-retrieval-anchors-and-exact-occurrences.md).

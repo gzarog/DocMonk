@@ -576,6 +576,11 @@ pub fn explore_options(
         selective_graph: sc.selective_graph.enabled,
         max_seed_entities: sc.selective_graph.max_seed_entities.max(1) as usize,
         explain,
+        rerank_top_n: sc
+            .reranker
+            .enabled
+            .then_some(sc.reranker.top_n.max(1) as usize),
+        candidates: docmonk_retrieval::pipeline::candidate_budget(sc.candidate_pool, 10),
     }
 }
 
@@ -670,7 +675,9 @@ pub fn explore_value_with(
     };
     let t = Instant::now();
     let opts = explore_options(cfg, req.budget, req.explain);
-    let mut r = explore::explore_with(&corp, &plan, &mut semantic, opts).map_err(search_err)?;
+    let encoder = sc.reranker.enabled.then(|| cross_encoder(home)).flatten();
+    let mut r = explore::explore_ranked(&corp, &plan, &mut semantic, opts, encoder.as_deref())
+        .map_err(search_err)?;
     stage("explore", t);
     let t = Instant::now();
     absolutize_json(&mut r, opened, None);
@@ -1029,6 +1036,8 @@ pub struct SearchRun {
     pub semantic: Option<hybrid::SemanticOutcome>,
     /// The merged hybrid ranking, when requested.
     pub ranked: Option<Vec<hybrid::RankedHit>>,
+    /// What the neural pass did for `ranked` (hybrid runs only).
+    pub reranker: Option<docmonk_retrieval::pipeline::RerankerStatus>,
     /// Context per document hit id.
     pub expanded: HashMap<String, Value>,
     /// `{stage, hits, duration_ms}` per stage.
@@ -1062,35 +1071,6 @@ pub fn tokenizer_json() -> Value {
     })
 }
 
-/// Reranker passages (see [`hybrid::passage`]) of the first `top_n`
-/// hybrid-tier hits, keyed by `(source, id)`: chunks with their stored
-/// text, entities with their qualified name and signature.
-fn rerank_passages(
-    opened: &[Opened],
-    hits: &[hybrid::RankedHit],
-    top_n: usize,
-) -> HashMap<(String, String), String> {
-    let mut out = HashMap::new();
-    for h in hits.iter().filter(|h| !h.candidate.exact_match).take(top_n) {
-        let c = &h.candidate;
-        let Some(o) = opened.iter().find(|o| o.source.id == c.source_id) else {
-            continue;
-        };
-        let text = match c.kind.as_str() {
-            "document" => match o.store.read().chunk(&o.build, &c.id) {
-                Ok(Some(ch)) => hybrid::passage(&c.title, &ch.heading_path, &context::text_of(&ch)),
-                _ => continue,
-            },
-            "entity" | "passage" => {
-                hybrid::passage(&c.title, &[], c.snippet.as_deref().unwrap_or_default())
-            }
-            _ => continue,
-        };
-        out.insert((c.source_id.clone(), c.id.clone()), text);
-    }
-    out
-}
-
 /// Document chunks of one file kept on a plain `search` page.
 pub const PLAIN_SEARCH_CHUNKS_PER_DOCUMENT: usize = 2;
 
@@ -1111,13 +1091,11 @@ pub fn run_search(
         .into_iter()
         .filter(|c| f.allows_source(c.store.source_id()))
         .collect();
-    // Over-fetch so the limit still fills after collapsing sibling chunks
-    // (and more when filtering).
-    let fetch = if f.is_empty() {
-        req.limit * 2
-    } else {
-        req.limit * 4
-    };
+    // The candidate budget of every stage (`search.candidate_pool`),
+    // independent of the response size: the limit still fills after
+    // collapsing sibling chunks and filtering, and fusion and the neural
+    // pass rank a meaningful pool (ADR 0038).
+    let fetch = docmonk_retrieval::pipeline::candidate_budget(sc.candidate_pool, req.limit);
     // The semantic stage: model (shared, loaded once per process), one
     // query embedding, every corpus.
     let semantic_job =
@@ -1132,7 +1110,7 @@ pub fn run_search(
                 corp,
                 embedder,
                 req.query,
-                req.limit,
+                fetch,
                 Some(sc.semantic_top_k.max(1) as usize),
                 ann_params(cfg),
                 f,
@@ -1205,8 +1183,11 @@ pub fn run_search(
         }
         results = kept;
     }
-    results.truncate(req.limit);
+    // Fusion ranks the whole candidate budget; the lexical listing shows
+    // the requested number of hits.
     absolutize_results(&mut results, opened);
+    let lexical_candidates = req.hybrid.then(|| results.clone());
+    results.truncate(req.limit);
     let mut timings: Vec<Value> = stage_timings
         .iter()
         .map(|t| json!({"stage": t.stage, "hits": t.hits, "duration_ms": t.duration_ms}))
@@ -1239,55 +1220,57 @@ pub fn run_search(
     } else {
         None
     };
+    let mut reranker = None;
     let ranked = if req.hybrid {
         let sem_hits = semantic
             .as_ref()
             .map(|s| s.hits.clone())
             .unwrap_or_default();
-        let candidates = hybrid::merge(&results, &sem_hits);
-        let collapse = |mut hits: Vec<hybrid::RankedHit>| {
-            docmonk_retrieval::diversify::collapse_ranked_document_chunks(
-                &mut hits,
-                PLAIN_SEARCH_CHUNKS_PER_DOCUMENT,
+        // The shared ranking path (ADR 0038): the same fusion and neural
+        // pass as evidence and explore.
+        let encoder = sc.reranker.enabled.then(|| cross_encoder(home)).flatten();
+        let term_coverage = sc.routing.enabled
+            && docmonk_retrieval::pipeline::orders_by_coverage(
+                docmonk_retrieval::route::route(req.query, route_options(cfg)).intent,
             );
-            hits
-        };
-        if sc.reranker.enabled {
-            let top_n = sc.reranker.top_n.max(1) as usize;
-            let pooled = collapse(hybrid::rerank(candidates, req.limit.max(top_n) * 2));
-            let started = Instant::now();
-            let encoder = cross_encoder(home);
-            let passages = rerank_passages(opened, &pooled, top_n);
-            let mut hits = match encoder.as_deref() {
-                Some(ce) => hybrid::neural_rerank_with(
-                    pooled,
-                    top_n,
-                    |h| {
-                        passages
-                            .get(&(h.candidate.source_id.clone(), h.candidate.id.clone()))
-                            .cloned()
-                            .unwrap_or_else(|| hybrid::snippet_passage(h))
-                    },
-                    |texts| ce.score(req.query, texts),
-                ),
-                None => hybrid::neural_rerank(req.query, pooled, top_n, None),
-            };
+        let fused = docmonk_retrieval::pipeline::fuse(
+            &corp,
+            req.query,
+            lexical_candidates.as_deref().unwrap_or_default(),
+            &sem_hits,
+            docmonk_retrieval::pipeline::FuseOptions {
+                limit: req.limit,
+                rerank_top_n: sc
+                    .reranker
+                    .enabled
+                    .then_some(sc.reranker.top_n.max(1) as usize),
+                per_document_cap: Some(PLAIN_SEARCH_CHUNKS_PER_DOCUMENT),
+                term_coverage,
+            },
+            encoder.as_deref(),
+        )
+        .map_err(search_err)?;
+        if fused.reranker.enabled {
             timings.push(json!({
                 "stage": "neural_rerank",
-                "hits": hits.len().min(top_n),
-                "duration_ms": started.elapsed().as_secs_f64() * 1000.0,
+                "hits": fused.reranker.scored,
+                "duration_ms": fused.reranker.duration_ms,
+                "state": fused.reranker.state,
             }));
-            hits.truncate(req.limit);
-            Some(hits)
-        } else {
-            let mut hits = collapse(hybrid::rerank(candidates, req.limit * 2));
-            hits.truncate(req.limit);
-            Some(hits)
         }
+        reranker = Some(fused.reranker);
+        Some(fused.hits)
     } else {
         None
     };
-    // Context for document hits, after ranking and the limit.
+    // The semantic stage fetched a candidate pool for fusion; its own
+    // listing shows the requested number of hits.
+    let semantic = semantic.map(|mut s| {
+        s.hits.truncate(req.limit);
+        s
+    });
+    // Context after ranking and the limit: around lexical document hits,
+    // and around every final ranked hit (semantic-only and code hits too).
     let ctx_opts = context::ContextOptions::from_config(&sc.context);
     let mut expanded = HashMap::new();
     if req.with_context && !ctx_opts.disabled() {
@@ -1302,6 +1285,16 @@ pub fn run_search(
                 }
             }
         }
+        for h in ranked.iter().flatten() {
+            if expanded.contains_key(&h.candidate.id) {
+                continue;
+            }
+            if let Some(c) = docmonk_retrieval::pipeline::expand_context(&corp, h, &ctx_opts)
+                .map_err(search_err)?
+            {
+                expanded.insert(h.candidate.id.clone(), c);
+            }
+        }
         timings.push(json!({
             "stage": "context",
             "hits": expanded.len(),
@@ -1312,6 +1305,7 @@ pub fn run_search(
         results,
         semantic,
         ranked,
+        reranker,
         expanded,
         timings,
         confidence,

@@ -292,6 +292,9 @@ fn setup(backend: &str, server: Option<(&str, &str)>, models: Models) -> Backend
     let t = Instant::now();
     let (_, update_indexed) = index_all(&home);
     let update_ms = t.elapsed().as_secs_f64() * 1000.0;
+    if let Some((url, prefix)) = &cleanup {
+        settle_segments(url, prefix);
+    }
     let coverage = coverage(&home, &first, first_indexed);
     Backend {
         name: backend.into(),
@@ -303,6 +306,30 @@ fn setup(backend: &str, server: Option<(&str, &str)>, models: Models) -> Backend
         update_ms,
         update_indexed,
         coverage,
+    }
+}
+
+/// Merges the test indexes' segments before measuring. The update's
+/// garbage collection deletes the edited file's old records, and Lucene
+/// counts deleted documents in its term statistics until a background
+/// merge expunges them. That merge can happen between the two passes and
+/// shift BM25 scores of near-tied hits, which says nothing about
+/// DocMonk's determinism. Settled segments keep the reproducibility gate
+/// about DocMonk alone.
+fn settle_segments(url: &str, prefix: &str) {
+    use docmonk_backends::schema::{index_name, IndexKind};
+    let names: Vec<String> = IndexKind::ALL
+        .iter()
+        .map(|k| index_name(prefix, *k))
+        .collect();
+    let c = reqwest::blocking::Client::new();
+    let list = names.join(",");
+    for path in [
+        format!("{url}/{list}/_forcemerge?max_num_segments=1&ignore_unavailable=true"),
+        format!("{url}/{list}/_refresh?ignore_unavailable=true"),
+    ] {
+        let r = c.post(&path).send().expect("settle the test indexes");
+        assert!(r.status().is_success(), "{path}: {}", r.status());
     }
 }
 
@@ -770,16 +797,32 @@ fn evaluate(b: &Backend, models: Models, queries: &[Query]) -> Value {
     // Reproducibility: a second pass over the same snapshot must return
     // the same rankings, citations and verdicts.
     let (second, _) = run_all(b, models, queries);
+    let top = |a: Option<&Answer>| -> Vec<String> {
+        a.map(|a| {
+            a.hits
+                .iter()
+                .map(|h| format!("{}:{:?}", h.path, h.line_start))
+                .collect()
+        })
+        .unwrap_or_default()
+    };
     let mut diverged = Vec::new();
     for (k, a) in &first {
         if second.get(k) != Some(a) {
-            diverged.push(format!("{}/{}", k.0, k.1));
+            diverged.push(format!(
+                "{}/{}: {:?} then {:?}",
+                k.0,
+                k.1,
+                top(Some(a)),
+                top(second.get(k))
+            ));
         }
     }
     assert!(
         diverged.is_empty(),
-        "{}: rankings changed between two runs over the same snapshot: {diverged:?}",
-        b.name
+        "{}: rankings changed between two runs over the same snapshot:\n{}",
+        b.name,
+        diverged.join("\n")
     );
     // Evidence citations returned as evidence must re-verify.
     let invalid: Vec<String> = first
