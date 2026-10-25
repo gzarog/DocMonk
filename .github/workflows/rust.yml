@@ -362,7 +362,11 @@ jobs:
           Invoke-WebRequest -UseBasicParsing -OutFile "$k\minisign.zip" `
             -Uri "https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-win64.zip"
           Expand-Archive "$k\minisign.zip" -DestinationPath "$k\minisign"
-          $exe = (Get-ChildItem -Recurse -Filter minisign.exe "$k\minisign" | Select-Object -First 1).FullName
+          # The archive holds one minisign.exe per architecture.
+          $exe = (Get-ChildItem -Recurse -Filter minisign.exe "$k\minisign" |
+            Where-Object { $_.FullName -notmatch 'aarch64|arm64' } |
+            Sort-Object { $_.FullName -notmatch 'x86_64' } | Select-Object -First 1).FullName
+          if (-not $exe) { throw "no x86_64 minisign.exe in the archive" }
           & $exe -G -W -p "$k\test.pub" -s "$k\test.key"
           if ($LASTEXITCODE -ne 0) { throw "key generation failed" }
           $env:DOCMONK_MINISIGN_PUBKEY = (Get-Content "$k\test.pub")[1]
