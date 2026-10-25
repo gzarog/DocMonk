@@ -13,6 +13,12 @@ use. No other runtime is needed.
 cargo build --workspace          # the `docmonk` binary: target/debug/docmonk
 ```
 
+Debug builds keep line tables for the workspace crates and no debug info
+for dependencies (`[profile.dev]` in `Cargo.toml`), so backtraces still
+name files and lines. A full debug test build (`cargo test --workspace
+--no-run`) needs about 9 GB of `target/`. For a debugger session, build
+with `CARGO_PROFILE_DEV_DEBUG=full`.
+
 ## Running the checks
 
 CI (`.github/workflows/rust.yml`) runs these on Linux, macOS and Windows.
