@@ -75,6 +75,8 @@ DocMonk is a **local-first knowledge engine**. Point it at folders and you get a
 
 Check the install with `docmonk version` and `docmonk doctor`.
 
+**Verification:** the installers and `docmonk update` check every archive against the release's `SHA256SUMS`. Once a release-signing key is configured, they also require a valid minisign signature on `SHA256SUMS` and refuse to install without one: install [`minisign`](https://jedisct1.github.io/minisign/) first. `DOCMONK_INSECURE_SKIP_SIGNATURE=1` is the only opt-out, and it prints a warning.
+
 ---
 
 ## 🚀 Quick start (5 minutes)

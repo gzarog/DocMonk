@@ -1,9 +1,10 @@
 #!/bin/sh
 # Installs the native DocMonk CLI: downloads the release archive
-# for this platform, verifies it against the release's SHA256SUMS (and the
-# minisign signature over it, when a key is configured below and
-# `minisign` is installed), unpacks it under $DOCMONK_INSTALL_DIR/versions,
-# and links `docmonk` onto a per-user bin directory.
+# for this platform, verifies it against the release's SHA256SUMS and,
+# when a release key is configured below, the minisign signature over it,
+# unpacks it under $DOCMONK_INSTALL_DIR/versions, and links `docmonk` onto
+# a per-user bin directory. With a key, verification fails closed: a
+# missing `minisign` tool, a missing or invalid SHA256SUMS.minisig aborts.
 #
 #   DOCMONK_VERSION        version to install (default: the latest release)
 #   DOCMONK_INSTALL_DIR    default: ~/.docmonk
@@ -11,11 +12,19 @@
 #   DOCMONK_HOME           default: ~/.docmonk
 #   DOCMONK_DOWNLOAD_BASE  a URL or local directory holding the release
 #                          assets (testing and mirrors)
+#   DOCMONK_MINISIGN_PUBKEY  a release key to verify with instead of the
+#                          one below (testing and mirrors)
+#   DOCMONK_INSECURE_SKIP_SIGNATURE=1  install without checking the
+#                          signature (checksums only); prints a warning
 set -eu
 
 REPO="gzarog/DocMonk"
-# The release-signing public key (minisign). Empty: checksums only.
+# The release-signing public key (minisign), committed so the README
+# one-liner verifies signatures. Empty: checksums only, with a warning.
+# rust-release.yml refuses to publish when it differs from
+# vars.MINISIGN_PUBLIC_KEY.
 MINISIGN_PUBKEY=""
+VERIFY_KEY="${DOCMONK_MINISIGN_PUBKEY:-$MINISIGN_PUBKEY}"
 INSTALL_DIR="${DOCMONK_INSTALL_DIR:-$HOME/.docmonk}"
 BIN_DIR="${DOCMONK_BIN_DIR:-$HOME/.local/bin}"
 DOCMONK_HOME="${DOCMONK_HOME:-$HOME/.docmonk}"
@@ -71,15 +80,21 @@ echo "Downloading DocMonk $VERSION ($TARGET)..."
 fetch "$BASE/$ASSET" "$TMP/$ASSET"
 fetch "$BASE/SHA256SUMS" "$TMP/SHA256SUMS"
 
-if [ -n "$MINISIGN_PUBKEY" ]; then
-    if command -v minisign >/dev/null 2>&1; then
-        fetch "$BASE/SHA256SUMS.minisig" "$TMP/SHA256SUMS.minisig"
-        minisign -Vqm "$TMP/SHA256SUMS" -P "$MINISIGN_PUBKEY" \
-            || fail "SHA256SUMS signature does not verify; refusing to install"
-        echo "Signature verified."
-    else
-        echo "note: install minisign to also verify the release signature" >&2
-    fi
+if [ -z "$VERIFY_KEY" ]; then
+    echo "warning: this installer carries no release key; verifying checksums only" >&2
+elif [ "${DOCMONK_INSECURE_SKIP_SIGNATURE:-}" = 1 ]; then
+    echo "warning: DOCMONK_INSECURE_SKIP_SIGNATURE=1: the release signature is NOT verified" >&2
+else
+    command -v minisign >/dev/null 2>&1 \
+        || fail "minisign is required to verify the release signature; install it
+  (https://jedisct1.github.io/minisign/, e.g. 'brew install minisign' or
+  'apt install minisign') and run this again, or set
+  DOCMONK_INSECURE_SKIP_SIGNATURE=1 to install with checksums only"
+    # A release without SHA256SUMS.minisig fails here (fetch exits).
+    fetch "$BASE/SHA256SUMS.minisig" "$TMP/SHA256SUMS.minisig"
+    minisign -Vqm "$TMP/SHA256SUMS" -x "$TMP/SHA256SUMS.minisig" -P "$VERIFY_KEY" \
+        || fail "SHA256SUMS signature does not verify; refusing to install"
+    echo "Signature verified."
 fi
 
 EXPECTED="$(awk -v n="$ASSET" '{ f = $2; sub(/^\*/, "", f); if (f == n) print $1 }' "$TMP/SHA256SUMS")"
