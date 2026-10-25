@@ -25,6 +25,7 @@ listens to; do not rename them. A failed `CI` push run never releases.
 | CI gate | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | 150-source status benchmark | – | – | – | – | – | – (nightly) |
 | Retrieval eval (repository, pinned models) | – | – | – | – | – | – (nightly) |
+| Dependency advisories (`cargo deny check advisories`) | – | – | – | – | – | – (nightly) |
 
 The Linux Rust job always requires the pinned OCR, embedding and reranker
 models (`DOCMONK_REQUIRE_OCR=1`, `DOCMONK_REQUIRE_MODELS=1`).
@@ -45,7 +46,7 @@ against its first parent) and decides:
   components and fixtures even when they contain no platform-specific `cfg`
   guards. These use filesystem paths whose canonical representation differs
   on Windows, macOS, and Linux
-- **all three**: `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, any crate
+- **all three**: `Cargo.toml`, `Cargo.lock`, `deny.toml`, `rust-toolchain.toml`, any crate
   manifest, `.github/workflows/**`, `.github/actions/**`, the classifier itself
 
 `scripts/ci_changes.sh --self-test` checks representative paths and runs
@@ -60,6 +61,18 @@ Endpoint and exact-occurrence retrieval changes (including source/query paths
 and `fixtures/endpoints/**`) select Windows and macOS Rust checks on pull
 requests. This catches cross-platform temporary-directory alias and
 canonicalization mistakes before merging; classifier self-tests cover the paths.
+
+## Dependency policy (cargo-deny)
+
+`Repository audits` runs `cargo deny check` against `deny.toml` on every
+PR and push: any RustSec vulnerability fails, licences must be on the
+MIT-compatible allowlist, crates may only come from crates.io, and
+duplicate versions are reported as warnings. Ignores are allowed only for
+advisories that cannot affect DocMonk, each with a reason and a review
+date. The nightly `Dependency advisories` job re-runs the advisory check
+on `main`; on failure it opens one issue labelled `security-advisory`, or
+comments on the open one. Locally: `cargo install cargo-deny --locked`,
+then `cargo deny check`.
 
 ## CI gate
 

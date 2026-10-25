@@ -29,7 +29,7 @@ classify() {
   while IFS= read -r path || [ -n "$path" ]; do
     [ -z "$path" ] && continue
     case "$path" in
-      Cargo.toml | Cargo.lock | rust-toolchain.toml | crates/*/Cargo.toml | xtask/Cargo.toml \
+      Cargo.toml | Cargo.lock | deny.toml | rust-toolchain.toml | crates/*/Cargo.toml | xtask/Cargo.toml \
         | .github/workflows/* | .github/actions/* | scripts/ci_changes.sh)
         installer=true docker=true cross_platform=true ;;
     esac
@@ -88,6 +88,7 @@ expect "xtask/src/main.rs" "installer=true docker=false cross_platform=true"
 expect "Dockerfile" "installer=false docker=true cross_platform=false"
 expect "scripts/fetch_models.sh" "installer=false docker=true cross_platform=false"
 expect "Cargo.lock" "installer=true docker=true cross_platform=true"
+expect "deny.toml" "installer=true docker=true cross_platform=true"
 expect "crates/docmonk-cli/Cargo.toml" "installer=true docker=true cross_platform=true"
 expect ".github/workflows/rust.yml" "installer=true docker=true cross_platform=true"
 expect "crates/docmonk-core/src/paths.rs" "installer=false docker=false cross_platform=true"

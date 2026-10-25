@@ -17,3 +17,9 @@ Status: accepted
   workspace `rust-version` (1.89, needed for `std::fs::File::try_lock`).
 * The production runtime has no dependency outside the Rust binary and its
   bundled model assets.
+* `deny.toml` enforces this policy with `cargo deny check` in CI
+  (docs/CI.md): no open RustSec vulnerability, an allowlist of permissive
+  licences, crates.io as the only source. An advisory may be ignored only
+  when it cannot affect DocMonk, with the reason and a review date next
+  to the id; the nightly advisory run catches advisories published
+  between PRs.
