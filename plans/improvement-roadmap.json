@@ -880,7 +880,7 @@
         "V01"
       ],
       "branch": "roadmap/h1-tls-advisories",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/145",
       "purpose": "Remove the six open RustSec advisories in rustls, rustls-webpki and webpki-roots from the lockfile and record why the zip advisories do not apply until upstream crates move.",
       "scope": {
         "modify": [
@@ -969,7 +969,7 @@
         "V02"
       ],
       "branch": "roadmap/h2-cargo-deny",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/145",
       "purpose": "Catch new advisories, licence violations and duplicate or untrusted sources automatically, including advisories published between PRs.",
       "scope": {
         "modify": [
@@ -1073,7 +1073,7 @@
         "V03"
       ],
       "branch": "roadmap/h3-signed-installs",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/145",
       "purpose": "Make the README one-liners and docmonk update verify the release signature and refuse to install when verification cannot run.",
       "scope": {
         "modify": [
@@ -1183,7 +1183,7 @@
         "V04"
       ],
       "branch": "roadmap/h4-secret-redaction",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/145",
       "purpose": "Stop credentials in indexed files from being stored, embedded or returned through search, evidence, the Admin UI or MCP.",
       "scope": {
         "modify": [
@@ -1291,7 +1291,7 @@
         "V14"
       ],
       "branch": "roadmap/h5-mcp-visibility",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/145",
       "purpose": "Let users keep sensitive sources searchable from the CLI and UI while hiding them from AI agents, and see what agents asked.",
       "scope": {
         "modify": [
@@ -1736,7 +1736,7 @@
         "V07"
       ],
       "branch": "roadmap/r5-ann-sweep",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/145",
       "purpose": "Replace the stale recall figure and justify the default with a recall/latency curve.",
       "scope": {
         "modify": [
@@ -1820,7 +1820,7 @@
         "V15"
       ],
       "branch": "roadmap/r6-release-hygiene",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/145",
       "purpose": "Close ADR 0032 and prepare user-facing release material.",
       "scope": {
         "modify": [
@@ -3111,7 +3111,7 @@
         "V20"
       ],
       "branch": "roadmap/a3-build-ergonomics",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/145",
       "purpose": "Shrink debug builds and link times; can land at any time.",
       "scope": {
         "modify": [
@@ -3438,7 +3438,7 @@
         "V22"
       ],
       "branch": "roadmap/q1-codeowners",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/145",
       "purpose": "Prevent a model from writing the code, the labels and the floors that judge it.",
       "scope": {
         "modify": [
@@ -3654,7 +3654,7 @@
         "V13"
       ],
       "branch": "roadmap/q4-coverage-ops",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/145",
       "purpose": "Cover the operations users rely on to protect their data.",
       "scope": {
         "modify": [
@@ -4137,6 +4137,76 @@
       "work_package": "R2",
       "event": "blocked",
       "summary": "Waiting on R1: the held-out labels need human review before floors and a nightly gate."
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "H1",
+      "event": "pr_opened",
+      "summary": "H1 is in the combined roadmap PR.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "H2",
+      "event": "pr_opened",
+      "summary": "H2 is in the combined roadmap PR.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "Q1",
+      "event": "pr_opened",
+      "summary": "Q1 is in the combined roadmap PR.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "H3",
+      "event": "pr_opened",
+      "summary": "H3 is in the combined roadmap PR.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "H4",
+      "event": "pr_opened",
+      "summary": "H4 is in the combined roadmap PR.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "H5",
+      "event": "pr_opened",
+      "summary": "H5 is in the combined roadmap PR.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "A3",
+      "event": "pr_opened",
+      "summary": "A3 is in the combined roadmap PR.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "Q4",
+      "event": "pr_opened",
+      "summary": "Q4 is in the combined roadmap PR.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "R5",
+      "event": "pr_opened",
+      "summary": "R5 is in the combined roadmap PR.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "R6",
+      "event": "pr_opened",
+      "summary": "R6 is in the combined roadmap PR.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
     }
   ],
   "agent_prompt": "Implement plans/improvement-roadmap.json in https://github.com/gzarog/DocMonk. It follows plans/plan.schema.json; read both fully, then inspect current main (the plan was written against b9f38da, v0.3.25) and adapt where the code has moved. Work in execution.order, starting with execution.start_with, one roadmap/ branch and one PR per work package, respecting depends_on. Do only tasks whose executor (task-level, else work-package-level) is not human; for claude_code_then_human_review, open the PR and stop for review; for claude_code_with_cluster, use the service containers from .github/workflows/rust.yml. Obey policy.protected_paths and execution.stop_and_ask_when. Every PR runs all keys in its verification.commands and must pass the clean-slate and branding audits; attach before/after held-out reports when eval_report_required is true. Never decide D1-D4 yourself. Report each PR as execution.pr_report says, and update status fields and progress_log in this file as execution.status_updates says, validating with commands.validate_plan."
