@@ -75,6 +75,13 @@ fn rules() -> &'static [Rule] {
                 r#"(?i)[\w.\-]*(?:password|passwd|secret|api[_\-]?key|apikey|access[_\-]?key|auth[_\-]?token|access[_\-]?token|refresh[_\-]?token|client[_\-]?secret|private[_\-]?key|token|credential)[\w.\-]*["']?\s*(?::|=|=>|:=)\s*(?:["'])([^"'\s\[][^"']{3,})["']"#,
                 1,
             ),
+            // Environment-style KEY=value anywhere in a line (shell snippets,
+            // prose, log lines): an upper-case key, no spaces around `=`.
+            r(
+                "assignment",
+                r#"\b[A-Z0-9_]*(?:PASSWORD|PASSWD|SECRET|API_?KEY|ACCESS_KEY|TOKEN|CREDENTIAL)[A-Z0-9_]*=([^\s"'#;,()\[\]\$\{<|>&*][^\s"'#;,()\[\]]{3,})"#,
+                1,
+            ),
             // Config-style bare values on their own line (.env, YAML, INI,
             // .properties): KEY=value, key: value, export KEY=value.
             r(
@@ -267,6 +274,10 @@ mod tests {
             "DB_PASSWORD=[REDACTED:assignment]"
         );
         assert_eq!(
+            r("run with GITHUB_TOKEN=abc123def456 set"),
+            "run with GITHUB_TOKEN=[REDACTED:assignment] set"
+        );
+        assert_eq!(
             r("export API_KEY=abcdef123"),
             "export API_KEY=[REDACTED:assignment]"
         );
@@ -280,6 +291,7 @@ mod tests {
             "password = request.form['password']",
             "token = self.token",
             "API_KEY=${API_KEY}",
+            "env DB_PASSWORD=$PW ./run",
             "secret: true",
             "def check_password(password):",
             "fn token(&self) -> &str {",
