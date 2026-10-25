@@ -1,0 +1,4029 @@
+{
+  "$schema": "./plan.schema.json",
+  "schema_version": "2.0",
+  "plan": {
+    "id": "docmonk-improvement-roadmap",
+    "title": "DocMonk Improvement Roadmap: harden, ship 1.0, product, architecture",
+    "created_on": "2026-10-25",
+    "updated_on": "2026-10-25",
+    "status": "active",
+    "sources": [
+      {
+        "kind": "analysis",
+        "title": "DocMonk deep status analysis",
+        "url": "https://claude.ai/artifact/8V6FJDPJvYra2jZ25Bw8w6"
+      },
+      {
+        "kind": "roadmap",
+        "title": "DocMonk Improvement Roadmap",
+        "url": "https://claude.ai/artifact/4n6Bcje6WQCju1RD4GuwFd"
+      }
+    ],
+    "repository": {
+      "url": "https://github.com/gzarog/DocMonk",
+      "base_branch": "main",
+      "base_commit": "b9f38dadf0d9a65cd50caee76030b14823538ce4",
+      "base_release": "v0.3.25",
+      "language": "Rust",
+      "toolchain": "1.90.0 (rust-toolchain.toml)",
+      "msrv": "1.89",
+      "storage_backends": [
+        "SQLite",
+        "OpenSearch",
+        "Elasticsearch"
+      ]
+    }
+  },
+  "context": {
+    "summary": "DocMonk is feature-complete for local mode and technically healthy, but not ready for v1.0.0: shipped releases carry open TLS advisories and installs that never verify signatures, the only multilingual eval has no human-reviewed labels or floors, server-mode measurements are missing, and multilingual retrieval is opt-in and hard to install.",
+    "baseline": [
+      {
+        "id": "B01",
+        "metric": "workspace tests passed / failed / ignored",
+        "value": "562 / 0 / 6",
+        "scope": "125 test binaries, Linux, DOCMONK_REQUIRE_MODELS=1, DOCMONK_REQUIRE_OCR=1",
+        "source": "local run of cargo test --workspace --no-fail-fast on b9f38da"
+      },
+      {
+        "id": "B02",
+        "metric": "cargo fmt and clippy -D warnings",
+        "value": "clean",
+        "source": "local run on b9f38da"
+      },
+      {
+        "id": "B03",
+        "metric": "evidence recall@10, default model",
+        "value": 0.854,
+        "scope": "held-out, SQLite, all-MiniLM-L6-v2",
+        "source": "benchmarks/heldout-eval/phase-3.json (reproduced locally, identical)"
+      },
+      {
+        "id": "B04",
+        "metric": "evidence recall@1, default model",
+        "value": 0.811,
+        "scope": "held-out, SQLite",
+        "source": "benchmarks/heldout-eval/phase-3.json"
+      },
+      {
+        "id": "B05",
+        "metric": "evidence cross-language recall@10, default model",
+        "value": 0.231,
+        "scope": "held-out, SQLite, 13 queries",
+        "source": "benchmarks/heldout-eval/phase-3.json"
+      },
+      {
+        "id": "B06",
+        "metric": "false support rate",
+        "value": 0.083,
+        "scope": "held-out, SQLite, 12 unanswerable queries, every report",
+        "source": "benchmarks/heldout-eval/phase-*.json"
+      },
+      {
+        "id": "B07",
+        "metric": "false abstention rate, default model",
+        "value": 0.136,
+        "scope": "held-out, SQLite, 88 answerable queries",
+        "source": "benchmarks/heldout-eval/phase-3.json"
+      },
+      {
+        "id": "B08",
+        "metric": "evidence recall@10, multilingual-e5-small",
+        "value": 0.979,
+        "scope": "held-out, SQLite",
+        "source": "benchmarks/heldout-eval/phase-4-multilingual-e5-small.json (reproduced locally, identical)"
+      },
+      {
+        "id": "B09",
+        "metric": "evidence cross-language recall@10, multilingual-e5-small",
+        "value": 1.0,
+        "scope": "held-out, SQLite",
+        "source": "benchmarks/heldout-eval/phase-4-multilingual-e5-small.json"
+      },
+      {
+        "id": "B10",
+        "metric": "evidence recall@10 on English queries, MiniLM vs E5",
+        "value": "0.823 vs 0.973",
+        "scope": "held-out, SQLite, 76 queries",
+        "source": "benchmarks/heldout-eval/phase-3.json, phase-4-multilingual-e5-small.json"
+      },
+      {
+        "id": "B11",
+        "metric": "reranked hybrid p95 latency",
+        "value": "1400-1900",
+        "unit": "ms",
+        "scope": "release, 4 vCPU; evidence arm 34-50 ms",
+        "source": "benchmarks/heldout-eval/phase-*.json"
+      },
+      {
+        "id": "B12",
+        "metric": "embedding throughput MiniLM / E5",
+        "value": "35 / 17",
+        "unit": "texts per second",
+        "scope": "4 CPU threads",
+        "source": "benchmarks/embedding-models/phase-4.json"
+      },
+      {
+        "id": "B13",
+        "metric": "debug test build size",
+        "value": 28,
+        "unit": "GB",
+        "scope": "default dev profile, 47 test binaries over 200 MB",
+        "source": "local build on b9f38da"
+      },
+      {
+        "id": "B14",
+        "metric": "open RustSec advisories in Cargo.lock",
+        "value": 9,
+        "scope": "6 TLS (rustls x4, rustls-webpki, webpki-roots), 3 zip (extract-only); plus 2 informational",
+        "source": "rustsec/advisory-db matched against Cargo.lock on 2026-10-25"
+      },
+      {
+        "id": "B15",
+        "metric": "local ANN recall@10",
+        "value": 0.7305,
+        "scope": "20k vectors, ef_search=96 (default is now 400)",
+        "source": "benchmarks/ann-20000.json"
+      }
+    ],
+    "findings": [
+      {
+        "id": "V01",
+        "severity": "high",
+        "summary": "Open RustSec advisories in the TLS stack used by docmonk-update, docmonk-ai and docmonk-backends: rustls 0.23.45 (RUSTSEC-2026-0346/0347/0348/0349), rustls-webpki 0.103.15 (RUSTSEC-2026-0382), webpki-roots 1.0.9 (RUSTSEC-2026-0381). zip 1.1.4 and 8.6.0 have RUSTSEC-2026-0367/0368/0369, which affect only ZipArchive::extract and ZipStreamReader::extract.",
+        "evidence": [
+          {
+            "path": "Cargo.lock"
+          }
+        ]
+      },
+      {
+        "id": "V02",
+        "severity": "high",
+        "summary": "No cargo-deny or cargo-audit in any workflow.",
+        "evidence": [
+          {
+            "path": ".github/workflows/rust.yml"
+          },
+          {
+            "path": ".github/workflows/rust-nightly.yml"
+          },
+          {
+            "path": ".github/workflows/rust-release.yml"
+          }
+        ]
+      },
+      {
+        "id": "V03",
+        "severity": "high",
+        "summary": "The README one-liner downloads install.sh from main, where the minisign key is empty, so signatures are never checked; with a key set, a missing minisign tool only prints a note.",
+        "evidence": [
+          {
+            "path": "install.sh",
+            "lines": "17-18,74-83"
+          },
+          {
+            "path": "install.ps1"
+          },
+          {
+            "path": ".github/workflows/rust-release.yml",
+            "note": "injects the key only into dist/ copies"
+          }
+        ]
+      },
+      {
+        "id": "V04",
+        "severity": "high",
+        "summary": "Secret filtering is filename-only with 8 patterns; indexed text is never redacted and is served through MCP.",
+        "evidence": [
+          {
+            "path": "crates/docmonk-core/src/security.rs",
+            "note": "SECRET_FILENAME_PATTERNS"
+          },
+          {
+            "path": "crates/docmonk-telemetry/src/redact.rs",
+            "note": "redaction exists for logs only"
+          }
+        ]
+      },
+      {
+        "id": "V05",
+        "severity": "high",
+        "summary": "All 100 held-out labels are model-authored and pending review, and the held-out floors are empty, so the only multilingual eval gates nothing.",
+        "evidence": [
+          {
+            "path": "fixtures/eval/queries.json"
+          },
+          {
+            "path": "fixtures/eval/heldout-gates.json"
+          }
+        ]
+      },
+      {
+        "id": "V06",
+        "severity": "medium",
+        "summary": "Server-mode measurements are missing: ADR 0035 live numbers; ADR 0041 held-out on three backends and paged-embedding memory; ledger F10 (8k/50k live gate) and F12 (cache loss, two-host writers).",
+        "evidence": [
+          {
+            "path": "docs/adr/0035-server-mvcc-publication.md"
+          },
+          {
+            "path": "docs/adr/0041-bounded-embedding-and-server-hydration.md"
+          },
+          {
+            "path": "audit/remediation/ledger.json"
+          }
+        ]
+      },
+      {
+        "id": "V07",
+        "severity": "low",
+        "summary": "Local ANN recall was recorded at ef_search=96 while the default is 400.",
+        "evidence": [
+          {
+            "path": "benchmarks/ann-20000.json"
+          },
+          {
+            "path": "crates/docmonk-config/src/model.rs",
+            "note": "SearchAnnConfig"
+          }
+        ]
+      },
+      {
+        "id": "V08",
+        "severity": "medium",
+        "summary": "multilingual-e5-small can only be installed with a repository shell script; the README does not mention it.",
+        "evidence": [
+          {
+            "path": "scripts/fetch_models.sh"
+          },
+          {
+            "path": "docs/reference.md",
+            "note": "search.embedding_model row"
+          }
+        ]
+      },
+      {
+        "id": "V09",
+        "severity": "low",
+        "summary": "documents.chunking.max_tokens auto always resolves to 256 and is counted with the MiniLM tokenizer, so E5 (512) gets half-size chunks.",
+        "evidence": [
+          {
+            "path": "crates/docmonk-config/src/model.rs",
+            "note": "ChunkingConfig::resolved_max_tokens"
+          },
+          {
+            "path": "crates/docmonk-documents/src/tokenizer.rs",
+            "note": "MAX_SEQUENCE_TOKENS"
+          }
+        ]
+      },
+      {
+        "id": "V10",
+        "severity": "medium",
+        "summary": "The English cross-encoder lowers multilingual results (E5 recall@1 0.875 to 0.799, cross-language recall@10 1.0 to 0.846) and costs about 1.5 s p95.",
+        "evidence": [
+          {
+            "path": "benchmarks/heldout-eval/phase-4-multilingual-e5-small.json"
+          }
+        ]
+      },
+      {
+        "id": "V11",
+        "severity": "medium",
+        "summary": "Layering leaks: docmonk-ml depends on docmonk-storage and docmonk-indexing; docmonk-convert depends on docmonk-code, docmonk-knowledge and docmonk-ml.",
+        "evidence": [
+          {
+            "path": "crates/docmonk-ml/src/lib.rs",
+            "note": "EmbeddingFinalizer"
+          },
+          {
+            "path": "crates/docmonk-ml/src/ann.rs",
+            "note": "ProjectStore"
+          },
+          {
+            "path": "crates/docmonk-convert/src/process.rs",
+            "note": "pipeline wiring"
+          }
+        ]
+      },
+      {
+        "id": "V12",
+        "severity": "medium",
+        "summary": "Very large functions on the hottest paths: evidence_value 451 lines, explore_ranked 447, literal_content 395, health::problems 326; 20 production functions exceed 150 lines.",
+        "evidence": [
+          {
+            "path": "crates/docmonk-service/src/evidence.rs"
+          },
+          {
+            "path": "crates/docmonk-retrieval/src/explore.rs"
+          },
+          {
+            "path": "crates/docmonk-code/src/extract.rs"
+          },
+          {
+            "path": "crates/docmonk-status/src/health.rs"
+          }
+        ]
+      },
+      {
+        "id": "V13",
+        "severity": "medium",
+        "summary": "docmonk-ops (backup, restore, rebuild, uninstall, vectors; 1,065 lines) has a single test.",
+        "evidence": [
+          {
+            "path": "crates/docmonk-ops/src/"
+          }
+        ]
+      },
+      {
+        "id": "V14",
+        "severity": "medium",
+        "summary": "MCP exposes 10 tools; the CLI's references and link commands have no MCP counterpart and agents cannot fetch a cited span.",
+        "evidence": [
+          {
+            "path": "crates/docmonk-mcp/src/mcp_tools.json"
+          }
+        ]
+      },
+      {
+        "id": "V15",
+        "severity": "low",
+        "summary": "docs/clean-slate-inventory.md still exists although the baseline is empty; docs/ui.md still describes services as docmonk.service.*.",
+        "evidence": [
+          {
+            "path": "docs/clean-slate-inventory.md",
+            "lines": "8"
+          },
+          {
+            "path": "audit/clean-slate-baseline.tsv"
+          },
+          {
+            "path": "docs/ui.md",
+            "lines": "6"
+          }
+        ]
+      },
+      {
+        "id": "V16",
+        "severity": "low",
+        "summary": "Code intelligence links HTTP routes across sources but has no rules for message brokers.",
+        "evidence": [
+          {
+            "path": "crates/docmonk-code/src/framework.rs"
+          }
+        ]
+      },
+      {
+        "id": "V17",
+        "severity": "medium",
+        "summary": "Remaining held-out failures with E5: h099 (unanswerable reported supported) and the one-word ambiguous queries h085, h087, h088.",
+        "evidence": [
+          {
+            "path": "benchmarks/heldout-eval/phase-4-multilingual-e5-small.json",
+            "note": "backends.sqlite.failures.evidence"
+          }
+        ]
+      },
+      {
+        "id": "V18",
+        "severity": "low",
+        "summary": "Embedding runs on CPU only: 35 texts/s (MiniLM) and 17 texts/s (E5), 24-49 minutes for 50k chunks.",
+        "evidence": [
+          {
+            "path": "benchmarks/embedding-models/phase-4.json"
+          },
+          {
+            "path": "crates/docmonk-ml/Cargo.toml"
+          }
+        ]
+      },
+      {
+        "id": "V19",
+        "severity": "low",
+        "summary": "Sources are local or network folders only; there is no git remote source kind.",
+        "evidence": [
+          {
+            "path": "crates/docmonk-service/src/sources.rs"
+          },
+          {
+            "path": "crates/docmonk-indexing/src/watcher/network.rs",
+            "note": "polling for network roots"
+          }
+        ]
+      },
+      {
+        "id": "V20",
+        "severity": "low",
+        "summary": "A debug test build reaches 28 GB because each of 125 test binaries statically links candle, rten and tokenizers with full debug info.",
+        "evidence": [
+          {
+            "path": "Cargo.toml",
+            "note": "[profile.dev]"
+          }
+        ]
+      },
+      {
+        "id": "V21",
+        "severity": "low",
+        "summary": "Ledger residuals limit multi-host server mode: discovery needs a checkout (F04), CAS relies on the lease (F05), host-local retry state (F08), uninterruptible model batches (F09), no UI rate limiting (F11).",
+        "evidence": [
+          {
+            "path": "audit/remediation/ledger.json"
+          }
+        ]
+      },
+      {
+        "id": "V22",
+        "severity": "medium",
+        "summary": "62% of commits come from Claude sessions; code, eval labels and gates can all come from the same model.",
+        "evidence": [
+          {
+            "path": "fixtures/eval/queries.json",
+            "note": "origin model_authored"
+          }
+        ]
+      }
+    ],
+    "do_not_duplicate": [
+      {
+        "summary": "Held-out eval harness with per-arm metrics, approved-only floors and a label-file SHA check.",
+        "paths": [
+          "crates/docmonk-service/tests/heldout_eval.rs"
+        ]
+      },
+      {
+        "summary": "Optional multilingual-e5-small profile with query/passage prefixes in the model fingerprint (ADR 0040).",
+        "paths": [
+          "crates/docmonk-ml/src/manifest.rs",
+          "docs/adr/0040-multilingual-embedding-profile.md"
+        ]
+      },
+      {
+        "summary": "Minisign verification in docmonk update and SHA256SUMS signing in the release workflow when the secret exists.",
+        "paths": [
+          "crates/docmonk-update/src/verify.rs",
+          ".github/workflows/rust-release.yml"
+        ]
+      },
+      {
+        "summary": "Admin UI Host-header, CSRF and Origin/Referer checks; non-loopback binds refused without remote mode.",
+        "paths": [
+          "crates/docmonk-ui/src/lib.rs"
+        ]
+      },
+      {
+        "summary": "Greek lexical normalization: accent folding, final sigma, light stemmer (ADR 0039).",
+        "paths": [
+          "crates/docmonk-core/src/lexnorm.rs"
+        ]
+      },
+      {
+        "summary": "Live filtered ANN recall test for OpenSearch and Elasticsearch.",
+        "paths": [
+          "crates/docmonk-backends/tests/ann_recall.rs"
+        ]
+      },
+      {
+        "summary": "Safe archive unpacking in docmonk-update (enclosed_name, own placement, mode masked to 0o755); ZipArchive::extract is not used.",
+        "paths": [
+          "crates/docmonk-update/src/install.rs"
+        ]
+      },
+      {
+        "summary": "Clean-slate and branding audits.",
+        "paths": [
+          "xtask/src/audit.rs",
+          "xtask/src/branding.rs"
+        ]
+      },
+      {
+        "summary": "Single storage-mode resolver and the KnowledgeRead port shared by SQLite and server backends.",
+        "paths": [
+          "crates/docmonk-service/src/backend.rs",
+          "crates/docmonk-storage/src/read.rs"
+        ]
+      }
+    ]
+  },
+  "policy": {
+    "branching": {
+      "prefix": "roadmap/",
+      "merge_target": "main",
+      "one_pr_per": "work_package",
+      "rules": [
+        "Branch from the latest main after every depends_on package is merged.",
+        "Keep security, retrieval-quality and refactor changes in separate PRs.",
+        "Split a work package into several PRs when one would be too large to review in one sitting; keep the work package id in every PR title."
+      ]
+    },
+    "protected_paths": [
+      {
+        "path": "fixtures/eval/queries.json",
+        "rule": "human_approval_required",
+        "reason": "Held-out labels judge the code; a model must not approve its own labels."
+      },
+      {
+        "path": "fixtures/eval/heldout-gates.json",
+        "rule": "never_lower",
+        "reason": "Floors only move up, with human approval."
+      },
+      {
+        "path": "fixtures/search_quality/gates.json",
+        "rule": "never_lower",
+        "reason": "Golden-query floors."
+      },
+      {
+        "path": "fixtures/search_quality/repo-eval-gates.json",
+        "rule": "never_lower",
+        "reason": "Repository eval floors."
+      },
+      {
+        "path": "fixtures/p0/eval-gates.json",
+        "rule": "never_lower",
+        "reason": "Planted-fact eval floors."
+      },
+      {
+        "path": "audit/remediation/ledger.json",
+        "rule": "human_approval_required",
+        "reason": "Finding statuses are claims about verification."
+      },
+      {
+        "path": "audit/clean-slate-baseline.tsv",
+        "rule": "read_only",
+        "reason": "Must stay empty for the release gate."
+      },
+      {
+        "path": "xtask/src/audit.rs",
+        "rule": "human_approval_required",
+        "reason": "Audits are never weakened to get CI green."
+      }
+    ],
+    "required_checks": [
+      "fmt",
+      "clippy",
+      "test",
+      "audits"
+    ],
+    "principles": [
+      "Inspect current main before each work package; adapt the plan where the code has moved instead of applying it blindly.",
+      "Measure before and after; never claim an improvement without a committed report.",
+      "Keep determinism: identical rankings, citations and verdicts on repeated runs over the same snapshot.",
+      "Any change to stored text, tokenization or embeddings updates the relevant fingerprint so affected sources rebuild; schema changes follow ADR 0032.",
+      "Record design decisions as new ADRs in docs/adr/ with the next free number.",
+      "Prefer the smallest change that meets the acceptance criteria."
+    ],
+    "non_goals": [
+      "No new storage backend and no hosted or cloud service.",
+      "No telemetry; user eval data stays local.",
+      "No change to the ADR 0032 clean-slate policy: no code reads or converts earlier homes, databases or indexes.",
+      "No lowering of floors or loosening of audits to land a change.",
+      "No reranker enabled by default until it beats the semantic arm in every category.",
+      "No change of the default embedding model before decision D2 is recorded."
+    ]
+  },
+  "commands": {
+    "fetch_models": {
+      "run": "scripts/fetch_models.sh <models dir> --multilingual",
+      "purpose": "Download and verify the pinned embedding, reranker, OCR and E5 models."
+    },
+    "fmt": {
+      "run": "cargo fmt --all --check",
+      "purpose": "Formatting."
+    },
+    "clippy": {
+      "run": "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+      "purpose": "Lints, warnings denied."
+    },
+    "test": {
+      "run": "cargo test --workspace --no-fail-fast",
+      "purpose": "Workspace tests with pinned models required, as in CI.",
+      "env": {
+        "DOCMONK_MODELS_DIR": "<models dir>",
+        "DOCMONK_OCR_MODELS_DIR": "<models dir>/ocrs",
+        "DOCMONK_REQUIRE_MODELS": "1",
+        "DOCMONK_REQUIRE_OCR": "1"
+      }
+    },
+    "audits": {
+      "run": "cargo xtask clean-slate-audit && cargo xtask branding-audit",
+      "purpose": "Repository audits every new line must pass."
+    },
+    "release_gate_audit": {
+      "run": "cargo xtask clean-slate-audit --require-empty-baseline",
+      "purpose": "Release gate of ADR 0032."
+    },
+    "eval_default": {
+      "run": "cargo test --release -p docmonk-service --test heldout_eval",
+      "purpose": "Held-out eval with the default embedding model; attach the report.",
+      "env": {
+        "DOCMONK_MODELS_DIR": "<models dir>",
+        "DOCMONK_OCR_MODELS_DIR": "<models dir>/ocrs",
+        "DOCMONK_EVAL_OUT": "<report path>.json"
+      }
+    },
+    "eval_e5": {
+      "run": "cargo test --release -p docmonk-service --test heldout_eval",
+      "purpose": "Held-out eval with multilingual-e5-small; attach the report.",
+      "env": {
+        "DOCMONK_MODELS_DIR": "<models dir>",
+        "DOCMONK_OCR_MODELS_DIR": "<models dir>/ocrs",
+        "DOCMONK_EVAL_EMBEDDING_MODEL": "multilingual-e5-small",
+        "DOCMONK_EVAL_OUT": "<report path>.json"
+      }
+    },
+    "server_tests": {
+      "run": "cargo test --workspace",
+      "purpose": "Live OpenSearch/Elasticsearch suites.",
+      "env": {
+        "DOCMONK_TEST_OPENSEARCH_URL": "http://localhost:9201",
+        "DOCMONK_TEST_ELASTICSEARCH_URL": "http://localhost:9202",
+        "DOCMONK_REQUIRE_LIVE_SERVER": "1"
+      },
+      "requires": [
+        {
+          "kind": "cluster",
+          "description": "OpenSearch 2.17 on :9201 and Elasticsearch 8.15 on :9202 (the service containers of .github/workflows/rust.yml)"
+        }
+      ]
+    },
+    "deny": {
+      "run": "cargo deny check",
+      "purpose": "Advisories, licences, bans and sources.",
+      "available_after": "H2"
+    },
+    "validate_plan": {
+      "run": "npx --yes ajv-cli@5 validate --spec=draft2020 --strict=false -s plans/plan.schema.json -d plans/improvement-roadmap.json",
+      "purpose": "Validate this plan against its schema after every edit; then re-check x-integrity-rules by reading."
+    },
+    "low_disk": {
+      "run": "export CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0",
+      "purpose": "Keep debug builds small on machines with under 40 GB free until A3 lands."
+    }
+  },
+  "objectives": [
+    {
+      "id": "O1",
+      "objective": "Close the security exposure of releases people can install today.",
+      "success_criteria": [
+        "cargo deny check passes with only documented, expiring ignores.",
+        "Installers and docmonk update refuse tampered or unsigned releases when a key is configured.",
+        "No planted secret is retrievable through any read surface."
+      ]
+    },
+    {
+      "id": "O2",
+      "objective": "Ship v1.0.0 with human-verified quality gates.",
+      "success_criteria": [
+        "Floors on approved held-out labels run nightly on all three backends.",
+        "v1.0.0 signed and installable on Linux, macOS and Windows."
+      ]
+    },
+    {
+      "id": "O3",
+      "objective": "Make multilingual retrieval first-class.",
+      "success_criteria": [
+        "E5 installable with one command on every platform.",
+        "False support 0 and false abstention below 0.10 on approved labels."
+      ]
+    },
+    {
+      "id": "O4",
+      "objective": "Widen what DocMonk indexes and what agents can do through MCP.",
+      "success_criteria": [
+        "Git remote sources and messaging topology land with tests.",
+        "Agents can follow citations to spans and linked code through MCP alone."
+      ]
+    },
+    {
+      "id": "O5",
+      "objective": "Reduce structural debt with behaviour-preserving refactors.",
+      "success_criteria": [
+        "The layer table is enforced in CI.",
+        "A full debug test build stays under 8 GB."
+      ]
+    },
+    {
+      "id": "O6",
+      "objective": "Make AI-authored changes independently verifiable.",
+      "success_criteria": [
+        "Gate and label files require code-owner approval.",
+        "At least 300 approved queries with a sealed split; mutation score tracked."
+      ]
+    }
+  ],
+  "milestones": [
+    {
+      "id": "M0",
+      "name": "Harden",
+      "summary": "Fix what is exposed in releases people can install today.",
+      "work_packages": [
+        "H1",
+        "H2",
+        "H3",
+        "H4",
+        "H5"
+      ],
+      "gate": [
+        {
+          "id": "G0-1",
+          "criterion": "cargo deny check passes in CI with only documented, expiring ignores.",
+          "verify": {
+            "kind": "command",
+            "ref": "deny"
+          }
+        },
+        {
+          "id": "G0-2",
+          "criterion": "Installers and docmonk update fail closed on tampered or unsigned releases.",
+          "verify": {
+            "kind": "test",
+            "ref": "install-script CI job"
+          }
+        },
+        {
+          "id": "G0-3",
+          "criterion": "The secrets fixture passes on every read surface.",
+          "verify": {
+            "kind": "test",
+            "ref": "secrets fixture tests"
+          }
+        }
+      ]
+    },
+    {
+      "id": "M1",
+      "name": "Ship 1.0",
+      "summary": "Human-verified quality gates, closed measurements, signed v1.0.0.",
+      "work_packages": [
+        "R1",
+        "R2",
+        "R3",
+        "R4",
+        "R5",
+        "R6",
+        "R7"
+      ],
+      "gate": [
+        {
+          "id": "G1-1",
+          "criterion": "Held-out floors are set and pass nightly.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_default"
+          }
+        },
+        {
+          "id": "G1-2",
+          "criterion": "ADR 0041 is implemented and measured.",
+          "verify": {
+            "kind": "report",
+            "ref": "benchmarks/heldout-eval/phase-5.json"
+          }
+        },
+        {
+          "id": "G1-3",
+          "criterion": "v1.0.0 is signed and installable on three platforms.",
+          "verify": {
+            "kind": "manual"
+          }
+        },
+        {
+          "id": "G1-4",
+          "criterion": "Server mode ships GA only if R4 passed; otherwise preview (decision D1).",
+          "verify": {
+            "kind": "manual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "M2",
+      "name": "Product",
+      "summary": "Multilingual first, better abstention, wider sources and agent interface.",
+      "work_packages": [
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+        "P5",
+        "P6",
+        "P7",
+        "P8",
+        "P9",
+        "P10",
+        "P11"
+      ],
+      "gate": [
+        {
+          "id": "G2-1",
+          "criterion": "Decision D2 on the default embedding model is recorded.",
+          "verify": {
+            "kind": "manual"
+          }
+        },
+        {
+          "id": "G2-2",
+          "criterion": "P1-P4 meet their acceptance on approved floors.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_e5"
+          }
+        },
+        {
+          "id": "G2-3",
+          "criterion": "At least 300 approved held-out queries exist.",
+          "verify": {
+            "kind": "manual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "M3",
+      "name": "Architecture and scale",
+      "summary": "Behaviour-preserving structural work after the 1.0 freeze; A3 can land any time.",
+      "work_packages": [
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6"
+      ],
+      "gate": []
+    },
+    {
+      "id": "PROCESS",
+      "name": "Process",
+      "summary": "Runs alongside every milestone: make AI-written code, labels and gates verifiable.",
+      "work_packages": [
+        "Q1",
+        "Q2",
+        "Q3",
+        "Q4",
+        "Q5",
+        "Q6"
+      ],
+      "gate": []
+    }
+  ],
+  "work_packages": [
+    {
+      "id": "H1",
+      "title": "Patch TLS advisories and document zip non-applicability",
+      "milestone": "M0",
+      "priority": "P0",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V01"
+      ],
+      "branch": "roadmap/h1-tls-advisories",
+      "pr": null,
+      "purpose": "Remove the six open RustSec advisories in rustls, rustls-webpki and webpki-roots from the lockfile and record why the zip advisories do not apply until upstream crates move.",
+      "scope": {
+        "modify": [
+          "Cargo.lock"
+        ],
+        "create": [],
+        "review": [
+          "Cargo.toml",
+          "crates/docmonk-update/src/install.rs",
+          "xtask/src/package.rs"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "H1-01",
+          "title": "Update TLS crates",
+          "details": "cargo update -p rustls -p rustls-webpki -p webpki-roots to the latest semver-compatible releases (at least rustls 0.23.46, rustls-webpki 0.103.16, webpki-roots 1.0.10). Use --precise only if a plain update does not reach the patched versions.",
+          "done": false
+        },
+        {
+          "id": "H1-02",
+          "title": "Assess zip",
+          "details": "zip 1.1.4 comes from candle-core 0.9.1 (pinned =0.9.1) and zip 8.6.0 from calamine, docling, docmonk-update and xtask. RUSTSEC-2026-0367/0368/0369 are fixed only in zip >= 9.0.0 and concern ZipArchive::extract and ZipStreamReader::extract. Grep the workspace to confirm neither is called. If docmonk-update and xtask can move to zip 9 without breaking calamine/docling, do it; otherwise write the justification that H2 will put in deny.toml.",
+          "done": false
+        },
+        {
+          "id": "H1-03",
+          "title": "Verify",
+          "details": "Run the full test suite with pinned models; rely on the CI server-integration job for OpenSearch/Elasticsearch transport.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "cargo test --workspace with DOCMONK_REQUIRE_MODELS=1 and DOCMONK_REQUIRE_OCR=1",
+          "docmonk-update install tests",
+          "CI server integration job"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "H1-AC1",
+          "criterion": "A RustSec scan of Cargo.lock reports no rustls, rustls-webpki or webpki-roots advisories.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        },
+        {
+          "id": "H1-AC2",
+          "criterion": "The zip advisories are fixed, or documented with why they do not apply and which upstream crates block the bump.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Updated Cargo.lock",
+        "zip justification text for H2's deny.toml"
+      ],
+      "rollback": "Revert the lockfile commit."
+    },
+    {
+      "id": "H2",
+      "title": "cargo-deny in CI and a nightly advisory run",
+      "milestone": "M0",
+      "priority": "P0",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "H1"
+      ],
+      "addresses": [
+        "V02"
+      ],
+      "branch": "roadmap/h2-cargo-deny",
+      "pr": null,
+      "purpose": "Catch new advisories, licence violations and duplicate or untrusted sources automatically, including advisories published between PRs.",
+      "scope": {
+        "modify": [
+          ".github/workflows/rust.yml",
+          ".github/workflows/rust-nightly.yml",
+          "scripts/ci_changes.sh",
+          "docs/CI.md",
+          "docs/adr/0003-dependency-policy.md"
+        ],
+        "create": [
+          "deny.toml"
+        ],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "H2-01",
+          "title": "deny.toml",
+          "details": "advisories: deny vulnerabilities, warn unmaintained/unsound, ignore list only for the zip ids from H1 with a reason and an expiry date; licenses: an allowlist compatible with MIT per ADR 0003; bans: warn on multiple versions; sources: crates.io only.",
+          "done": false
+        },
+        {
+          "id": "H2-02",
+          "title": "CI step",
+          "details": "Add cargo-deny (EmbarkStudios/cargo-deny-action pinned by commit SHA) to the Repository audits job so every PR runs it, and add deny.toml to the classifier's 'all three' paths with a self-test case.",
+          "done": false
+        },
+        {
+          "id": "H2-03",
+          "title": "Nightly advisories",
+          "details": "A nightly job runs cargo deny check advisories against main and opens or updates a single issue on failure.",
+          "done": false
+        },
+        {
+          "id": "H2-04",
+          "title": "Docs",
+          "details": "Document the job in docs/CI.md and the policy in ADR 0003.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "deny"
+        ],
+        "tests": [
+          "scripts/ci_changes.sh --self-test",
+          "cargo deny check locally"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "H2-AC1",
+          "criterion": "A PR introducing a crate with an open advisory fails CI.",
+          "verify": {
+            "kind": "command",
+            "ref": "deny"
+          },
+          "met": false
+        },
+        {
+          "id": "H2-AC2",
+          "criterion": "A nightly advisory run exists and reports failures to one issue.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "deny.toml",
+        "CI and nightly jobs",
+        "docs/CI.md section"
+      ],
+      "rollback": "Remove the cargo-deny steps; keep deny.toml."
+    },
+    {
+      "id": "H3",
+      "title": "Fail-closed install and update verification",
+      "milestone": "M0",
+      "priority": "P0",
+      "executor": "claude_code_then_human_review",
+      "status": "not_started",
+      "depends_on": [],
+      "requires": [
+        {
+          "kind": "repo_admin",
+          "description": "Confirm or add the minisign signing secret, its password and the public-key variable."
+        }
+      ],
+      "addresses": [
+        "V03"
+      ],
+      "branch": "roadmap/h3-signed-installs",
+      "pr": null,
+      "purpose": "Make the README one-liners and docmonk update verify the release signature and refuse to install when verification cannot run.",
+      "scope": {
+        "modify": [
+          "install.sh",
+          "install.ps1",
+          "README.md",
+          ".github/workflows/rust-release.yml",
+          ".github/workflows/rust.yml",
+          "crates/docmonk-update/src/install.rs",
+          "crates/docmonk-update/src/verify.rs",
+          "crates/docmonk-update/src/lib.rs"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "H3-01",
+          "title": "confirm signing secrets",
+          "details": "Confirm the signing secret and public-key variable exist in the repository settings; if not, generate a minisign key pair offline and add them. Claude Code stops and asks if it cannot confirm this.",
+          "executor": "human",
+          "done": false
+        },
+        {
+          "id": "H3-02",
+          "title": "Commit the public key",
+          "details": "Put the public key into install.sh and install.ps1 on main. The release workflow's sed step becomes a check that the committed key equals vars.MINISIGN_PUBLIC_KEY.",
+          "done": false
+        },
+        {
+          "id": "H3-03",
+          "title": "Fail closed",
+          "details": "With a key set, a missing minisign tool or a missing/invalid SHA256SUMS.minisig aborts the install with instructions; DOCMONK_INSECURE_SKIP_SIGNATURE=1 is the only explicit opt-out and prints a warning. Same behaviour in PowerShell.",
+          "done": false
+        },
+        {
+          "id": "H3-04",
+          "title": "docmonk update",
+          "details": "Confirm that with a compiled-in key a missing or invalid signature is an error in crates/docmonk-update; add tests for both cases.",
+          "done": false
+        },
+        {
+          "id": "H3-05",
+          "title": "Release workflow",
+          "details": "Fail the release when the key is configured but no SHA256SUMS.minisig was produced, and verify the signature with the public key before publishing.",
+          "done": false
+        },
+        {
+          "id": "H3-06",
+          "title": "Installer CI",
+          "details": "Extend the install-script job on ubuntu, macos and windows with a tampered SHA256SUMS case and a missing-signature case; both must exit non-zero.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "install-script CI job: tampered checksum, missing signature, valid signature",
+          "crates/docmonk-update verify and install tests"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "H3-AC1",
+          "criterion": "install.sh, install.ps1 and docmonk update refuse a tampered or unsigned release when a key is configured.",
+          "verify": {
+            "kind": "test",
+            "ref": "install-script CI job"
+          },
+          "met": false
+        },
+        {
+          "id": "H3-AC2",
+          "criterion": "The README install instructions verify the signature by default.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Committed public key in both installers",
+        "fail-closed installer logic",
+        "release workflow signature check"
+      ],
+      "rollback": "Revert the installer changes; the release workflow keeps signing as before."
+    },
+    {
+      "id": "H4",
+      "title": "Keep secrets out of the index",
+      "milestone": "M0",
+      "priority": "P0",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V04"
+      ],
+      "branch": "roadmap/h4-secret-redaction",
+      "pr": null,
+      "purpose": "Stop credentials in indexed files from being stored, embedded or returned through search, evidence, the Admin UI or MCP.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-core/src/security.rs",
+          "crates/docmonk-indexing/src/ignore.rs",
+          "crates/docmonk-convert/src/process.rs",
+          "crates/docmonk-code/src/process.rs",
+          "crates/docmonk-code/src/passages.rs",
+          "crates/docmonk-documents/src/chunker.rs",
+          "crates/docmonk-documents/src/version.rs",
+          "crates/docmonk-config/src/model.rs",
+          "docs/reference.md",
+          "fixtures/"
+        ],
+        "create": [
+          "fixtures/secrets/"
+        ],
+        "review": [
+          "crates/docmonk-telemetry/src/redact.rs"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "H4-01",
+          "title": "Filename patterns",
+          "details": "Extend SECRET_FILENAME_PATTERNS with .netrc, .git-credentials, .npmrc, kubeconfig, *.kubeconfig, id_ecdsa, id_dsa, *.pfx, *.p12, *.jks, *.keystore, *.kdbx, *.tfstate. Add an indexing.secret_patterns setting that extends, never replaces, the built-in list.",
+          "done": false
+        },
+        {
+          "id": "H4-02",
+          "title": "Content redaction",
+          "details": "A docmonk-core secrets module applied to every text before it is stored or embedded (chunk text, passages, entity bodies, document metadata): private key blocks, cloud access keys, GitHub/GitLab/Slack tokens, JWTs, password/secret/api-key assignments, connection strings with Password= or Pwd=, URLs with credentials. Replace only the secret value with [REDACTED:<kind>] on the same line so line numbers and citations stay valid.",
+          "done": false
+        },
+        {
+          "id": "H4-03",
+          "title": "Fingerprint and config",
+          "details": "Include the redaction rule-set version in the chunker/passage fingerprint so existing sources rebuild. indexing.redact_secrets defaults to true, with a per-source override.",
+          "done": false
+        },
+        {
+          "id": "H4-04",
+          "title": "Fixture and tests",
+          "details": "A fixture corpus with planted secrets in code, appsettings JSON, Markdown, a PDF and an email attachment; tests that search, evidence, explore, documents, MCP tools and the UI document view never return them.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "eval_default"
+        ],
+        "tests": [
+          "new secrets fixture across all read surfaces",
+          "citation re-verification on redacted lines",
+          "held-out eval unchanged"
+        ],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "H4-AC1",
+          "criterion": "No planted secret is retrievable through search, evidence, explore, documents, MCP or the UI.",
+          "verify": {
+            "kind": "test",
+            "ref": "secrets fixture tests"
+          },
+          "met": false
+        },
+        {
+          "id": "H4-AC2",
+          "criterion": "Citations still verify and held-out metrics are unchanged.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_default"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "docmonk-core secrets module",
+        "fixtures/secrets/",
+        "docs/reference.md settings"
+      ],
+      "rollback": "Set indexing.redact_secrets: false and rebuild; revert to remove the code."
+    },
+    {
+      "id": "H5",
+      "title": "Per-source MCP visibility and an MCP query log",
+      "milestone": "M0",
+      "priority": "P1",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V04",
+        "V14"
+      ],
+      "branch": "roadmap/h5-mcp-visibility",
+      "pr": null,
+      "purpose": "Let users keep sensitive sources searchable from the CLI and UI while hiding them from AI agents, and see what agents asked.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-config/src/model.rs",
+          "crates/docmonk-service/src/sources.rs",
+          "crates/docmonk-service/src/query.rs",
+          "crates/docmonk-service/src/evidence.rs",
+          "crates/docmonk-service/src/ask.rs",
+          "crates/docmonk-mcp/src/lib.rs",
+          "crates/docmonk-mcp/src/exec.rs",
+          "crates/docmonk-mcp/tests/execution.rs",
+          "docs/reference.md"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "H5-01",
+          "title": "Visibility flag",
+          "details": "A per-source mcp: true|false (default true), applied as a hard filter at candidate generation for every MCP tool, including graph traversals across sources (impact, callers, callees) and ask citations.",
+          "done": false
+        },
+        {
+          "id": "H5-02",
+          "title": "Query log",
+          "details": "Opt-in mcp.query_log writes JSON lines to <home>/logs/mcp.jsonl: time, tool, redacted arguments, result count, sources touched; size-based rotation.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "a hidden source never appears in any MCP tool result",
+          "log redaction and rotation"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "H5-AC1",
+          "criterion": "No docmonk_* tool returns a record or source name from a hidden source.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-mcp/tests/execution.rs"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "mcp source flag",
+        "opt-in MCP query log"
+      ],
+      "rollback": "Revert; the flag defaults to visible so configs stay valid."
+    },
+    {
+      "id": "R1",
+      "title": "Human review of held-out labels and floors",
+      "milestone": "M1",
+      "priority": "P0",
+      "executor": "human",
+      "status": "not_started",
+      "depends_on": [],
+      "requires": [
+        {
+          "kind": "human_approval",
+          "description": "A person reviews and approves each held-out label."
+        }
+      ],
+      "addresses": [
+        "V05",
+        "V22"
+      ],
+      "branch": "roadmap/r1-heldout-floors",
+      "pr": null,
+      "purpose": "Turn the held-out eval, the only one with multilingual and cross-language queries, into a real gate.",
+      "scope": {
+        "modify": [
+          "fixtures/eval/queries.json",
+          "fixtures/eval/heldout-gates.json",
+          "docs/evaluation.md",
+          "benchmarks/heldout-eval/"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "R1-01",
+          "title": "review labels",
+          "details": "Follow docs/evaluation.md: for each of the 100 queries read the query, expected paths and lines and the corpus file; fix the label if needed; set review_status approved and reviewed_by. Claude Code may generate a read-only review sheet (query, expected spans, corpus excerpts) but must not change labels.",
+          "executor": "human",
+          "done": false
+        },
+        {
+          "id": "R1-02",
+          "title": "Floors",
+          "details": "After approval, Claude Code reruns the eval on SQLite (and both engines in CI) and proposes floors 0.03 below the measured values per backend, arm and category for the approved set; a human approves the PR.",
+          "executor": "claude_code_then_human_review",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "eval_default"
+        ],
+        "tests": [
+          "heldout_eval reports metrics_approved_only",
+          "floors enforced"
+        ],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "R1-AC1",
+          "criterion": "All 100 queries carry review_status approved and reviewed_by.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        },
+        {
+          "id": "R1-AC2",
+          "criterion": "heldout-gates.json has floors for SQLite and, when run, both engines; metrics_approved_only is non-null.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_default"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Reviewed fixtures/eval/queries.json",
+        "Floors in fixtures/eval/heldout-gates.json"
+      ],
+      "rollback": "Revert the floors commit; label fixes stay."
+    },
+    {
+      "id": "R2",
+      "title": "Held-out eval in the nightly workflow",
+      "milestone": "M1",
+      "priority": "P0",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "R1"
+      ],
+      "addresses": [
+        "V05"
+      ],
+      "branch": "roadmap/r2-nightly-heldout",
+      "pr": null,
+      "purpose": "Detect retrieval regressions without anyone running the eval by hand.",
+      "scope": {
+        "modify": [
+          ".github/workflows/rust-nightly.yml",
+          ".github/actions/fetch-models",
+          "crates/docmonk-service/tests/heldout_eval.rs",
+          "docs/CI.md",
+          "docs/evaluation.md"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "R2-01",
+          "title": "Nightly job",
+          "details": "Fetch pinned models (including --multilingual), start OpenSearch 2.17 and Elasticsearch 8.15 service containers, run cargo test --release -p docmonk-service --test heldout_eval with DOCMONK_EVAL_OUT, once with the default model and once with DOCMONK_EVAL_EMBEDDING_MODEL=multilingual-e5-small; upload both reports as artifacts.",
+          "done": false
+        },
+        {
+          "id": "R2-02",
+          "title": "Failure reporting",
+          "details": "Fail on any floor and open or update one issue with the failing metrics.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "eval_default",
+          "eval_e5"
+        ],
+        "tests": [
+          "workflow_dispatch run of the nightly job"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "R2-AC1",
+          "criterion": "The nightly run is green and archives both reports.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        },
+        {
+          "id": "R2-AC2",
+          "criterion": "A floor regression fails the nightly and updates one issue.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Nightly held-out job"
+      ],
+      "rollback": "Disable the nightly job."
+    },
+    {
+      "id": "R3",
+      "title": "Close ADR 0041",
+      "milestone": "M1",
+      "priority": "P1",
+      "executor": "claude_code_with_cluster",
+      "status": "not_started",
+      "depends_on": [],
+      "requires": [
+        {
+          "kind": "cluster",
+          "description": "OpenSearch 2.17 on :9201 and Elasticsearch 8.15 on :9202 (the service containers of .github/workflows/rust.yml)"
+        }
+      ],
+      "addresses": [
+        "V06"
+      ],
+      "branch": "roadmap/r3-adr-0041-measurements",
+      "pr": null,
+      "purpose": "Finish the bounded-embedding phase with the measurements its ADR still lists as open.",
+      "scope": {
+        "modify": [
+          "docs/adr/0041-bounded-embedding-and-server-hydration.md",
+          "crates/docmonk-ml/src/bin/docmonk-embed-bench.rs",
+          "crates/docmonk-ml/tests/finalize.rs",
+          "benchmarks/heldout-eval/",
+          "benchmarks/embedding-models/"
+        ],
+        "create": [
+          "benchmarks/heldout-eval/phase-5.json"
+        ],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "R3-01",
+          "title": "Held-out on three backends",
+          "details": "Run the held-out eval on SQLite, OpenSearch and Elasticsearch with the ADR 0041 changes and commit benchmarks/heldout-eval/phase-5.json.",
+          "done": false
+        },
+        {
+          "id": "R3-02",
+          "title": "Memory benchmark",
+          "details": "Measure peak RSS of a paged embedding pass against a one-window pass on at least 50k subjects and commit the report.",
+          "done": false
+        },
+        {
+          "id": "R3-03",
+          "title": "ADR status",
+          "details": "Set the ADR status to implemented and fill its Measurement section.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "eval_default",
+          "server_tests"
+        ],
+        "tests": [
+          "heldout_eval on all backends",
+          "finalize tests"
+        ],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "R3-AC1",
+          "criterion": "benchmarks/heldout-eval/phase-5.json covers SQLite, OpenSearch and Elasticsearch.",
+          "verify": {
+            "kind": "report",
+            "ref": "benchmarks/heldout-eval/phase-5.json"
+          },
+          "met": false
+        },
+        {
+          "id": "R3-AC2",
+          "criterion": "ADR 0041 status reads implemented with the memory measurement filled in.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "benchmarks/heldout-eval/phase-5.json",
+        "paged vs one-window memory report",
+        "ADR 0041 update"
+      ],
+      "rollback": "Documentation and reports only; revert the commit."
+    },
+    {
+      "id": "R4",
+      "title": "Live server-mode measurements",
+      "milestone": "M1",
+      "priority": "P1",
+      "executor": "claude_code_with_cluster",
+      "status": "not_started",
+      "depends_on": [],
+      "requires": [
+        {
+          "kind": "cluster",
+          "description": "OpenSearch and Elasticsearch able to hold 50k-file corpora"
+        }
+      ],
+      "addresses": [
+        "V06"
+      ],
+      "branch": "roadmap/r4-server-live",
+      "pr": null,
+      "purpose": "Verify server-mode publication at scale so it can ship as GA rather than preview (decision D1).",
+      "scope": {
+        "modify": [
+          "docs/adr/0035-server-mvcc-publication.md",
+          "audit/remediation/ledger.json",
+          "crates/docmonk-service/tests/server_live.rs",
+          "crates/docmonk-backends/tests/live.rs",
+          "crates/docmonk-service/src/bin/docmonk-graph-bench.rs",
+          "benchmarks/relationships/",
+          ".github/workflows/rust-nightly.yml"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "R4-01",
+          "title": "ADR 0035 numbers",
+          "details": "Run the graph and publication benchmarks against live engines and fill the ADR's Measurement section.",
+          "done": false
+        },
+        {
+          "id": "R4-02",
+          "title": "F10 live gate",
+          "details": "8k and 50k-file live runs measuring write amplification, recall@10, p95 (within 5% of baseline) and CPU; commit the reports and add the nightly benchmark gate (T08.3).",
+          "done": false
+        },
+        {
+          "id": "R4-03",
+          "title": "F12 server tests",
+          "details": "server_live tests for local cache loss (identical bindings after deleting the staging cache) and two hosts alternating as writers on one prefix.",
+          "done": false
+        },
+        {
+          "id": "R4-04",
+          "title": "Ledger",
+          "details": "Propose status updates for F10 and F12 in audit/remediation/ledger.json; a human approves.",
+          "executor": "claude_code_then_human_review",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "server_tests"
+        ],
+        "tests": [
+          "new server_live cases",
+          "nightly benchmark gate"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "R4-AC1",
+          "criterion": "Ledger F10 and F12 read fixed with live evidence, approved by a human.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        },
+        {
+          "id": "R4-AC2",
+          "criterion": "A nightly benchmark gate (T08.3) runs against live engines.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        },
+        {
+          "id": "R4-AC3",
+          "criterion": "server_live covers cache loss and two alternating writers.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-service/tests/server_live.rs"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "ADR 0035 measurement section",
+        "8k/50k live reports under benchmarks/relationships/",
+        "new server_live cases"
+      ],
+      "rollback": "Tests and reports only; disable the nightly gate if it is flaky."
+    },
+    {
+      "id": "R5",
+      "title": "Local ANN recall at the default ef_search",
+      "milestone": "M1",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V07"
+      ],
+      "branch": "roadmap/r5-ann-sweep",
+      "pr": null,
+      "purpose": "Replace the stale recall figure and justify the default with a recall/latency curve.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-ml/src/bin/docmonk-ann-bench.rs",
+          "benchmarks/ann-20000.json",
+          "crates/docmonk-config/src/model.rs",
+          "docs/adr/0014-ann-index.md"
+        ],
+        "create": [
+          "benchmarks/ann-sweep.json"
+        ],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "R5-01",
+          "title": "Sweep",
+          "details": "Measure recall@10 and p50/p95 at ef_search 64, 96, 200, 400 and 800 for 20k and 100k vectors, release build.",
+          "done": false
+        },
+        {
+          "id": "R5-02",
+          "title": "Default",
+          "details": "Choose the lowest-latency setting with recall@10 >= 0.95; change the default only if the sweep says so and note it in ADR 0014.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "ann bench in release mode"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "R5-AC1",
+          "criterion": "benchmarks/ann-sweep.json covers 20k and 100k vectors at five ef_search values.",
+          "verify": {
+            "kind": "report",
+            "ref": "benchmarks/ann-sweep.json"
+          },
+          "met": false
+        },
+        {
+          "id": "R5-AC2",
+          "criterion": "The default ef_search is the lowest-latency setting with recall@10 >= 0.95.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "benchmarks/ann-sweep.json",
+        "ADR 0014 note"
+      ],
+      "rollback": "Revert the default change if any."
+    },
+    {
+      "id": "R6",
+      "title": "Release hygiene for 1.0",
+      "milestone": "M1",
+      "priority": "P1",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "H1",
+        "H2",
+        "H3"
+      ],
+      "addresses": [
+        "V15"
+      ],
+      "branch": "roadmap/r6-release-hygiene",
+      "pr": null,
+      "purpose": "Close ADR 0032 and prepare user-facing release material.",
+      "scope": {
+        "modify": [
+          "docs/clean-slate-inventory.md",
+          "docs/adr/0032-docmonk-1.0-clean-slate.md",
+          "docs/ui.md",
+          "README.md",
+          "crates/docmonk-update/src/check.rs",
+          "crates/docmonk-cli/src/update_cmd.rs"
+        ],
+        "create": [
+          "CHANGELOG.md"
+        ],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "R6-01",
+          "title": "Remove the inventory",
+          "details": "Delete docs/clean-slate-inventory.md and update the ADR 0032 reference to say it was removed at release.",
+          "done": false
+        },
+        {
+          "id": "R6-02",
+          "title": "Docs",
+          "details": "Replace docmonk.service.* in docs/ui.md with the crate name (docmonk-service).",
+          "done": false
+        },
+        {
+          "id": "R6-03",
+          "title": "CHANGELOG",
+          "details": "Add CHANGELOG.md summarising v0.1.1 to v0.3.25 and the 1.0 notes, including whether server mode is GA or preview.",
+          "done": false
+        },
+        {
+          "id": "R6-04",
+          "title": "Update from 0.3.25",
+          "details": "Verify that a v0.3.25 home either opens unchanged or fails with the documented reset-and-reindex error; document the outcome in the CHANGELOG. Do not add code that detects or converts older homes.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "release_gate_audit"
+        ],
+        "tests": [
+          "cargo xtask clean-slate-audit --require-empty-baseline",
+          "update test from a v0.3.25 release asset"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "R6-AC1",
+          "criterion": "cargo xtask clean-slate-audit --require-empty-baseline passes.",
+          "verify": {
+            "kind": "command",
+            "ref": "release_gate_audit"
+          },
+          "met": false
+        },
+        {
+          "id": "R6-AC2",
+          "criterion": "CHANGELOG.md documents 0.1.1 to 0.3.25, the 1.0 notes and the update path from 0.3.25.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "CHANGELOG.md",
+        "docs fixes"
+      ],
+      "rollback": "Revert the docs commit."
+    },
+    {
+      "id": "R7",
+      "title": "Cut v1.0.0",
+      "milestone": "M1",
+      "priority": "P0",
+      "executor": "human",
+      "status": "not_started",
+      "depends_on": [
+        "R1",
+        "R2",
+        "R3",
+        "R5",
+        "R6",
+        "H1",
+        "H2",
+        "H3",
+        "H4"
+      ],
+      "requires": [
+        {
+          "kind": "human_approval",
+          "description": "A maintainer pushes the v1.0.0 tag."
+        }
+      ],
+      "addresses": [],
+      "branch": null,
+      "pr": null,
+      "purpose": "Release the first product generation.",
+      "scope": {
+        "modify": [
+          "README.md"
+        ],
+        "create": [
+          "CHANGELOG.md"
+        ],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "R7-01",
+          "title": "Check gates",
+          "details": "Claude Code produces a gate report for M0 and M1; if R4 is not done, apply decision D1 (server mode marked preview in README and CLI help).",
+          "executor": "claude_code",
+          "done": false
+        },
+        {
+          "id": "R7-02",
+          "title": "tag",
+          "details": "Push tag v1.0.0; confirm the release has signed SHA256SUMS.",
+          "executor": "human",
+          "done": false
+        },
+        {
+          "id": "R7-03",
+          "title": "Verify installs",
+          "details": "Install with the one-liners on Linux, macOS and Windows and run docmonk doctor.",
+          "executor": "human",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "release_gate_audit"
+        ],
+        "tests": [
+          "installer CI on the tag"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "R7-AC1",
+          "criterion": "v1.0.0 is tagged with a signed SHA256SUMS.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        },
+        {
+          "id": "R7-AC2",
+          "criterion": "The one-liners install it on Linux, macOS and Windows and docmonk doctor passes.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Gate report for M0 and M1",
+        "v1.0.0 release"
+      ],
+      "rollback": "Mark the release as pre-release and publish a fixed 1.0.1."
+    },
+    {
+      "id": "P1",
+      "title": "Multilingual as a first-class install",
+      "milestone": "M2",
+      "priority": "P0",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "R1"
+      ],
+      "addresses": [
+        "V08"
+      ],
+      "branch": "roadmap/p1-models-install",
+      "pr": null,
+      "purpose": "Let any user, Windows included, switch to multilingual-e5-small without a repository checkout, and tell them when they should.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-cli/src/main.rs",
+          "crates/docmonk-cli/src/ops_cmd.rs",
+          "crates/docmonk-ml/src/manifest.rs",
+          "crates/docmonk-ml/src/embedder.rs",
+          "crates/docmonk-ops/src/doctor.rs",
+          "crates/docmonk-status/src/health.rs",
+          "xtask/src/package.rs",
+          ".github/workflows/rust-release.yml",
+          "README.md",
+          "docs/reference.md"
+        ],
+        "create": [],
+        "review": [
+          "crates/docmonk-update/src/release.rs",
+          "scripts/fetch_models.sh"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "P1-01",
+          "title": "models command",
+          "details": "docmonk models list | install <slug> | verify: download the pinned files from the manifest (model id + revision), verify every SHA-256 against the manifest, write atomically under <home>/models/<slug>, honour proxy settings, and support --from <dir> for offline installs.",
+          "done": false
+        },
+        {
+          "id": "P1-02",
+          "title": "Full release asset",
+          "details": "An optional release asset per target with E5 bundled (xtask package with the multilingual models).",
+          "done": false
+        },
+        {
+          "id": "P1-03",
+          "title": "Recommendation",
+          "details": "doctor and status recommend E5 when most indexed documents are detected as non-English (ADR 0039 detection) and the active model is MiniLM.",
+          "done": false
+        },
+        {
+          "id": "P1-04",
+          "title": "README",
+          "details": "A 'Multilingual corpora' section with the install command, the cost (build time, memory, size) and the measured gain.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "Windows CI job installs E5 via the command and runs a search",
+          "checksum mismatch aborts the install",
+          "doctor recommendation test"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "P1-AC1",
+          "criterion": "A fresh Windows install switches to E5 with one command.",
+          "verify": {
+            "kind": "test",
+            "ref": "Windows CI job"
+          },
+          "met": false
+        },
+        {
+          "id": "P1-AC2",
+          "criterion": "A checksum mismatch aborts the install and leaves no partial model directory.",
+          "verify": {
+            "kind": "test",
+            "ref": "models install tests"
+          },
+          "met": false
+        },
+        {
+          "id": "P1-AC3",
+          "criterion": "The README has a Multilingual corpora section.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "docmonk models command",
+        "optional full release asset",
+        "doctor/status recommendation",
+        "README section"
+      ],
+      "rollback": "Revert; models placed under <home>/models stay usable."
+    },
+    {
+      "id": "P2",
+      "title": "Model-aware chunk budget",
+      "milestone": "M2",
+      "priority": "P1",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "P1",
+        "R1"
+      ],
+      "addresses": [
+        "V09"
+      ],
+      "branch": "roadmap/p2-model-aware-chunking",
+      "pr": null,
+      "purpose": "Use the active embedder's real input limit instead of MiniLM's 256 tokens.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-config/src/model.rs",
+          "crates/docmonk-documents/src/tokenizer.rs",
+          "crates/docmonk-documents/src/tokenization.rs",
+          "crates/docmonk-documents/src/chunker.rs",
+          "crates/docmonk-documents/src/version.rs",
+          "crates/docmonk-ml/src/manifest.rs"
+        ],
+        "create": [
+          "docs/adr/"
+        ],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "P2-01",
+          "title": "Resolve auto per model",
+          "details": "max_tokens auto = the active model's max input minus safety tokens, counted with that model's tokenizer; the tokenizer identity is part of the chunker fingerprint.",
+          "done": false
+        },
+        {
+          "id": "P2-02",
+          "title": "Evaluate",
+          "details": "Held-out with E5 at 256, 384 and 512; adopt under a rule fixed before reading the numbers: no category or language loses more than 0.05 recall@10 and line provenance does not drop.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "eval_default",
+          "eval_e5"
+        ],
+        "tests": [
+          "chunker tests per tokenizer",
+          "held-out reports per size"
+        ],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "P2-AC1",
+          "criterion": "An ADR records the chunk budget chosen from held-out runs at 256, 384 and 512 tokens with E5.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        },
+        {
+          "id": "P2-AC2",
+          "criterion": "No category or language loses more than 0.05 recall@10 and line provenance does not drop.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_e5"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "model-aware chunk budget",
+        "new ADR",
+        "held-out reports"
+      ],
+      "rollback": "Pin documents.chunking.max_tokens to 256; revert the resolver."
+    },
+    {
+      "id": "P3",
+      "title": "A reranker that fits the embedder",
+      "milestone": "M2",
+      "priority": "P1",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "R1"
+      ],
+      "addresses": [
+        "V10"
+      ],
+      "branch": "roadmap/p3-reranker-fit",
+      "pr": null,
+      "purpose": "Stop the English cross-encoder from degrading multilingual results; adopt a multilingual one only if it helps.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-ml/src/reranker.rs",
+          "crates/docmonk-ml/src/manifest.rs",
+          "crates/docmonk-retrieval/src/pipeline.rs",
+          "crates/docmonk-config/src/model.rs",
+          "docs/adr/0015-reranker-and-model-baseline.md"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "P3-01",
+          "title": "Language guard",
+          "details": "When the embedding model is multilingual and the reranker is English-only, skip reranking and report a skipped_language_mismatch state in explain output.",
+          "done": false
+        },
+        {
+          "id": "P3-02",
+          "title": "Multilingual candidate",
+          "details": "Run a compatibility check and the held-out eval for a multilingual cross-encoder candidate (for example the mMARCO multilingual MiniLM cross-encoder; verify the exact model id, revision and licence). Adopt only if the reranked arm is at least the semantic arm in every category and p95 at most 2x.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "eval_default",
+          "eval_e5"
+        ],
+        "tests": [
+          "reranker parity tests",
+          "held-out reranked vs semantic"
+        ],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "P3-AC1",
+          "criterion": "The reranked arm is at least the semantic arm in every category on approved labels, or reranking is skipped for that model.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_e5"
+          },
+          "met": false
+        },
+        {
+          "id": "P3-AC2",
+          "criterion": "Explain output reports skipped_language_mismatch when it applies.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-retrieval tests"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "language guard",
+        "candidate evaluation report"
+      ],
+      "rollback": "Revert; the reranker stays off by default."
+    },
+    {
+      "id": "P4",
+      "title": "Abstention and ambiguity",
+      "milestone": "M2",
+      "priority": "P1",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "R1",
+        "Q2"
+      ],
+      "addresses": [
+        "V17"
+      ],
+      "branch": "roadmap/p4-abstention",
+      "pr": null,
+      "purpose": "Fix the remaining held-out failures: false support, false abstention and one-word ambiguous queries.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-service/src/evidence.rs",
+          "crates/docmonk-retrieval/src/grounding.rs",
+          "crates/docmonk-retrieval/src/classify.rs",
+          "crates/docmonk-retrieval/src/diversify.rs",
+          "crates/docmonk-retrieval/src/decompose.rs"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "P4-01",
+          "title": "False support",
+          "details": "Case h099 ('what is the GraphQL rate limit per minute' reported supported by services/shipping/rates.py): require the question's rare anchor terms to be covered by the supporting evidence before reporting supported.",
+          "done": false
+        },
+        {
+          "id": "P4-02",
+          "title": "Ambiguity",
+          "details": "Cases h085, h087, h088 (refund, retention, approval): for single-term ambiguous queries return evidence grouped by meaning (code vs policy documents) with an ambiguous flag.",
+          "done": false
+        },
+        {
+          "id": "P4-03",
+          "title": "False abstention",
+          "details": "Analyse the answerable queries reported insufficient_evidence and adjust thresholds on the dev split only.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "eval_default",
+          "eval_e5"
+        ],
+        "tests": [
+          "held-out sealed split",
+          "evidence unit tests per case"
+        ],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "P4-AC1",
+          "criterion": "False support 0 and false abstention below 0.10 on approved sealed labels, with no category regression.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_e5"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "evidence and grounding changes",
+        "held-out reports"
+      ],
+      "rollback": "Revert the evidence changes."
+    },
+    {
+      "id": "P5",
+      "title": "Faster indexing",
+      "milestone": "M2",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V18"
+      ],
+      "branch": "roadmap/p5-indexing-throughput",
+      "pr": null,
+      "purpose": "Cut first-index time for large corpora, especially with E5.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-ml/Cargo.toml",
+          "crates/docmonk-ml/src/bert.rs",
+          "crates/docmonk-ml/src/embedder.rs",
+          "crates/docmonk-indexing/src/governor.rs",
+          "crates/docmonk-status/src/model.rs",
+          "crates/docmonk-cli/src/status_cmd.rs",
+          ".github/workflows/rust-release.yml",
+          "benchmarks/embedding-models/"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "P5-01",
+          "title": "Accelerators",
+          "details": "candle metal feature for the macOS aarch64 release and an optional cuda build feature, with CPU fallback.",
+          "done": false
+        },
+        {
+          "id": "P5-02",
+          "title": "Precision and batching",
+          "details": "Evaluate f16/int8 weights and batch autotuning; device and precision join the model fingerprint unless a parity test shows cosine >= 0.999 against CPU f32.",
+          "done": false
+        },
+        {
+          "id": "P5-03",
+          "title": "ETA",
+          "details": "Show an ETA in docmonk status from rolling embedding throughput.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "eval_default"
+        ],
+        "tests": [
+          "vector parity tests",
+          "embedding bench"
+        ],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "P5-AC1",
+          "criterion": "At least 3x embedding throughput on Apple silicon.",
+          "verify": {
+            "kind": "report",
+            "ref": "benchmarks/embedding-models/"
+          },
+          "met": false
+        },
+        {
+          "id": "P5-AC2",
+          "criterion": "Cosine parity >= 0.999 against CPU f32, or device and precision are part of the fingerprint.",
+          "verify": {
+            "kind": "test",
+            "ref": "vector parity tests"
+          },
+          "met": false
+        },
+        {
+          "id": "P5-AC3",
+          "criterion": "docmonk status shows an ETA during embedding.",
+          "verify": {
+            "kind": "test",
+            "ref": "status tests"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "accelerator features",
+        "parity tests",
+        "throughput report",
+        "ETA"
+      ],
+      "rollback": "Build without the accelerator features."
+    },
+    {
+      "id": "P6",
+      "title": "Git remote sources",
+      "milestone": "M2",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V19"
+      ],
+      "branch": "roadmap/p6-git-sources",
+      "pr": null,
+      "purpose": "Index repositories by URL and branch so multi-repo codebases stay current without manual checkouts.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-service/src/sources.rs",
+          "crates/docmonk-indexing/src/scan.rs",
+          "crates/docmonk-indexing/src/watcher/",
+          "crates/docmonk-config/src/model.rs",
+          "crates/docmonk-cli/src/workflow.rs",
+          "crates/docmonk-ui/src/lib.rs",
+          "docs/reference.md"
+        ],
+        "create": [
+          "docs/adr/"
+        ],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "P6-01",
+          "title": "Design ADR",
+          "details": "Choose system git versus a Rust git library under ADR 0003; credentials come only from git's own helpers and are never stored by DocMonk.",
+          "done": false
+        },
+        {
+          "id": "P6-02",
+          "title": "Source kind git",
+          "details": "url, branch, optional subpath; shallow clone/fetch under <home>/sources/<id>; poll for new commits; record the indexed commit in source state and status.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "local bare-repository fixture: add, index, new commit, branch deleted"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "P6-AC1",
+          "criterion": "docmonk source add <git url> indexes and refreshes a repository and status shows the indexed commit.",
+          "verify": {
+            "kind": "test",
+            "ref": "bare-repository fixture tests"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "design ADR",
+        "git source kind"
+      ],
+      "rollback": "Revert; folder sources are unaffected."
+    },
+    {
+      "id": "P7",
+      "title": "Messaging topology in code intelligence",
+      "milestone": "M2",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V16"
+      ],
+      "branch": "roadmap/p7-messaging-topology",
+      "pr": null,
+      "purpose": "Make event-driven services visible to impact analysis the way HTTP routes already are.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-code/src/framework.rs",
+          "crates/docmonk-code/queries/",
+          "crates/docmonk-code/src/resolve.rs",
+          "crates/docmonk-code/src/graph_stage.rs",
+          "crates/docmonk-service/src/dependencies.rs",
+          "crates/docmonk-retrieval/src/graph.rs",
+          "fixtures/"
+        ],
+        "create": [
+          "docs/adr/"
+        ],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "P7-01",
+          "title": "Message endpoint nodes",
+          "details": "Model broker endpoints (exchange or topic plus routing key or queue) like route nodes, with deterministic ids.",
+          "done": false
+        },
+        {
+          "id": "P7-02",
+          "title": "Framework rules",
+          "details": "RabbitMQ.Client (BasicPublish, BasicConsume, ExchangeDeclare, QueueBind), MassTransit (Publish, Send, IConsumer), Confluent.Kafka and kafkajs producers/consumers, Spring @KafkaListener; resolve literal and constant names.",
+          "done": false
+        },
+        {
+          "id": "P7-03",
+          "title": "Cross-source bindings",
+          "details": "Bind publishers and consumers across sources like HTTP routes; impact, explore and MCP impact traverse them.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "fixture: C# publisher in one source and consumer in another; impact lists both",
+          "determinism tests"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "P7-AC1",
+          "criterion": "impact on a message contract lists its publishers and consumers across sources.",
+          "verify": {
+            "kind": "test",
+            "ref": "messaging fixture tests"
+          },
+          "met": false
+        },
+        {
+          "id": "P7-AC2",
+          "criterion": "Graphs are byte-identical across repeated runs.",
+          "verify": {
+            "kind": "test",
+            "ref": "determinism tests"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "message endpoint nodes",
+        "framework rules",
+        "fixture",
+        "ADR"
+      ],
+      "rollback": "Disable the messaging rules; graphs rebuild without them."
+    },
+    {
+      "id": "P8",
+      "title": "MCP: read, references, links and HTTP transport",
+      "milestone": "M2",
+      "priority": "P1",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "H5"
+      ],
+      "addresses": [
+        "V14"
+      ],
+      "branch": "roadmap/p8-mcp-tools",
+      "pr": null,
+      "purpose": "Let agents follow an answer to its cited span and linked code without falling back to raw file reads.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-mcp/src/mcp_tools.json",
+          "crates/docmonk-mcp/src/lib.rs",
+          "crates/docmonk-mcp/src/exec.rs",
+          "crates/docmonk-mcp/tests/protocol.rs",
+          "crates/docmonk-mcp/tests/execution.rs",
+          "crates/docmonk-service/src/query.rs",
+          "crates/docmonk-cli/src/query_cmd.rs",
+          "docs/reference.md"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "P8-01",
+          "title": "New tools",
+          "details": "docmonk_read (a cited span with context, re-verified, refusing stale citations), docmonk_references and docmonk_links, reusing the CLI services.",
+          "done": false
+        },
+        {
+          "id": "P8-02",
+          "title": "Budgets",
+          "details": "Per-call result budgets (bytes and hits) with explicit truncation markers.",
+          "done": false
+        },
+        {
+          "id": "P8-03",
+          "title": "HTTP transport",
+          "details": "docmonk serve --mcp --http bound to loopback by default; remote use only behind the Admin UI's proxy-authentication model (docs/ui.md).",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "agent flow: answer, citation, read, links",
+          "MCP session golden blessed"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "P8-AC1",
+          "criterion": "An agent completes answer, citation, span and linked code with MCP alone.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-mcp/tests/execution.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "P8-AC2",
+          "criterion": "The MCP session golden is re-blessed with the new tools.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-mcp/tests/protocol.rs"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "docmonk_read, docmonk_references, docmonk_links",
+        "result budgets",
+        "HTTP transport"
+      ],
+      "rollback": "Remove the new tools from mcp_tools.json."
+    },
+    {
+      "id": "P9",
+      "title": "Admin UI: playground, label review, eval runner",
+      "milestone": "M2",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "R1"
+      ],
+      "addresses": [
+        "V05"
+      ],
+      "branch": "roadmap/p9-ui-quality",
+      "pr": null,
+      "purpose": "Make label review cheap and retrieval quality visible on real data.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-ui/src/lib.rs",
+          "crates/docmonk-ui/src/templates.rs",
+          "crates/docmonk-ui/src/data.rs",
+          "crates/docmonk-ui/assets/",
+          "docs/ui.md"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "P9-01",
+          "title": "Search playground",
+          "details": "Query, filters, explain output and evidence classes.",
+          "done": false
+        },
+        {
+          "id": "P9-02",
+          "title": "Label review",
+          "details": "Enabled only with --eval-dir: shows a query, its expected spans and corpus excerpts; a human approves or fixes it and the page writes reviewed_by.",
+          "done": false
+        },
+        {
+          "id": "P9-03",
+          "title": "Eval runner",
+          "details": "Runs held-out-style metrics on the user's recorded queries (P10).",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "UI tests with CSRF on every new POST",
+          "label approval writes valid JSON"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "P9-AC1",
+          "criterion": "A reviewer approves a label from the UI and the file stays valid.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-ui/tests"
+          },
+          "met": false
+        },
+        {
+          "id": "P9-AC2",
+          "criterion": "Every new POST route passes the CSRF and origin checks.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-ui/tests"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "search playground",
+        "label review screen",
+        "eval runner"
+      ],
+      "rollback": "Hide the new screens behind a flag."
+    },
+    {
+      "id": "P10",
+      "title": "Personal eval",
+      "milestone": "M2",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V05"
+      ],
+      "branch": "roadmap/p10-personal-eval",
+      "pr": null,
+      "purpose": "Let users measure quality on their own corpus and feed decision D2.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-cli/src/main.rs",
+          "crates/docmonk-service/src/lib.rs",
+          "docs/evaluation.md"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "P10-01",
+          "title": "Record",
+          "details": "docmonk eval record \"<query>\" --expect <path>[:line] writes to <home>/eval/queries.json; never uploaded.",
+          "done": false
+        },
+        {
+          "id": "P10-02",
+          "title": "Run",
+          "details": "docmonk eval run [--model <slug>] reports recall@1/10, MRR and abstention; --compare runs two models side by side.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "record/run round trip on a fixture"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "P10-AC1",
+          "criterion": "eval record and eval run round-trip on a fixture and report recall@1/10, MRR and abstention.",
+          "verify": {
+            "kind": "test",
+            "ref": "eval command tests"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "docmonk eval record / run / --compare"
+      ],
+      "rollback": "Remove the eval subcommands."
+    },
+    {
+      "id": "P11",
+      "title": "Packaging and SBOM",
+      "milestone": "M2",
+      "priority": "P3",
+      "executor": "claude_code_then_human_review",
+      "status": "not_started",
+      "depends_on": [
+        "R7"
+      ],
+      "requires": [
+        {
+          "kind": "external_account",
+          "description": "A Homebrew tap repository and an Apple Developer ID for notarization"
+        }
+      ],
+      "addresses": [],
+      "branch": "roadmap/p11-packaging",
+      "pr": null,
+      "purpose": "Easier installs and enterprise security review.",
+      "scope": {
+        "modify": [
+          ".github/workflows/rust-release.yml",
+          "xtask/src/package.rs",
+          "README.md"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "P11-01",
+          "title": "SBOM",
+          "details": "A CycloneDX SBOM per release, listed in the signed SHA256SUMS.",
+          "done": false
+        },
+        {
+          "id": "P11-02",
+          "title": "Package managers",
+          "details": "Homebrew formula auto-bump, winget and Scoop manifests.",
+          "done": false
+        },
+        {
+          "id": "P11-03",
+          "title": "notarization",
+          "details": "macOS codesign and notarization credentials.",
+          "executor": "human",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "release dry run"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "P11-AC1",
+          "criterion": "brew install works and every release carries an SBOM listed in the signed SHA256SUMS.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "SBOM",
+        "Homebrew, winget and Scoop manifests"
+      ],
+      "rollback": "Stop publishing to package managers; releases are unaffected."
+    },
+    {
+      "id": "A1",
+      "title": "A docmonk-pipeline crate for orchestration",
+      "milestone": "M3",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "R7"
+      ],
+      "addresses": [
+        "V11"
+      ],
+      "branch": "roadmap/a1-pipeline-crate",
+      "pr": null,
+      "purpose": "Restore layering: ml becomes pure inference and convert pure conversion.",
+      "scope": {
+        "modify": [
+          "Cargo.toml",
+          "crates/docmonk-convert/src/process.rs",
+          "crates/docmonk-convert/Cargo.toml",
+          "crates/docmonk-ml/src/lib.rs",
+          "crates/docmonk-ml/src/ann.rs",
+          "crates/docmonk-ml/Cargo.toml",
+          "crates/docmonk-service/Cargo.toml",
+          "crates/docmonk-ops/Cargo.toml",
+          "docs/architecture.md"
+        ],
+        "create": [
+          "crates/docmonk-pipeline/"
+        ],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "A1-01",
+          "title": "New crate",
+          "details": "Create crates/docmonk-pipeline; move the document processor wiring from docmonk-convert and EmbeddingFinalizer (plus its storage/indexing use) from docmonk-ml.",
+          "done": false
+        },
+        {
+          "id": "A1-02",
+          "title": "Trim dependencies",
+          "details": "docmonk-ml depends only on core and what inference needs; docmonk-convert only on documents, core and config; update the architecture table.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "eval_default"
+        ],
+        "tests": [
+          "full workspace tests",
+          "held-out and golden suites byte-identical"
+        ],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "A1-AC1",
+          "criterion": "docmonk-ml depends only on what inference needs and docmonk-convert only on documents, core and config.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        },
+        {
+          "id": "A1-AC2",
+          "criterion": "Held-out and golden reports are byte-identical before and after.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_default"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "crates/docmonk-pipeline",
+        "updated docs/architecture.md"
+      ],
+      "rollback": "Revert the move; no data changes."
+    },
+    {
+      "id": "A2",
+      "title": "Split the largest functions into typed stages",
+      "milestone": "M3",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "R2"
+      ],
+      "addresses": [
+        "V12"
+      ],
+      "branch": "roadmap/a2-split-functions",
+      "pr": null,
+      "purpose": "Make the hottest retrieval and status code reviewable and testable per stage.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-service/src/evidence.rs",
+          "crates/docmonk-retrieval/src/explore.rs",
+          "crates/docmonk-code/src/extract.rs",
+          "crates/docmonk-status/src/health.rs"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "A2-01",
+          "title": "One function per PR",
+          "details": "Split evidence_value, explore_ranked, literal_content and health::problems into stages with typed intermediate structs and unit tests per stage; one function per PR.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "eval_default"
+        ],
+        "tests": [
+          "snapshot and golden tests unchanged",
+          "held-out reports byte-identical"
+        ],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "A2-AC1",
+          "criterion": "No retrieval or service function exceeds 150 lines.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        },
+        {
+          "id": "A2-AC2",
+          "criterion": "Eval and golden reports are byte-identical before and after.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_default"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "one PR per function"
+      ],
+      "rollback": "Revert the individual PR."
+    },
+    {
+      "id": "A3",
+      "title": "Build ergonomics",
+      "milestone": "M3",
+      "priority": "P1",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V20"
+      ],
+      "branch": "roadmap/a3-build-ergonomics",
+      "pr": null,
+      "purpose": "Shrink debug builds and link times; can land at any time.",
+      "scope": {
+        "modify": [
+          "Cargo.toml",
+          "crates/*/tests/",
+          ".github/workflows/rust.yml",
+          "docs/CI.md",
+          "CONTRIBUTING.md"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "A3-01",
+          "title": "Debug info",
+          "details": "[profile.dev] debug = \"line-tables-only\", keeping the existing opt-level 3 overrides for inference crates.",
+          "done": false
+        },
+        {
+          "id": "A3-02",
+          "title": "Fewer test binaries",
+          "details": "Consolidate each crate's tests/*.rs into one integration binary (tests/it/main.rs with one module per former file), keeping test names; check CI selectors and docs that name test targets (for example --test heldout_eval) and update them.",
+          "done": false
+        },
+        {
+          "id": "A3-03",
+          "title": "Measure",
+          "details": "Record target/ size and CI wall time before and after in the PR.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "cargo test --workspace",
+          "documented --test commands still work"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "A3-AC1",
+          "criterion": "A full debug test build stays under 8 GB of target/.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        },
+        {
+          "id": "A3-AC2",
+          "criterion": "Every documented --test command still works.",
+          "verify": {
+            "kind": "command",
+            "ref": "test"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "profile change",
+        "consolidated test binaries",
+        "before/after size and CI time"
+      ],
+      "rollback": "Revert the profile line; test layout changes can stay."
+    },
+    {
+      "id": "A4",
+      "title": "Close the ledger's server residuals",
+      "milestone": "M3",
+      "priority": "P3",
+      "executor": "claude_code_with_cluster",
+      "status": "not_started",
+      "depends_on": [
+        "R4"
+      ],
+      "requires": [
+        {
+          "kind": "cluster",
+          "description": "OpenSearch 2.17 on :9201 and Elasticsearch 8.15 on :9202 (the service containers of .github/workflows/rust.yml)"
+        }
+      ],
+      "addresses": [
+        "V21"
+      ],
+      "branch": "roadmap/a4-server-residuals",
+      "pr": null,
+      "purpose": "Remove the documented limits on multi-host server mode.",
+      "scope": {
+        "modify": [
+          "audit/remediation/ledger.json",
+          "crates/docmonk-service/src/dependencies.rs",
+          "crates/docmonk-backends/src/",
+          "crates/docmonk-mcp/src/exec.rs",
+          "crates/docmonk-ml/src/bert.rs",
+          "crates/docmonk-ui/src/access.rs"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "A4-01",
+          "title": "F04",
+          "details": "Store project-file contents needed for dependency discovery in the server indexes so hosts need no checkout.",
+          "done": false
+        },
+        {
+          "id": "A4-02",
+          "title": "F08",
+          "details": "Shared retry state in the server catalog.",
+          "done": false
+        },
+        {
+          "id": "A4-03",
+          "title": "F09",
+          "details": "Cancellation inside a model batch (smaller sub-batches under a deadline).",
+          "done": false
+        },
+        {
+          "id": "A4-04",
+          "title": "F11",
+          "details": "Rate limiting for remote Admin UI access.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "server_tests"
+        ],
+        "tests": [
+          "a live test per item"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "A4-AC1",
+          "criterion": "Each residual (F04, F08, F09, F11) closes with a live test and a human-approved ledger update.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "one PR per residual"
+      ],
+      "rollback": "Revert the individual PR."
+    },
+    {
+      "id": "A5",
+      "title": "A tested scale envelope",
+      "milestone": "M3",
+      "priority": "P3",
+      "executor": "claude_code_with_cluster",
+      "status": "not_started",
+      "depends_on": [
+        "R4",
+        "P5"
+      ],
+      "requires": [
+        {
+          "kind": "cluster",
+          "description": "Clusters able to hold 500k-chunk corpora"
+        },
+        {
+          "kind": "hardware",
+          "description": "A machine with enough memory for 500k chunks locally"
+        }
+      ],
+      "addresses": [
+        "V18"
+      ],
+      "branch": "roadmap/a5-scale-envelope",
+      "pr": null,
+      "purpose": "Publish limits users can rely on.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-indexing/src/bin/docmonk-index-bench.rs",
+          "crates/docmonk-ml/src/hnsw.rs",
+          "benchmarks/",
+          "README.md"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "A5-01",
+          "title": "Large corpora",
+          "details": "500k chunks locally and on a cluster: index time, peak memory, query p95, HNSW memory and incremental persistence.",
+          "done": false
+        },
+        {
+          "id": "A5-02",
+          "title": "Publish",
+          "details": "A 'Limits' section in the README backed by committed reports.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "server_tests"
+        ],
+        "tests": [
+          "scale benchmarks"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "A5-AC1",
+          "criterion": "The README has a Limits section backed by committed 500k-chunk reports.",
+          "verify": {
+            "kind": "report",
+            "ref": "benchmarks/"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "scale reports",
+        "README Limits section"
+      ],
+      "rollback": "Documentation only."
+    },
+    {
+      "id": "A6",
+      "title": "Layering audit in xtask",
+      "milestone": "M3",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "A1"
+      ],
+      "addresses": [
+        "V11"
+      ],
+      "branch": "roadmap/a6-layer-audit",
+      "pr": null,
+      "purpose": "Keep A1 from regressing.",
+      "scope": {
+        "modify": [
+          "xtask/src/main.rs",
+          "docs/architecture.md",
+          ".github/workflows/rust.yml"
+        ],
+        "create": [
+          "xtask/src/layers.rs"
+        ],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "A6-01",
+          "title": "Audit",
+          "details": "cargo xtask layer-audit reads every crate's [dependencies] and fails on a dependency against the layer table declared in docs/architecture.md (entry, application, domain, infrastructure); runs in Repository audits.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "xtask unit tests with a violating manifest"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "A6-AC1",
+          "criterion": "CI fails when a crate gains a dependency against the layer table.",
+          "verify": {
+            "kind": "test",
+            "ref": "xtask unit tests"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "cargo xtask layer-audit"
+      ],
+      "rollback": "Remove the audit step."
+    },
+    {
+      "id": "Q1",
+      "title": "Human ownership of labels and gates",
+      "milestone": "PROCESS",
+      "priority": "P0",
+      "executor": "claude_code_then_human_review",
+      "status": "not_started",
+      "depends_on": [],
+      "requires": [
+        {
+          "kind": "repo_admin",
+          "description": "Enable required code-owner review on main."
+        }
+      ],
+      "addresses": [
+        "V22"
+      ],
+      "branch": "roadmap/q1-codeowners",
+      "pr": null,
+      "purpose": "Prevent a model from writing the code, the labels and the floors that judge it.",
+      "scope": {
+        "modify": [
+          "CONTRIBUTING.md"
+        ],
+        "create": [
+          ".github/CODEOWNERS",
+          ".github/pull_request_template.md"
+        ],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "Q1-01",
+          "title": "CODEOWNERS",
+          "details": "Owners for fixtures/eval/**, fixtures/p0/eval-gates.json, fixtures/search_quality/*gates*.json and audit/remediation/ledger.json.",
+          "done": false
+        },
+        {
+          "id": "Q1-02",
+          "title": "PR template",
+          "details": "Checklist: eval reports attached, labels or gates changed (needs human approval), audits run.",
+          "done": false
+        },
+        {
+          "id": "Q1-03",
+          "title": "branch protection",
+          "details": "Require code-owner review on main.",
+          "executor": "human",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "Q1-AC1",
+          "criterion": "Every change to a gate, label or ledger file requires a code-owner approval.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "CODEOWNERS",
+        "PR template"
+      ],
+      "rollback": "Remove the files."
+    },
+    {
+      "id": "Q2",
+      "title": "A bigger, sealed held-out set",
+      "milestone": "PROCESS",
+      "priority": "P1",
+      "executor": "human",
+      "status": "not_started",
+      "depends_on": [
+        "R1"
+      ],
+      "requires": [
+        {
+          "kind": "human_approval",
+          "description": "People write or approve the new queries."
+        }
+      ],
+      "addresses": [
+        "V05",
+        "V22"
+      ],
+      "branch": "roadmap/q2-heldout-growth",
+      "pr": null,
+      "purpose": "Make the eval hard to overfit and closer to real use.",
+      "scope": {
+        "modify": [
+          "fixtures/eval/queries.json",
+          "fixtures/eval/corpus/",
+          "crates/docmonk-service/tests/heldout_eval.rs",
+          "docs/evaluation.md"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "Q2-01",
+          "title": "Split field",
+          "details": "Claude Code adds a split field (dev or sealed) to the harness; floors apply only to sealed approved queries; tuning work uses dev only.",
+          "executor": "claude_code_then_human_review",
+          "done": false
+        },
+        {
+          "id": "Q2-02",
+          "title": "grow",
+          "details": "Reach at least 300 approved queries, a third from real use (P10) and real Greek or mixed-language documents.",
+          "executor": "human",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "eval_default"
+        ],
+        "tests": [
+          "harness respects splits"
+        ],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "Q2-AC1",
+          "criterion": "At least 300 approved queries, a third from real use.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        },
+        {
+          "id": "Q2-AC2",
+          "criterion": "Floors apply only to sealed approved queries and tuning uses the dev split.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-service/tests/heldout_eval.rs"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "split field in the harness",
+        "grown query set"
+      ],
+      "rollback": "Treat every query as sealed."
+    },
+    {
+      "id": "Q3",
+      "title": "Nightly mutation testing",
+      "milestone": "PROCESS",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V22"
+      ],
+      "branch": "roadmap/q3-mutation-testing",
+      "pr": null,
+      "purpose": "Show where tests pass without pinning behaviour.",
+      "scope": {
+        "modify": [
+          ".github/workflows/rust-nightly.yml",
+          "docs/CI.md"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "Q3-01",
+          "title": "cargo-mutants",
+          "details": "Nightly cargo-mutants on docmonk-retrieval, docmonk-storage and docmonk-backends (in-process engine); publish the score and surviving mutants as an artifact.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "Q3-AC1",
+          "criterion": "The nightly publishes a mutation score and surviving mutants are triaged into issues.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "nightly cargo-mutants job"
+      ],
+      "rollback": "Disable the job."
+    },
+    {
+      "id": "Q4",
+      "title": "Coverage, starting with docmonk-ops",
+      "milestone": "PROCESS",
+      "priority": "P1",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V13"
+      ],
+      "branch": "roadmap/q4-coverage-ops",
+      "pr": null,
+      "purpose": "Cover the operations users rely on to protect their data.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-ops/src/backup.rs",
+          "crates/docmonk-ops/src/rebuild.rs",
+          "crates/docmonk-ops/src/uninstall.rs",
+          "crates/docmonk-ops/src/vectors.rs",
+          ".github/workflows/rust.yml"
+        ],
+        "create": [
+          "crates/docmonk-ops/tests/"
+        ],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "Q4-01",
+          "title": "ops tests",
+          "details": "Backup then restore round trip with identical search results; rebuild; uninstall never touches user source files; vector maintenance.",
+          "done": false
+        },
+        {
+          "id": "Q4-02",
+          "title": "Coverage",
+          "details": "cargo-llvm-cov per-crate summary in the CI job summary.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "new docmonk-ops integration tests"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "Q4-AC1",
+          "criterion": "docmonk-ops has backup/restore round-trip, rebuild, uninstall and vector tests.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-ops/tests/"
+          },
+          "met": false
+        },
+        {
+          "id": "Q4-AC2",
+          "criterion": "Per-crate coverage appears in the CI summary.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "docmonk-ops integration tests",
+        "coverage summary"
+      ],
+      "rollback": "Tests only."
+    },
+    {
+      "id": "Q5",
+      "title": "ADR open-item audit",
+      "milestone": "PROCESS",
+      "priority": "P3",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V06"
+      ],
+      "branch": "roadmap/q5-adr-audit",
+      "pr": null,
+      "purpose": "Stop open measurements from hiding in ADR prose.",
+      "scope": {
+        "modify": [
+          "xtask/src/main.rs",
+          "docs/adr/",
+          ".github/workflows/rust.yml"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "Q5-01",
+          "title": "Audit",
+          "details": "cargo xtask adr-audit lists ADRs whose Status or text says in progress, not measured or still to be measured; printed in CI (non-failing) and reported nightly.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "xtask unit tests"
+        ],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "Q5-AC1",
+          "criterion": "CI prints the ADRs with open items.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "cargo xtask adr-audit"
+      ],
+      "rollback": "Remove the step."
+    },
+    {
+      "id": "Q6",
+      "title": "Status badges",
+      "milestone": "PROCESS",
+      "priority": "P3",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "R2"
+      ],
+      "addresses": [],
+      "branch": "roadmap/q6-badges",
+      "pr": null,
+      "purpose": "Make release health visible without repository access.",
+      "scope": {
+        "modify": [
+          "README.md"
+        ],
+        "create": [],
+        "review": []
+      },
+      "tasks": [
+        {
+          "id": "Q6-01",
+          "title": "Badges",
+          "details": "CI, Nightly and held-out eval badges at the top of the README.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "Q6-AC1",
+          "criterion": "CI, nightly and held-out badges render on the README.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "README badges"
+      ],
+      "rollback": "Remove the badges."
+    }
+  ],
+  "decisions": [
+    {
+      "id": "D1",
+      "question": "Server mode in 1.0: GA or preview?",
+      "options": [
+        "GA",
+        "Preview"
+      ],
+      "recommendation": "Preview, unless R4 passes before R7.",
+      "rationale": "Local mode is the main use and is fully verified; server mode has no live numbers yet.",
+      "owner": "human",
+      "status": "proposed",
+      "decision": null,
+      "blocks": [
+        "R7"
+      ]
+    },
+    {
+      "id": "D2",
+      "question": "Default embedding model",
+      "options": [
+        "Keep all-MiniLM-L6-v2",
+        "Switch to multilingual-e5-small with a lite profile",
+        "Auto-select by detected corpus language"
+      ],
+      "recommendation": "Switch to multilingual-e5-small once P1 and P2 land and Q2 confirms it; keep all-MiniLM-L6-v2 as a fast lite profile.",
+      "rationale": "E5 is better on every language measured, English included (B10), at about 3x build time, 4x memory and a 470 MB model.",
+      "owner": "human",
+      "status": "proposed",
+      "decision": null,
+      "blocks": [
+        "M2"
+      ]
+    },
+    {
+      "id": "D3",
+      "question": "Ship E5 bundled or on demand?",
+      "options": [
+        "Bundled in every release",
+        "On demand plus an optional full asset",
+        "On demand only"
+      ],
+      "recommendation": "On demand via docmonk models install, plus an optional full release asset.",
+      "rationale": "Keeps the base download small while offline installs remain possible.",
+      "owner": "human",
+      "status": "proposed",
+      "decision": null,
+      "blocks": [
+        "P1"
+      ]
+    },
+    {
+      "id": "D4",
+      "question": "Reranker",
+      "options": [
+        "Keep off by default",
+        "Adopt a multilingual cross-encoder",
+        "Remove the reranker"
+      ],
+      "recommendation": "Keep it off by default; adopt a multilingual cross-encoder only if P4 shows ranking, not recall, is the remaining gap.",
+      "rationale": "The English reranker costs about 1.5 s p95 and lowers multilingual results (V10).",
+      "owner": "human",
+      "status": "proposed",
+      "decision": null,
+      "blocks": [
+        "P3"
+      ]
+    }
+  ],
+  "risks": [
+    {
+      "id": "K01",
+      "risk": "Self-confirming quality: the same model writes code, labels and floors.",
+      "likelihood": "high",
+      "impact": "high",
+      "mitigation": "Q1 ownership rules, R1 human review, Q2 sealed split, floors never lowered.",
+      "related": [
+        "Q1",
+        "R1",
+        "Q2"
+      ]
+    },
+    {
+      "id": "K02",
+      "risk": "Content redaction changes stored text and rankings.",
+      "likelihood": "medium",
+      "impact": "medium",
+      "mitigation": "Redact only secret values on the same line, version the rule set in fingerprints, require unchanged held-out reports.",
+      "related": [
+        "H4"
+      ]
+    },
+    {
+      "id": "K03",
+      "risk": "Fail-closed installs block users without minisign.",
+      "likelihood": "medium",
+      "impact": "medium",
+      "mitigation": "Per-platform instructions and an explicit, loud DOCMONK_INSECURE_SKIP_SIGNATURE=1 opt-out.",
+      "related": [
+        "H3"
+      ]
+    },
+    {
+      "id": "K04",
+      "risk": "Switching the default model slows indexing and raises memory.",
+      "likelihood": "medium",
+      "impact": "medium",
+      "mitigation": "Decide only after P1, P2, P5 and Q2; keep a lite profile; show an ETA.",
+      "related": [
+        "D2",
+        "P5"
+      ]
+    },
+    {
+      "id": "K05",
+      "risk": "Refactors change behaviour silently.",
+      "likelihood": "low",
+      "impact": "high",
+      "mitigation": "Byte-identical eval and golden reports before and after.",
+      "related": [
+        "A1",
+        "A2"
+      ]
+    },
+    {
+      "id": "K06",
+      "risk": "Server-mode work needs clusters that are not always available.",
+      "likelihood": "medium",
+      "impact": "low",
+      "mitigation": "Use the CI service containers; decision D1 keeps the release unblocked.",
+      "related": [
+        "R4",
+        "D1"
+      ]
+    },
+    {
+      "id": "K07",
+      "risk": "zip advisories stay open because upstream crates pin older majors.",
+      "likelihood": "high",
+      "impact": "low",
+      "mitigation": "Documented, expiring cargo-deny ignores and upstream tracking; extract() stays unused.",
+      "related": [
+        "H1",
+        "H2"
+      ]
+    }
+  ],
+  "execution": {
+    "start_with": "H1",
+    "order": [
+      "H1",
+      "H2",
+      "Q1",
+      "H3",
+      "H4",
+      "R1",
+      "A3",
+      "H5",
+      "R2",
+      "R5",
+      "R6",
+      "R3",
+      "R4",
+      "R7",
+      "Q4",
+      "P1",
+      "P2",
+      "P3",
+      "Q2",
+      "P4",
+      "P10",
+      "P8",
+      "P9",
+      "P6",
+      "P7",
+      "P5",
+      "P11",
+      "A1",
+      "A6",
+      "A2",
+      "A4",
+      "A5",
+      "Q3",
+      "Q5",
+      "Q6"
+    ],
+    "parallel_tracks": [
+      {
+        "name": "Human review",
+        "work_packages": [
+          "R1",
+          "Q2"
+        ],
+        "why": "Label review is human work and gates most of M1 and M2; start it on day one."
+      },
+      {
+        "name": "Build ergonomics",
+        "work_packages": [
+          "A3"
+        ],
+        "why": "Independent and makes every later PR faster to build."
+      },
+      {
+        "name": "Cluster work",
+        "work_packages": [
+          "R3",
+          "R4"
+        ],
+        "why": "Batch the work that needs live engines."
+      }
+    ],
+    "stop_and_ask_when": [
+      "The next work package's executor is human, or a task's executor is human.",
+      "A change would touch a protected path in a way its rule forbids, or needs a human approval.",
+      "A decision (D1-D4) blocks the next step; present the evidence and the recommendation.",
+      "A cluster, secret or external account listed under requires is not available.",
+      "An acceptance criterion cannot be met without lowering a floor, weakening an audit or changing behaviour the plan says to preserve.",
+      "The code on main differs from the plan so much that the work package needs redesigning."
+    ],
+    "pr_report": [
+      "Work package id and title in the PR title.",
+      "Files changed and why.",
+      "Commands run with results (every key in verification.commands).",
+      "Before/after held-out reports when eval_report_required is true.",
+      "Measured numbers for any performance claim.",
+      "Trade-offs and how to roll back (from the work package's rollback)."
+    ],
+    "status_updates": "Edit this file in the same PR: set work_packages[].status, tasks[].done, acceptance[].met, pr; append a progress_log entry for started, pr_opened, merged, blocked; set plan.updated_on. Run validate_plan before committing."
+  },
+  "progress_log": [],
+  "agent_prompt": "Implement plans/improvement-roadmap.json in https://github.com/gzarog/DocMonk. It follows plans/plan.schema.json; read both fully, then inspect current main (the plan was written against b9f38da, v0.3.25) and adapt where the code has moved. Work in execution.order, starting with execution.start_with, one roadmap/ branch and one PR per work package, respecting depends_on. Do only tasks whose executor (task-level, else work-package-level) is not human; for claude_code_then_human_review, open the PR and stop for review; for claude_code_with_cluster, use the service containers from .github/workflows/rust.yml. Obey policy.protected_paths and execution.stop_and_ask_when. Every PR runs all keys in its verification.commands and must pass the clean-slate and branding audits; attach before/after held-out reports when eval_report_required is true. Never decide D1-D4 yourself. Report each PR as execution.pr_report says, and update status fields and progress_log in this file as execution.status_updates says, validating with commands.validate_plan."
+}
