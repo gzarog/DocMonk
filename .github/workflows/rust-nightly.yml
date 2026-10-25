@@ -163,7 +163,25 @@ jobs:
           DOCMONK_REQUIRE_MODELS: "1"
       - name: Per-crate summary
         if: always()
-        run: python3 scripts/coverage_summary.py "$RUNNER_TEMP/coverage.json" >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Line coverage per crate"
+            echo
+            echo "| Crate | Covered | Lines | % |"
+            echo "|---|---:|---:|---:|"
+            jq -r '
+              .data[0] as $d
+              | [$d.files[]
+                 | {crate: (.filename | gsub("\\\\"; "/") | capture("(?:^|/)(?:crates/)?(?<c>docmonk-[^/]+|xtask)/").c),
+                    covered: .summary.lines.covered, count: .summary.lines.count}]
+              | group_by(.crate)[]
+              | {crate: .[0].crate, covered: (map(.covered) | add), count: (map(.count) | add)}
+              | "| `\(.crate)` | \(.covered) | \(.count) | \(if .count > 0 then (.covered * 1000 / .count | round / 10) else 0 end) |"
+            ' "$RUNNER_TEMP/coverage.json"
+            jq -r '.data[0].totals.lines | "| **workspace** | \(.covered) | \(.count) | \(.percent * 10 | round / 10) |"' "$RUNNER_TEMP/coverage.json"
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
