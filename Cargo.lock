@@ -1235,6 +1235,7 @@ dependencies = [
  "serde_json",
  "sysinfo",
  "tar",
+ "tempfile",
 ]
 
 [[package]]

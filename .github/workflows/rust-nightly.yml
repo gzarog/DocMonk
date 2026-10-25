@@ -135,3 +135,39 @@ jobs:
             gh issue create --title "$title" --label security-advisory --body "$body"
           fi
           exit 1
+
+  # Per-crate line coverage of the workspace tests (pinned models
+  # required, as in CI), written to the job summary and kept as an
+  # artifact. Reported, not gated.
+  coverage:
+    name: Coverage (per crate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+      - run: rustup component add llvm-tools-preview
+      - uses: taiki-e/install-action@0e09747a63ae497bf945b3dcaf38fef0050d0109 # v2.62.0
+        with:
+          tool: cargo-llvm-cov
+      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/fetch-models
+        with:
+          dir: ${{ runner.temp }}
+      - name: cargo llvm-cov
+        run: cargo llvm-cov --workspace --no-fail-fast --json --summary-only --output-path "$RUNNER_TEMP/coverage.json"
+        env:
+          DOCMONK_OCR_MODELS_DIR: ${{ runner.temp }}/ocr-models
+          DOCMONK_REQUIRE_OCR: "1"
+          DOCMONK_MODELS_DIR: ${{ runner.temp }}/models
+          DOCMONK_REQUIRE_MODELS: "1"
+      - name: Per-crate summary
+        if: always()
+        run: python3 scripts/coverage_summary.py "$RUNNER_TEMP/coverage.json" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: ${{ runner.temp }}/coverage.json
+          if-no-files-found: ignore
+          retention-days: 14

@@ -26,6 +26,7 @@ listens to; do not rename them. A failed `CI` push run never releases.
 | 150-source status benchmark | – | – | – | – | – | – (nightly) |
 | Retrieval eval (repository, pinned models) | – | – | – | – | – | – (nightly) |
 | Dependency advisories (`cargo deny check advisories`) | – | – | – | – | – | – (nightly) |
+| Coverage (`cargo llvm-cov`, per crate in the job summary) | – | – | – | – | – | – (nightly) |
 
 The Linux Rust job always requires the pinned OCR, embedding and reranker
 models (`DOCMONK_REQUIRE_OCR=1`, `DOCMONK_REQUIRE_MODELS=1`).
