@@ -1183,6 +1183,7 @@ dependencies = [
 name = "docmonk-mcp"
 version = "0.0.0"
 dependencies = [
+ "chrono",
  "docmonk-config",
  "docmonk-core",
  "docmonk-retrieval",

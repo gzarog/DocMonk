@@ -178,16 +178,80 @@ pub struct Opened {
     pub build: String,
 }
 
+thread_local! {
+    static HIDDEN_SOURCES: std::cell::RefCell<Option<Vec<String>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `f` with `hidden` (source ids) removed from every
+/// [`open_sources`] on this thread: nothing in them is read, so no search,
+/// evidence, explore, graph or ask result can come from them. The MCP
+/// server wraps each tool call in it (`mcp.hidden_sources`).
+pub fn with_hidden_sources<T>(hidden: Vec<String>, f: impl FnOnce() -> T) -> T {
+    struct Restore(Option<Vec<String>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            HIDDEN_SOURCES.with(|h| *h.borrow_mut() = self.0.take());
+        }
+    }
+    let _restore = Restore(HIDDEN_SOURCES.with(|h| h.borrow_mut().replace(hidden)));
+    f()
+}
+
+/// Whether the current [`with_hidden_sources`] scope hides `source_id`.
+pub fn is_hidden_source(source_id: &str) -> bool {
+    HIDDEN_SOURCES.with(|h| {
+        h.borrow()
+            .as_ref()
+            .is_some_and(|ids| ids.iter().any(|id| id == source_id))
+    })
+}
+
+/// The ids of the registered sources `entries` (ids or paths) name.
+pub fn resolve_source_names(sources: &[SourceRecord], entries: &[String]) -> Vec<String> {
+    let canonical = |p: &str| {
+        docmonk_core::paths::resolve(Path::new(p))
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| p.to_owned())
+    };
+    let wanted: Vec<(String, String)> = entries
+        .iter()
+        .map(|e| e.trim())
+        .filter(|e| !e.is_empty())
+        .map(|e| (e.to_owned(), canonical(e)))
+        .collect();
+    sources
+        .iter()
+        .filter(|s| {
+            let path = canonical(&s.path);
+            wanted
+                .iter()
+                .any(|(raw, canon)| *raw == s.id || *raw == s.path || *canon == path)
+        })
+        .map(|s| s.id.clone())
+        .collect()
+}
+
 /// Every source with a published build (optionally one source), read from
 /// the configured backend. In server mode the catalog and the active
 /// builds come from the server, read once: that map is the request's
 /// snapshot, so every later read of this request sees one consistent set
 /// of builds. Nothing local is opened.
+/// Sources hidden by [`with_hidden_sources`] are left out before any of
+/// their records is read.
 pub fn open_sources(home: &Home, only: Option<&str>) -> Result<Vec<Opened>, DocMonkError> {
-    match crate::backend::open(home)? {
-        Backend::Local => open_local(home, only),
-        Backend::Server(server) => open_server(home, server, only),
+    if only.is_some_and(is_hidden_source) {
+        return Err(DocMonkError::usage(format!(
+            "no such source: {}",
+            only.unwrap_or_default()
+        )));
     }
+    let mut opened = match crate::backend::open(home)? {
+        Backend::Local => open_local(home, only)?,
+        Backend::Server(server) => open_server(home, server, only)?,
+    };
+    opened.retain(|o| !is_hidden_source(&o.source.id));
+    Ok(opened)
 }
 
 fn open_local(home: &Home, only: Option<&str>) -> Result<Vec<Opened>, DocMonkError> {

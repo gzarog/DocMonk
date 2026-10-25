@@ -322,7 +322,17 @@ The daemon runs one worker per `max_parallel_sources`. A source has at most one 
 docmonk serve --mcp   # register this command as a stdio MCP server in your client
 ```
 
-Tools: `docmonk_explore`, `docmonk_search`, `docmonk_documents`, `docmonk_symbol`, `docmonk_callers`, `docmonk_callees`, `docmonk_impact`, `docmonk_status`, `docmonk_ask`.
+Tools: `docmonk_explore`, `docmonk_search`, `docmonk_evidence`, `docmonk_documents`, `docmonk_symbol`, `docmonk_callers`, `docmonk_callees`, `docmonk_impact`, `docmonk_status`, `docmonk_ask`.
+
+**Hiding sources from agents.** `mcp.hidden_sources` lists sources (ids or paths) that AI agents never see, while the CLI and the Admin UI keep searching them. A hidden source's records are never read for a tool call, so no search, evidence, explore, graph traversal (`callers`, `callees`, `impact` across sources) or `ask` citation can come from it; naming it in `source_id`/`source_ids` answers `no such source`; and every answer is also scrubbed of records carrying its id or lying under its root. Status counts stay global, but its sources, problems and errors lose the hidden ones.
+
+**Query log.** `mcp.query_log: true` (off by default) appends one JSON line per tool call to `<home>/logs/mcp.jsonl`: `time`, `tool`, `arguments` (credentials redacted as in the index), `ok`, `error`, `result_count` and the `sources` the answer came from. Past `mcp.query_log_max_bytes` (default 10 MiB) the file is rotated to `mcp.jsonl.1`, keeping one previous generation. Nothing leaves the machine.
+
+| Setting | Default | Effect |
+|---|---|---|
+| `mcp.hidden_sources` | `[]` | Source ids or paths no MCP tool reads, returns or names. |
+| `mcp.query_log` | `false` | Log every tool call to `<home>/logs/mcp.jsonl`. |
+| `mcp.query_log_max_bytes` | `10485760` | Size at which the log is rotated (one generation kept). |
 
 ## Optional AI
 

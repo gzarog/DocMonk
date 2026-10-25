@@ -695,6 +695,16 @@ section! {
         max_request_bytes: i64 = 1_048_576, check = |v| {
             if (1024..=67_108_864).contains(v) { Ok(()) } else { Err("must be between 1024 and 67108864".into()) }
         };
+        // Sources (ids or paths) AI agents never see: no MCP tool reads,
+        // returns or names them. The CLI and the Admin UI still search them.
+        hidden_sources: Vec<String> = Vec::new();
+        // Append one JSON line per tool call to <home>/logs/mcp.jsonl: time,
+        // tool, redacted arguments, result count, sources touched.
+        query_log: bool = false;
+        // mcp.jsonl is rotated to mcp.jsonl.1 (one generation) past this size.
+        query_log_max_bytes: i64 = 10_485_760, check = |v| {
+            if (4096..=1_073_741_824).contains(v) { Ok(()) } else { Err("must be between 4096 and 1073741824".into()) }
+        };
     }
 }
 
