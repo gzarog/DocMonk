@@ -1,0 +1,103 @@
+{
+  "benchmark": "docmonk-ann-bench --n <vectors> --ef 64,96,200,400,800 (release, 4 CPU threads)",
+  "data": "deterministic clustered unit vectors (64 centres, noise 0.6), 384 dims, 200 queries; recall against exact top-10",
+  "default_ef_search": 400,
+  "runs": [
+    {
+      "build_s": 8.285410187,
+      "dims": 384,
+      "engine": "hnsw (m=16, ef_construction=128)",
+      "exact_query_ms": 5.0855410050000005,
+      "file_bytes": 33302264,
+      "load_s": 0.104103931,
+      "queries": 200,
+      "save_s": 0.403155637,
+      "sweep": [
+        {
+          "ef_search": 64,
+          "p50_ms": 0.316775,
+          "p95_ms": 0.5150279999999999,
+          "query_ms": 0.3214921650000001,
+          "recall_at_10": 0.6275
+        },
+        {
+          "ef_search": 96,
+          "p50_ms": 0.39207000000000003,
+          "p95_ms": 0.6441640000000001,
+          "query_ms": 0.4160110449999999,
+          "recall_at_10": 0.7305
+        },
+        {
+          "ef_search": 200,
+          "p50_ms": 0.6793100000000001,
+          "p95_ms": 1.000381,
+          "query_ms": 0.6874600800000006,
+          "recall_at_10": 0.879
+        },
+        {
+          "ef_search": 400,
+          "p50_ms": 1.331083,
+          "p95_ms": 1.955599,
+          "query_ms": 1.376060225,
+          "recall_at_10": 0.961
+        },
+        {
+          "ef_search": 800,
+          "p50_ms": 2.3533109999999997,
+          "p95_ms": 3.133151,
+          "query_ms": 2.416309745,
+          "recall_at_10": 0.9935
+        }
+      ],
+      "vectors": 20000
+    },
+    {
+      "build_s": 84.245322188,
+      "dims": 384,
+      "engine": "hnsw (m=16, ef_construction=128)",
+      "exact_query_ms": 49.67861274999999,
+      "file_bytes": 166395860,
+      "load_s": 0.473156833,
+      "queries": 200,
+      "save_s": 1.871256839,
+      "sweep": [
+        {
+          "ef_search": 64,
+          "p50_ms": 0.860655,
+          "p95_ms": 1.4661819999999999,
+          "query_ms": 0.9200018400000002,
+          "recall_at_10": 0.262
+        },
+        {
+          "ef_search": 96,
+          "p50_ms": 0.970017,
+          "p95_ms": 1.807319,
+          "query_ms": 1.0951296500000003,
+          "recall_at_10": 0.321
+        },
+        {
+          "ef_search": 200,
+          "p50_ms": 1.6215279999999999,
+          "p95_ms": 3.2089800000000004,
+          "query_ms": 1.8651437300000004,
+          "recall_at_10": 0.4335
+        },
+        {
+          "ef_search": 400,
+          "p50_ms": 2.531787,
+          "p95_ms": 4.534178,
+          "query_ms": 2.750673995000001,
+          "recall_at_10": 0.604
+        },
+        {
+          "ef_search": 800,
+          "p50_ms": 4.096795,
+          "p95_ms": 6.55725,
+          "query_ms": 4.223308114999999,
+          "recall_at_10": 0.8085
+        }
+      ],
+      "vectors": 100000
+    }
+  ]
+}
