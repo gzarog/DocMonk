@@ -41,9 +41,13 @@ pub const CODE_DERIVATION_VERSION: &str = "rust-code-3";
 pub const GRAPH_DERIVATION_VERSION: &str = "graph-3";
 
 /// The full graph identity recorded with every graph generation (it
-/// includes the code derivation, whose entity ids the graph points at).
+/// includes the code derivation, whose entity ids the graph points at, and
+/// the redaction rules applied to relationship evidence).
 pub fn graph_derivation() -> String {
-    format!("{CODE_DERIVATION_VERSION}+{GRAPH_DERIVATION_VERSION}")
+    format!(
+        "{CODE_DERIVATION_VERSION}+{GRAPH_DERIVATION_VERSION}+{}",
+        docmonk_core::secrets::REDACTION_VERSION
+    )
 }
 
 /// Resolver label of a reference awaiting whole-build resolution.

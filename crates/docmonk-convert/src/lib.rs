@@ -146,5 +146,6 @@ pub fn registry_with(config: &DocMonkConfig, opts: &RegistryOptions) -> Registry
         }),
         image_ocr: d.image_ocr,
     });
-    r
+    // Credentials in indexed text are redacted before storage (ADR 0042).
+    r.with_redaction(config.indexing.redact_secrets)
 }

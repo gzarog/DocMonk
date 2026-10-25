@@ -4,7 +4,7 @@
 
 use std::path::{Component, Path, PathBuf};
 
-use docmonk_core::security::{fnmatch, is_secret_filename};
+use docmonk_core::security::{fnmatch, is_secret_filename_with};
 
 pub const DEFAULT_EXCLUDE_DIRS: &[&str] = &[
     ".git",
@@ -58,6 +58,8 @@ pub struct IgnoreMatcher {
     root: PathBuf,
     patterns: Vec<String>,
     include_patterns: Vec<String>,
+    /// `indexing.secret_patterns`: added to the built-in secret file names.
+    secret_patterns: Vec<String>,
 }
 
 impl IgnoreMatcher {
@@ -69,7 +71,15 @@ impl IgnoreMatcher {
             root: root.to_path_buf(),
             patterns,
             include_patterns: include_patterns.to_vec(),
+            secret_patterns: Vec::new(),
         }
+    }
+
+    /// Extra secret file-name patterns; like the built-in ones they are
+    /// never indexed, whatever the include patterns say.
+    pub fn with_secret_patterns(mut self, patterns: &[String]) -> Self {
+        self.secret_patterns = patterns.to_vec();
+        self
     }
 
     fn matches_any(patterns: &[String], rel_posix: &str, name: &str, is_dir: bool) -> bool {
@@ -117,7 +127,7 @@ impl IgnoreMatcher {
         {
             return true;
         }
-        if !is_dir && is_secret_filename(&name) {
+        if !is_dir && is_secret_filename_with(&name, cfg!(windows), &self.secret_patterns) {
             return true;
         }
         if !Self::matches_any(&self.patterns, &rel_posix, &name, is_dir) {

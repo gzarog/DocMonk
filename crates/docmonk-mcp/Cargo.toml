@@ -14,6 +14,7 @@ docmonk-service.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+docmonk-config.workspace = true
 docmonk-storage.workspace = true
 tempfile.workspace = true
 

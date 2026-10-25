@@ -115,7 +115,7 @@ pub struct PageExtraction {
     pub empty_pages: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize)]
 pub struct ChunkRow {
     pub id: String,
     pub document_id: String,

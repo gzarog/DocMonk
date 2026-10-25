@@ -133,6 +133,9 @@ pub struct Registry {
     pub unknown: Arc<dyn Processor>,
     pub finalizers: Vec<Arc<dyn BuildFinalizer>>,
     pub versions: IndexVersions,
+    /// Content redaction of everything the processors extract
+    /// (`indexing.redact_secrets`); set with [`Registry::with_redaction`].
+    pub redact_secrets: bool,
 }
 
 impl Registry {
@@ -150,7 +153,21 @@ impl Registry {
                 embedding_model_id: None,
                 embedding_text_version: None,
             },
+            redact_secrets: false,
         }
+    }
+
+    /// Turns content redaction on or off. The rule-set version becomes part
+    /// of the parser and chunker identities, so toggling redaction or
+    /// changing a rule rebuilds every source.
+    pub fn with_redaction(mut self, on: bool) -> Self {
+        self.redact_secrets = on;
+        if on {
+            let v = docmonk_core::secrets::REDACTION_VERSION;
+            self.versions.parser_version = format!("{}+{v}", self.versions.parser_version);
+            self.versions.chunker_version = format!("{}+{v}", self.versions.chunker_version);
+        }
+        self
     }
 
     fn for_kind(&self, kind: FileKind) -> &dyn Processor {
@@ -292,6 +309,8 @@ pub struct Options {
     /// written the pass stops as if the process were killed: no cleanup,
     /// the open segment is lost and the pending build claim stays.
     pub inject_crash_after_files: Option<usize>,
+    /// `indexing.secret_patterns`.
+    pub secret_patterns: Vec<String>,
 }
 
 /// Default files per full-build segment.
@@ -325,6 +344,7 @@ impl Options {
             inject_unreadable: Vec::new(),
             segment_files: SEGMENT_FILES,
             inject_crash_after_files: None,
+            secret_patterns: cfg.indexing.secret_patterns.clone(),
         }
     }
 }
@@ -465,14 +485,21 @@ fn run_workers(
                         work.input.content_hash = hash_file(&work.input.path).ok();
                     }
                     let processor = registry.for_kind(work.input.kind);
-                    let r = catch_unwind(AssertUnwindSafe(|| processor.prepare(&work.input)))
-                        .unwrap_or_else(|_| {
-                            Err(ProcessError {
-                                code: "processor_panic".into(),
-                                message: "processor panicked".into(),
-                                transient: false,
-                            })
-                        });
+                    let redact = registry.redact_secrets;
+                    let r = catch_unwind(AssertUnwindSafe(|| {
+                        let mut k = processor.prepare(&work.input)?;
+                        if redact {
+                            crate::redact::redact_knowledge(&mut k);
+                        }
+                        Ok(k)
+                    }))
+                    .unwrap_or_else(|_| {
+                        Err(ProcessError {
+                            code: "processor_panic".into(),
+                            message: "processor panicked".into(),
+                            transient: false,
+                        })
+                    });
                     active.fetch_sub(1, Ordering::Relaxed);
                     r
                 };
@@ -649,7 +676,8 @@ pub fn run_source_with(
         &docmonk_core::paths::resolve(root).map_err(db_err)?,
         &source.exclude_patterns,
         &source.include_patterns,
-    );
+    )
+    .with_secret_patterns(&opts.secret_patterns);
     let targets = targets.filter(|_| matches!(plan, RebuildPlan::Incremental { .. }));
     let targeted = match targets {
         Some(t) => {

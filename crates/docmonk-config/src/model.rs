@@ -294,6 +294,14 @@ section! {
         debounce_ms: i64 = 2000;
         max_file_size_mb: i64 = 100;
         follow_symlinks: bool = false;
+        // File-name patterns never indexed, added to the built-in secret
+        // list (.env, *.pem, id_rsa, .netrc, *.tfstate, ...); never replace it.
+        secret_patterns: Vec<String> = Vec::new();
+        // Replace credentials found in indexed text (private keys, cloud
+        // and VCS tokens, JWTs, password/secret/api-key literals,
+        // connection-string passwords, URL credentials) with
+        // [REDACTED:<kind>] before anything is stored or embedded.
+        redact_secrets: bool = true;
         network_poll_seconds: i64 = 30;
         reconciliation_interval_seconds: i64 = 900;
         code_extraction_workers: i64 = 1;
