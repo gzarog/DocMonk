@@ -874,7 +874,7 @@
       "milestone": "M0",
       "priority": "P0",
       "executor": "claude_code",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [],
       "addresses": [
         "V01"
@@ -898,19 +898,19 @@
           "id": "H1-01",
           "title": "Update TLS crates",
           "details": "cargo update -p rustls -p rustls-webpki -p webpki-roots to the latest semver-compatible releases (at least rustls 0.23.46, rustls-webpki 0.103.16, webpki-roots 1.0.10). Use --precise only if a plain update does not reach the patched versions.",
-          "done": false
+          "done": true
         },
         {
           "id": "H1-02",
           "title": "Assess zip",
           "details": "zip 1.1.4 comes from candle-core 0.9.1 (pinned =0.9.1) and zip 8.6.0 from calamine, docling, docmonk-update and xtask. RUSTSEC-2026-0367/0368/0369 are fixed only in zip >= 9.0.0 and concern ZipArchive::extract and ZipStreamReader::extract. Grep the workspace to confirm neither is called. If docmonk-update and xtask can move to zip 9 without breaking calamine/docling, do it; otherwise write the justification that H2 will put in deny.toml.",
-          "done": false
+          "done": true
         },
         {
           "id": "H1-03",
           "title": "Verify",
           "details": "Run the full test suite with pinned models; rely on the CI server-integration job for OpenSearch/Elasticsearch transport.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -934,7 +934,7 @@
           "verify": {
             "kind": "manual"
           },
-          "met": false
+          "met": true
         },
         {
           "id": "H1-AC2",
@@ -942,14 +942,18 @@
           "verify": {
             "kind": "manual"
           },
-          "met": false
+          "met": true
         }
       ],
       "deliverables": [
         "Updated Cargo.lock",
         "zip justification text for H2's deny.toml"
       ],
-      "rollback": "Revert the lockfile commit."
+      "rollback": "Revert the lockfile commit.",
+      "notes": [
+        "cargo deny also found RUSTSEC-2026-0386 (tokio AsyncFd, unsound); tokio was bumped to 1.54.1 in the same work package.",
+        "zip stays: zip 1.1.4 is pinned by candle-core =0.9.1 and zip 8 by calamine; neither the workspace nor those crates call ZipArchive::extract or ZipStreamReader::extract. The ignores in deny.toml carry the reason and a 2027-01-31 review date."
+      ]
     },
     {
       "id": "H2",
@@ -957,7 +961,7 @@
       "milestone": "M0",
       "priority": "P0",
       "executor": "claude_code",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [
         "H1"
       ],
@@ -985,25 +989,25 @@
           "id": "H2-01",
           "title": "deny.toml",
           "details": "advisories: deny vulnerabilities, warn unmaintained/unsound, ignore list only for the zip ids from H1 with a reason and an expiry date; licenses: an allowlist compatible with MIT per ADR 0003; bans: warn on multiple versions; sources: crates.io only.",
-          "done": false
+          "done": true
         },
         {
           "id": "H2-02",
           "title": "CI step",
           "details": "Add cargo-deny (EmbarkStudios/cargo-deny-action pinned by commit SHA) to the Repository audits job so every PR runs it, and add deny.toml to the classifier's 'all three' paths with a self-test case.",
-          "done": false
+          "done": true
         },
         {
           "id": "H2-03",
           "title": "Nightly advisories",
           "details": "A nightly job runs cargo deny check advisories against main and opens or updates a single issue on failure.",
-          "done": false
+          "done": true
         },
         {
           "id": "H2-04",
           "title": "Docs",
           "details": "Document the job in docs/CI.md and the policy in ADR 0003.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -1028,7 +1032,7 @@
             "kind": "command",
             "ref": "deny"
           },
-          "met": false
+          "met": true
         },
         {
           "id": "H2-AC2",
@@ -1044,7 +1048,12 @@
         "CI and nightly jobs",
         "docs/CI.md section"
       ],
-      "rollback": "Remove the cargo-deny steps; keep deny.toml."
+      "rollback": "Remove the cargo-deny steps; keep deny.toml.",
+      "notes": [
+        "H2-AC1 was checked locally: cargo deny check failed on the then-open tokio advisory until it was patched.",
+        "MPL-2.0 is allowed only as per-crate exceptions (cssparser, cssparser-macros, dtoa-short, selectors).",
+        "H2-AC2 stays open until the nightly advisory job has run on main."
+      ]
     },
     {
       "id": "H3",
@@ -1052,7 +1061,7 @@
       "milestone": "M0",
       "priority": "P0",
       "executor": "claude_code_then_human_review",
-      "status": "not_started",
+      "status": "blocked",
       "depends_on": [],
       "requires": [
         {
@@ -1098,25 +1107,25 @@
           "id": "H3-03",
           "title": "Fail closed",
           "details": "With a key set, a missing minisign tool or a missing/invalid SHA256SUMS.minisig aborts the install with instructions; DOCMONK_INSECURE_SKIP_SIGNATURE=1 is the only explicit opt-out and prints a warning. Same behaviour in PowerShell.",
-          "done": false
+          "done": true
         },
         {
           "id": "H3-04",
           "title": "docmonk update",
           "details": "Confirm that with a compiled-in key a missing or invalid signature is an error in crates/docmonk-update; add tests for both cases.",
-          "done": false
+          "done": true
         },
         {
           "id": "H3-05",
           "title": "Release workflow",
           "details": "Fail the release when the key is configured but no SHA256SUMS.minisig was produced, and verify the signature with the public key before publishing.",
-          "done": false
+          "done": true
         },
         {
           "id": "H3-06",
           "title": "Installer CI",
           "details": "Extend the install-script job on ubuntu, macos and windows with a tampered SHA256SUMS case and a missing-signature case; both must exit non-zero.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -1156,7 +1165,11 @@
         "fail-closed installer logic",
         "release workflow signature check"
       ],
-      "rollback": "Revert the installer changes; the release workflow keeps signing as before."
+      "rollback": "Revert the installer changes; the release workflow keeps signing as before.",
+      "notes": [
+        "Blocked on H3-01 (human): v0.3.25 is unsigned and no minisign key is configured, so no public key could be committed (H3-02). The installers stay checksums-only, with a warning, until a maintainer commits the key to install.sh and install.ps1 and sets vars.MINISIGN_PUBLIC_KEY plus the secrets. The release workflow then verifies that the committed key and the variable match.",
+        "Fail-closed logic is tested with a throwaway key: unit tests in docmonk-update, and tampered, unsigned and no-minisign cases in the install-script CI job on all three platforms. DOCMONK_MINISIGN_PUBKEY overrides the key for tests and mirrors."
+      ]
     },
     {
       "id": "H4",
@@ -1164,7 +1177,7 @@
       "milestone": "M0",
       "priority": "P0",
       "executor": "claude_code",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [],
       "addresses": [
         "V04"
@@ -1197,13 +1210,13 @@
           "id": "H4-01",
           "title": "Filename patterns",
           "details": "Extend SECRET_FILENAME_PATTERNS with .netrc, .git-credentials, .npmrc, kubeconfig, *.kubeconfig, id_ecdsa, id_dsa, *.pfx, *.p12, *.jks, *.keystore, *.kdbx, *.tfstate. Add an indexing.secret_patterns setting that extends, never replaces, the built-in list.",
-          "done": false
+          "done": true
         },
         {
           "id": "H4-02",
           "title": "Content redaction",
           "details": "A docmonk-core secrets module applied to every text before it is stored or embedded (chunk text, passages, entity bodies, document metadata): private key blocks, cloud access keys, GitHub/GitLab/Slack tokens, JWTs, password/secret/api-key assignments, connection strings with Password= or Pwd=, URLs with credentials. Replace only the secret value with [REDACTED:<kind>] on the same line so line numbers and citations stay valid.",
-          "done": false
+          "done": true
         },
         {
           "id": "H4-03",
@@ -1215,7 +1228,7 @@
           "id": "H4-04",
           "title": "Fixture and tests",
           "details": "A fixture corpus with planted secrets in code, appsettings JSON, Markdown, a PDF and an email attachment; tests that search, evidence, explore, documents, MCP tools and the UI document view never return them.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -1241,7 +1254,7 @@
             "kind": "test",
             "ref": "secrets fixture tests"
           },
-          "met": false
+          "met": true
         },
         {
           "id": "H4-AC2",
@@ -1250,7 +1263,7 @@
             "kind": "command",
             "ref": "eval_default"
           },
-          "met": false
+          "met": true
         }
       ],
       "deliverables": [
@@ -1258,7 +1271,12 @@
         "fixtures/secrets/",
         "docs/reference.md settings"
       ],
-      "rollback": "Set indexing.redact_secrets: false and rebuild; revert to remove the code."
+      "rollback": "Set indexing.redact_secrets: false and rebuild; revert to remove the code.",
+      "notes": [
+        "H4-03 is partly done: the rule-set version is in the parser/chunker identities and the graph derivation, and indexing.redact_secrets defaults to true. The per-source override is not implemented, because source records have no per-source settings and adding one is a control schema change (ADR 0042).",
+        "The UI document view reads the same stored, redacted text; the tests cover the service and every MCP tool.",
+        "Held-out report: benchmarks/heldout-eval/h4-secret-redaction.json. All metrics are identical to phase-3.json on SQLite."
+      ]
     },
     {
       "id": "H5",
@@ -1266,7 +1284,7 @@
       "milestone": "M0",
       "priority": "P1",
       "executor": "claude_code",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [],
       "addresses": [
         "V04",
@@ -1295,13 +1313,13 @@
           "id": "H5-01",
           "title": "Visibility flag",
           "details": "A per-source mcp: true|false (default true), applied as a hard filter at candidate generation for every MCP tool, including graph traversals across sources (impact, callers, callees) and ask citations.",
-          "done": false
+          "done": true
         },
         {
           "id": "H5-02",
           "title": "Query log",
           "details": "Opt-in mcp.query_log writes JSON lines to <home>/logs/mcp.jsonl: time, tool, redacted arguments, result count, sources touched; size-based rotation.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -1325,14 +1343,17 @@
             "kind": "test",
             "ref": "crates/docmonk-mcp/tests/execution.rs"
           },
-          "met": false
+          "met": true
         }
       ],
       "deliverables": [
         "mcp source flag",
         "opt-in MCP query log"
       ],
-      "rollback": "Revert; the flag defaults to visible so configs stay valid."
+      "rollback": "Revert; the flag defaults to visible so configs stay valid.",
+      "notes": [
+        "Adapted: the visibility flag is mcp.hidden_sources (source ids or paths) in config rather than a per-source field, which would have been a control schema change. Hidden sources are left out by open_sources inside a per-call scope, and every answer is also scrubbed."
+      ]
     },
     {
       "id": "R1",
@@ -1426,7 +1447,7 @@
       "milestone": "M1",
       "priority": "P0",
       "executor": "claude_code",
-      "status": "not_started",
+      "status": "blocked",
       "depends_on": [
         "R1"
       ],
@@ -1496,7 +1517,10 @@
       "deliverables": [
         "Nightly held-out job"
       ],
-      "rollback": "Disable the nightly job."
+      "rollback": "Disable the nightly job.",
+      "notes": [
+        "Depends on R1 (human review of the held-out labels)."
+      ]
     },
     {
       "id": "R3",
@@ -1706,7 +1730,7 @@
       "milestone": "M1",
       "priority": "P2",
       "executor": "claude_code",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [],
       "addresses": [
         "V07"
@@ -1731,13 +1755,13 @@
           "id": "R5-01",
           "title": "Sweep",
           "details": "Measure recall@10 and p50/p95 at ef_search 64, 96, 200, 400 and 800 for 20k and 100k vectors, release build.",
-          "done": false
+          "done": true
         },
         {
           "id": "R5-02",
           "title": "Default",
           "details": "Choose the lowest-latency setting with recall@10 >= 0.95; change the default only if the sweep says so and note it in ADR 0014.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -1760,7 +1784,7 @@
             "kind": "report",
             "ref": "benchmarks/ann-sweep.json"
           },
-          "met": false
+          "met": true
         },
         {
           "id": "R5-AC2",
@@ -1775,7 +1799,10 @@
         "benchmarks/ann-sweep.json",
         "ADR 0014 note"
       ],
-      "rollback": "Revert the default change if any."
+      "rollback": "Revert the default change if any.",
+      "notes": [
+        "At 20k vectors ef_search 400 is the lowest-latency setting with recall@10 >= 0.95 (0.961), so the default is unchanged. At 100k no measured setting reaches 0.95 (800 gives 0.809) on the synthetic set; ADR 0014 records this as open (a build-side change, and a measurement on real embeddings)."
+      ]
     },
     {
       "id": "R6",
@@ -1783,7 +1810,7 @@
       "milestone": "M1",
       "priority": "P1",
       "executor": "claude_code",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [
         "H1",
         "H2",
@@ -1814,25 +1841,25 @@
           "id": "R6-01",
           "title": "Remove the inventory",
           "details": "Delete docs/clean-slate-inventory.md and update the ADR 0032 reference to say it was removed at release.",
-          "done": false
+          "done": true
         },
         {
           "id": "R6-02",
           "title": "Docs",
           "details": "Replace docmonk.service.* in docs/ui.md with the crate name (docmonk-service).",
-          "done": false
+          "done": true
         },
         {
           "id": "R6-03",
           "title": "CHANGELOG",
           "details": "Add CHANGELOG.md summarising v0.1.1 to v0.3.25 and the 1.0 notes, including whether server mode is GA or preview.",
-          "done": false
+          "done": true
         },
         {
           "id": "R6-04",
           "title": "Update from 0.3.25",
           "details": "Verify that a v0.3.25 home either opens unchanged or fails with the documented reset-and-reindex error; document the outcome in the CHANGELOG. Do not add code that detects or converts older homes.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -1857,7 +1884,7 @@
             "kind": "command",
             "ref": "release_gate_audit"
           },
-          "met": false
+          "met": true
         },
         {
           "id": "R6-AC2",
@@ -1865,14 +1892,17 @@
           "verify": {
             "kind": "manual"
           },
-          "met": false
+          "met": true
         }
       ],
       "deliverables": [
         "CHANGELOG.md",
         "docs fixes"
       ],
-      "rollback": "Revert the docs commit."
+      "rollback": "Revert the docs commit.",
+      "notes": [
+        "R6-04: the v0.3.25 release binary indexed a home, and this build opened it unchanged and rebuilt it on the next docmonk index (with redaction). The CHANGELOG tells users to reindex right after upgrading. Server mode GA vs preview is left to decision D1."
+      ]
     },
     {
       "id": "R7",
@@ -3075,7 +3105,7 @@
       "milestone": "M3",
       "priority": "P1",
       "executor": "claude_code",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [],
       "addresses": [
         "V20"
@@ -3099,7 +3129,7 @@
           "id": "A3-01",
           "title": "Debug info",
           "details": "[profile.dev] debug = \"line-tables-only\", keeping the existing opt-level 3 overrides for inference crates.",
-          "done": false
+          "done": true
         },
         {
           "id": "A3-02",
@@ -3111,7 +3141,7 @@
           "id": "A3-03",
           "title": "Measure",
           "details": "Record target/ size and CI wall time before and after in the PR.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -3143,7 +3173,7 @@
             "kind": "command",
             "ref": "test"
           },
-          "met": false
+          "met": true
         }
       ],
       "deliverables": [
@@ -3151,7 +3181,12 @@
         "consolidated test binaries",
         "before/after size and CI time"
       ],
-      "rollback": "Revert the profile line; test layout changes can stay."
+      "rollback": "Revert the profile line; test layout changes can stay.",
+      "notes": [
+        "Measured on a 4-vCPU Linux box from an empty target/: a full debug test build (cargo test --workspace --no-run) is 8.8 GB (8,995 MiB) and took 229 s, against the 28 GB baseline (B13). A3-AC1 (under 8 GB) is not met yet.",
+        "A3-02 (one integration binary per crate) is not done: it rewrites the layout of every crate's tests and the CI and documentation selectors (--test heldout_eval, --test live_server, ...). It is the remaining lever for A3-AC1 and stays a follow-up.",
+        "CI wall time before/after is read from the PR's own CI run."
+      ]
     },
     {
       "id": "A4",
@@ -3391,7 +3426,7 @@
       "milestone": "PROCESS",
       "priority": "P0",
       "executor": "claude_code_then_human_review",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [],
       "requires": [
         {
@@ -3420,13 +3455,13 @@
           "id": "Q1-01",
           "title": "CODEOWNERS",
           "details": "Owners for fixtures/eval/**, fixtures/p0/eval-gates.json, fixtures/search_quality/*gates*.json and audit/remediation/ledger.json.",
-          "done": false
+          "done": true
         },
         {
           "id": "Q1-02",
           "title": "PR template",
           "details": "Checklist: eval reports attached, labels or gates changed (needs human approval), audits run.",
-          "done": false
+          "done": true
         },
         {
           "id": "Q1-03",
@@ -3460,7 +3495,10 @@
         "CODEOWNERS",
         "PR template"
       ],
-      "rollback": "Remove the files."
+      "rollback": "Remove the files.",
+      "notes": [
+        "Q1-03 (require code-owner review on main) is a repository setting for a maintainer; Q1-AC1 is met once it is on."
+      ]
     },
     {
       "id": "Q2",
@@ -3610,7 +3648,7 @@
       "milestone": "PROCESS",
       "priority": "P1",
       "executor": "claude_code",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [],
       "addresses": [
         "V13"
@@ -3636,13 +3674,13 @@
           "id": "Q4-01",
           "title": "ops tests",
           "details": "Backup then restore round trip with identical search results; rebuild; uninstall never touches user source files; vector maintenance.",
-          "done": false
+          "done": true
         },
         {
           "id": "Q4-02",
           "title": "Coverage",
           "details": "cargo-llvm-cov per-crate summary in the CI job summary.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -3665,7 +3703,7 @@
             "kind": "test",
             "ref": "crates/docmonk-ops/tests/"
           },
-          "met": false
+          "met": true
         },
         {
           "id": "Q4-AC2",
@@ -3680,7 +3718,10 @@
         "docmonk-ops integration tests",
         "coverage summary"
       ],
-      "rollback": "Tests only."
+      "rollback": "Tests only.",
+      "notes": [
+        "Coverage runs in the nightly workflow (not on every PR) and writes the per-crate table to the job summary; Q4-AC2 is met after its first run."
+      ]
     },
     {
       "id": "Q5",
@@ -4024,6 +4065,79 @@
     ],
     "status_updates": "Edit this file in the same PR: set work_packages[].status, tasks[].done, acceptance[].met, pr; append a progress_log entry for started, pr_opened, merged, blocked; set plan.updated_on. Run validate_plan before committing."
   },
-  "progress_log": [],
+  "progress_log": [
+    {
+      "date": "2026-10-25",
+      "work_package": "H1",
+      "event": "started",
+      "summary": "H1 implemented on ccr-23ab38cd-ni2rvm as one commit series in a single roadmap PR (agreed with the owner instead of one PR per work package)."
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "H2",
+      "event": "started",
+      "summary": "H2 implemented on ccr-23ab38cd-ni2rvm as one commit series in a single roadmap PR (agreed with the owner instead of one PR per work package)."
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "Q1",
+      "event": "started",
+      "summary": "Q1 implemented on ccr-23ab38cd-ni2rvm as one commit series in a single roadmap PR (agreed with the owner instead of one PR per work package)."
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "H3",
+      "event": "started",
+      "summary": "H3 implemented on ccr-23ab38cd-ni2rvm as one commit series in a single roadmap PR (agreed with the owner instead of one PR per work package)."
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "H4",
+      "event": "started",
+      "summary": "H4 implemented on ccr-23ab38cd-ni2rvm as one commit series in a single roadmap PR (agreed with the owner instead of one PR per work package)."
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "H5",
+      "event": "started",
+      "summary": "H5 implemented on ccr-23ab38cd-ni2rvm as one commit series in a single roadmap PR (agreed with the owner instead of one PR per work package)."
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "A3",
+      "event": "started",
+      "summary": "A3 implemented on ccr-23ab38cd-ni2rvm as one commit series in a single roadmap PR (agreed with the owner instead of one PR per work package)."
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "Q4",
+      "event": "started",
+      "summary": "Q4 implemented on ccr-23ab38cd-ni2rvm as one commit series in a single roadmap PR (agreed with the owner instead of one PR per work package)."
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "R5",
+      "event": "started",
+      "summary": "R5 implemented on ccr-23ab38cd-ni2rvm as one commit series in a single roadmap PR (agreed with the owner instead of one PR per work package)."
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "R6",
+      "event": "started",
+      "summary": "R6 implemented on ccr-23ab38cd-ni2rvm as one commit series in a single roadmap PR (agreed with the owner instead of one PR per work package)."
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "H3",
+      "event": "blocked",
+      "summary": "Waiting on H3-01: a maintainer creates the minisign key pair, commits the public key and sets the release secrets."
+    },
+    {
+      "date": "2026-10-25",
+      "work_package": "R2",
+      "event": "blocked",
+      "summary": "Waiting on R1: the held-out labels need human review before floors and a nightly gate."
+    }
+  ],
   "agent_prompt": "Implement plans/improvement-roadmap.json in https://github.com/gzarog/DocMonk. It follows plans/plan.schema.json; read both fully, then inspect current main (the plan was written against b9f38da, v0.3.25) and adapt where the code has moved. Work in execution.order, starting with execution.start_with, one roadmap/ branch and one PR per work package, respecting depends_on. Do only tasks whose executor (task-level, else work-package-level) is not human; for claude_code_then_human_review, open the PR and stop for review; for claude_code_with_cluster, use the service containers from .github/workflows/rust.yml. Obey policy.protected_paths and execution.stop_and_ask_when. Every PR runs all keys in its verification.commands and must pass the clean-slate and branding audits; attach before/after held-out reports when eval_report_required is true. Never decide D1-D4 yourself. Report each PR as execution.pr_report says, and update status fields and progress_log in this file as execution.status_updates says, validating with commands.validate_plan."
 }
