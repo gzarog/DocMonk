@@ -79,8 +79,10 @@ gate runs `--require-empty-baseline`. The audit is never weakened to get
 CI green; a legitimate Python-language occurrence gets the narrowest
 possible allowlist entry instead.
 
-The per-area removal inventory and Python classification are in
-[`docs/clean-slate-inventory.md`](../clean-slate-inventory.md).
+The per-area removal inventory and Python classification lived in
+`docs/clean-slate-inventory.md` while the cleanup phases ran; it was
+removed for the 1.0 release once the baseline was empty (git history keeps
+it).
 
 ## Consequences
 Users of earlier builds reinstall and reindex. Rewrite-era ADRs are
