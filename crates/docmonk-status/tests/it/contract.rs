@@ -19,7 +19,7 @@ const REQUIRED_ROOT: [&str; 12] = [
 ];
 
 fn fixture() -> serde_json::Value {
-    serde_json::from_str(include_str!("fixtures/server_multi_host.json")).unwrap()
+    serde_json::from_str(include_str!("../fixtures/server_multi_host.json")).unwrap()
 }
 
 #[test]

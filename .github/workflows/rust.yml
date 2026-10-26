@@ -201,35 +201,35 @@ jobs:
             done
           done
       - name: Live server lifecycle tests
-        run: cargo test -p docmonk-backends --test live -- --nocapture
+        run: 'cargo test -p docmonk-backends --test it -- live:: --nocapture'
       # Server mode end to end (ADR 0033): catalog, staged indexing with
       # copy-forward, queries, status, links, leases, offline safety and
       # the no-local-fallback guarantee, on both engines.
       - name: Server mode end-to-end tests
-        run: cargo test -p docmonk-service --test server_live -- --nocapture
+        run: 'cargo test -p docmonk-service --test it -- server_live:: --nocapture'
       # The held-out retrieval evaluation on SQLite and both engines: the
       # same corpus and labels through every backend (docs/evaluation.md).
       - name: Held-out retrieval evaluation
-        run: cargo test -p docmonk-service --test heldout_eval -- --nocapture
+        run: 'cargo test -p docmonk-service --test it -- heldout_eval:: --nocapture'
       # The normalized lexical projection (ADR 0039) as one contract for
       # SQLite and both engines: accents, Greek and Arabic inflection,
       # unsegmented Japanese and Chinese.
       - name: Multilingual lexical contract
-        run: cargo test -p docmonk-service --test multilingual_lexical -- --nocapture
+        run: 'cargo test -p docmonk-service --test it -- multilingual_lexical:: --nocapture'
       # Filtered kNN recall against exact search after publication and GC,
       # and batched citation hydration (ADR 0041), on both engines.
       - name: Live ANN recall and citation hydration
         run: |
-          cargo test --release -p docmonk-backends --test ann_recall -- --nocapture
-          cargo test -p docmonk-service --test server_hydration -- --nocapture
+          cargo test --release -p docmonk-backends --test it -- ann_recall:: --nocapture
+          cargo test -p docmonk-service --test it -- server_hydration:: --nocapture
       # Status (ADR 0034) on both engines: 150 sources in <= 30 requests,
       # a watch refresh in < 10, pending builds invisible, global error
       # order, two-host run visibility, fencing and expired leases; the
       # CLI in server mode never reads the home's SQLite.
       - name: Status live tests
         run: |
-          cargo test -p docmonk-status --test live_server -- --nocapture
-          cargo test -p docmonk-cli --test status -- --nocapture
+          cargo test -p docmonk-status --test it -- live_server:: --nocapture
+          cargo test -p docmonk-cli --test it -- status:: --nocapture
       # The 150-source release-mode benchmark runs in rust-nightly.yml.
 
   # The native installers end to end, against release archives

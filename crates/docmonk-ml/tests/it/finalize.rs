@@ -1,7 +1,7 @@
 //! Embedding finalizer: completeness, cache reuse, explicit rebuild on a
 //! model change, crash recovery and the model-unavailable path.
 
-mod common;
+use crate::common;
 
 use common::{fixture, models_root};
 use docmonk_ml::embedder::Embedder;

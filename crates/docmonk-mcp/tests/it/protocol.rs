@@ -27,6 +27,7 @@ fn tool(name: &str, arguments: Value) -> Value {
 
 #[test]
 fn malformed_messages_get_standard_json_rpc_errors() {
+    let _home = crate::home_lock();
     for (line, code) in [
         ("{not json", PARSE_ERROR),
         ("[1,2]", INVALID_REQUEST),
@@ -62,6 +63,7 @@ fn malformed_messages_get_standard_json_rpc_errors() {
 
 #[test]
 fn notifications_and_client_responses_get_no_reply() {
+    let _home = crate::home_lock();
     assert!(handle_line(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#).is_none());
     assert!(handle_line(r#"{"jsonrpc":"2.0","method":"anything/unknown"}"#).is_none());
     assert!(handle_line(r#"{"jsonrpc":"2.0","id":9,"result":{}}"#).is_none());
@@ -69,6 +71,7 @@ fn notifications_and_client_responses_get_no_reply() {
 
 #[test]
 fn every_tool_failure_sets_is_error_with_a_typed_error() {
+    let _home = crate::home_lock();
     // Unknown tool and validation failures are rejected before any source
     // is opened.
     let r = tool("docmonk_nope", json!({}));
@@ -136,6 +139,7 @@ fn every_tool_failure_sets_is_error_with_a_typed_error() {
 
 #[test]
 fn valid_nullable_filters_pass_validation() {
+    let _home = crate::home_lock();
     // Null filters mean "no restriction requested" and are accepted; the
     // call then proceeds past validation (it may fail later for lack of a
     // configured home, but never with a validation error).
@@ -149,6 +153,7 @@ fn valid_nullable_filters_pass_validation() {
 
 #[test]
 fn oversized_messages_are_rejected_and_the_stream_stays_in_sync() {
+    let _home = crate::home_lock();
     let big = format!("{{\"pad\":\"{}\"}}\n", "x".repeat(10_000));
     let input = format!("{big}{{\"next\":1}}\n");
     let mut r = Cursor::new(input.into_bytes());

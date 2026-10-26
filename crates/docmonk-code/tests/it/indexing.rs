@@ -4,7 +4,7 @@
 //! recomputation), stale-snapshot protection, determinism and graph
 //! traversal.
 
-mod common;
+use crate::common;
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};

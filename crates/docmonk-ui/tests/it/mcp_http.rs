@@ -78,8 +78,8 @@ fn mcp_over_http_is_json_rpc_behind_the_ui_access_model() {
     let mut cfg = DocMonkConfig::default();
     cfg.updates.enabled = false;
     docmonk_config::write_user_config(&cfg, &home).unwrap();
-    // The only test in this binary: the JSON-RPC handler reads its home
-    // from the environment, like the real server process.
+    // The JSON-RPC handler reads its home from the environment, like the
+    // real server process (no other test in this binary reads it).
     std::env::set_var("DOCMONK_HOME", home.root());
 
     let port = start(&home, Access::Local);

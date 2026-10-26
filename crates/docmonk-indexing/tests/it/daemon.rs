@@ -280,7 +280,7 @@ fn uptime_format_cases() {
     }
 }
 
-mod common;
+use crate::common;
 
 #[test]
 fn coordinator_runner_indexes_and_publishes_progress() {

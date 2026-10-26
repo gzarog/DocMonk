@@ -58,7 +58,7 @@ pending human review and are never rewritten by a test run.
 
 Expected results are DocMonk's own specification. A deliberate behaviour
 change regenerates the affected file with `DOCMONK_BLESS=1 cargo test
--p <crate> --test <test>` (where the test supports it) or edits it by
+-p <crate> --test it -- <module>::` (where the test supports it) or edits it by
 hand, in the same PR, and the PR description says why.
 
 ## Labels, floors and audits

@@ -7,7 +7,7 @@
 //! (normalized semantic tuples; ids are content-addressed).
 //!
 //! `selective_updates_over_a_small_corpus` runs by default; the 150-source
-//! variant (`cargo test -p docmonk-service --test selective_updates --
+//! variant (`cargo test -p docmonk-service --test it -- selective_updates::
 //! --ignored`) exercises the same assertions at scale. Neither measures
 //! time: no performance claim is made by these tests.
 

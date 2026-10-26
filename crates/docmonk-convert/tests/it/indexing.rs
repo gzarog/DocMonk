@@ -1,6 +1,6 @@
 //! Native document processing through the indexer.
 
-mod common;
+use crate::common;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

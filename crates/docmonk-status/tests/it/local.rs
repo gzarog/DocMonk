@@ -2,7 +2,7 @@
 //! errors are globally ordered, runs are per source, and a store that
 //! cannot be read is unknown, never zero.
 
-mod common;
+use crate::common;
 
 use std::time::Instant;
 
@@ -401,7 +401,7 @@ fn peak_rss_kib() -> Option<u64> {
 
 /// Benchmark (ignored by default): 150 local sources, 30 snapshots.
 #[test]
-#[ignore = "benchmark: cargo test -p docmonk-status --release --test local -- --ignored"]
+#[ignore = "benchmark: cargo test -p docmonk-status --release --test it -- local:: --ignored"]
 fn bench_local_150_sources() {
     let tmp = tempfile::tempdir().unwrap();
     let home = common::home(tmp.path());
