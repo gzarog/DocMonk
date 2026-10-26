@@ -189,3 +189,12 @@ jobs:
           path: ${{ runner.temp }}/coverage.json
           if-no-files-found: ignore
           retention-days: 14
+
+  # ADRs with open items (roadmap Q5), in the job summary. Never fails.
+  adr-audit:
+    name: ADR open items
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo xtask adr-audit --markdown >> "$GITHUB_STEP_SUMMARY"

@@ -27,6 +27,7 @@ listens to; do not rename them. A failed `CI` push run never releases.
 | Retrieval eval (repository, pinned models) | – | – | – | – | – | – (nightly) |
 | Dependency advisories (`cargo deny check advisories`) | – | – | – | – | – | – (nightly) |
 | Coverage (`cargo llvm-cov`, per crate in the job summary) | – | – | – | – | – | – (nightly) |
+| ADR open items (`cargo xtask adr-audit --markdown`, job summary) | – | – | – | – | – | – (nightly) |
 
 The Linux Rust job always requires the pinned OCR, embedding and reranker
 models (`DOCMONK_REQUIRE_OCR=1`, `DOCMONK_REQUIRE_MODELS=1`).
@@ -74,6 +75,16 @@ date. The nightly `Dependency advisories` job re-runs the advisory check
 on `main`; on failure it opens one issue labelled `security-advisory`, or
 comments on the open one. Locally: `cargo install cargo-deny --locked`,
 then `cargo deny check`.
+
+## ADR open items
+
+`Repository audits` also prints `cargo xtask adr-audit`. It lists every
+ADR whose `Status:` paragraph says in progress, proposed or not
+implemented, and every line that names a measurement not taken yet
+("not measured yet", "still to be measured", "stays open", ...). It never
+fails a build; the nightly workflow writes the same list to its job
+summary. Closing an item means measuring it and rewording the ADR, never
+rewording alone.
 
 ## CI gate
 
