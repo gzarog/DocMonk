@@ -174,14 +174,21 @@ fn impact_lists_publishers_and_consumers_across_sources() {
     let again = tempfile::tempdir().unwrap();
     let home2 = indexed(again.path());
     for q in ["orders", "OrderPlaced", "orders.events"] {
+        // Source ids, entity ids and absolute paths name the temp
+        // directories (in whatever form the platform resolves them): keep
+        // each path from its source folder on.
+        let relative = |p: &mut serde_json::Value| {
+            if let Some(s) = p.as_str() {
+                let s = s.replace('\\', "/");
+                let tail = ["/orders/", "/billing/", "/web/", "/java/"]
+                    .iter()
+                    .filter_map(|f| s.find(f))
+                    .min()
+                    .map_or(s.as_str(), |i| &s[i..]);
+                *p = serde_json::Value::String(tail.to_owned());
+            }
+        };
         let strip = |mut v: serde_json::Value| {
-            // Source ids and paths name the temp directories.
-            let s = v.to_string();
-            v = serde_json::from_str(
-                &s.replace(dir.path().to_str().unwrap(), "<DIR>")
-                    .replace(again.path().to_str().unwrap(), "<DIR>"),
-            )
-            .unwrap();
             if let Some(o) = v.as_object_mut() {
                 o.remove("graph");
             }
@@ -189,14 +196,15 @@ fn impact_lists_publishers_and_consumers_across_sources() {
                 if let Some(a) = v["messaging"][list].as_array_mut() {
                     for h in a {
                         h["source_id"] = serde_json::Value::Null;
+                        relative(&mut h["path"]);
                     }
                 }
             }
-            // Entity ids hash the source id too.
             if let Some(a) = v["defined"].as_array_mut() {
                 for d in a {
                     d["source_id"] = serde_json::Value::Null;
                     d["entity_id"] = serde_json::Value::Null;
+                    relative(&mut d["path"]);
                 }
             }
             v
