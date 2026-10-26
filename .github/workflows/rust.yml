@@ -201,21 +201,21 @@ jobs:
             done
           done
       - name: Live server lifecycle tests
-        run: cargo test -p docmonk-backends --test it -- live:: --nocapture
+        run: 'cargo test -p docmonk-backends --test it -- live:: --nocapture'
       # Server mode end to end (ADR 0033): catalog, staged indexing with
       # copy-forward, queries, status, links, leases, offline safety and
       # the no-local-fallback guarantee, on both engines.
       - name: Server mode end-to-end tests
-        run: cargo test -p docmonk-service --test it -- server_live:: --nocapture
+        run: 'cargo test -p docmonk-service --test it -- server_live:: --nocapture'
       # The held-out retrieval evaluation on SQLite and both engines: the
       # same corpus and labels through every backend (docs/evaluation.md).
       - name: Held-out retrieval evaluation
-        run: cargo test -p docmonk-service --test it -- heldout_eval:: --nocapture
+        run: 'cargo test -p docmonk-service --test it -- heldout_eval:: --nocapture'
       # The normalized lexical projection (ADR 0039) as one contract for
       # SQLite and both engines: accents, Greek and Arabic inflection,
       # unsegmented Japanese and Chinese.
       - name: Multilingual lexical contract
-        run: cargo test -p docmonk-service --test it -- multilingual_lexical:: --nocapture
+        run: 'cargo test -p docmonk-service --test it -- multilingual_lexical:: --nocapture'
       # Filtered kNN recall against exact search after publication and GC,
       # and batched citation hydration (ADR 0041), on both engines.
       - name: Live ANN recall and citation hydration

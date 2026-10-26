@@ -87,7 +87,7 @@ jobs:
         with:
           dir: ${{ runner.temp }}
       - name: Repository retrieval eval (lexical, routed, hybrid, hybrid_rerank)
-        run: cargo test --release -p docmonk-service --test it -- repo_eval:: --nocapture
+        run: 'cargo test --release -p docmonk-service --test it -- repo_eval:: --nocapture'
         env:
           DOCMONK_REPO_EVAL: "1"
           DOCMONK_MODELS_DIR: ${{ runner.temp }}/models
