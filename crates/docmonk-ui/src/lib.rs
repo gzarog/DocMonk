@@ -15,6 +15,7 @@ pub mod access;
 mod config_form;
 mod data;
 mod indexer;
+pub mod mcp_http;
 pub mod templates;
 
 use std::collections::HashMap;

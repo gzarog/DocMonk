@@ -24,6 +24,7 @@ use serde_json::{json, Map, Value};
 use docmonk_service::query::{self as query_cmd, open_sources};
 use docmonk_service::{load, prepared_home};
 
+pub mod budget;
 pub mod exec;
 pub mod query_log;
 pub mod visibility;
@@ -39,9 +40,12 @@ pub const INSTRUCTIONS: &str =
 on this machine (see `docmonk index`). Start with docmonk_explore for a natural-language or \
 identifier query -- it is the primary tool and runs DocMonk's deterministic query planner. Use \
 docmonk_evidence when you need hard source/path/document filters or verified [E#] citations \
-with an explicit insufficient_evidence verdict. The other read-only tools \
+with an explicit insufficient_evidence verdict. To follow a citation, pass its evidence entry \
+to docmonk_read (the verified span with context; a stale citation is refused), then \
+docmonk_references (where a symbol is used) and docmonk_links (the documents linked to code \
+and back). The other read-only tools \
 (docmonk_search/symbol/callers/callees/impact/documents/status) are narrower, single-purpose \
-lookups; all 9 of them return a bounded, versioned JSON result \
+lookups; all 12 of them return a bounded, versioned JSON result \
 (schema_version/ok/error) and never call an LLM or the network -- results are \
 retrieved/structured data for the calling agent to reason over. docmonk_ask is the one \
 exception: it calls the locally configured `ai:` provider (which may be a real cloud endpoint, \
@@ -279,7 +283,21 @@ fn call_tool(params: &Value) -> Value {
         &spec["outputSchema"],
         &spec["outputSchema"],
     );
-    tool_result(output)
+    let (items, bytes) = result_budget();
+    tool_result(budget::apply(output, items, bytes))
+}
+
+/// `mcp.max_result_items` and `mcp.max_result_bytes` (defaults when the
+/// config cannot be read: the call itself reports that error).
+fn result_budget() -> (usize, usize) {
+    let mcp = prepared_home()
+        .and_then(|h| load(&h))
+        .map(|c| c.mcp)
+        .unwrap_or_default();
+    (
+        usize::try_from(mcp.max_result_items).unwrap_or(200),
+        usize::try_from(mcp.max_result_bytes).unwrap_or(262_144),
+    )
 }
 
 /// The `tools/call` result for a tool's (projected) output.
@@ -750,6 +768,57 @@ fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, Doc
                 optional(args, "limit", graph::DEFAULT_LIMIT),
             )
         }
+        "docmonk_references" => {
+            let symbol = required(args, "name")?;
+            query_cmd::references_value(
+                &open_sources(home, None)?,
+                &symbol,
+                optional(args, "max_depth", graph::DEFAULT_MAX_DEPTH),
+                optional(args, "limit", graph::DEFAULT_LIMIT),
+            )
+        }
+        "docmonk_links" => {
+            let text = |k: &str| {
+                args.get(k)
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+            };
+            // Agents name things as they saw them in other answers: an
+            // entity by id, qualified name or short name, a document by
+            // id or path (absolute or a trailing part).
+            let ends = |full: &str, part: &str, sep: char| {
+                full == part
+                    || full
+                        .strip_suffix(part)
+                        .is_some_and(|rest| rest.ends_with(sep) || rest.ends_with('/'))
+            };
+            let mut rows = query_cmd::link_list(home, None, None, text("source_id"))?;
+            if let Some(e) = text("entity") {
+                rows.retain(|r| {
+                    r["entity_id"] == e || r["entity"].as_str().is_some_and(|q| ends(q, e, '.'))
+                });
+            }
+            if let Some(d) = text("document") {
+                let d = d.replace('\\', "/");
+                rows.retain(|r| {
+                    r["document_id"] == d.as_str()
+                        || r["document_path"]
+                            .as_str()
+                            .is_some_and(|p| ends(&p.replace('\\', "/"), &d, '/'))
+                });
+            }
+            Ok(json!({ "links": rows }))
+        }
+        "docmonk_read" => {
+            let citation = docmonk_service::read::citation_from(args)?;
+            docmonk_service::read::read_value(
+                home,
+                &cfg,
+                &citation,
+                optional(args, "context_lines", 5),
+            )
+        }
         "docmonk_documents" => {
             let source = args
                 .get("source_id")
@@ -808,9 +877,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn catalog_has_all_ten_tools() {
+    fn catalog_has_all_thirteen_tools() {
         let names: Vec<&str> = tools().iter().filter_map(|t| t["name"].as_str()).collect();
-        assert_eq!(names.len(), 10);
+        assert_eq!(names.len(), 13);
+        for t in ["docmonk_read", "docmonk_references", "docmonk_links"] {
+            assert!(names.contains(&t), "{t}");
+        }
         assert!(names.contains(&"docmonk_evidence"));
         assert!(names.contains(&"docmonk_ask"));
     }

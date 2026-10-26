@@ -1,5 +1,6 @@
 //! Repository tooling for DocMonk, run as `cargo xtask <command>`.
 
+mod adr;
 mod audit;
 mod branding;
 mod fixtures;
@@ -19,6 +20,9 @@ commands:
       Write DIR/SHA256SUMS over every release archive in DIR.
   branding-audit
       Fail if the product's former name appears in a tracked file.
+  adr-audit [--markdown]
+      List ADRs whose status says in progress or whose text names
+      measurements still open (reported, never failing).
   clean-slate-audit [--update-baseline] [--require-empty-baseline]
       Fail if a reference forbidden by ADR 0032 (clean slate)
       appears outside the narrow allowlist or above the shrink-only
@@ -48,6 +52,14 @@ fn main() -> Result<()> {
             Ok(())
         }
         Some("branding-audit") => branding::run(),
+        Some("adr-audit") => {
+            let markdown = match args.next().as_deref() {
+                None => false,
+                Some("--markdown") => true,
+                Some(other) => bail!("unknown option {other}\n\n{USAGE}"),
+            };
+            adr::run(&audit::repo_root()?, markdown)
+        }
         Some("p0-corpus") => {
             let a = fixtures::CorpusArgs::parse(args)?;
             let n = fixtures::generate(&audit::repo_root()?, &a)?;

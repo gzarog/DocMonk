@@ -348,4 +348,53 @@ mod tests {
         let once = r("DB_PASSWORD=s3cr3t!\npassword = \"abcdefgh\"");
         assert_eq!(r(&once), once);
     }
+
+    #[test]
+    fn references_to_other_settings_are_not_secrets() {
+        for line in [
+            "secret: this.secret",
+            "password = process.env.DB_PASSWORD",
+            "db_password: os.environment",
+            "api_key: env.API_KEY",
+            "token: required",
+        ] {
+            assert_eq!(r(line), line, "{line}");
+        }
+    }
+
+    #[test]
+    fn key_blocks_keep_blank_and_header_lines() {
+        let pem = "-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\n\nMIIEow\n-----END RSA PRIVATE KEY-----";
+        assert_eq!(
+            r(pem),
+            "-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\n\n[REDACTED:private_key]\n-----END RSA PRIVATE KEY-----"
+        );
+        // Before an END whose BEGIN is out of view, only the base64 lines
+        // right above it are key material: prose and short tokens stay.
+        let tail = "Rotate the deploy key monthly.\nabc\nQUJDREVGR0hJSktMTU5PUFFS\n-----END PRIVATE KEY-----";
+        assert_eq!(
+            r(tail),
+            "Rotate the deploy key monthly.\nabc\n[REDACTED:private_key]\n-----END PRIVATE KEY-----"
+        );
+    }
+
+    #[test]
+    fn only_runs_of_64_column_base64_lines_count_as_key_bodies() {
+        let short = ["QUJDREVGR0hJSktMTU5P"; 3].join("\n");
+        assert_eq!(r(&short), short);
+        let prose = ["The quick brown fox jumps over the lazy dog, again and again!!"; 3]
+            .map(|l| format!("{l:<64}"))
+            .join("\n");
+        assert_eq!(r(&prose), prose);
+    }
+
+    #[test]
+    fn redact_in_place_rewrites_only_when_needed() {
+        let mut text = String::from("DB_PASSWORD=s3cr3t!");
+        redact_in_place(&mut text);
+        assert_eq!(text, "DB_PASSWORD=[REDACTED:assignment]");
+        let mut plain = String::from("nothing to see");
+        redact_in_place(&mut plain);
+        assert_eq!(plain, "nothing to see");
+    }
 }

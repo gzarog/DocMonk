@@ -1341,6 +1341,7 @@ dependencies = [
  "docmonk-config",
  "docmonk-core",
  "docmonk-indexing",
+ "docmonk-mcp",
  "docmonk-ops",
  "docmonk-retrieval",
  "docmonk-service",

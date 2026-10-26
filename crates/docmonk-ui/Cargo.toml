@@ -18,6 +18,7 @@ docmonk-ai.workspace = true
 docmonk-config.workspace = true
 docmonk-core.workspace = true
 docmonk-indexing.workspace = true
+docmonk-mcp.workspace = true
 docmonk-ops.workspace = true
 docmonk-retrieval.workspace = true
 docmonk-service.workspace = true
