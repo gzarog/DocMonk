@@ -3118,7 +3118,7 @@
       "milestone": "M3",
       "priority": "P1",
       "executor": "claude_code",
-      "status": "in_progress",
+      "status": "in_review",
       "depends_on": [],
       "addresses": [
         "V20"
@@ -3148,7 +3148,7 @@
           "id": "A3-02",
           "title": "Fewer test binaries",
           "details": "Consolidate each crate's tests/*.rs into one integration binary (tests/it/main.rs with one module per former file), keeping test names; check CI selectors and docs that name test targets (for example --test heldout_eval) and update them.",
-          "done": false
+          "done": true
         },
         {
           "id": "A3-03",
@@ -3177,7 +3177,7 @@
           "verify": {
             "kind": "manual"
           },
-          "met": false
+          "met": true
         },
         {
           "id": "A3-AC2",
@@ -3196,8 +3196,10 @@
       ],
       "rollback": "Revert the profile line; test layout changes can stay.",
       "notes": [
-        "Measured on a 4-vCPU Linux box from an empty target/: a full debug test build (cargo test --workspace --no-run) is 8.8 GB (8,995 MiB) and took 229 s, against the 28 GB baseline (B13). A3-AC1 (under 8 GB) is not met yet.",
-        "A3-02 (one integration binary per crate) is not done: it rewrites the layout of every crate's tests and the CI and documentation selectors (--test heldout_eval, --test live_server, ...). It is the remaining lever for A3-AC1 and stays a follow-up.",
+        "Before A3-02, measured on a 4-vCPU Linux box from an empty target/: a full debug test build (cargo test --workspace --no-run) was 8.8 GB (8,995 MiB) and took 229 s, against the 28 GB baseline (B13).",
+        "After A3-02 (one tests/it binary per crate with several test files; single-file crates keep their one binary), on the same box from an empty target/: 4.8 GiB (4,924 MiB) in 193 s. A3-AC1 is met.",
+        "Test groups are selected with cargo test -p <crate> --test it -- <module>::; CI, docs and scripts/ci_changes.sh use that form.",
+        "audit/remediation/ledger.json still names the former test paths; it is protected (human_approval_required) and was not edited.",
         "CI wall time before/after is read from the PR's own CI run."
       ]
     },
@@ -4374,6 +4376,12 @@
       "event": "note",
       "summary": "P5-03 (status ETA) merged to main with #147; P5-01/02 stay open (need GPU hardware).",
       "pr": "https://github.com/gzarog/DocMonk/pull/147"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "A3",
+      "event": "started",
+      "summary": "A3-02 test-binary consolidation implemented on ccr-23ab38cd-ni2rvm: full debug test build 4,924 MiB in 193 s (was 8,995 MiB, 229 s)."
     }
   ],
   "agent_prompt": "Implement plans/improvement-roadmap.json in https://github.com/gzarog/DocMonk. It follows plans/plan.schema.json; read both fully, then inspect current main (the plan was written against b9f38da, v0.3.25) and adapt where the code has moved. Work in execution.order, starting with execution.start_with, one roadmap/ branch and one PR per work package, respecting depends_on. Do only tasks whose executor (task-level, else work-package-level) is not human; for claude_code_then_human_review, open the PR and stop for review; for claude_code_with_cluster, use the service containers from .github/workflows/rust.yml. Obey policy.protected_paths and execution.stop_and_ask_when. Every PR runs all keys in its verification.commands and must pass the clean-slate and branding audits; attach before/after held-out reports when eval_report_required is true. Never decide D1-D4 yourself. Report each PR as execution.pr_report says, and update status fields and progress_log in this file as execution.status_updates says, validating with commands.validate_plan."
