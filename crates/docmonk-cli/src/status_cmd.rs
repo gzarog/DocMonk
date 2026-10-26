@@ -233,7 +233,28 @@ fn summary(r: &StatusReport, thr: Option<Option<f64>>) -> String {
     s + "\n"
 }
 
+/// `1h02m`, `3m05s`, `42s`.
+fn duration(secs: f64) -> String {
+    let s = secs.max(0.0).round() as u64;
+    match (s / 3600, (s % 3600) / 60, s % 60) {
+        (0, 0, s) => format!("{s}s"),
+        (0, m, s) => format!("{m}m{s:02}s"),
+        (h, m, _) => format!("{h}h{m:02}m"),
+    }
+}
+
 fn progress(w: &LiveRun) -> String {
+    if let Some(e) = &w.embedding {
+        let rate = e
+            .rate_per_second
+            .map(|r| format!(", {r:.1}/s"))
+            .unwrap_or_default();
+        let eta = e
+            .eta_seconds
+            .map(|s| format!(", ETA {}", duration(s)))
+            .unwrap_or_default();
+        return format!("embedding {}/{}{rate}{eta}", e.processed, e.planned);
+    }
     if let Some(g) = &w.relationships {
         return match (g.processed, g.planned) {
             (Some(p), Some(t)) => format!("{p}/{t} files"),
@@ -659,6 +680,26 @@ mod tests {
             "../../docmonk-status/tests/fixtures/server_multi_host.json"
         ))
         .unwrap()
+    }
+
+    #[test]
+    fn embedding_progress_shows_rate_and_eta() {
+        assert_eq!(duration(42.0), "42s");
+        assert_eq!(duration(185.0), "3m05s");
+        assert_eq!(duration(3725.0), "1h02m");
+        let mut w = fixture().indexer.workers[0].clone();
+        w.embedding = Some(docmonk_status::model::EmbeddingProgress::at(
+            300,
+            1200,
+            Some(10.0),
+        ));
+        assert_eq!(progress(&w), "embedding 300/1200, 30.0/s, ETA 30s");
+        w.embedding = Some(docmonk_status::model::EmbeddingProgress::at(
+            0,
+            1200,
+            Some(1.0),
+        ));
+        assert_eq!(progress(&w), "embedding 0/1200");
     }
 
     #[test]

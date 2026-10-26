@@ -186,6 +186,25 @@ impl ProjectStore {
         }
     }
 
+    /// How many subjects of `build_id` have no vector under `fingerprint`
+    /// (empty texts included; an upper bound for progress reporting).
+    pub fn pending_embedding_count(&self, build_id: &str, fingerprint: &str) -> Result<usize> {
+        let mut n = 0usize;
+        for (_, sql) in PENDING_KINDS {
+            let (head, _) = sql.split_once("ORDER BY").unwrap_or((sql, ""));
+            let from = &head[head.find("FROM").unwrap_or(0)..];
+            let count = format!("SELECT COUNT(*) {from}");
+            let rows = self.query_rows(
+                "pending embedding count",
+                &count,
+                &[&build_id, &fingerprint, &"", &i64::MIN, &""],
+                |r| r.get::<_, i64>(0),
+            )?;
+            n += rows.first().copied().unwrap_or(0).max(0) as usize;
+        }
+        Ok(n)
+    }
+
     /// One page of [`Self::pending_embedding_subjects`] (ADR 0041): at
     /// most `limit` rows after `after`, in the same order, and where the
     /// next page starts (`None` after the last). The cursor is a keyset
