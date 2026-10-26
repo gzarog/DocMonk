@@ -109,6 +109,20 @@ pub fn local_runs(
                         planned: s.relationships_planned.and_then(count),
                     }
                 }),
+                embedding: s
+                    .embedding_planned
+                    .and_then(count)
+                    .filter(|planned| {
+                        s.active && *planned > 0 && (s.embedded.max(0) as u64) < *planned
+                    })
+                    .map(|planned| {
+                        let started = normalize_time(s.embedding_started_at.as_deref());
+                        crate::model::EmbeddingProgress::at(
+                            s.embedded.max(0) as u64,
+                            planned,
+                            age_seconds(started.as_deref(), now),
+                        )
+                    }),
             });
         }
         if !p.running {
@@ -165,6 +179,7 @@ pub fn local_runs(
             lease_valid: None,
             outcome: None,
             relationships: None,
+            embedding: None,
         });
     }
     out
@@ -281,6 +296,7 @@ pub fn server_runs(
             lease_valid: Some(lease_valid),
             outcome: str_field(d, "outcome").map(str::to_owned),
             relationships: None,
+            embedding: None,
         });
     }
     out
@@ -295,6 +311,46 @@ mod tests {
 
     fn ms(t: DateTime<Utc>) -> String {
         t.timestamp_millis().to_string()
+    }
+
+    #[test]
+    fn a_live_embedding_stage_reports_rate_and_eta() {
+        let now = Utc::now();
+        let t = |secs: i64| iso(now - chrono::Duration::seconds(secs));
+        let mut s = docmonk_indexing::progress::SourceProgress::new("src", &t(100));
+        s.stage = Some("finalizing".into());
+        s.heartbeat_at = Some(t(1));
+        s.embedded = 300;
+        s.embedding_planned = Some(1200);
+        s.embedding_started_at = Some(t(10));
+        let mut done = docmonk_indexing::progress::SourceProgress::new("done", &t(100));
+        done.embedded = 50;
+        done.embedding_planned = Some(50);
+        done.embedding_started_at = Some(t(10));
+        let p = docmonk_indexing::progress::IndexProgress {
+            running: true,
+            pid: Some(1),
+            updated_at: Some(t(1)),
+            sources: vec![s, done],
+            ..Default::default()
+        };
+        let free = LockInfo {
+            state: "free".into(),
+            pid: None,
+            operation: None,
+            hostname: None,
+            source_id: None,
+            acquired_at: None,
+        };
+        let out = local_runs(Some(&p), free, &[], &|_| true, 120.0, now);
+        let e = out.runs[0].embedding.as_ref().expect("embedding progress");
+        assert_eq!((e.processed, e.planned), (300, 1200));
+        let rate = e.rate_per_second.unwrap();
+        assert!((rate - 30.0).abs() < 1.0, "{rate}");
+        let eta = e.eta_seconds.unwrap();
+        assert!((eta - 30.0).abs() < 2.0, "{eta}");
+        // Finished embedding: nothing to estimate.
+        assert!(out.runs[1].embedding.is_none());
     }
 
     #[test]

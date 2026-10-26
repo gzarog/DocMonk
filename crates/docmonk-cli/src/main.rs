@@ -8,6 +8,7 @@
 mod ai_cmd;
 mod daemon_cmd;
 mod doctor_cmd;
+mod eval_cmd;
 mod ops_cmd;
 mod query_cmd;
 mod status_cmd;
@@ -104,6 +105,9 @@ enum Command {
     /// Manage subscription AI providers.
     #[command(subcommand)]
     Ai(ai_cmd::AiCommand),
+    /// Measure retrieval on your own corpus (recorded queries, local only).
+    #[command(subcommand)]
+    Eval(eval_cmd::EvalCommand),
     /// Serve the indexed knowledge to agents (MCP over stdio, or HTTP).
     Serve {
         /// Run the MCP server (over stdio unless --http).
@@ -365,6 +369,7 @@ fn run(cli: Cli) -> Result<(), DocMonkError> {
         Command::Serve { mcp, .. } => docmonk_mcp::serve(mcp)?,
         Command::Ask { question, json } => ai_cmd::ask(&question, json)?,
         Command::Ai(cmd) => ai_cmd::run(cmd)?,
+        Command::Eval(cmd) => eval_cmd::run(cmd)?,
         Command::Ui {
             host,
             port,

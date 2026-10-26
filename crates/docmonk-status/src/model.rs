@@ -342,6 +342,38 @@ pub struct LiveRun {
     /// before resolving, linking and committing are done.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relationships: Option<RelationshipProgress>,
+    /// The embedding stage of this pass while it runs (local runs): vectors
+    /// computed of those planned, the rolling rate since the stage started
+    /// and the ETA it implies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding: Option<EmbeddingProgress>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EmbeddingProgress {
+    pub processed: u64,
+    pub planned: u64,
+    /// Vectors per second since the embedding stage started; `null` before
+    /// the first page is written.
+    pub rate_per_second: Option<f64>,
+    /// Seconds left at that rate; `null` without a rate.
+    pub eta_seconds: Option<f64>,
+}
+
+impl EmbeddingProgress {
+    /// Progress at `elapsed` seconds into the stage.
+    pub fn at(processed: u64, planned: u64, elapsed: Option<f64>) -> Self {
+        let rate = elapsed
+            .filter(|e| *e > 0.0 && processed > 0)
+            .map(|e| processed as f64 / e);
+        let eta = rate.map(|r| (planned.saturating_sub(processed) as f64 / r).round());
+        Self {
+            processed,
+            planned,
+            rate_per_second: rate.map(|r| (r * 10.0).round() / 10.0),
+            eta_seconds: eta,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

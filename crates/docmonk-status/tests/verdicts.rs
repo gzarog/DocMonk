@@ -66,6 +66,7 @@ fn run(id: &str, stage: &str, liveness: Liveness) -> LiveRun {
         lease_valid: Some(liveness == Liveness::Live),
         outcome: None,
         relationships: None,
+        embedding: None,
     }
 }
 

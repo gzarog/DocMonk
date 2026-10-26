@@ -129,3 +129,41 @@ slightly after such a merge.
 
 `benchmarks/heldout-eval/` keeps the report of each change that moved the
 numbers, so before/after comparisons stay reproducible from the repository.
+
+## Personal evaluation (your own corpus)
+
+`docmonk eval` measures retrieval on what you index, with questions you
+write. Nothing leaves the machine: queries live in
+`<home>/eval/queries.json` and runs read only your index.
+
+```bash
+docmonk eval record "which refunds need finance approval" --expect docs/refunds.md
+docmonk eval record "where is the invoice total computed" --expect src/Billing/Invoice.cs:42
+docmonk eval record "the 2019 audit findings" --unanswerable   # a good run abstains
+docmonk eval list
+docmonk eval run                                    # the current index and settings
+docmonk eval run --compare all-minilm-l6-v2,multilingual-e5-small
+docmonk eval remove q2
+```
+
+`--expect` is a path, absolute or relative to a source root (it matches
+as a path suffix), optionally with a line that the cited span must cover;
+repeat it when several places answer the query. `eval run` sends each
+query through `evidence`, the pipeline agents use, and reports, over the
+answerable queries:
+
+| Metric | Meaning |
+|---|---|
+| `recall@1`, `recall@10` | An expected place is the first, or among the first ten, evidence entries. |
+| `mrr` | Mean reciprocal rank of the first expected place (0 when missed). |
+| `false_abstention` | Answerable queries whose verdict was `insufficient_evidence`. |
+| `false_support` | Unanswerable queries that were not refused (over those queries). |
+
+`--model <slug>` (or `--compare a,b`) indexes the registered sources
+again with that embedding model, with semantic search on, in a throwaway
+home under `<home>/eval/runs/<slug>/`, then scores there. The real index
+and settings are untouched, so two models are compared on exactly the
+same corpus. This takes as long as a full index per model, and the model
+must be installed (`scripts/fetch_models.sh <dir> --multilingual` for
+`multilingual-e5-small`). Results from your corpus are evidence for the
+default-model decision (roadmap D2); they are yours to share or not.

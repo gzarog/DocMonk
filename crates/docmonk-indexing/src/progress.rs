@@ -100,6 +100,14 @@ pub struct SourceProgress {
     pub relationships_phase: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relationships_error: Option<String>,
+    /// Vectors computed so far in this pass's embedding stage, of
+    /// `embedding_planned`, since `embedding_started_at`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub embedded: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding_planned: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding_started_at: Option<String>,
 }
 
 impl SourceProgress {
@@ -524,6 +532,24 @@ impl ProgressTracker {
         });
     }
 
+    /// Embedding progress of `source_id`: `done` of `planned` subjects
+    /// (coalesced like counter updates; the first call starts the clock
+    /// the status ETA is measured from).
+    pub fn embedding(&self, source_id: &str, done: usize, planned: usize) {
+        self.with(|i| {
+            let now = i.now();
+            let s = i.progress.source_mut(source_id, &now);
+            if s.embedding_started_at.is_none() || done == 0 {
+                s.embedding_started_at = Some(now.clone());
+            }
+            s.embedded = done as i64;
+            s.embedding_planned = Some(planned as i64);
+            s.last_progress_at = Some(now.clone());
+            s.heartbeat_at = Some(now);
+            i.flush(false);
+        });
+    }
+
     /// Liveness signal (no progress): refreshes every active source's
     /// heartbeat, coalesced like counter updates.
     pub fn heartbeat(&self) {
@@ -637,6 +663,14 @@ impl Drop for ActiveGuard {
     }
 }
 
+/// Embedding progress for the active run, if any (a no-op otherwise).
+pub fn embedding(source_id: &str, done: usize, planned: usize) {
+    let active = ACTIVE.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    if let Some(t) = active {
+        t.embedding(source_id, done, planned);
+    }
+}
+
 /// Heartbeat for the active run, if any (a no-op otherwise).
 pub fn heartbeat() {
     let active = ACTIVE.lock().unwrap_or_else(|p| p.into_inner()).clone();
@@ -712,6 +746,27 @@ mod tests {
         assert!(read_progress(&path).is_none());
         let leftovers: Vec<_> = std::fs::read_dir(dir.path()).unwrap().collect();
         assert_eq!(leftovers.len(), 1, "no temp files left");
+    }
+
+    #[test]
+    fn embedding_progress_starts_its_clock_once_and_counts_up() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("p.json");
+        let (clock, secs) = fake_clock();
+        let t = ProgressTracker::start_with_clock(&path, "index", Some(1), clock);
+        t.source_started("s");
+        t.embedding("s", 0, 100);
+        let started = t.source("s").unwrap().embedding_started_at;
+        secs.fetch_add(5, Ordering::SeqCst);
+        t.embedding("s", 40, 100);
+        let s = t.source("s").unwrap();
+        assert_eq!((s.embedded, s.embedding_planned), (40, Some(100)));
+        assert_eq!(s.embedding_started_at, started, "the clock starts once");
+        assert_ne!(s.last_progress_at, started);
+        // Persisted with the snapshot.
+        t.finish(None);
+        let back = read_progress(&path).unwrap();
+        assert_eq!(back.sources[0].embedded, 40);
     }
 
     #[test]

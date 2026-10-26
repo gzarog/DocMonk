@@ -2366,7 +2366,7 @@
       "milestone": "M2",
       "priority": "P2",
       "executor": "claude_code",
-      "status": "not_started",
+      "status": "in_progress",
       "depends_on": [],
       "addresses": [
         "V18"
@@ -2405,7 +2405,7 @@
           "id": "P5-03",
           "title": "ETA",
           "details": "Show an ETA in docmonk status from rolling embedding throughput.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -2448,7 +2448,7 @@
             "kind": "test",
             "ref": "status tests"
           },
-          "met": false
+          "met": true
         }
       ],
       "deliverables": [
@@ -2457,7 +2457,11 @@
         "throughput report",
         "ETA"
       ],
-      "rollback": "Build without the accelerator features."
+      "rollback": "Build without the accelerator features.",
+      "notes": [
+        "P5-03 (ETA) is implemented: embedding progress per page, indexer.workers[].embedding with rate_per_second and eta_seconds, shown in the status text view.",
+        "P5-01 (Metal/CUDA) and P5-02 (f16/int8, batch autotuning) are open: building and measuring them needs Apple-silicon or CUDA hardware (the 3x target and the >= 0.999 cosine parity), which the agent environment does not have."
+      ]
     },
     {
       "id": "P6",
@@ -2627,7 +2631,7 @@
       "milestone": "M2",
       "priority": "P1",
       "executor": "claude_code",
-      "status": "in_review",
+      "status": "done",
       "depends_on": [
         "H5"
       ],
@@ -2635,7 +2639,7 @@
         "V14"
       ],
       "branch": "roadmap/p8-mcp-tools",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/146",
       "purpose": "Let agents follow an answer to its cited span and linked code without falling back to raw file reads.",
       "scope": {
         "modify": [
@@ -2809,7 +2813,7 @@
       "milestone": "M2",
       "priority": "P2",
       "executor": "claude_code",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [],
       "addresses": [
         "V05"
@@ -2831,13 +2835,13 @@
           "id": "P10-01",
           "title": "Record",
           "details": "docmonk eval record \"<query>\" --expect <path>[:line] writes to <home>/eval/queries.json; never uploaded.",
-          "done": false
+          "done": true
         },
         {
           "id": "P10-02",
           "title": "Run",
           "details": "docmonk eval run [--model <slug>] reports recall@1/10, MRR and abstention; --compare runs two models side by side.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -2860,13 +2864,17 @@
             "kind": "test",
             "ref": "eval command tests"
           },
-          "met": false
+          "met": true
         }
       ],
       "deliverables": [
         "docmonk eval record / run / --compare"
       ],
-      "rollback": "Remove the eval subcommands."
+      "rollback": "Remove the eval subcommands.",
+      "notes": [
+        "Also eval list / eval remove and --unanswerable queries (false support). --model/--compare index the registered sources again per model in <home>/eval/runs/<slug>/ so the real index is untouched.",
+        "The CLI lives in crates/docmonk-cli/src/eval_cmd.rs and the logic in docmonk_service::personal_eval; tests in crates/docmonk-cli/tests/eval.rs."
+      ]
     },
     {
       "id": "P11",
@@ -3598,13 +3606,13 @@
       "milestone": "PROCESS",
       "priority": "P2",
       "executor": "claude_code",
-      "status": "in_review",
+      "status": "done",
       "depends_on": [],
       "addresses": [
         "V22"
       ],
       "branch": "roadmap/q3-mutation-testing",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/146",
       "purpose": "Show where tests pass without pinning behaviour.",
       "scope": {
         "modify": [
@@ -3738,13 +3746,13 @@
       "milestone": "PROCESS",
       "priority": "P3",
       "executor": "claude_code",
-      "status": "in_review",
+      "status": "done",
       "depends_on": [],
       "addresses": [
         "V06"
       ],
       "branch": "roadmap/q5-adr-audit",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/146",
       "purpose": "Stop open measurements from hiding in ADR prose.",
       "scope": {
         "modify": [
@@ -4319,6 +4327,39 @@
       "work_package": "Q5",
       "event": "started",
       "summary": "Q5 implemented on ccr-23ab38cd-ni2rvm (second roadmap PR)."
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "P10",
+      "event": "started",
+      "summary": "P10 implemented on a local branch, to be opened as the third roadmap PR after #146 merges."
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "P5",
+      "event": "started",
+      "summary": "P5-03 (status ETA) implemented; P5-01/02 need GPU hardware."
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "P8",
+      "event": "merged",
+      "summary": "P8: merged to main with #146.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/146"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "Q3",
+      "event": "merged",
+      "summary": "Q3: merged to main with #146.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/146"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "Q5",
+      "event": "merged",
+      "summary": "Q5: merged to main with #146.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/146"
     }
   ],
   "agent_prompt": "Implement plans/improvement-roadmap.json in https://github.com/gzarog/DocMonk. It follows plans/plan.schema.json; read both fully, then inspect current main (the plan was written against b9f38da, v0.3.25) and adapt where the code has moved. Work in execution.order, starting with execution.start_with, one roadmap/ branch and one PR per work package, respecting depends_on. Do only tasks whose executor (task-level, else work-package-level) is not human; for claude_code_then_human_review, open the PR and stop for review; for claude_code_with_cluster, use the service containers from .github/workflows/rust.yml. Obey policy.protected_paths and execution.stop_and_ask_when. Every PR runs all keys in its verification.commands and must pass the clean-slate and branding audits; attach before/after held-out reports when eval_report_required is true. Never decide D1-D4 yourself. Report each PR as execution.pr_report says, and update status fields and progress_log in this file as execution.status_updates says, validating with commands.validate_plan."

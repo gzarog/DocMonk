@@ -208,6 +208,12 @@ pub fn embed_build_paged(
             .map_err(storage)?;
     }
     let mut cursor: Option<docmonk_storage::vectors::SubjectCursor> = None;
+    // For the status ETA: how much is left, and how much is done.
+    let source_id = store.source_id().to_owned();
+    let planned = store
+        .pending_embedding_count(build_id, &fingerprint)
+        .unwrap_or(0);
+    docmonk_indexing::progress::embedding(&source_id, 0, planned);
     loop {
         let (window, next) = store
             .pending_embedding_subjects_page(build_id, &fingerprint, cursor.as_ref(), page)
@@ -275,11 +281,14 @@ pub fn embed_build_paged(
         store
             .put_embeddings(build_id, &fingerprint, &rows)
             .map_err(storage)?;
+        docmonk_indexing::progress::embedding(&source_id, stats.subjects.min(planned), planned);
         match next {
             Some(c) => cursor = Some(c),
             None => break,
         }
     }
+    // Subjects with empty text are counted as planned but never embedded.
+    docmonk_indexing::progress::embedding(&source_id, planned, planned);
     Ok(stats)
 }
 

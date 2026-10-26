@@ -14,6 +14,7 @@ pub mod daemon;
 pub mod dependencies;
 pub mod evidence;
 pub mod indexing;
+pub mod personal_eval;
 pub mod query;
 pub mod read;
 pub mod relationships;
