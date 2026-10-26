@@ -322,7 +322,21 @@ The daemon runs one worker per `max_parallel_sources`. A source has at most one 
 docmonk serve --mcp   # register this command as a stdio MCP server in your client
 ```
 
-Tools: `docmonk_explore`, `docmonk_search`, `docmonk_evidence`, `docmonk_documents`, `docmonk_symbol`, `docmonk_callers`, `docmonk_callees`, `docmonk_impact`, `docmonk_status`, `docmonk_ask`.
+```bash
+docmonk serve --mcp --http [--host 127.0.0.1] [--port 8766]   # the same tools over HTTP: POST /mcp
+```
+
+Tools: `docmonk_explore`, `docmonk_search`, `docmonk_evidence`, `docmonk_read`, `docmonk_documents`, `docmonk_symbol`, `docmonk_callers`, `docmonk_callees`, `docmonk_impact`, `docmonk_references`, `docmonk_links`, `docmonk_status`, `docmonk_ask`.
+
+**Following an answer.** An agent can go from an answer to its sources without reading files itself:
+
+- `docmonk_read` takes one evidence entry from `docmonk_evidence` (or `docmonk_ask`), passed back unchanged. It re-verifies the citation against the current index (source, build, record, location, content fingerprint). A stale citation is refused (`valid: false`, `reason`, `text: null`) instead of being answered from old text. Code comes back as numbered lines with the cited lines marked `>` and `context_lines` (default 5, at most 200) around them. A document chunk comes back with its heading and up to 10 neighbouring chunks.
+- `docmonk_references` lists every graph edge touching a symbol, like `docmonk references`.
+- `docmonk_links` lists the code-document links of an entity (id, qualified or short name) or a document (id or path), like `docmonk link list`. It is read-only: links are added and removed with the CLI or the Admin UI.
+
+**Result budgets.** Every tool answer is limited to `mcp.max_result_items` items per list (default 200) and `mcp.max_result_bytes` in total (default 256 KiB). Lists are cut first, then the largest list is shortened, then the longest text. A cut answer carries `truncated: true` and one `truncation` entry per cut (`path`, `dropped` items or `chars`, `reason`), so the agent knows to narrow its query.
+
+**HTTP transport.** `docmonk serve --mcp --http` serves the same JSON-RPC messages on `POST /mcp`: one message per request, the reply as `application/json`, `202` for notifications, no server-initiated streams. It uses the Admin UI's access model ([docs/ui.md](ui.md)). It binds to loopback by default, where requests act as the local user. A non-loopback bind is refused unless remote mode through an authenticating TLS reverse proxy is configured (`ui.remote_enabled`), and then a tool call needs the proxy-asserted `admin` role. `Host` and `Origin` must be allowed hosts, so a web page on another origin cannot call it.
 
 **Hiding sources from agents.** `mcp.hidden_sources` lists sources (ids or paths) that AI agents never see, while the CLI and the Admin UI keep searching them. A hidden source's records are never read for a tool call, so no search, evidence, explore, graph traversal (`callers`, `callees`, `impact` across sources) or `ask` citation can come from it; naming it in `source_id`/`source_ids` answers `no such source`; and every answer is also scrubbed of records carrying its id or lying under its root. Status counts stay global, but its sources, problems and errors lose the hidden ones.
 
@@ -333,6 +347,8 @@ Tools: `docmonk_explore`, `docmonk_search`, `docmonk_evidence`, `docmonk_documen
 | `mcp.hidden_sources` | `[]` | Source ids or paths no MCP tool reads, returns or names. |
 | `mcp.query_log` | `false` | Log every tool call to `<home>/logs/mcp.jsonl`. |
 | `mcp.query_log_max_bytes` | `10485760` | Size at which the log is rotated (one generation kept). |
+| `mcp.max_result_items` | `200` | Items per list in a tool answer; longer lists are cut and reported. |
+| `mcp.max_result_bytes` | `262144` | Size of a tool answer; larger answers are trimmed and reported. |
 
 ## Optional AI
 

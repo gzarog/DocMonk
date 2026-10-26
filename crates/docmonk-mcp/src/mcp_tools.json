@@ -649,6 +649,26 @@
   "outputSchema": {
    "additionalProperties": true,
    "properties": {
+    "schema_version": {
+     "default": "1",
+     "title": "Schema Version",
+     "type": "string"
+    },
+    "ok": {
+     "title": "Ok",
+     "type": "boolean"
+    },
+    "error": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/ToolError"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    },
     "query": {
      "title": "Query",
      "type": "string"
@@ -685,6 +705,9 @@
     }
    },
    "required": [
+    "schema_version",
+    "ok",
+    "error",
     "query",
     "verdict",
     "plan",
@@ -693,7 +716,796 @@
     "support"
    ],
    "title": "docmonk_evidenceOutput",
-   "type": "object"
+   "type": "object",
+   "$defs": {
+    "DocumentRow": {
+     "properties": {
+      "source_id": {
+       "title": "Source Id",
+       "type": "string"
+      },
+      "file_id": {
+       "title": "File Id",
+       "type": "string"
+      },
+      "path": {
+       "title": "Path",
+       "type": "string"
+      },
+      "status": {
+       "title": "Status",
+       "type": "string"
+      },
+      "format": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Format"
+      },
+      "title": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Title"
+      },
+      "page_count": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Page Count"
+      },
+      "section_count": {
+       "title": "Section Count",
+       "type": "integer"
+      },
+      "paragraph_count": {
+       "title": "Paragraph Count",
+       "type": "integer"
+      },
+      "table_count": {
+       "title": "Table Count",
+       "type": "integer"
+      },
+      "is_scanned": {
+       "title": "Is Scanned",
+       "type": "boolean"
+      },
+      "language": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Language"
+      },
+      "script": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Script"
+      },
+      "pages": {
+       "anyOf": [
+        {
+         "additionalProperties": true,
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Pages"
+      }
+     },
+     "required": [
+      "source_id",
+      "file_id",
+      "path",
+      "status",
+      "section_count",
+      "paragraph_count",
+      "table_count",
+      "is_scanned"
+     ],
+     "title": "DocumentRow",
+     "type": "object"
+    },
+    "ToolError": {
+     "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
+     "properties": {
+      "type": {
+       "title": "Type",
+       "type": "string"
+      },
+      "message": {
+       "title": "Message",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "message"
+     ],
+     "title": "ToolError",
+     "type": "object"
+    }
+   }
+  },
+  "annotations": {
+   "readOnlyHint": true,
+   "destructiveHint": false,
+   "idempotentHint": true,
+   "openWorldHint": false
+  }
+ },
+ {
+  "name": "docmonk_read",
+  "description": "Read what a citation stands for: pass back the fields of one docmonk_evidence (or docmonk_ask) evidence entry. The citation is re-verified against the current index first; a stale citation (another build, a changed or missing record, a wrong location) is refused with `valid: false` and the reason instead of answering from old text. Code comes back as numbered lines with the cited lines marked `>` and `context` lines around them; a document chunk comes back with its heading and neighbouring chunks. Every field of an evidence entry is accepted, so an entry can be passed back unchanged; `context_lines` sets how much surrounding text to return.",
+  "inputSchema": {
+   "properties": {
+    "source_id": {
+     "title": "Source Id",
+     "type": "string"
+    },
+    "build_id": {
+     "title": "Build Id",
+     "type": "string"
+    },
+    "kind": {
+     "title": "Kind",
+     "type": "string"
+    },
+    "record_id": {
+     "title": "Record Id",
+     "type": "string"
+    },
+    "id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Id"
+    },
+    "path": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Path"
+    },
+    "line_start": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 100000000
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Line Start"
+    },
+    "line_end": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 100000000
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Line End"
+    },
+    "page_start": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 100000000
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Page Start"
+    },
+    "page_end": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 100000000
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Page End"
+    },
+    "content_fingerprint": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Content Fingerprint"
+    },
+    "context_lines": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 200
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Context Lines",
+     "description": "Code lines (or document chunks, at most 10) shown around the cited span; default 5."
+    },
+    "invalid_reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Invalid Reason"
+    },
+    "title": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Title"
+    },
+    "heading": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Heading"
+    },
+    "fingerprint": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Fingerprint"
+    },
+    "language": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Language"
+    },
+    "tier": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Tier"
+    },
+    "text": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Text"
+    },
+    "valid": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Valid"
+    },
+    "retrieval": {
+     "anyOf": [
+      {
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Retrieval",
+     "description": "Accepted so an evidence entry can be passed back as is; ignored."
+    },
+    "context": {
+     "anyOf": [
+      {
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Context",
+     "description": "Accepted so an evidence entry can be passed back as is; ignored."
+    }
+   },
+   "required": [
+    "source_id",
+    "build_id",
+    "kind",
+    "record_id"
+   ],
+   "title": "docmonk_readArguments",
+   "type": "object",
+   "additionalProperties": false
+  },
+  "outputSchema": {
+   "properties": {
+    "schema_version": {
+     "default": "1",
+     "title": "Schema Version",
+     "type": "string"
+    },
+    "ok": {
+     "title": "Ok",
+     "type": "boolean"
+    },
+    "error": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/ToolError"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    },
+    "citation": {
+     "title": "Citation",
+     "type": "string"
+    },
+    "valid": {
+     "title": "Valid",
+     "type": "boolean"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Reason"
+    },
+    "text": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Text"
+    },
+    "source_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Source Id"
+    },
+    "build_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Build Id"
+    },
+    "kind": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Kind"
+    },
+    "record_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Record Id"
+    },
+    "path": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Path"
+    },
+    "hint": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Hint"
+    },
+    "language": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Language"
+    },
+    "line_start": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Line Start"
+    },
+    "line_end": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Line End"
+    },
+    "page_start": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Page Start"
+    },
+    "page_end": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Page End"
+    },
+    "record_lines": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "integer"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Record Lines"
+    },
+    "context_clipped": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Context Clipped"
+    },
+    "context": {
+     "anyOf": [
+      {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Context"
+    }
+   },
+   "required": [
+    "schema_version",
+    "ok",
+    "error",
+    "citation",
+    "valid",
+    "reason",
+    "text"
+   ],
+   "title": "docmonk_readOutput",
+   "type": "object",
+   "$defs": {
+    "DocumentRow": {
+     "properties": {
+      "source_id": {
+       "title": "Source Id",
+       "type": "string"
+      },
+      "file_id": {
+       "title": "File Id",
+       "type": "string"
+      },
+      "path": {
+       "title": "Path",
+       "type": "string"
+      },
+      "status": {
+       "title": "Status",
+       "type": "string"
+      },
+      "format": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Format"
+      },
+      "title": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Title"
+      },
+      "page_count": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Page Count"
+      },
+      "section_count": {
+       "title": "Section Count",
+       "type": "integer"
+      },
+      "paragraph_count": {
+       "title": "Paragraph Count",
+       "type": "integer"
+      },
+      "table_count": {
+       "title": "Table Count",
+       "type": "integer"
+      },
+      "is_scanned": {
+       "title": "Is Scanned",
+       "type": "boolean"
+      },
+      "language": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Language"
+      },
+      "script": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Script"
+      },
+      "pages": {
+       "anyOf": [
+        {
+         "additionalProperties": true,
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Pages"
+      }
+     },
+     "required": [
+      "source_id",
+      "file_id",
+      "path",
+      "status",
+      "section_count",
+      "paragraph_count",
+      "table_count",
+      "is_scanned"
+     ],
+     "title": "DocumentRow",
+     "type": "object"
+    },
+    "ToolError": {
+     "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
+     "properties": {
+      "type": {
+       "title": "Type",
+       "type": "string"
+      },
+      "message": {
+       "title": "Message",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "message"
+     ],
+     "title": "ToolError",
+     "type": "object"
+    }
+   }
   },
   "annotations": {
    "readOnlyHint": true,
@@ -1771,6 +2583,542 @@
    ],
    "title": "ImpactOutput",
    "type": "object"
+  },
+  "annotations": {
+   "readOnlyHint": true,
+   "destructiveHint": false,
+   "idempotentHint": true,
+   "openWorldHint": false
+  }
+ },
+ {
+  "name": "docmonk_references",
+  "description": "Every graph edge touching a symbol, in both directions (calls, references, inheritance, imports, routes and links), like `docmonk references`. Use it to see where a cited symbol is used before changing it.",
+  "inputSchema": {
+   "properties": {
+    "name": {
+     "title": "Name",
+     "type": "string"
+    },
+    "max_depth": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 10
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Max Depth"
+    },
+    "limit": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 1000
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Limit"
+    }
+   },
+   "required": [
+    "name"
+   ],
+   "title": "docmonk_referencesArguments",
+   "type": "object",
+   "additionalProperties": false
+  },
+  "outputSchema": {
+   "$defs": {
+    "EntityMatch": {
+     "description": "One resolved code entity -- the same shape ``cli/_code_common.py``'s\n``match_to_dict`` produces for ``docmonk symbol --json`` etc.",
+     "properties": {
+      "entity_id": {
+       "title": "Entity Id",
+       "type": "string"
+      },
+      "kind": {
+       "title": "Kind",
+       "type": "string"
+      },
+      "name": {
+       "title": "Name",
+       "type": "string"
+      },
+      "qualified_name": {
+       "title": "Qualified Name",
+       "type": "string"
+      },
+      "language": {
+       "title": "Language",
+       "type": "string"
+      },
+      "file_id": {
+       "title": "File Id",
+       "type": "string"
+      },
+      "start_line": {
+       "title": "Start Line",
+       "type": "integer"
+      },
+      "end_line": {
+       "title": "End Line",
+       "type": "integer"
+      },
+      "signature": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Signature"
+      },
+      "source_id": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Source Id"
+      },
+      "source_path": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Source Path"
+      }
+     },
+     "required": [
+      "entity_id",
+      "kind",
+      "name",
+      "qualified_name",
+      "language",
+      "file_id",
+      "start_line",
+      "end_line"
+     ],
+     "title": "EntityMatch",
+     "type": "object"
+    },
+    "GraphEdge": {
+     "description": "One traversal hop -- the same shape ``edge_to_dict`` produces for\n``docmonk callers/callees --json``.",
+     "properties": {
+      "depth": {
+       "title": "Depth",
+       "type": "integer"
+      },
+      "relationship_type": {
+       "title": "Relationship Type",
+       "type": "string"
+      },
+      "source_entity_id": {
+       "title": "Source Entity Id",
+       "type": "string"
+      },
+      "target_entity_id": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Target Entity Id"
+      },
+      "target_symbol": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Target Symbol"
+      },
+      "confidence": {
+       "title": "Confidence",
+       "type": "string"
+      },
+      "resolver": {
+       "title": "Resolver",
+       "type": "string"
+      },
+      "source_location": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Source Location"
+      },
+      "evidence": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Evidence"
+      }
+     },
+     "required": [
+      "depth",
+      "relationship_type",
+      "source_entity_id",
+      "confidence",
+      "resolver"
+     ],
+     "title": "GraphEdge",
+     "type": "object"
+    },
+    "ToolError": {
+     "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
+     "properties": {
+      "type": {
+       "title": "Type",
+       "type": "string"
+      },
+      "message": {
+       "title": "Message",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "message"
+     ],
+     "title": "ToolError",
+     "type": "object"
+    }
+   },
+   "properties": {
+    "schema_version": {
+     "default": "1",
+     "title": "Schema Version",
+     "type": "string"
+    },
+    "ok": {
+     "title": "Ok",
+     "type": "boolean"
+    },
+    "error": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/ToolError"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    },
+    "query": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Query"
+    },
+    "matches": {
+     "items": {
+      "$ref": "#/$defs/EntityMatch"
+     },
+     "title": "Matches",
+     "type": "array"
+    },
+    "edges": {
+     "items": {
+      "$ref": "#/$defs/GraphEdge"
+     },
+     "title": "Edges",
+     "type": "array"
+    },
+    "truncated": {
+     "default": false,
+     "description": "The result limit was reached: more edges may exist than were returned.",
+     "title": "Truncated",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "ok"
+   ],
+   "title": "docmonk_referencesOutput",
+   "type": "object"
+  },
+  "annotations": {
+   "readOnlyHint": true,
+   "destructiveHint": false,
+   "idempotentHint": true,
+   "openWorldHint": false
+  }
+ },
+ {
+  "name": "docmonk_links",
+  "description": "Code-document links (automatic and user-added) for an entity, a document, or everything in a source, like `docmonk link list`: which specification sections a function implements, and which code a document describes. Read-only.",
+  "inputSchema": {
+   "properties": {
+    "entity": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Entity"
+    },
+    "document": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Document"
+    },
+    "source_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Source Id"
+    }
+   },
+   "title": "docmonk_linksArguments",
+   "type": "object",
+   "additionalProperties": false
+  },
+  "outputSchema": {
+   "properties": {
+    "schema_version": {
+     "default": "1",
+     "title": "Schema Version",
+     "type": "string"
+    },
+    "ok": {
+     "title": "Ok",
+     "type": "boolean"
+    },
+    "error": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/ToolError"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null
+    },
+    "links": {
+     "items": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "title": "Links",
+     "type": "array"
+    }
+   },
+   "required": [
+    "schema_version",
+    "ok",
+    "error",
+    "links"
+   ],
+   "title": "docmonk_linksOutput",
+   "type": "object",
+   "$defs": {
+    "DocumentRow": {
+     "properties": {
+      "source_id": {
+       "title": "Source Id",
+       "type": "string"
+      },
+      "file_id": {
+       "title": "File Id",
+       "type": "string"
+      },
+      "path": {
+       "title": "Path",
+       "type": "string"
+      },
+      "status": {
+       "title": "Status",
+       "type": "string"
+      },
+      "format": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Format"
+      },
+      "title": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Title"
+      },
+      "page_count": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Page Count"
+      },
+      "section_count": {
+       "title": "Section Count",
+       "type": "integer"
+      },
+      "paragraph_count": {
+       "title": "Paragraph Count",
+       "type": "integer"
+      },
+      "table_count": {
+       "title": "Table Count",
+       "type": "integer"
+      },
+      "is_scanned": {
+       "title": "Is Scanned",
+       "type": "boolean"
+      },
+      "language": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Language"
+      },
+      "script": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Script"
+      },
+      "pages": {
+       "anyOf": [
+        {
+         "additionalProperties": true,
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Pages"
+      }
+     },
+     "required": [
+      "source_id",
+      "file_id",
+      "path",
+      "status",
+      "section_count",
+      "paragraph_count",
+      "table_count",
+      "is_scanned"
+     ],
+     "title": "DocumentRow",
+     "type": "object"
+    },
+    "ToolError": {
+     "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
+     "properties": {
+      "type": {
+       "title": "Type",
+       "type": "string"
+      },
+      "message": {
+       "title": "Message",
+       "type": "string"
+      }
+     },
+     "required": [
+      "type",
+      "message"
+     ],
+     "title": "ToolError",
+     "type": "object"
+    }
+   }
   },
   "annotations": {
    "readOnlyHint": true,

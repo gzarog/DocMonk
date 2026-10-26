@@ -104,11 +104,22 @@ enum Command {
     /// Manage subscription AI providers.
     #[command(subcommand)]
     Ai(ai_cmd::AiCommand),
-    /// Serve the indexed knowledge to agents (MCP over stdio).
+    /// Serve the indexed knowledge to agents (MCP over stdio, or HTTP).
     Serve {
-        /// Run the MCP server over stdio.
+        /// Run the MCP server (over stdio unless --http).
         #[arg(long = "mcp")]
         mcp: bool,
+        /// Serve MCP over HTTP (POST /mcp) instead of stdio.
+        #[arg(long, requires = "mcp")]
+        http: bool,
+        /// Interface for --http. Defaults to localhost; a non-loopback
+        /// address is refused unless the Admin UI's remote mode
+        /// (`ui.remote_enabled`, an authenticating TLS proxy) is configured.
+        #[arg(long, default_value = "127.0.0.1", requires = "http")]
+        host: String,
+        /// Port for --http.
+        #[arg(long, default_value_t = 8766, requires = "http")]
+        port: u16,
     },
     /// Lexical search across code and documents.
     Search(query_cmd::SearchArgs),
@@ -345,7 +356,13 @@ fn run(cli: Cli) -> Result<(), DocMonkError> {
         Command::Status(a) => status_cmd::status(&a)?,
         Command::Docs { source, json } => workflow::docs(source, json)?,
         Command::Watch => daemon_cmd::run(daemon_cmd::DaemonCommand::Run)?,
-        Command::Serve { mcp } => docmonk_mcp::serve(mcp)?,
+        Command::Serve {
+            mcp: true,
+            http: true,
+            host,
+            port,
+        } => docmonk_ui::mcp_http::serve(&host, port)?,
+        Command::Serve { mcp, .. } => docmonk_mcp::serve(mcp)?,
         Command::Ask { question, json } => ai_cmd::ask(&question, json)?,
         Command::Ai(cmd) => ai_cmd::run(cmd)?,
         Command::Ui {

@@ -15,6 +15,7 @@ pub mod dependencies;
 pub mod evidence;
 pub mod indexing;
 pub mod query;
+pub mod read;
 pub mod relationships;
 pub mod server_index;
 pub mod sources;

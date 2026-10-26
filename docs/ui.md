@@ -197,3 +197,11 @@ container, with `ui.trusted_proxies` set to the proxy container's address.
 - **Indexing looks stuck** — check the Logs screen and the Indexing page's
   failed-files list; heavy first-time indexing loads the document/embedding
   models, which can take a while on first run.
+
+## MCP over HTTP
+
+`docmonk serve --mcp --http` serves the MCP tools on `POST /mcp` under the
+same access model as this UI: loopback by default, remote only through
+the authenticating proxy configured above (`ui.remote_enabled`), where a
+tool call needs the `admin` role. See the MCP section of
+[reference.md](reference.md).

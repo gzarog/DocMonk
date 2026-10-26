@@ -701,6 +701,15 @@ section! {
         // Append one JSON line per tool call to <home>/logs/mcp.jsonl: time,
         // tool, redacted arguments, result count, sources touched.
         query_log: bool = false;
+        // Per-call result budgets: lists are cut to max_result_items, then
+        // the answer is trimmed under max_result_bytes; every cut is
+        // reported (truncated / truncation).
+        max_result_items: i64 = 200, check = |v| {
+            if (1..=100_000).contains(v) { Ok(()) } else { Err("must be between 1 and 100000".into()) }
+        };
+        max_result_bytes: i64 = 262_144, check = |v| {
+            if (4096..=67_108_864).contains(v) { Ok(()) } else { Err("must be between 4096 and 67108864".into()) }
+        };
         // mcp.jsonl is rotated to mcp.jsonl.1 (one generation) past this size.
         query_log_max_bytes: i64 = 10_485_760, check = |v| {
             if (4096..=1_073_741_824).contains(v) { Ok(()) } else { Err("must be between 4096 and 1073741824".into()) }
