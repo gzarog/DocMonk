@@ -409,6 +409,26 @@ fn dependency_note(s: &SourceStatus, verbose: bool) -> Option<String> {
     Some(note)
 }
 
+/// `git <url> <branch>: indexed <commit>` for a git source, with the
+/// fetched commit when a newer one is not indexed yet.
+fn git_note(s: &SourceStatus) -> Option<String> {
+    let g = s.git.as_ref()?;
+    let short = |c: &Option<String>| {
+        c.as_deref()
+            .map_or("-".to_owned(), |c| c.chars().take(12).collect())
+    };
+    let mut note = format!(
+        "git {} {}: indexed {}",
+        ascii(&g.url),
+        ascii(&g.branch),
+        short(&g.indexed_commit)
+    );
+    if g.commit.is_some() && g.commit != g.indexed_commit {
+        note += &format!(", fetched {} (not indexed yet)", short(&g.commit));
+    }
+    Some(note)
+}
+
 fn sources(r: &StatusReport, errors_only: bool, verbose: bool) -> String {
     let mut rows = Vec::new();
     let mut folded = 0;
@@ -464,6 +484,7 @@ fn sources(r: &StatusReport, errors_only: bool, verbose: bool) -> String {
             )
             .chain(relationship_note(s, verbose))
             .chain(dependency_note(s, verbose))
+            .chain(git_note(s))
             .collect();
         for n in notes {
             rows.push(vec![String::new(), format!("  {n}")]);

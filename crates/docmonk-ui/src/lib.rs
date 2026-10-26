@@ -532,9 +532,18 @@ async fn add_source(State(st): State<AppState>, Form(f): Form<Params>) -> Respon
     };
     let include = split_patterns(f.get("include_patterns"));
     let exclude = split_patterns(f.get("exclude_patterns"));
+    let field = |k: &str| {
+        f.get(k)
+            .map(|v| v.trim().to_owned())
+            .filter(|v| !v.is_empty())
+    };
+    let git = docmonk_service::sources::GitOptions {
+        branch: field("branch"),
+        subpath: field("subpath"),
+    };
     let r = locked(&st, move |home| {
         let mut cp = docmonk_service::sources::catalog(home)?;
-        cp.add(&path, include, exclude).map(|_| ())
+        cp.add_any(home, &path, &git, include, exclude).map(|_| ())
     })
     .await;
     match r {

@@ -303,6 +303,9 @@ section! {
         // [REDACTED:<kind>] before anything is stored or embedded.
         redact_secrets: bool = true;
         network_poll_seconds: i64 = 30;
+        // Git sources (ADR 0043): the daemon asks each remote for new
+        // commits this often (git ls-remote; no objects are fetched).
+        git_poll_seconds: i64 = 300;
         reconciliation_interval_seconds: i64 = 900;
         code_extraction_workers: i64 = 1;
         document_extraction_workers: i64 = 1;

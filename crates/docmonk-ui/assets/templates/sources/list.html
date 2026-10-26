@@ -8,8 +8,16 @@
   <form hx-post="/sources" hx-swap="none">
     <div class="field-row">
       <div>
-        <label>Path</label>
-        <input type="text" name="path" placeholder="/home/you/Documents" required>
+        <label>Path or git URL</label>
+        <input type="text" name="path" placeholder="/home/you/Documents or https://host/org/repo.git" required>
+      </div>
+      <div>
+        <label>Git branch <span class="tag">(git URLs; default branch if empty)</span></label>
+        <input type="text" name="branch" placeholder="main">
+      </div>
+      <div>
+        <label>Git subpath</label>
+        <input type="text" name="subpath" placeholder="docs">
       </div>
       <div>
         <label>Include patterns <span class="tag">(comma or newline separated)</span></label>

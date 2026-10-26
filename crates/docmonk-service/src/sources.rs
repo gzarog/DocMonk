@@ -42,6 +42,14 @@ pub fn catalog(home: &Home) -> Result<Catalog, DocMonkError> {
     }
 }
 
+/// Git options of [`Catalog::add`] (ignored for directories).
+#[derive(Debug, Clone, Default)]
+pub struct GitOptions {
+    pub branch: Option<String>,
+    /// A directory inside the repository to index instead of its root.
+    pub subpath: Option<String>,
+}
+
 /// `(online_status, last_scan_at)` of a source.
 pub struct SourceSummary {
     pub online_status: String,
@@ -103,6 +111,44 @@ impl Catalog {
                 })
             }
         }
+    }
+
+    /// [`Catalog::add`], or, when `path` is a git URL, a shallow checkout
+    /// of `git.branch` (default: the remote's default branch) under
+    /// `<home>/sources/git` (ADR 0043; idempotent by URL, branch and
+    /// subpath).
+    pub fn add_any(
+        &mut self,
+        home: &Home,
+        path: &str,
+        git: &GitOptions,
+        include: Vec<String>,
+        exclude: Vec<String>,
+    ) -> Result<SourceRecord, DocMonkError> {
+        let path = if docmonk_indexing::git::is_remote_url(path) {
+            if self.is_server() {
+                return Err(DocMonkError::usage(
+                    "git sources are local-mode only: in server mode, check the repository \
+                     out on each indexing host and add the directory",
+                ));
+            }
+            docmonk_indexing::git::clone(
+                home.root(),
+                path,
+                git.branch.as_deref(),
+                git.subpath.as_deref(),
+            )
+            .map_err(|e| DocMonkError::new(ErrorKind::SourceUnavailable, e))?
+            .to_string_lossy()
+            .into_owned()
+        } else if git.branch.is_some() || git.subpath.is_some() {
+            return Err(DocMonkError::usage(
+                "--branch and --subpath apply to git URLs only",
+            ));
+        } else {
+            path.to_owned()
+        };
+        self.add(&path, include, exclude)
     }
 
     /// Registers a directory (idempotent by canonical path).
@@ -229,7 +275,7 @@ fn expand_user(raw: &str) -> std::path::PathBuf {
 
 pub fn source_info(cp: &ControlPlane, s: &SourceRecord) -> Result<Value, DocMonkError> {
     let state = cp.state(&s.id).map_err(db)?;
-    Ok(json!({
+    let mut v = json!({
         "id": s.id,
         "path": s.path,
         "source_type": s.source_type.as_str(),
@@ -245,7 +291,11 @@ pub fn source_info(cp: &ControlPlane, s: &SourceRecord) -> Result<Value, DocMonk
         "last_error": state.last_error,
         "created_at": s.created_at,
         "updated_at": s.updated_at,
-    }))
+    });
+    if let Some(git) = docmonk_indexing::git::remote_of(Path::new(&s.path)) {
+        v["git"] = json!(git);
+    }
+    Ok(v)
 }
 
 pub fn assert_no_active_daemon(home: &Home) -> Result<(), DocMonkError> {
@@ -340,6 +390,12 @@ pub fn remove_source(home: &Home, source_id: &str) -> Result<bool, DocMonkError>
         })?;
     }
     cp.remove_source(source_id).map_err(db)?;
+    // A git source's checkout is DocMonk's own copy, not original files.
+    if let Some(dir) = docmonk_indexing::git::remote_dir_of(Path::new(&s.path)) {
+        if let Err(e) = std::fs::remove_dir_all(&dir) {
+            tracing::warn!(component = "sources", event = "git_checkout_not_removed", source_id, path = %dir.display(), error = %e);
+        }
+    }
     lock.release();
     Ok(deleted)
 }

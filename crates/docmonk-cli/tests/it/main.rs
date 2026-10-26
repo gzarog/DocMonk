@@ -7,6 +7,7 @@ mod ai;
 mod cli;
 mod daemon;
 mod eval;
+mod git_source;
 mod mcp;
 mod ops;
 mod queries;

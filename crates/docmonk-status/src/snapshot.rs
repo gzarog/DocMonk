@@ -139,6 +139,8 @@ pub fn assemble(
                 last_error_at: f.last_error_at.clone(),
                 last_error: f.last_error.as_deref().map(crate::errors::redact_text),
                 warnings,
+                git: docmonk_indexing::git::remote_of(std::path::Path::new(&f.path))
+                    .map(Into::into),
             }
         })
         .collect();

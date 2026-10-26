@@ -155,9 +155,16 @@ pub fn init(a: &InitArgs) -> Result<(), DocMonkError> {
 
 #[derive(Subcommand)]
 pub enum SourceCommand {
-    /// Register a directory as a source.
+    /// Register a directory, or a git repository by URL, as a source.
     Add {
+        /// A directory, or a git URL (https://, ssh://, file://, git@host:path).
         path: String,
+        /// Git URLs: the branch to index (default: the remote's default branch).
+        #[arg(long)]
+        branch: Option<String>,
+        /// Git URLs: index this directory of the repository instead of its root.
+        #[arg(long)]
+        subpath: Option<String>,
         /// Include glob pattern.
         #[arg(long)]
         include: Vec<String>,
@@ -199,11 +206,20 @@ pub fn source(cmd: SourceCommand) -> Result<(), DocMonkError> {
     match cmd {
         SourceCommand::Add {
             path,
+            branch,
+            subpath,
             include,
             exclude,
         } => {
-            let s = cp.add(&path, include, exclude)?;
-            println!("Added source {} -> {}", s.id, s.path);
+            let git = docmonk_service::sources::GitOptions { branch, subpath };
+            let s = cp.add_any(&home, &path, &git, include, exclude)?;
+            match docmonk_indexing::git::remote_of(std::path::Path::new(&s.path)) {
+                Some(g) => println!(
+                    "Added source {} -> {} ({} at {})",
+                    s.id, s.path, g.url, g.branch
+                ),
+                None => println!("Added source {} -> {}", s.id, s.path),
+            }
         }
         SourceCommand::List => {
             let mut rows = Vec::new();
@@ -212,7 +228,12 @@ pub fn source(cmd: SourceCommand) -> Result<(), DocMonkError> {
                 rows.push(vec![
                     s.id.clone(),
                     s.path.clone(),
-                    s.source_type.as_str().into(),
+                    if docmonk_indexing::git::remote_dir_of(std::path::Path::new(&s.path)).is_some()
+                    {
+                        "git".into()
+                    } else {
+                        s.source_type.as_str().into()
+                    },
                     if s.enabled { "yes" } else { "no" }.into(),
                     state.online_status.clone(),
                     state.last_scan_at.clone().unwrap_or_else(|| "-".into()),
@@ -248,7 +269,10 @@ pub fn source(cmd: SourceCommand) -> Result<(), DocMonkError> {
                 println!("This will permanently remove:");
                 println!("  - source {} ({}) from the registry", s.id, s.path);
                 println!("  - its indexed data at {}", project_dir.display());
-                println!("The original files at the source path are never touched.");
+                match docmonk_indexing::git::remote_dir_of(std::path::Path::new(&s.path)) {
+                    Some(dir) => println!("  - its git checkout at {}", dir.display()),
+                    None => println!("The original files at the source path are never touched."),
+                }
                 if !confirm("Proceed?") {
                     println!("Aborted; nothing was removed.");
                     return Ok(());

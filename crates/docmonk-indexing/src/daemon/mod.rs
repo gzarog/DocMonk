@@ -42,6 +42,7 @@ use crate::progress::now_iso;
 use health::{DaemonHealth, SourceWatchStatus};
 use scheduler::Scheduler;
 
+use crate::watcher::git::GitWatcher;
 use crate::watcher::local::LocalWatcher;
 use crate::watcher::network::{NetworkSpec, NetworkWatcher};
 
@@ -49,8 +50,10 @@ use crate::watcher::network::{NetworkSpec, NetworkWatcher};
 pub const MAX_TARGETED_PATHS: usize = 200;
 /// Reasons that always force a full scan. `watcher_rescan`: the watcher
 /// reported an error or that it lost events (a queue overflow), so
-/// touched paths no longer describe every change.
-pub const FORCE_FULL_REASONS: [&str; 3] = ["startup", "reconciliation", "watcher_rescan"];
+/// touched paths no longer describe every change. `git_poll`: a git
+/// source's branch moved (ADR 0043).
+pub const FORCE_FULL_REASONS: [&str; 4] =
+    ["startup", "reconciliation", "watcher_rescan", "git_poll"];
 
 /// What the next pass for one source should scan.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -153,6 +156,8 @@ pub struct DaemonOptions {
     pub debounce_ms: i64,
     /// Network roots are fingerprinted this often.
     pub network_poll: Duration,
+    /// Git sources ask their remote for new commits this often.
+    pub git_poll: Duration,
     /// Paces the local polling fallback.
     pub local_poll: Duration,
     pub follow_symlinks: bool,
@@ -169,6 +174,7 @@ impl Default for DaemonOptions {
             watch: false,
             debounce_ms: 2000,
             network_poll: Duration::from_secs(30),
+            git_poll: Duration::from_secs(300),
             local_poll: Duration::from_secs(2),
             follow_symlinks: false,
         }
@@ -191,6 +197,7 @@ impl DaemonOptions {
             watch: cfg.indexing.watch,
             debounce_ms: cfg.indexing.debounce_ms,
             network_poll: Duration::from_secs(cfg.indexing.network_poll_seconds.max(1) as u64),
+            git_poll: Duration::from_secs(cfg.indexing.git_poll_seconds.max(1) as u64),
             local_poll: Duration::from_secs(2),
             follow_symlinks: cfg.indexing.follow_symlinks,
         }
@@ -201,6 +208,7 @@ impl DaemonOptions {
 struct Watchers {
     local: HashMap<String, LocalWatcher>,
     network: HashMap<String, NetworkWatcher>,
+    git: HashMap<String, GitWatcher>,
 }
 
 #[derive(Default)]
@@ -284,6 +292,31 @@ impl Shared {
         let id = source.id.clone();
         let me = self.me.clone();
         let root = PathBuf::from(&source.path);
+        if let Some(remote) = crate::git::remote_dir_of(&root) {
+            // The checkout changes only when a pass fetches it, so it gets
+            // no filesystem watcher: the remote is polled instead.
+            if lock(&self.watchers).git.contains_key(&id) {
+                return;
+            }
+            let sid = id.clone();
+            match GitWatcher::start(
+                remote,
+                self.opts.git_poll,
+                Arc::new(move || {
+                    if let Some(s) = me.upgrade() {
+                        s.enqueue(&sid, "git_poll", &[]);
+                    }
+                }),
+            ) {
+                Ok(w) => {
+                    lock(&self.watchers).git.insert(id, w);
+                }
+                Err(e) => {
+                    tracing::warn!(component = "daemon", event = "git_watcher_attach_failed", source_id = %id, error = %e);
+                }
+            }
+            return;
+        }
         if source.source_type == SourceType::Network {
             if lock(&self.watchers).network.contains_key(&id) {
                 return;

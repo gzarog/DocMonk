@@ -4407,6 +4407,10 @@
        "items": {
         "type": "string"
        }
+      },
+      "git": {
+       "description": "Git sources only (absent for folder sources): the remote, the fetched commit and the commit the published index was built from.",
+       "$ref": "#/$defs/GitSourceStatus"
       }
      },
      "required": [
@@ -4423,6 +4427,56 @@
       "last_error_at",
       "last_error",
       "warnings"
+     ]
+    },
+    "GitSourceStatus": {
+     "type": "object",
+     "properties": {
+      "url": {
+       "type": "string"
+      },
+      "branch": {
+       "type": "string"
+      },
+      "subpath": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "commit": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "indexed_commit": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "fetched_at": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "last_error": {
+       "type": [
+        "string",
+        "null"
+       ]
+      }
+     },
+     "required": [
+      "url",
+      "branch",
+      "subpath",
+      "commit",
+      "indexed_commit",
+      "fetched_at",
+      "last_error"
      ]
     },
     "PublishedCounts": {
