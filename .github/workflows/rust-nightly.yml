@@ -198,3 +198,55 @@ jobs:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - run: cargo xtask adr-audit --markdown >> "$GITHUB_STEP_SUMMARY"
+
+  # Mutation testing (roadmap Q3): which mutated lines the tests still
+  # pass on. One crate per leg; the in-process engine only (no live
+  # cluster). Reported, not gated: the score goes to the job summary,
+  # mutants.out (missed.txt lists the survivors) is kept as an artifact.
+  mutants:
+    name: Mutation testing (${{ matrix.crate }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [docmonk-retrieval, docmonk-storage, docmonk-backends]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: taiki-e/install-action@0e09747a63ae497bf945b3dcaf38fef0050d0109 # v2.62.0
+        with:
+          tool: cargo-mutants
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo mutants
+        shell: bash
+        run: |
+          set +e
+          cargo mutants -p "${{ matrix.crate }}" --no-shuffle -j 2 --timeout-multiplier 3 \
+            -o "$RUNNER_TEMP/mutants"
+          code=$?
+          # 0: all caught; 2: some missed; 3: some timed out. Anything else
+          # (a failing baseline, a usage error) is a real failure.
+          case $code in 0 | 2 | 3) exit 0 ;; *) exit $code ;; esac
+      - name: Score
+        if: always()
+        shell: bash
+        run: |
+          out="$RUNNER_TEMP/mutants/mutants.out/outcomes.json"
+          [ -f "$out" ] || { echo "no outcomes for ${{ matrix.crate }}" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          jq -r --arg c "${{ matrix.crate }}" '
+            "## Mutation score: `\($c)`\n",
+            "| Mutants | Caught | Missed | Timeouts | Unviable | Score |",
+            "|---:|---:|---:|---:|---:|---:|",
+            "| \(.total_mutants) | \(.caught) | \(.missed) | \(.timeout) | \(.unviable) | \(if (.caught + .missed) > 0 then (.caught * 1000 / (.caught + .missed) | round / 10) else 0 end)% |"
+          ' "$out" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "Surviving mutants: \`missed.txt\` in the mutants-${{ matrix.crate }} artifact." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutants-${{ matrix.crate }}
+          path: ${{ runner.temp }}/mutants/mutants.out
+          if-no-files-found: ignore
+          retention-days: 14
