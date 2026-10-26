@@ -841,7 +841,8 @@ fn derive_file(
     let cached = facts.map(|c| c.get(&crate::process::graph_fact_key(&f.id, &f.rel_path, &hash)));
     let cache_load_seconds = looking.elapsed().as_secs_f64();
     let consulted = cached.is_some();
-    if let Some(Some(rows)) = cached {
+    if let Some(Some(mut rows)) = cached {
+        docmonk_indexing::redact::redact_relationships(&mut rows);
         return Ok(Derived {
             rows,
             bytes: source.len() as u64,
@@ -856,7 +857,9 @@ fn derive_file(
     let parsing = Instant::now();
     // The base index parsed these exact bytes: a file with syntax errors
     // was indexed as plain text (no symbols), so it has no relationships.
-    let rows = file_relationships(&f.rel_path, &f.id, &source).unwrap_or_default();
+    let mut rows = file_relationships(&f.rel_path, &f.id, &source).unwrap_or_default();
+    // Evidence quotes source text: never store a credential in it.
+    docmonk_indexing::redact::redact_relationships(&mut rows);
     Ok(Derived {
         rows,
         bytes: source.len() as u64,

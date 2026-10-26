@@ -233,6 +233,20 @@ The run summary adds the same phase totals over all sources. While a graph is bu
 
 `docmonk-graph-bench` (in `docmonk-service`) reproduces these measurements on a generated C# and Markdown corpus of any size, with no proprietary source: see `benchmarks/relationships/README.md`.
 
+## Secrets
+
+DocMonk keeps credentials out of the index in two layers (ADR 0042):
+
+- **Secret files are never indexed**, whatever the include patterns say: `.env`, `.env.*`, `*.pem`, `*.key`, `id_rsa`, `id_ed25519`, `id_ecdsa`, `id_dsa`, `credentials*`, `secrets*`, `.netrc`, `_netrc`, `.git-credentials`, `.npmrc`, `.pypirc`, `kubeconfig`, `*.kubeconfig`, `*.pfx`, `*.p12`, `*.jks`, `*.keystore`, `*.kdbx`, `*.tfstate`, `*.tfstate.backup`. `indexing.secret_patterns` adds file-name patterns to this list; it never replaces it.
+- **Credentials inside indexed files are redacted** (`indexing.redact_secrets`, on by default) before anything is stored or embedded: chunk and passage text, the text they are searched and embedded by, table cells, headings, entity signatures, relationship evidence and document titles. Recognised: private key blocks (`-----BEGIN ... PRIVATE KEY-----`), AWS access key ids, GitHub, GitLab and Slack tokens, Google API keys, Stripe live keys, JWTs, `password`/`secret`/`api_key`/`token`/... assignments whose value is a literal (`DB_PASSWORD=...`, `"apiKey": "..."`, `client_secret: ...`), `Password=`/`Pwd=` in connection strings, and the password in `scheme://user:password@host` URLs. Only the value is replaced, with `[REDACTED:<kind>]` on the same line: line numbers, spans and citations stay valid, and the key name stays searchable. Assignments from expressions (`password = read_password()`) are left alone.
+
+So search, evidence, explore, documents, the Admin UI and every MCP tool only ever see the redacted text. The redaction rule set is part of the parser and chunker identity: turning `indexing.redact_secrets` off or on, or a release that changes a rule, rebuilds the affected sources. The source files themselves are never modified.
+
+| Setting | Default | Effect |
+|---|---|---|
+| `indexing.redact_secrets` | `true` | Replace credentials in indexed text with `[REDACTED:<kind>]`. `false` stores text as written (rebuilds every source). |
+| `indexing.secret_patterns` | `[]` | Extra file-name patterns that are never indexed, added to the built-in list. |
+
 ## Status and observability
 
 `docmonk status` answers: is indexing running, progressing, stalled or failing, where, and what failed. It is built by one crate (`docmonk-status`, ADR 0034); the CLI, the MCP `docmonk_status` tool and the Admin UI (`/`, `/api/status`, `/ready`) all show the same report.
@@ -308,7 +322,17 @@ The daemon runs one worker per `max_parallel_sources`. A source has at most one 
 docmonk serve --mcp   # register this command as a stdio MCP server in your client
 ```
 
-Tools: `docmonk_explore`, `docmonk_search`, `docmonk_documents`, `docmonk_symbol`, `docmonk_callers`, `docmonk_callees`, `docmonk_impact`, `docmonk_status`, `docmonk_ask`.
+Tools: `docmonk_explore`, `docmonk_search`, `docmonk_evidence`, `docmonk_documents`, `docmonk_symbol`, `docmonk_callers`, `docmonk_callees`, `docmonk_impact`, `docmonk_status`, `docmonk_ask`.
+
+**Hiding sources from agents.** `mcp.hidden_sources` lists sources (ids or paths) that AI agents never see, while the CLI and the Admin UI keep searching them. A hidden source's records are never read for a tool call, so no search, evidence, explore, graph traversal (`callers`, `callees`, `impact` across sources) or `ask` citation can come from it; naming it in `source_id`/`source_ids` answers `no such source`; and every answer is also scrubbed of records carrying its id or lying under its root. Status counts stay global, but its sources, problems and errors lose the hidden ones.
+
+**Query log.** `mcp.query_log: true` (off by default) appends one JSON line per tool call to `<home>/logs/mcp.jsonl`: `time`, `tool`, `arguments` (credentials redacted as in the index), `ok`, `error`, `result_count` and the `sources` the answer came from. Past `mcp.query_log_max_bytes` (default 10 MiB) the file is rotated to `mcp.jsonl.1`, keeping one previous generation. Nothing leaves the machine.
+
+| Setting | Default | Effect |
+|---|---|---|
+| `mcp.hidden_sources` | `[]` | Source ids or paths no MCP tool reads, returns or names. |
+| `mcp.query_log` | `false` | Log every tool call to `<home>/logs/mcp.jsonl`. |
+| `mcp.query_log_max_bytes` | `10485760` | Size at which the log is rotated (one generation kept). |
 
 ## Optional AI
 

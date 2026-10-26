@@ -11,10 +11,13 @@ use docmonk_service::load;
 
 const ENV_PREFIX: &str = "DOCMONK_";
 const SENSITIVE: &[&str] = &["key", "token", "secret", "password", "credential"];
+/// Settings whose names match [`SENSITIVE`] but hold policy, not a
+/// credential (ADR 0042): shown and editable like any other setting.
+const NOT_SENSITIVE: &[&str] = &["indexing.redact_secrets", "indexing.secret_patterns"];
 
 fn is_sensitive(path: &str) -> bool {
     let lower = path.to_lowercase();
-    SENSITIVE.iter().any(|t| lower.contains(t))
+    !NOT_SENSITIVE.contains(&lower.as_str()) && SENSITIVE.iter().any(|t| lower.contains(t))
 }
 
 fn env_var_for(path: &str) -> String {

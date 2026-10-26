@@ -81,8 +81,35 @@ Status: accepted
 ## Benchmark
 
 `benchmarks/ann-20000.json`: 20,000 clustered 384-dimension unit vectors
-and 200 queries. Build about 11 s single-threaded, query about 0.6 ms,
-recall@10 about 0.73, exact query about 7.7 ms.
+and 200 queries. Build about 8 s single-threaded, exact query about
+5 ms. The earlier figure (recall@10 0.73 at 0.6 ms) was measured at
+`ef_search` 96; the default is 400.
+
+`benchmarks/ann-sweep.json` measures `ef_search` 64, 96, 200, 400 and 800
+over the same index at 20,000 and 100,000 vectors (release, 4 threads):
+
+| Vectors | ef_search | recall@10 | p50 ms | p95 ms |
+|---|---|---|---|---|
+| 20,000 | 64 | 0.628 | 0.32 | 0.52 |
+| 20,000 | 96 | 0.731 | 0.39 | 0.64 |
+| 20,000 | 200 | 0.879 | 0.68 | 1.00 |
+| 20,000 | **400** | **0.961** | 1.33 | 1.96 |
+| 20,000 | 800 | 0.994 | 2.35 | 3.13 |
+| 100,000 | 64 | 0.262 | 0.86 | 1.47 |
+| 100,000 | 96 | 0.321 | 0.97 | 1.81 |
+| 100,000 | 200 | 0.434 | 1.62 | 3.21 |
+| 100,000 | 400 | 0.604 | 2.53 | 4.53 |
+| 100,000 | 800 | 0.809 | 4.10 | 6.56 |
+
+The default `search.ann.ef_search: 400` stays: at 20,000 vectors it is
+the lowest-latency setting with recall@10 >= 0.95. At 100,000 vectors no
+measured setting reaches 0.95 on this data, and 800 doubles the latency
+for 0.81, so changing the default would not meet the target either.
+Closing that gap needs a build-side change (a larger `m` or
+`ef_construction`, or exact re-scoring of a wider beam), and real
+embeddings, which cluster less tightly than this synthetic set, need
+measuring first. It stays open. Exact search over 100,000 vectors costs
+about 50 ms per query.
 
 - Build cost is about 0.5 ms per vector, under 2% of the time to embed the
   same text.

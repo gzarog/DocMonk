@@ -1,9 +1,10 @@
 # Installs the native DocMonk CLI on Windows: downloads the
-# release archive, verifies it against the release's SHA256SUMS (and the
-# minisign signature over it, when a key is configured below and
-# minisign.exe is on PATH), unpacks it under
-# $env:DOCMONK_INSTALL_DIR\versions, and puts docmonk.exe on a per-user
-# bin directory added to the user's PATH.
+# release archive, verifies it against the release's SHA256SUMS and,
+# when a release key is configured below, the minisign signature over it,
+# unpacks it under $env:DOCMONK_INSTALL_DIR\versions, and puts
+# docmonk.exe on a per-user bin directory added to the user's PATH. With a
+# key, verification fails closed: a missing minisign.exe, a missing or
+# invalid SHA256SUMS.minisig aborts.
 #
 #   DOCMONK_VERSION        version to install (default: the latest release)
 #   DOCMONK_INSTALL_DIR    default: %LOCALAPPDATA%\DocMonk
@@ -11,12 +12,20 @@
 #   DOCMONK_HOME           default: %LOCALAPPDATA%\DocMonk
 #   DOCMONK_DOWNLOAD_BASE  a URL or local directory holding the release
 #                          assets (testing and mirrors)
+#   DOCMONK_MINISIGN_PUBKEY  a release key to verify with instead of the
+#                          one below (testing and mirrors)
+#   DOCMONK_INSECURE_SKIP_SIGNATURE=1  install without checking the
+#                          signature (checksums only); prints a warning
 
 $ErrorActionPreference = "Stop"
 
 $Repo = "gzarog/DocMonk"
-# The release-signing public key (minisign). Empty: checksums only.
+# The release-signing public key (minisign), committed so the README
+# one-liner verifies signatures. Empty: checksums only, with a warning.
+# rust-release.yml refuses to publish when it differs from
+# vars.MINISIGN_PUBLIC_KEY.
 $MinisignPubkey = ""
+$VerifyKey = if ($env:DOCMONK_MINISIGN_PUBKEY) { $env:DOCMONK_MINISIGN_PUBKEY } else { $MinisignPubkey }
 $Target = "x86_64-pc-windows-msvc"
 $InstallDir = if ($env:DOCMONK_INSTALL_DIR) { $env:DOCMONK_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "DocMonk" }
 $LayoutBin = Join-Path $InstallDir "bin"
@@ -59,15 +68,22 @@ try {
     Get-Asset "$Base$Sep$Asset" (Join-Path $Tmp $Asset)
     Get-Asset "$Base${Sep}SHA256SUMS" (Join-Path $Tmp "SHA256SUMS")
 
-    if ($MinisignPubkey) {
-        if (Get-Command minisign -ErrorAction SilentlyContinue) {
-            Get-Asset "$Base${Sep}SHA256SUMS.minisig" (Join-Path $Tmp "SHA256SUMS.minisig")
-            & minisign -Vqm (Join-Path $Tmp "SHA256SUMS") -P $MinisignPubkey
-            if ($LASTEXITCODE -ne 0) { throw "SHA256SUMS signature does not verify; refusing to install" }
-            Write-Host "Signature verified."
-        } else {
-            Write-Warning "install minisign to also verify the release signature"
+    if (-not $VerifyKey) {
+        Write-Warning "this installer carries no release key; verifying checksums only"
+    } elseif ($env:DOCMONK_INSECURE_SKIP_SIGNATURE -eq "1") {
+        Write-Warning "DOCMONK_INSECURE_SKIP_SIGNATURE=1: the release signature is NOT verified"
+    } else {
+        if (-not (Get-Command minisign -ErrorAction SilentlyContinue)) {
+            throw ("minisign is required to verify the release signature; install it " +
+                "(https://jedisct1.github.io/minisign/, e.g. 'scoop install minisign') and run this again, " +
+                "or set DOCMONK_INSECURE_SKIP_SIGNATURE=1 to install with checksums only")
         }
+        $Sig = Join-Path $Tmp "SHA256SUMS.minisig"
+        try { Get-Asset "$Base${Sep}SHA256SUMS.minisig" $Sig }
+        catch { throw "the release has no SHA256SUMS.minisig signature; refusing to install" }
+        & minisign -Vqm (Join-Path $Tmp "SHA256SUMS") -x $Sig -P $VerifyKey
+        if ($LASTEXITCODE -ne 0) { throw "SHA256SUMS signature does not verify; refusing to install" }
+        Write-Host "Signature verified."
     }
 
     $expected = $null

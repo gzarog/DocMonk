@@ -3,7 +3,7 @@
 DocMonk ships with a built-in, local-first administration web interface. It
 lets you manage DocMonk from a browser instead of the CLI, while reusing the
 same underlying application services — the CLI, the MCP server and the UI all
-call the same code (`docmonk.service.*`), so there is one source of truth and
+call the same code (the `docmonk-service` crate), so there is one source of truth and
 no business logic duplicated in the web layer.
 
 ## Starting the UI

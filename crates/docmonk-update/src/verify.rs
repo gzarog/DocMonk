@@ -45,6 +45,31 @@ pub fn check_signature(public_key: &str, data: &[u8], signature: &str) -> Result
         .map_err(|e| format!("release signature does not verify: {e}; refusing to install"))
 }
 
+/// Verifies downloaded release assets. With a compiled-in public key the
+/// signature is mandatory: a missing, unreadable or invalid
+/// `SHA256SUMS.minisig` refuses the install (fail closed), and only then
+/// is the archive checked against the signed `SHA256SUMS`.
+pub fn check_release(
+    public_key: Option<&str>,
+    archive: &[u8],
+    sums: &[u8],
+    signature: Option<Result<Vec<u8>, String>>,
+    name: &str,
+) -> Result<(), String> {
+    if let Some(key) = public_key {
+        let sig = signature
+            .unwrap_or_else(|| Err("not downloaded".to_owned()))
+            .map_err(|e| {
+                format!(
+                    "{} is required for a signed release ({e}); refusing to install",
+                    crate::SIG_ASSET
+                )
+            })?;
+        check_signature(key, sums, &String::from_utf8_lossy(&sig))?;
+    }
+    check_digest(archive, &String::from_utf8_lossy(sums), name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -77,5 +102,65 @@ mod tests {
         let e = check_signature(PUBKEY, b"tampered", SIG).unwrap_err();
         assert!(e.contains("does not verify"), "{e}");
         assert!(check_signature("bogus", SIG_DATA, SIG).is_err());
+    }
+
+    #[test]
+    fn a_configured_key_requires_a_valid_signature() {
+        let name = "docmonk-1.0.0-x86_64-unknown-linux-gnu.tar.gz";
+        let archive = b"archive";
+        let sums = format!("{}  {name}\n", sha256_hex(archive));
+        // Missing signature: refused before the checksum is even read.
+        let e = check_release(
+            Some(PUBKEY),
+            archive,
+            sums.as_bytes(),
+            Some(Err("HTTP 404".into())),
+            name,
+        )
+        .unwrap_err();
+        assert!(e.contains("is required") && e.contains("refusing"), "{e}");
+        let e = check_release(Some(PUBKEY), archive, sums.as_bytes(), None, name).unwrap_err();
+        assert!(e.contains("is required"), "{e}");
+        // A signature over different SHA256SUMS (tampered checksums).
+        let e = check_release(
+            Some(PUBKEY),
+            archive,
+            sums.as_bytes(),
+            Some(Ok(SIG.as_bytes().to_vec())),
+            name,
+        )
+        .unwrap_err();
+        assert!(e.contains("does not verify"), "{e}");
+        // Garbage in place of a signature.
+        let e = check_release(
+            Some(PUBKEY),
+            archive,
+            sums.as_bytes(),
+            Some(Ok(b"not a signature".to_vec())),
+            name,
+        )
+        .unwrap_err();
+        assert!(e.contains("invalid release signature"), "{e}");
+        // A valid signature passes on to the checksum check (the signed
+        // test SHA256SUMS lists no real digest).
+        let e = check_release(
+            Some(PUBKEY),
+            archive,
+            SIG_DATA,
+            Some(Ok(SIG.as_bytes().to_vec())),
+            name,
+        )
+        .unwrap_err();
+        assert!(e.contains("not listed in SHA256SUMS"), "{e}");
+    }
+
+    #[test]
+    fn without_a_key_only_the_checksum_is_checked() {
+        let name = "a.tar.gz";
+        let archive = b"archive";
+        let sums = format!("{}  {name}\n", sha256_hex(archive));
+        check_release(None, archive, sums.as_bytes(), None, name).unwrap();
+        let e = check_release(None, b"tampered", sums.as_bytes(), None, name).unwrap_err();
+        assert!(e.contains("checksum mismatch"), "{e}");
     }
 }

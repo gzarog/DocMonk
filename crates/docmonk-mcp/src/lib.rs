@@ -25,6 +25,8 @@ use docmonk_service::query::{self as query_cmd, open_sources};
 use docmonk_service::{load, prepared_home};
 
 pub mod exec;
+pub mod query_log;
+pub mod visibility;
 
 /// Protocol versions the server accepts; anything else gets the latest.
 const SUPPORTED_PROTOCOL_VERSIONS: &[&str] =
@@ -537,6 +539,29 @@ fn run_tool(name: &str, args: Map<String, Value>) -> Value {
         Ok(cfg) => cfg.mcp,
         Err(e) => return failure(error_type(&e), e.message()),
     };
+    // Hidden sources are resolved per call, like the config itself.
+    let hidden = match visibility::Hidden::resolve(&home, &mcp.hidden_sources) {
+        Ok(h) => h,
+        Err(e) => return failure(error_type(&e), e.message()),
+    };
+    let logged = mcp
+        .query_log
+        .then(|| (Value::Object(args.clone()), home.clone()));
+    let out = run_visible(&home, name, args, &mcp, hidden);
+    if let Some((args, home)) = logged {
+        query_log::append(&home, name, &args, &out, mcp.query_log_max_bytes);
+    }
+    out
+}
+
+fn run_visible(
+    home: &Home,
+    name: &str,
+    args: Map<String, Value>,
+    mcp: &docmonk_config::model::McpConfig,
+    hidden: visibility::Hidden,
+) -> Value {
+    let home = home.clone();
     let exec = executor();
     exec.set_limits(exec::Limits {
         max_running: usize::try_from(mcp.max_concurrent_calls).unwrap_or(1),
@@ -545,7 +570,13 @@ fn run_tool(name: &str, args: Map<String, Value>) -> Value {
     let timeout = mcp.request_timeout_seconds;
     let wait = Duration::try_from_secs_f64(timeout.max(0.0)).unwrap_or(Duration::MAX);
     let name = name.to_owned();
-    match exec.run(wait, move || work(&home, &name, &args)) {
+    match exec.run(wait, move || {
+        let ids = hidden.ids.clone();
+        query_cmd::with_hidden_sources(ids, || {
+            hidden.check_args(&args)?;
+            work(&home, &name, &args).map(|v| hidden.scrub(v))
+        })
+    }) {
         exec::Outcome::Done(Ok(Value::Object(mut data))) => {
             data.insert("schema_version".into(), json!(SCHEMA_VERSION));
             data.insert("ok".into(), json!(true));

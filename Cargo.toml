@@ -89,6 +89,15 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["s
 unicode-normalization = "0.1"
 yaml-rust2 = "0.10"
 
+# Debug builds keep line tables for the workspace (backtraces still name
+# file and line) and no debug info for dependencies: full debug info in
+# every one of the test binaries, each linking candle, rten and
+# tokenizers, made a debug test build tens of GB.
+[profile.dev]
+debug = "line-tables-only"
+[profile.dev.package."*"]
+debug = false
+
 # Inference/decoding crates are unusably slow unoptimized; tests run in the
 # dev profile, so build these optimized there too.
 [profile.dev.package.rten]

@@ -13,6 +13,12 @@ use. No other runtime is needed.
 cargo build --workspace          # the `docmonk` binary: target/debug/docmonk
 ```
 
+Debug builds keep line tables for the workspace crates and no debug info
+for dependencies (`[profile.dev]` in `Cargo.toml`), so backtraces still
+name files and lines. A full debug test build (`cargo test --workspace
+--no-run`) needs about 9 GB of `target/`. For a debugger session, build
+with `CARGO_PROFILE_DEV_DEBUG=full`.
+
 ## Running the checks
 
 CI (`.github/workflows/rust.yml`) runs these on Linux, macOS and Windows.
@@ -54,6 +60,16 @@ Expected results are DocMonk's own specification. A deliberate behaviour
 change regenerates the affected file with `DOCMONK_BLESS=1 cargo test
 -p <crate> --test <test>` (where the test supports it) or edits it by
 hand, in the same PR, and the PR description says why.
+
+## Labels, floors and audits
+
+Held-out labels (`fixtures/eval/`), quality floors (`*gates*.json`), the
+remediation ledger (`audit/remediation/ledger.json`), the clean-slate
+baseline and the audit rules (`xtask/src/audit.rs`) decide whether the
+code is good enough; `.github/CODEOWNERS` requires a code-owner approval
+for every change to them. Floors only move up. A label written by a model
+is approved by a person, never by the model that wrote it or the change
+it judges. The PR template's checklist asks for this explicitly.
 
 ## Test isolation
 

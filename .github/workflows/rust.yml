@@ -57,6 +57,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo xtask branding-audit
       - run: cargo xtask clean-slate-audit
+      # Advisories, licences, bans and sources (deny.toml, ADR 0003).
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
 
   rust-linux:
     name: Rust fmt/clippy/test (ubuntu-latest)
@@ -272,6 +276,39 @@ jobs:
           cp -R "$DIST" "$RUNNER_TEMP/bad" && echo x >> "$RUNNER_TEMP/bad/docmonk-0.9.1-${{ matrix.target }}.tar.gz"
           if DOCMONK_VERSION=0.9.1 DOCMONK_DOWNLOAD_BASE="$RUNNER_TEMP/bad" sh ./install.sh; then exit 1; fi
           test "$(readlink "$DOCMONK_INSTALL_DIR/current")" = "versions/0.9.0"
+      # Fail-closed signature checks with a throwaway key (never a release
+      # key): a valid signature installs; tampered SHA256SUMS, a missing
+      # SHA256SUMS.minisig and a missing minisign tool are all refused.
+      - name: Signature verification fails closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = macOS ]; then brew install minisign; else sudo apt-get install -y -qq minisign; fi
+          k="$RUNNER_TEMP/sigkey" && mkdir -p "$k"
+          minisign -G -W -p "$k/test.pub" -s "$k/test.key"
+          export DOCMONK_MINISIGN_PUBKEY="$(sed -n 2p "$k/test.pub")"
+          for d in signed tampered unsigned; do rm -rf "$RUNNER_TEMP/$d"; cp -R "$DIST" "$RUNNER_TEMP/$d"; done
+          minisign -S -s "$k/test.key" -m "$RUNNER_TEMP/signed/SHA256SUMS"
+          cp "$RUNNER_TEMP/signed/SHA256SUMS.minisig" "$RUNNER_TEMP/tampered/"
+          echo "$(printf '0%.0s' $(seq 64))  extra.tar.gz" >> "$RUNNER_TEMP/tampered/SHA256SUMS"
+          refused() { # <download base> [env...]
+            local base="$1"; shift
+            if env DOCMONK_VERSION=0.9.0 DOCMONK_DOWNLOAD_BASE="$base" "$@" sh ./install.sh; then
+              echo "::error::install from $base was not refused"; exit 1
+            fi
+          }
+          refused "$RUNNER_TEMP/tampered"
+          refused "$RUNNER_TEMP/unsigned"
+          # No minisign on PATH: only the tools install.sh needs.
+          nobin="$RUNNER_TEMP/nobin" && mkdir -p "$nobin"
+          for t in sh uname mktemp curl cp awk sha256sum shasum cut rm mkdir mv tar sed ln cat gzip grep head readlink; do
+            p="$(command -v "$t" || true)"; [ -n "$p" ] && ln -sf "$p" "$nobin/$t"
+          done
+          refused "$RUNNER_TEMP/signed" PATH="$nobin"
+          DOCMONK_VERSION=0.9.0 DOCMONK_DOWNLOAD_BASE="$RUNNER_TEMP/signed" sh ./install.sh | tee "$RUNNER_TEMP/signed.log"
+          grep -q "Signature verified." "$RUNNER_TEMP/signed.log"
+          DOCMONK_INSECURE_SKIP_SIGNATURE=1 DOCMONK_VERSION=0.9.0 DOCMONK_DOWNLOAD_BASE="$RUNNER_TEMP/unsigned" sh ./install.sh
+          test "$(readlink "$DOCMONK_INSTALL_DIR/current")" = "versions/0.9.0"
       - name: Install 0.9.1, then roll back
         run: |
           DOCMONK_VERSION=0.9.1 sh ./install.sh
@@ -316,6 +353,49 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "doctor failed" }
           $info = Get-Content "$env:DOCMONK_HOME\install_info.json" -Raw | ConvertFrom-Json
           if ($info.install_method -ne "native") { throw "unexpected install_method: $($info.install_method)" }
+      # Fail-closed signature checks with a throwaway key (never a release
+      # key), as on Linux/macOS.
+      - name: Signature verification fails closed
+        run: |
+          $k = Join-Path $env:RUNNER_TEMP "sigkey"
+          New-Item -ItemType Directory -Force -Path $k | Out-Null
+          Invoke-WebRequest -UseBasicParsing -OutFile "$k\minisign.zip" `
+            -Uri "https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-win64.zip"
+          Expand-Archive "$k\minisign.zip" -DestinationPath "$k\minisign"
+          # The archive holds one minisign.exe per architecture.
+          $exe = (Get-ChildItem -Recurse -Filter minisign.exe "$k\minisign" |
+            Where-Object { $_.FullName -notmatch 'aarch64|arm64' } |
+            Sort-Object { $_.FullName -notmatch 'x86_64' } | Select-Object -First 1).FullName
+          if (-not $exe) { throw "no x86_64 minisign.exe in the archive" }
+          & $exe -G -W -p "$k\test.pub" -s "$k\test.key"
+          if ($LASTEXITCODE -ne 0) { throw "key generation failed" }
+          $env:DOCMONK_MINISIGN_PUBKEY = (Get-Content "$k\test.pub")[1]
+          foreach ($d in "signed", "tampered", "unsigned") {
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$env:RUNNER_TEMP\$d"
+            Copy-Item -Recurse $env:DIST "$env:RUNNER_TEMP\$d"
+          }
+          & $exe -S -s "$k\test.key" -m "$env:RUNNER_TEMP\signed\SHA256SUMS"
+          if ($LASTEXITCODE -ne 0) { throw "signing failed" }
+          Copy-Item "$env:RUNNER_TEMP\signed\SHA256SUMS.minisig" "$env:RUNNER_TEMP\tampered\"
+          Add-Content "$env:RUNNER_TEMP\tampered\SHA256SUMS" ("0" * 64 + "  extra.zip")
+          $env:DOCMONK_VERSION = "0.9.0"
+          function Refused([string]$Base) {
+            $env:DOCMONK_DOWNLOAD_BASE = $Base
+            $ok = $true
+            try { ./install.ps1 } catch { $ok = $false; Write-Host "refused as expected: $_" }
+            if ($ok) { throw "install from $Base was not refused" }
+          }
+          # minisign is not on PATH yet: a signed release is refused.
+          Refused "$env:RUNNER_TEMP\signed"
+          $env:PATH = "$(Split-Path $exe);$env:PATH"
+          Refused "$env:RUNNER_TEMP\tampered"
+          Refused "$env:RUNNER_TEMP\unsigned"
+          $env:DOCMONK_DOWNLOAD_BASE = "$env:RUNNER_TEMP\signed"
+          ./install.ps1
+          $env:DOCMONK_INSECURE_SKIP_SIGNATURE = "1"
+          $env:DOCMONK_DOWNLOAD_BASE = "$env:RUNNER_TEMP\unsigned"
+          ./install.ps1
+          if ((Get-Content "$env:DOCMONK_INSTALL_DIR\current" -Raw).Trim() -ne "0.9.0") { throw "not on 0.9.0" }
       # Windows cannot overwrite a running exe: re-installing while the
       # daemon runs from bin\docmonk.exe proves the rename-based swap.
       - name: Install 0.9.1 while the daemon holds the current exe, then roll back

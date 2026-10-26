@@ -294,6 +294,14 @@ section! {
         debounce_ms: i64 = 2000;
         max_file_size_mb: i64 = 100;
         follow_symlinks: bool = false;
+        // File-name patterns never indexed, added to the built-in secret
+        // list (.env, *.pem, id_rsa, .netrc, *.tfstate, ...); never replace it.
+        secret_patterns: Vec<String> = Vec::new();
+        // Replace credentials found in indexed text (private keys, cloud
+        // and VCS tokens, JWTs, password/secret/api-key literals,
+        // connection-string passwords, URL credentials) with
+        // [REDACTED:<kind>] before anything is stored or embedded.
+        redact_secrets: bool = true;
         network_poll_seconds: i64 = 30;
         reconciliation_interval_seconds: i64 = 900;
         code_extraction_workers: i64 = 1;
@@ -686,6 +694,16 @@ section! {
         // Largest JSON-RPC message accepted (bytes).
         max_request_bytes: i64 = 1_048_576, check = |v| {
             if (1024..=67_108_864).contains(v) { Ok(()) } else { Err("must be between 1024 and 67108864".into()) }
+        };
+        // Sources (ids or paths) AI agents never see: no MCP tool reads,
+        // returns or names them. The CLI and the Admin UI still search them.
+        hidden_sources: Vec<String> = Vec::new();
+        // Append one JSON line per tool call to <home>/logs/mcp.jsonl: time,
+        // tool, redacted arguments, result count, sources touched.
+        query_log: bool = false;
+        // mcp.jsonl is rotated to mcp.jsonl.1 (one generation) past this size.
+        query_log_max_bytes: i64 = 10_485_760, check = |v| {
+            if (4096..=1_073_741_824).contains(v) { Ok(()) } else { Err("must be between 4096 and 1073741824".into()) }
         };
     }
 }

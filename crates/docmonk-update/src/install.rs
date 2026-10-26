@@ -55,11 +55,9 @@ pub fn install_release(
     let name = asset_name(version, TARGET);
     let archive = release::download(&release::asset_url(&rel.tag_name, &name))?;
     let sums_bytes = release::download(&release::asset_url(&rel.tag_name, SUMS_ASSET))?;
-    if let Some(key) = public_key {
-        let sig = release::download(&release::asset_url(&rel.tag_name, SIG_ASSET))?;
-        verify::check_signature(key, &sums_bytes, &String::from_utf8_lossy(&sig))?;
-    }
-    verify::check_digest(&archive, &String::from_utf8_lossy(&sums_bytes), &name)?;
+    let signature =
+        public_key.map(|_| release::download(&release::asset_url(&rel.tag_name, SIG_ASSET)));
+    verify::check_release(public_key, &archive, &sums_bytes, signature, &name)?;
 
     let target = layout.version_dir(version);
     if !target.join(BINARY).is_file() {

@@ -1,0 +1,404 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gzarog/DocMonk/plans/plan.schema.json",
+  "title": "DocMonk execution plan",
+  "description": "A plan an agent (Claude Code) can execute work package by work package. Status fields (work_packages[].status, tasks[].done, acceptance[].met, decisions[].status, progress_log) are meant to be updated in place as work lands. Referential rules JSON Schema cannot express are listed in x-integrity-rules and checked by the plan's validate commands.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schema_version", "plan", "context", "policy", "commands", "objectives", "milestones", "work_packages", "decisions", "risks", "execution", "progress_log", "agent_prompt"],
+  "x-integrity-rules": [
+    "Every id is unique across the whole document.",
+    "milestones[].work_packages and work_packages[].milestone agree, and every work package belongs to exactly one milestone.",
+    "work_packages[].depends_on, decisions[].blocks, risks[].related and execution.order only reference existing work package, milestone or decision ids.",
+    "work_packages[].addresses only references context.findings ids.",
+    "verification.commands and gate/acceptance verify.ref of kind 'command' only reference keys of commands.",
+    "execution.order lists every work package exactly once and never places a package before one it depends on.",
+    "tasks[].id and acceptance[].id start with their work package id followed by '-'."
+  ],
+  "$defs": {
+    "nonEmptyString": {"type": "string", "minLength": 1},
+    "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "url": {"type": "string", "pattern": "^https://"},
+    "path": {
+      "description": "Repository-relative path; a trailing / means a directory, * a glob.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._*/-][A-Za-z0-9._*/ -]*$"
+    },
+    "workPackageId": {"type": "string", "pattern": "^[A-Z][0-9]{1,2}$"},
+    "milestoneId": {"type": "string", "pattern": "^(M[0-9]|PROCESS)$"},
+    "findingId": {"type": "string", "pattern": "^V[0-9]{2}$"},
+    "decisionId": {"type": "string", "pattern": "^D[0-9]{1,2}$"},
+    "commandKey": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "priority": {"enum": ["P0", "P1", "P2", "P3"]},
+    "executor": {
+      "description": "claude_code: the agent does it end to end. claude_code_then_human_review: the agent opens the PR and stops for a human. claude_code_with_cluster: needs live OpenSearch/Elasticsearch. human: the agent only prepares listed material.",
+      "enum": ["claude_code", "claude_code_then_human_review", "claude_code_with_cluster", "human"]
+    },
+    "wpStatus": {"enum": ["not_started", "in_progress", "in_review", "blocked", "done", "dropped"]},
+    "verify": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {"enum": ["command", "test", "report", "manual"]},
+        "ref": {"$ref": "#/$defs/nonEmptyString", "description": "A commands key (kind command), a test path or name (kind test), a report path (kind report)."}
+      },
+      "allOf": [
+        {"if": {"properties": {"kind": {"enum": ["command", "report"]}}}, "then": {"required": ["ref"]}}
+      ]
+    },
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "description"],
+      "properties": {
+        "kind": {"enum": ["cluster", "secret", "repo_admin", "human_approval", "external_account", "hardware"]},
+        "description": {"$ref": "#/$defs/nonEmptyString"}
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "details", "done"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Z][0-9]{1,2}-[0-9]{2}$"},
+        "title": {"$ref": "#/$defs/nonEmptyString"},
+        "details": {"$ref": "#/$defs/nonEmptyString"},
+        "executor": {"$ref": "#/$defs/executor", "description": "Overrides the work package's executor for this task."},
+        "done": {"type": "boolean"}
+      }
+    },
+    "acceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "criterion", "verify", "met"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Z][0-9]{1,2}-AC[0-9]$"},
+        "criterion": {"$ref": "#/$defs/nonEmptyString"},
+        "verify": {"$ref": "#/$defs/verify"},
+        "met": {"type": "boolean"}
+      }
+    },
+    "gateCriterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "criterion", "verify"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^G[0-9A-Z]+-[0-9]$"},
+        "criterion": {"$ref": "#/$defs/nonEmptyString"},
+        "verify": {"$ref": "#/$defs/verify"}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"},
+        "lines": {"type": "string", "pattern": "^[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$"},
+        "note": {"$ref": "#/$defs/nonEmptyString"}
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run", "purpose"],
+      "properties": {
+        "run": {"$ref": "#/$defs/nonEmptyString"},
+        "purpose": {"$ref": "#/$defs/nonEmptyString"},
+        "env": {"type": "object", "additionalProperties": {"type": "string"}},
+        "requires": {"type": "array", "items": {"$ref": "#/$defs/requirement"}},
+        "available_after": {"$ref": "#/$defs/workPackageId", "description": "The command only works once this work package has landed."}
+      }
+    },
+    "workPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "milestone", "priority", "executor", "status", "depends_on", "addresses", "branch", "purpose", "scope", "tasks", "verification", "acceptance", "deliverables", "rollback"],
+      "properties": {
+        "id": {"$ref": "#/$defs/workPackageId"},
+        "title": {"$ref": "#/$defs/nonEmptyString"},
+        "milestone": {"$ref": "#/$defs/milestoneId"},
+        "priority": {"$ref": "#/$defs/priority"},
+        "executor": {"$ref": "#/$defs/executor"},
+        "status": {"$ref": "#/$defs/wpStatus"},
+        "depends_on": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/workPackageId"}},
+        "requires": {"type": "array", "items": {"$ref": "#/$defs/requirement"}},
+        "addresses": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/findingId"}},
+        "branch": {"oneOf": [{"type": "string", "pattern": "^roadmap/[a-z0-9][a-z0-9-]*$"}, {"type": "null"}]},
+        "pr": {"oneOf": [{"type": "string", "pattern": "^https://github\\.com/"}, {"type": "null"}], "description": "Filled in when the PR is opened."},
+        "purpose": {"$ref": "#/$defs/nonEmptyString"},
+        "scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["modify", "create", "review"],
+          "properties": {
+            "modify": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/path"}},
+            "create": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/path"}},
+            "review": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/path"}}
+          }
+        },
+        "tasks": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/task"}},
+        "verification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["commands", "tests", "eval_report_required"],
+          "properties": {
+            "commands": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/commandKey"}},
+            "tests": {"type": "array", "items": {"$ref": "#/$defs/nonEmptyString"}},
+            "eval_report_required": {"type": "boolean", "description": "The PR must attach before/after held-out eval reports."}
+          }
+        },
+        "acceptance": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/acceptance"}},
+        "deliverables": {"type": "array", "items": {"$ref": "#/$defs/nonEmptyString"}},
+        "rollback": {"$ref": "#/$defs/nonEmptyString"},
+        "notes": {"type": "array", "items": {"$ref": "#/$defs/nonEmptyString"}}
+      },
+      "allOf": [
+        {"if": {"properties": {"executor": {"enum": ["claude_code_with_cluster"]}}}, "then": {"required": ["requires"], "properties": {"requires": {"contains": {"properties": {"kind": {"const": "cluster"}}}}}}}
+      ]
+    }
+  },
+  "properties": {
+    "$schema": {"type": "string"},
+    "schema_version": {"const": "2.0"},
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "created_on", "status", "sources", "repository"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "title": {"$ref": "#/$defs/nonEmptyString"},
+        "created_on": {"$ref": "#/$defs/date"},
+        "updated_on": {"$ref": "#/$defs/date"},
+        "status": {"enum": ["draft", "active", "done", "superseded"]},
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "title", "url"],
+            "properties": {
+              "kind": {"enum": ["analysis", "roadmap", "adr", "issue", "other"]},
+              "title": {"$ref": "#/$defs/nonEmptyString"},
+              "url": {"$ref": "#/$defs/url"}
+            }
+          }
+        },
+        "repository": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["url", "base_branch", "base_commit", "language", "toolchain"],
+          "properties": {
+            "url": {"$ref": "#/$defs/url"},
+            "base_branch": {"$ref": "#/$defs/nonEmptyString"},
+            "base_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+            "base_release": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+            "language": {"$ref": "#/$defs/nonEmptyString"},
+            "toolchain": {"$ref": "#/$defs/nonEmptyString"},
+            "msrv": {"$ref": "#/$defs/nonEmptyString"},
+            "storage_backends": {"type": "array", "items": {"$ref": "#/$defs/nonEmptyString"}}
+          }
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "baseline", "findings", "do_not_duplicate"],
+      "properties": {
+        "summary": {"$ref": "#/$defs/nonEmptyString"},
+        "baseline": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "metric", "value", "source"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^B[0-9]{2}$"},
+              "metric": {"$ref": "#/$defs/nonEmptyString"},
+              "value": {"type": ["number", "string", "boolean"]},
+              "unit": {"$ref": "#/$defs/nonEmptyString"},
+              "scope": {"$ref": "#/$defs/nonEmptyString"},
+              "source": {"$ref": "#/$defs/nonEmptyString"}
+            }
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "summary", "severity", "evidence"],
+            "properties": {
+              "id": {"$ref": "#/$defs/findingId"},
+              "summary": {"$ref": "#/$defs/nonEmptyString"},
+              "severity": {"enum": ["high", "medium", "low"]},
+              "evidence": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/evidence"}}
+            }
+          }
+        },
+        "do_not_duplicate": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["summary", "paths"],
+            "properties": {
+              "summary": {"$ref": "#/$defs/nonEmptyString"},
+              "paths": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/path"}}
+            }
+          }
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branching", "protected_paths", "required_checks", "principles", "non_goals"],
+      "properties": {
+        "branching": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["prefix", "merge_target", "one_pr_per", "rules"],
+          "properties": {
+            "prefix": {"type": "string", "pattern": "^[a-z]+/$"},
+            "merge_target": {"$ref": "#/$defs/nonEmptyString"},
+            "one_pr_per": {"enum": ["work_package", "task"]},
+            "rules": {"type": "array", "items": {"$ref": "#/$defs/nonEmptyString"}}
+          }
+        },
+        "protected_paths": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "rule", "reason"],
+            "properties": {
+              "path": {"$ref": "#/$defs/path"},
+              "rule": {"enum": ["human_approval_required", "never_lower", "read_only"]},
+              "reason": {"$ref": "#/$defs/nonEmptyString"}
+            }
+          }
+        },
+        "required_checks": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/commandKey"}},
+        "principles": {"type": "array", "items": {"$ref": "#/$defs/nonEmptyString"}},
+        "non_goals": {"type": "array", "items": {"$ref": "#/$defs/nonEmptyString"}}
+      }
+    },
+    "commands": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/commandKey"},
+      "additionalProperties": {"$ref": "#/$defs/command"}
+    },
+    "objectives": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "objective", "success_criteria"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^O[0-9]$"},
+          "objective": {"$ref": "#/$defs/nonEmptyString"},
+          "success_criteria": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/nonEmptyString"}}
+        }
+      }
+    },
+    "milestones": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "summary", "work_packages", "gate"],
+        "properties": {
+          "id": {"$ref": "#/$defs/milestoneId"},
+          "name": {"$ref": "#/$defs/nonEmptyString"},
+          "summary": {"$ref": "#/$defs/nonEmptyString"},
+          "work_packages": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/workPackageId"}},
+          "gate": {"type": "array", "items": {"$ref": "#/$defs/gateCriterion"}}
+        }
+      }
+    },
+    "work_packages": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/workPackage"}},
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "question", "options", "recommendation", "rationale", "owner", "status", "decision", "blocks"],
+        "properties": {
+          "id": {"$ref": "#/$defs/decisionId"},
+          "question": {"$ref": "#/$defs/nonEmptyString"},
+          "options": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/nonEmptyString"}},
+          "recommendation": {"$ref": "#/$defs/nonEmptyString"},
+          "rationale": {"$ref": "#/$defs/nonEmptyString"},
+          "owner": {"const": "human"},
+          "status": {"enum": ["proposed", "decided"]},
+          "decision": {"oneOf": [{"$ref": "#/$defs/nonEmptyString"}, {"type": "null"}]},
+          "blocks": {"type": "array", "items": {"type": "string", "pattern": "^([A-Z][0-9]{1,2}|M[0-9])$"}}
+        },
+        "allOf": [
+          {"if": {"properties": {"status": {"const": "decided"}}}, "then": {"properties": {"decision": {"type": "string"}}}}
+        ]
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "risk", "likelihood", "impact", "mitigation", "related"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^K[0-9]{2}$"},
+          "risk": {"$ref": "#/$defs/nonEmptyString"},
+          "likelihood": {"enum": ["high", "medium", "low"]},
+          "impact": {"enum": ["high", "medium", "low"]},
+          "mitigation": {"$ref": "#/$defs/nonEmptyString"},
+          "related": {"type": "array", "items": {"type": "string", "pattern": "^([A-Z][0-9]{1,2}|D[0-9]{1,2})$"}}
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_with", "order", "parallel_tracks", "stop_and_ask_when", "pr_report", "status_updates"],
+      "properties": {
+        "start_with": {"$ref": "#/$defs/workPackageId"},
+        "order": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/workPackageId"}},
+        "parallel_tracks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "work_packages", "why"],
+            "properties": {
+              "name": {"$ref": "#/$defs/nonEmptyString"},
+              "work_packages": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/workPackageId"}},
+              "why": {"$ref": "#/$defs/nonEmptyString"}
+            }
+          }
+        },
+        "stop_and_ask_when": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/nonEmptyString"}},
+        "pr_report": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/nonEmptyString"}},
+        "status_updates": {"$ref": "#/$defs/nonEmptyString"}
+      }
+    },
+    "progress_log": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["date", "work_package", "event", "summary"],
+        "properties": {
+          "date": {"$ref": "#/$defs/date"},
+          "work_package": {"$ref": "#/$defs/workPackageId"},
+          "event": {"enum": ["started", "pr_opened", "merged", "blocked", "unblocked", "dropped", "note"]},
+          "summary": {"$ref": "#/$defs/nonEmptyString"},
+          "pr": {"type": "string", "pattern": "^https://github\\.com/"}
+        }
+      }
+    },
+    "agent_prompt": {"$ref": "#/$defs/nonEmptyString"}
+  }
+}

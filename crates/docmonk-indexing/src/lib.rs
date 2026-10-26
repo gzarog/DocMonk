@@ -23,6 +23,7 @@ pub mod governor;
 pub mod ignore;
 pub mod lock;
 pub mod progress;
+pub mod redact;
 pub mod retry;
 pub mod runtime;
 pub mod scan;

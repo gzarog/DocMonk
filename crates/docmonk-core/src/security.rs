@@ -13,6 +13,22 @@ pub const SECRET_FILENAME_PATTERNS: &[&str] = &[
     "id_ed25519",
     "credentials*",
     "secrets*",
+    ".netrc",
+    "_netrc",
+    ".git-credentials",
+    ".npmrc",
+    ".pypirc",
+    "kubeconfig",
+    "*.kubeconfig",
+    "id_ecdsa",
+    "id_dsa",
+    "*.pfx",
+    "*.p12",
+    "*.jks",
+    "*.keystore",
+    "*.kdbx",
+    "*.tfstate",
+    "*.tfstate.backup",
 ];
 
 /// Shell-style glob matching (`*`, `?`, `[...]`): case-insensitive on Windows
@@ -22,6 +38,12 @@ pub fn is_secret_filename(name: &str) -> bool {
 }
 
 pub fn is_secret_filename_for(name: &str, windows: bool) -> bool {
+    is_secret_filename_with(name, windows, &[])
+}
+
+/// [`is_secret_filename_for`] with extra patterns (`indexing.secret_patterns`),
+/// which extend the built-in list and never replace it.
+pub fn is_secret_filename_with(name: &str, windows: bool, extra: &[String]) -> bool {
     let fold = |s: &str| {
         if windows {
             s.to_lowercase().replace('/', "\\")
@@ -29,13 +51,12 @@ pub fn is_secret_filename_for(name: &str, windows: bool) -> bool {
             s.to_owned()
         }
     };
-    let name = fold(name);
-    SECRET_FILENAME_PATTERNS.iter().any(|p| {
-        fnmatch(
-            &name.chars().collect::<Vec<_>>(),
-            &fold(p).chars().collect::<Vec<_>>(),
-        )
-    })
+    let name: Vec<char> = fold(name).chars().collect();
+    SECRET_FILENAME_PATTERNS
+        .iter()
+        .copied()
+        .chain(extra.iter().map(String::as_str))
+        .any(|p| fnmatch(&name, &fold(p).chars().collect::<Vec<_>>()))
 }
 
 /// Minimal `fnmatch.translate` matcher: `*`, `?`, `[seq]`, `[!seq]`.

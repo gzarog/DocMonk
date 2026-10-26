@@ -7,6 +7,7 @@ pub mod ids;
 pub mod lexnorm;
 pub mod models;
 pub mod paths;
+pub mod secrets;
 pub mod security;
 pub mod urls;
 pub mod version;

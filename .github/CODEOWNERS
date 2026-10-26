@@ -1,0 +1,15 @@
+# Files that judge the code: held-out labels, quality floors, the
+# remediation ledger and the repository audits. A change to any of them
+# needs a code-owner approval, so a model never approves its own labels,
+# floors or audit rules (plans/improvement-roadmap.json, Q1). Takes
+# effect once branch protection on main requires code-owner review.
+
+/fixtures/eval/                           @gzarog
+/fixtures/p0/eval-gates.json              @gzarog
+/fixtures/search_quality/gates.json       @gzarog
+/fixtures/search_quality/repo-eval-gates.json @gzarog
+/audit/remediation/ledger.json            @gzarog
+/audit/clean-slate-baseline.tsv           @gzarog
+/xtask/src/audit.rs                       @gzarog
+/deny.toml                                @gzarog
+/.github/CODEOWNERS                       @gzarog
