@@ -65,6 +65,16 @@ R4), which have not been run yet.
   reason and keeps its last index. Credentials come only from git's own
   helpers. Local mode only.
 
+### Code intelligence
+
+- Messaging topology (ADR 0044). RabbitMQ.Client, MassTransit,
+  Confluent.Kafka, kafkajs and Spring Kafka publish, consume, bind and
+  declare sites are graph edges to their topic, queue, exchange or message
+  type. `impact` on a message contract lists its publishers and consumers
+  across sources (RabbitMQ bindings followed), and `explore` and MCP
+  `docmonk_impact` carry the same sites. Graph derivation `graph-4`: the
+  first index after upgrading recomputes graphs, not content.
+
 ### Project
 
 - Code owners for held-out labels, quality floors, the remediation

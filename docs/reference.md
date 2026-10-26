@@ -190,6 +190,8 @@ docmonk link add <entity> <document> [--section ID]
 docmonk link remove <ID>
 ```
 
+**Messaging topology** (ADR 0044). Broker sites become graph edges to message endpoints: Kafka topics, RabbitMQ queues and exchanges, and MassTransit message types. Recognised: RabbitMQ.Client (`BasicPublish`, `BasicConsume`, `QueueBind`, `ExchangeDeclare`), MassTransit (`Publish<T>`, `Send<T>`, `Publish(new T(...))`, `IConsumer<T>`), Confluent.Kafka (`Produce`/`ProduceAsync`, `Subscribe`), kafkajs (`send({ topic })`, `subscribe({ topics })`) and Spring Kafka (`@KafkaListener(topics = ...)`, `KafkaTemplate.send`). An endpoint is read when it is a string literal or a constant defined in the same file; names from configuration or other files are not seen. `impact <topic | queue | exchange | MessageType>` lists the `publishers` and `consumers` across every source, following RabbitMQ queue bindings whose key matches a published routing key (`*` one word, `#` any), with each site in `messaging` (source, path, line, framework, endpoint, routing key). The text view prints `Publishers:` and `Consumers:`, `explore` adds `publishes`/`consumes` evidence, and MCP `docmonk_impact` returns the same fields. The edges are part of graph derivation `graph-4`: the first `docmonk index` after upgrading recomputes graphs (never content).
+
 ## Indexing speed
 
 | Setting | Default | Effect |

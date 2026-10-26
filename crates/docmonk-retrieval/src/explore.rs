@@ -520,7 +520,21 @@ pub fn impact(
     limit: usize,
 ) -> Result<Value, SearchError> {
     let matches = graph::find_symbol_matches(corpora, name)?;
-    if matches.is_empty() {
+    // A message contract (topic, queue, exchange or message type): its
+    // publishers and consumers across sources (ADR 0044).
+    let types: Vec<&str> = matches
+        .iter()
+        .filter(|m| {
+            matches!(
+                m.entity.kind.as_str(),
+                "class" | "struct" | "record" | "interface"
+            )
+        })
+        .map(|m| m.entity.name.as_str())
+        .collect();
+    let flow =
+        crate::messaging::message_flow(corpora, &crate::messaging::keys_for(name, &types), limit)?;
+    if matches.is_empty() && flow.is_empty() {
         return Ok(json!({"query": name, "found": false}));
     }
     let callers = graph::resolved_incoming(corpora, &matches, name, &CALL_TYPES, max_depth, limit)?;
@@ -559,8 +573,19 @@ pub fn impact(
         .iter()
         .map(|d| (d.path.as_str(), d.location.section.as_deref()))
         .collect();
-    let score = distinct_callers.len() + distinct_docs.len();
-    Ok(json!({
+    let distinct_sites: HashSet<(&str, &str)> = flow
+        .publishers
+        .iter()
+        .chain(&flow.consumers)
+        .map(|h| {
+            (
+                h.source_id.as_str(),
+                h.entity.as_deref().unwrap_or(h.path.as_str()),
+            )
+        })
+        .collect();
+    let score = distinct_callers.len() + distinct_docs.len() + distinct_sites.len();
+    let mut out = json!({
         "query": name,
         "found": true,
         "defined": defined,
@@ -571,7 +596,20 @@ pub fn impact(
         "confidence": {"code_references": code_conf, "document_links": doc_conf},
         "blast_radius": blast_radius(score),
         "blast_radius_score": score,
-    }))
+    });
+    if !flow.is_empty() {
+        let names = |hits: &[crate::messaging::MessageSiteHit]| -> Vec<String> {
+            hits.iter()
+                .filter_map(|h| h.entity.clone())
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect()
+        };
+        out["publishers"] = json!(names(&flow.publishers));
+        out["consumers"] = json!(names(&flow.consumers));
+        out["messaging"] = serde_json::to_value(&flow).unwrap_or(Value::Null);
+    }
+    Ok(out)
 }
 
 // ---- explore -----------------------------------------------------------------
@@ -1190,6 +1228,29 @@ pub fn explore_ranked(
             )?;
         }
     }
+    // Message flows (ADR 0044): a named topic, queue, exchange or message
+    // type brings its publishers and consumers from the searched sources
+    // (a URL path is never a message endpoint).
+    let flow = if !endpoint && (has(Identifier) || has(References)) {
+        let types: Vec<&str> = matches
+            .iter()
+            .filter(|m| matches!(m.entity.kind.as_str(), "class" | "struct" | "interface"))
+            .map(|m| m.entity.name.as_str())
+            .collect();
+        diag.time(
+            "graph.messaging",
+            |f: &crate::messaging::MessageFlow| f.publishers.len() + f.consumers.len(),
+            || {
+                crate::messaging::message_flow(
+                    &scoped,
+                    &crate::messaging::keys_for(&symbol_query, &types),
+                    DEFAULT_LIMIT,
+                )
+            },
+        )?
+    } else {
+        crate::messaging::MessageFlow::default()
+    };
     diag.graph_edges = callers.len() + callees.len() + tests.len() + references.len();
     diag.traversal_truncated |= [&callers, &callees, &tests, &references]
         .iter()
@@ -1305,7 +1366,29 @@ pub fn explore_ranked(
             evidence: ev.clone(),
         });
     }
-    if matches.is_empty() && !exact_found {
+    for (h, relationship) in flow
+        .publishers
+        .iter()
+        .map(|h| (h, "publishes"))
+        .chain(flow.consumers.iter().map(|h| (h, "consumes")))
+    {
+        items.push(EvidenceItem {
+            snippet: format!("{relationship} {}", h.endpoint),
+            evidence: Evidence {
+                source: format!("graph:messaging:{}", h.framework),
+                path: h.path.clone(),
+                location: EvidenceLocation {
+                    line_start: h.line,
+                    line_end: h.line,
+                    ..Default::default()
+                },
+                entity: h.entity.clone().unwrap_or_else(|| h.endpoint.clone()),
+                relationship: relationship.into(),
+                confidence: "heuristic".into(),
+            },
+        });
+    }
+    if matches.is_empty() && !exact_found && flow.is_empty() {
         // No symbol or exact anchor: the fused ranking is the evidence.
         items.extend(
             fused
@@ -1382,6 +1465,9 @@ pub fn explore_ranked(
     let a = &query_plan.anchors;
     if !a.url_paths.is_empty() || !a.file_paths.is_empty() {
         out["anchors"] = json!(a);
+    }
+    if !flow.is_empty() {
+        out["message_flows"] = serde_json::to_value(&flow).unwrap_or(Value::Null);
     }
     if !references.is_empty() {
         out["references"] = json!(paths

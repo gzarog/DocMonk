@@ -5,6 +5,7 @@ pub mod deadline;
 pub mod errors;
 pub mod ids;
 pub mod lexnorm;
+pub mod messaging;
 pub mod models;
 pub mod paths;
 pub mod secrets;

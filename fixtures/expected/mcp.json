@@ -2597,6 +2597,28 @@
          "title": "Callees",
          "type": "array"
         },
+        "publishers": {
+         "description": "Message contracts only: functions and types that publish to the endpoint (topic, queue, exchange or message type), across sources.",
+         "items": {
+          "type": "string"
+         },
+         "title": "Publishers",
+         "type": "array"
+        },
+        "consumers": {
+         "description": "Message contracts only: functions and types that consume from the endpoint, across sources (AMQP queues bound to the exchange included).",
+         "items": {
+          "type": "string"
+         },
+         "title": "Consumers",
+         "type": "array"
+        },
+        "messaging": {
+         "description": "Message contracts only: every publish, consume, bind and declare site with its source, path, line, framework, endpoint key and routing key.",
+         "additionalProperties": true,
+         "title": "Messaging",
+         "type": "object"
+        },
         "tests": {
          "items": {
           "type": "string"
@@ -6165,6 +6187,8 @@
       "code.rust.animals.Dog.bark",
       "com.example.animals.Dog.bark"
      ],
+     "publishers": [],
+     "consumers": [],
      "tests": [],
      "documentation": [],
      "confidence": {
@@ -6209,6 +6233,8 @@
      "defined": [],
      "callers": [],
      "callees": [],
+     "publishers": [],
+     "consumers": [],
      "tests": [],
      "documentation": [],
      "confidence": null,

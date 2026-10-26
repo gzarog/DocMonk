@@ -118,6 +118,9 @@ pub struct Extraction {
     pub literals: Vec<ExtractedLiteral>,
     /// Statement boundaries of every function and method with a body.
     pub bodies: Vec<ExtractedBody>,
+    /// Message broker sites (filled by [`crate::process::prepare_source`],
+    /// which has the language and the text).
+    pub messages: Vec<crate::messaging::MessageSite>,
 }
 
 /// String literal node kinds of every supported grammar.

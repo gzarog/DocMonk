@@ -9,6 +9,7 @@ mod daemon;
 mod eval;
 mod git_source;
 mod mcp;
+mod messaging;
 mod ops;
 mod queries;
 mod status;
