@@ -5,7 +5,7 @@
     "id": "docmonk-improvement-roadmap",
     "title": "DocMonk Improvement Roadmap: harden, ship 1.0, product, architecture",
     "created_on": "2026-10-25",
-    "updated_on": "2026-10-25",
+    "updated_on": "2026-10-26",
     "status": "active",
     "sources": [
       {
@@ -874,7 +874,7 @@
       "milestone": "M0",
       "priority": "P0",
       "executor": "claude_code",
-      "status": "in_review",
+      "status": "done",
       "depends_on": [],
       "addresses": [
         "V01"
@@ -961,7 +961,7 @@
       "milestone": "M0",
       "priority": "P0",
       "executor": "claude_code",
-      "status": "in_review",
+      "status": "done",
       "depends_on": [
         "H1"
       ],
@@ -1177,7 +1177,7 @@
       "milestone": "M0",
       "priority": "P0",
       "executor": "claude_code",
-      "status": "in_review",
+      "status": "done",
       "depends_on": [],
       "addresses": [
         "V04"
@@ -1284,7 +1284,7 @@
       "milestone": "M0",
       "priority": "P1",
       "executor": "claude_code",
-      "status": "in_review",
+      "status": "done",
       "depends_on": [],
       "addresses": [
         "V04",
@@ -1730,7 +1730,7 @@
       "milestone": "M1",
       "priority": "P2",
       "executor": "claude_code",
-      "status": "in_review",
+      "status": "done",
       "depends_on": [],
       "addresses": [
         "V07"
@@ -1810,7 +1810,7 @@
       "milestone": "M1",
       "priority": "P1",
       "executor": "claude_code",
-      "status": "in_review",
+      "status": "done",
       "depends_on": [
         "H1",
         "H2",
@@ -3105,7 +3105,7 @@
       "milestone": "M3",
       "priority": "P1",
       "executor": "claude_code",
-      "status": "in_review",
+      "status": "in_progress",
       "depends_on": [],
       "addresses": [
         "V20"
@@ -3426,7 +3426,7 @@
       "milestone": "PROCESS",
       "priority": "P0",
       "executor": "claude_code_then_human_review",
-      "status": "in_review",
+      "status": "blocked",
       "depends_on": [],
       "requires": [
         {
@@ -3648,7 +3648,7 @@
       "milestone": "PROCESS",
       "priority": "P1",
       "executor": "claude_code",
-      "status": "in_review",
+      "status": "done",
       "depends_on": [],
       "addresses": [
         "V13"
@@ -4207,6 +4207,88 @@
       "event": "pr_opened",
       "summary": "R6 is in the combined roadmap PR.",
       "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "H1",
+      "event": "merged",
+      "summary": "H1: merged to main with #145.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "H2",
+      "event": "merged",
+      "summary": "H2: merged to main with #145.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "H4",
+      "event": "merged",
+      "summary": "H4: merged to main with #145.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "H5",
+      "event": "merged",
+      "summary": "H5: merged to main with #145.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "Q4",
+      "event": "merged",
+      "summary": "Q4: merged to main with #145.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "R5",
+      "event": "merged",
+      "summary": "R5: merged to main with #145.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "R6",
+      "event": "merged",
+      "summary": "R6: merged to main with #145.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "Q1",
+      "event": "merged",
+      "summary": "Q1: merged to main with #145.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "H3",
+      "event": "merged",
+      "summary": "H3: merged to main with #145.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "A3",
+      "event": "merged",
+      "summary": "A3: merged to main with #145.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/145"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "Q1",
+      "event": "blocked",
+      "summary": "Waiting on Q1-03: a maintainer requires code-owner review on main."
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "A3",
+      "event": "note",
+      "summary": "Debug-info change merged (8.8 GB full debug test build); A3-02 test-binary consolidation remains to reach < 8 GB."
     }
   ],
   "agent_prompt": "Implement plans/improvement-roadmap.json in https://github.com/gzarog/DocMonk. It follows plans/plan.schema.json; read both fully, then inspect current main (the plan was written against b9f38da, v0.3.25) and adapt where the code has moved. Work in execution.order, starting with execution.start_with, one roadmap/ branch and one PR per work package, respecting depends_on. Do only tasks whose executor (task-level, else work-package-level) is not human; for claude_code_then_human_review, open the PR and stop for review; for claude_code_with_cluster, use the service containers from .github/workflows/rust.yml. Obey policy.protected_paths and execution.stop_and_ask_when. Every PR runs all keys in its verification.commands and must pass the clean-slate and branding audits; attach before/after held-out reports when eval_report_required is true. Never decide D1-D4 yourself. Report each PR as execution.pr_report says, and update status fields and progress_log in this file as execution.status_updates says, validating with commands.validate_plan."
