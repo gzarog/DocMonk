@@ -1,7 +1,7 @@
 //! Semantic search: rankings against the exact cosine ranking in
 //! fixtures/expected/semantic.json, and ANN crash/delete/rebuild behaviour.
 
-mod common;
+use crate::common;
 
 use std::path::Path;
 

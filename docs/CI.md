@@ -118,11 +118,11 @@ unique group, so a `main` run is never cancelled.
 ## Nightly
 
 `rust-nightly.yml` starts OpenSearch 2.15.0 and Elasticsearch 8.15.0 and
-runs the ignored release-mode `docmonk-status --test live_server`
+runs the ignored release-mode `docmonk-status --test it -- live_server::`
 benchmark unchanged. Its log and duration are uploaded as the
 `status-benchmark-log` artifact (14-day retention). It never publishes.
 
-The `retrieval-eval` job runs `docmonk-service --test repo_eval` in
+The `retrieval-eval` job runs `docmonk-service --test it -- repo_eval::` in
 release mode with `DOCMONK_REPO_EVAL=1` and the pinned models, so every
 arm (lexical, routed, hybrid, hybrid with reranking) is checked against
 `fixtures/search_quality/repo-eval-gates.json`. The report is uploaded as

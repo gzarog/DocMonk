@@ -13,11 +13,11 @@ set -euo pipefail
 platform_source() {
   case "$1" in
     crates/docmonk-ai/src/runtime.rs | crates/docmonk-cli/src/update_cmd.rs \
-      | crates/docmonk-cli/tests/status.rs | crates/docmonk-cli/tests/ui.rs \
-      | crates/docmonk-cli/tests/update.rs | crates/docmonk-core/src/paths.rs \
+      | crates/docmonk-cli/tests/it/status.rs | crates/docmonk-cli/tests/it/ui.rs \
+      | crates/docmonk-cli/tests/it/update.rs | crates/docmonk-core/src/paths.rs \
       | crates/docmonk-core/src/security.rs | crates/docmonk-indexing/src/ignore.rs \
       | crates/docmonk-indexing/src/lock.rs | crates/docmonk-indexing/src/scan.rs \
-      | crates/docmonk-indexing/tests/scenarios.rs | crates/docmonk-service/src/daemon.rs \
+      | crates/docmonk-indexing/tests/it/scenarios.rs | crates/docmonk-service/src/daemon.rs \
       | crates/docmonk-service/src/sources.rs | crates/docmonk-ui/src/lib.rs)
       return 0 ;;
   esac
@@ -45,11 +45,11 @@ classify() {
     # must run Windows/macOS PR tests, not only the Linux suite.
     case "$path" in
       crates/docmonk-service/src/query.rs | crates/docmonk-service/src/evidence.rs \
-        | crates/docmonk-service/tests/endpoints.rs \
-        | crates/docmonk-service/tests/exact_parity.rs \
+        | crates/docmonk-service/tests/it/endpoints.rs \
+        | crates/docmonk-service/tests/it/exact_parity.rs \
         | crates/docmonk-retrieval/src/exact.rs \
         | crates/docmonk-retrieval/src/explore.rs \
-        | crates/docmonk-retrieval/tests/endpoints.rs \
+        | crates/docmonk-retrieval/tests/it/endpoints.rs \
         | crates/docmonk-code/src/extract.rs \
         | crates/docmonk-code/src/framework.rs \
         | crates/docmonk-code/src/process.rs \
@@ -93,7 +93,7 @@ expect "crates/docmonk-cli/Cargo.toml" "installer=true docker=true cross_platfor
 expect ".github/workflows/rust.yml" "installer=true docker=true cross_platform=true"
 expect "crates/docmonk-core/src/paths.rs" "installer=false docker=false cross_platform=true"
 expect "crates/docmonk-service/src/daemon.rs" "installer=false docker=false cross_platform=true"
-expect "crates/docmonk-service/tests/endpoints.rs" "installer=false docker=false cross_platform=true"
+expect "crates/docmonk-service/tests/it/endpoints.rs" "installer=false docker=false cross_platform=true"
 expect "crates/docmonk-retrieval/src/exact.rs" "installer=false docker=false cross_platform=true"
 expect "crates/docmonk-retrieval/src/explore.rs" "installer=false docker=false cross_platform=true"
 expect "crates/docmonk-code/src/framework.rs" "installer=false docker=false cross_platform=true"

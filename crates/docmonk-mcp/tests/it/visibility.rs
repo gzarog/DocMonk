@@ -25,6 +25,7 @@ fn tool(name: &str, arguments: Value) -> Value {
 
 #[test]
 fn a_hidden_source_never_appears_in_any_mcp_tool_result() {
+    let _home = crate::home_lock();
     let d = tempfile::tempdir().unwrap();
     let home = Home::new(d.path().join("home"));
     home.ensure_layout().unwrap();
@@ -68,8 +69,6 @@ fn a_hidden_source_never_appears_in_any_mcp_tool_result() {
     let selected = docmonk_service::indexing::selected_sources(&home, None).unwrap();
     docmonk_service::indexing::index_sources(&home, &selected, "index", |_| {}).unwrap();
 
-    // The only test in this binary: the MCP server reads its home from the
-    // environment, like the real `docmonk mcp` process.
     std::env::set_var("DOCMONK_HOME", home.root());
 
     // Visible to agents before it is hidden (the test sees what it hides).

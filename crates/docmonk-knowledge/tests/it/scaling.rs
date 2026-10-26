@@ -9,7 +9,7 @@
 //! per-file or per-name query loop (an N+1 pattern) shows up here as a
 //! count that grows with the corpus.
 
-mod common;
+use crate::common;
 
 use std::path::PathBuf;
 

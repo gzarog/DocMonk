@@ -47,6 +47,7 @@ const REFUNDS: &str = "namespace Billing {
 
 #[test]
 fn an_agent_follows_an_answer_to_its_span_references_and_links() {
+    let _home = crate::home_lock();
     let d = tempfile::tempdir().unwrap();
     let home = Home::new(d.path().join("home"));
     home.ensure_layout().unwrap();
@@ -66,8 +67,6 @@ fn an_agent_follows_an_answer_to_its_span_references_and_links() {
         .add(root.to_str().unwrap(), vec![], vec![])
         .unwrap();
     index(&home);
-    // The only test in this binary: the MCP server reads its home from the
-    // environment, like the real `docmonk mcp` process.
     std::env::set_var("DOCMONK_HOME", home.root());
 
     // 1. The answer and its citations.

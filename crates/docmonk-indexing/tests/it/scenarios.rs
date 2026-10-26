@@ -1,7 +1,7 @@
 //! Coordinator behavior: publication, warm no-op, incomplete/offline
 //! safety, retries, panic isolation, source isolation, locks and scale.
 
-mod common;
+use crate::common;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;

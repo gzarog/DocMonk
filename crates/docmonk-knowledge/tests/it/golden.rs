@@ -1,7 +1,7 @@
 //! Cross-domain links over fixtures/linking against
 //! fixtures/expected/links.json, plus incremental and manual-link behaviour.
 
-mod common;
+use crate::common;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

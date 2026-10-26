@@ -6,10 +6,10 @@ the repository.
 
 | Suite | Corpus and labels | Gates |
 |---|---|---|
-| `docmonk-retrieval --test quality` | `fixtures/search_quality` (72 golden queries) | `fixtures/search_quality/gates.json` |
-| `docmonk-service --test repo_eval` | DocMonk's own repository | `fixtures/search_quality/repo-eval-gates.json` |
-| `docmonk-service --test p0_eval` | generated, 250 planted-fact queries | `fixtures/p0/eval-gates.json` |
-| `docmonk-service --test heldout_eval` | `fixtures/eval/corpus`, 100 held-out queries | `fixtures/eval/heldout-gates.json` (approved labels only) |
+| `docmonk-retrieval --test it -- quality::` | `fixtures/search_quality` (72 golden queries) | `fixtures/search_quality/gates.json` |
+| `docmonk-service --test it -- repo_eval::` | DocMonk's own repository | `fixtures/search_quality/repo-eval-gates.json` |
+| `docmonk-service --test it -- p0_eval::` | generated, 250 planted-fact queries | `fixtures/p0/eval-gates.json` |
+| `docmonk-service --test it -- heldout_eval::` | `fixtures/eval/corpus`, 100 held-out queries | `fixtures/eval/heldout-gates.json` (approved labels only) |
 
 ## The held-out evaluation
 
@@ -101,7 +101,7 @@ These hold for every query, approved or not:
 scripts/fetch_models.sh /tmp/models          # optional: pinned local models
 export DOCMONK_MODELS_DIR=/tmp/models DOCMONK_OCR_MODELS_DIR=/tmp/models/ocrs
 DOCMONK_EVAL_OUT=/tmp/heldout.json \
-  cargo test --release -p docmonk-service --test heldout_eval
+  cargo test --release -p docmonk-service --test it -- heldout_eval::
 ```
 
 `DOCMONK_EVAL_EMBEDDING_MODEL` evaluates another pinned embedding model

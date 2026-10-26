@@ -2,7 +2,7 @@
 //! fixtures/expected/watcher.json: pass counters and the files left in the
 //! index after each step.
 
-mod common;
+use crate::common;
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;

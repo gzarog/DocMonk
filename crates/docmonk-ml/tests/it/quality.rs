@@ -6,7 +6,7 @@
 //! `DOCMONK_QUALITY_OUT=<file>` also writes the measured numbers as a
 //! benchmark record.
 
-mod common;
+use crate::common;
 
 use std::collections::{BTreeMap, HashSet};
 

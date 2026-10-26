@@ -475,7 +475,7 @@ fn bench(base: &str, engine: Engine) -> serde_json::Value {
 }
 
 #[test]
-#[ignore = "benchmark: cargo test --release -p docmonk-status --test live_server -- --ignored"]
+#[ignore = "benchmark: cargo test --release -p docmonk-status --test it -- live_server:: --ignored"]
 fn bench_status_150_sources() {
     for (var, engine) in [
         ("DOCMONK_TEST_OPENSEARCH_URL", Engine::OpenSearch),

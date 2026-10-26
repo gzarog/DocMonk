@@ -65,7 +65,7 @@ jobs:
         run: |
           set -o pipefail
           start=$(date +%s)
-          cargo test --release -p docmonk-status --test live_server -- --ignored --nocapture 2>&1 \
+          cargo test --release -p docmonk-status --test it -- live_server:: --ignored --nocapture 2>&1 \
             | tee "$RUNNER_TEMP/benchmark.log"
           echo "duration_seconds=$(( $(date +%s) - start ))" | tee -a "$RUNNER_TEMP/benchmark.log"
       - uses: actions/upload-artifact@v4
@@ -87,7 +87,7 @@ jobs:
         with:
           dir: ${{ runner.temp }}
       - name: Repository retrieval eval (lexical, routed, hybrid, hybrid_rerank)
-        run: cargo test --release -p docmonk-service --test repo_eval -- --nocapture
+        run: cargo test --release -p docmonk-service --test it -- repo_eval:: --nocapture
         env:
           DOCMONK_REPO_EVAL: "1"
           DOCMONK_MODELS_DIR: ${{ runner.temp }}/models

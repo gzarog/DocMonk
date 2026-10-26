@@ -1,7 +1,7 @@
 //! Scans and step-by-step change counts against
 //! `fixtures/expected/indexing.json`.
 
-mod common;
+use crate::common;
 
 use docmonk_indexing::classify::classify;
 use docmonk_indexing::coordinator::{run_source, NoProgress, Options, Registry};
