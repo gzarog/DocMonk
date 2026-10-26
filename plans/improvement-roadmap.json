@@ -448,7 +448,7 @@
       {
         "summary": "Held-out eval harness with per-arm metrics, approved-only floors and a label-file SHA check.",
         "paths": [
-          "crates/docmonk-service/tests/heldout_eval.rs"
+          "crates/docmonk-service/tests/it/heldout_eval.rs"
         ]
       },
       {
@@ -480,7 +480,7 @@
       {
         "summary": "Live filtered ANN recall test for OpenSearch and Elasticsearch.",
         "paths": [
-          "crates/docmonk-backends/tests/ann_recall.rs"
+          "crates/docmonk-backends/tests/it/ann_recall.rs"
         ]
       },
       {
@@ -613,7 +613,7 @@
       "purpose": "Release gate of ADR 0032."
     },
     "eval_default": {
-      "run": "cargo test --release -p docmonk-service --test heldout_eval",
+      "run": "cargo test --release -p docmonk-service --test it -- heldout_eval::",
       "purpose": "Held-out eval with the default embedding model; attach the report.",
       "env": {
         "DOCMONK_MODELS_DIR": "<models dir>",
@@ -622,7 +622,7 @@
       }
     },
     "eval_e5": {
-      "run": "cargo test --release -p docmonk-service --test heldout_eval",
+      "run": "cargo test --release -p docmonk-service --test it -- heldout_eval::",
       "purpose": "Held-out eval with multilingual-e5-small; attach the report.",
       "env": {
         "DOCMONK_MODELS_DIR": "<models dir>",
@@ -1302,7 +1302,7 @@
           "crates/docmonk-service/src/ask.rs",
           "crates/docmonk-mcp/src/lib.rs",
           "crates/docmonk-mcp/src/exec.rs",
-          "crates/docmonk-mcp/tests/execution.rs",
+          "crates/docmonk-mcp/tests/it/execution.rs",
           "docs/reference.md"
         ],
         "create": [],
@@ -1341,7 +1341,7 @@
           "criterion": "No docmonk_* tool returns a record or source name from a hidden source.",
           "verify": {
             "kind": "test",
-            "ref": "crates/docmonk-mcp/tests/execution.rs"
+            "ref": "crates/docmonk-mcp/tests/it/execution.rs"
           },
           "met": true
         }
@@ -1461,7 +1461,7 @@
         "modify": [
           ".github/workflows/rust-nightly.yml",
           ".github/actions/fetch-models",
-          "crates/docmonk-service/tests/heldout_eval.rs",
+          "crates/docmonk-service/tests/it/heldout_eval.rs",
           "docs/CI.md",
           "docs/evaluation.md"
         ],
@@ -1472,7 +1472,7 @@
         {
           "id": "R2-01",
           "title": "Nightly job",
-          "details": "Fetch pinned models (including --multilingual), start OpenSearch 2.17 and Elasticsearch 8.15 service containers, run cargo test --release -p docmonk-service --test heldout_eval with DOCMONK_EVAL_OUT, once with the default model and once with DOCMONK_EVAL_EMBEDDING_MODEL=multilingual-e5-small; upload both reports as artifacts.",
+          "details": "Fetch pinned models (including --multilingual), start OpenSearch 2.17 and Elasticsearch 8.15 service containers, run cargo test --release -p docmonk-service --test it -- heldout_eval:: with DOCMONK_EVAL_OUT, once with the default model and once with DOCMONK_EVAL_EMBEDDING_MODEL=multilingual-e5-small; upload both reports as artifacts.",
           "done": false
         },
         {
@@ -1546,7 +1546,7 @@
         "modify": [
           "docs/adr/0041-bounded-embedding-and-server-hydration.md",
           "crates/docmonk-ml/src/bin/docmonk-embed-bench.rs",
-          "crates/docmonk-ml/tests/finalize.rs",
+          "crates/docmonk-ml/tests/it/finalize.rs",
           "benchmarks/heldout-eval/",
           "benchmarks/embedding-models/"
         ],
@@ -1640,8 +1640,8 @@
         "modify": [
           "docs/adr/0035-server-mvcc-publication.md",
           "audit/remediation/ledger.json",
-          "crates/docmonk-service/tests/server_live.rs",
-          "crates/docmonk-backends/tests/live.rs",
+          "crates/docmonk-service/tests/it/server_live.rs",
+          "crates/docmonk-backends/tests/it/live.rs",
           "crates/docmonk-service/src/bin/docmonk-graph-bench.rs",
           "benchmarks/relationships/",
           ".github/workflows/rust-nightly.yml"
@@ -1712,7 +1712,7 @@
           "criterion": "server_live covers cache loss and two alternating writers.",
           "verify": {
             "kind": "test",
-            "ref": "crates/docmonk-service/tests/server_live.rs"
+            "ref": "crates/docmonk-service/tests/it/server_live.rs"
           },
           "met": false
         }
@@ -2646,8 +2646,8 @@
           "crates/docmonk-mcp/src/mcp_tools.json",
           "crates/docmonk-mcp/src/lib.rs",
           "crates/docmonk-mcp/src/exec.rs",
-          "crates/docmonk-mcp/tests/protocol.rs",
-          "crates/docmonk-mcp/tests/execution.rs",
+          "crates/docmonk-mcp/tests/it/protocol.rs",
+          "crates/docmonk-mcp/tests/it/execution.rs",
           "crates/docmonk-service/src/query.rs",
           "crates/docmonk-cli/src/query_cmd.rs",
           "docs/reference.md"
@@ -2694,7 +2694,7 @@
           "criterion": "An agent completes answer, citation, span and linked code with MCP alone.",
           "verify": {
             "kind": "test",
-            "ref": "crates/docmonk-mcp/tests/execution.rs"
+            "ref": "crates/docmonk-mcp/tests/it/execution.rs"
           },
           "met": true
         },
@@ -2703,7 +2703,7 @@
           "criterion": "The MCP session golden is re-blessed with the new tools.",
           "verify": {
             "kind": "test",
-            "ref": "crates/docmonk-mcp/tests/protocol.rs"
+            "ref": "crates/docmonk-mcp/tests/it/protocol.rs"
           },
           "met": true
         }
@@ -2715,7 +2715,7 @@
       ],
       "rollback": "Remove the new tools from mcp_tools.json.",
       "notes": [
-        "The agent-flow test lives in crates/docmonk-mcp/tests/agent_flow.rs (rather than execution.rs) and the HTTP transport test in crates/docmonk-ui/tests/mcp_http.rs; the stdio session golden is fixtures/expected/mcp.json (crates/docmonk-cli/tests/mcp.rs).",
+        "The agent-flow test lives in crates/docmonk-mcp/tests/it/agent_flow.rs (rather than execution.rs) and the HTTP transport test in crates/docmonk-ui/tests/it/mcp_http.rs; the stdio session golden is fixtures/expected/mcp.json (crates/docmonk-cli/tests/it/mcp.rs).",
         "The HTTP transport lives in docmonk-ui (docmonk_ui::mcp_http) to reuse the Admin UI's host, origin and proxy-authentication guards; remote tool calls need the admin role.",
         "Found and fixed on the way: docmonk_evidence results were always flagged isError because its output schema did not declare ok/schema_version/error."
       ]
@@ -2813,7 +2813,7 @@
       "milestone": "M2",
       "priority": "P2",
       "executor": "claude_code",
-      "status": "in_review",
+      "status": "done",
       "depends_on": [],
       "addresses": [
         "V05"
@@ -2873,7 +2873,7 @@
       "rollback": "Remove the eval subcommands.",
       "notes": [
         "Also eval list / eval remove and --unanswerable queries (false support). --model/--compare index the registered sources again per model in <home>/eval/runs/<slug>/ so the real index is untouched.",
-        "The CLI lives in crates/docmonk-cli/src/eval_cmd.rs and the logic in docmonk_service::personal_eval; tests in crates/docmonk-cli/tests/eval.rs."
+        "The CLI lives in crates/docmonk-cli/src/eval_cmd.rs and the logic in docmonk_service::personal_eval; tests in crates/docmonk-cli/tests/it/eval.rs."
       ]
     },
     {
@@ -3540,7 +3540,7 @@
         "modify": [
           "fixtures/eval/queries.json",
           "fixtures/eval/corpus/",
-          "crates/docmonk-service/tests/heldout_eval.rs",
+          "crates/docmonk-service/tests/it/heldout_eval.rs",
           "docs/evaluation.md"
         ],
         "create": [],
@@ -3589,7 +3589,7 @@
           "criterion": "Floors apply only to sealed approved queries and tuning uses the dev split.",
           "verify": {
             "kind": "test",
-            "ref": "crates/docmonk-service/tests/heldout_eval.rs"
+            "ref": "crates/docmonk-service/tests/it/heldout_eval.rs"
           },
           "met": false
         }
@@ -4360,6 +4360,20 @@
       "event": "merged",
       "summary": "Q5: merged to main with #146.",
       "pr": "https://github.com/gzarog/DocMonk/pull/146"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "P10",
+      "event": "merged",
+      "summary": "P10: merged to main with #147.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/147"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "P5",
+      "event": "note",
+      "summary": "P5-03 (status ETA) merged to main with #147; P5-01/02 stay open (need GPU hardware).",
+      "pr": "https://github.com/gzarog/DocMonk/pull/147"
     }
   ],
   "agent_prompt": "Implement plans/improvement-roadmap.json in https://github.com/gzarog/DocMonk. It follows plans/plan.schema.json; read both fully, then inspect current main (the plan was written against b9f38da, v0.3.25) and adapt where the code has moved. Work in execution.order, starting with execution.start_with, one roadmap/ branch and one PR per work package, respecting depends_on. Do only tasks whose executor (task-level, else work-package-level) is not human; for claude_code_then_human_review, open the PR and stop for review; for claude_code_with_cluster, use the service containers from .github/workflows/rust.yml. Obey policy.protected_paths and execution.stop_and_ask_when. Every PR runs all keys in its verification.commands and must pass the clean-slate and branding audits; attach before/after held-out reports when eval_report_required is true. Never decide D1-D4 yourself. Report each PR as execution.pr_report says, and update status fields and progress_log in this file as execution.status_updates says, validating with commands.validate_plan."
