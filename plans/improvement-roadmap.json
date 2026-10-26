@@ -2469,13 +2469,13 @@
       "milestone": "M2",
       "priority": "P2",
       "executor": "claude_code",
-      "status": "in_review",
+      "status": "done",
       "depends_on": [],
       "addresses": [
         "V19"
       ],
       "branch": "roadmap/p6-git-sources",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/149",
       "purpose": "Index repositories by URL and branch so multi-repo codebases stay current without manual checkouts.",
       "scope": {
         "modify": [
@@ -2547,13 +2547,13 @@
       "milestone": "M2",
       "priority": "P2",
       "executor": "claude_code",
-      "status": "in_review",
+      "status": "done",
       "depends_on": [],
       "addresses": [
         "V16"
       ],
       "branch": "roadmap/p7-messaging-topology",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/149",
       "purpose": "Make event-driven services visible to impact analysis the way HTTP routes already are.",
       "scope": {
         "modify": [
@@ -4412,6 +4412,20 @@
       "work_package": "P7",
       "event": "started",
       "summary": "P7 implemented on ccr-23ab38cd-ni2rvm (messaging topology)."
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "P6",
+      "event": "merged",
+      "summary": "P6: merged to main with #149.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/149"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "P7",
+      "event": "merged",
+      "summary": "P7: merged to main with #149.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/149"
     }
   ],
   "agent_prompt": "Implement plans/improvement-roadmap.json in https://github.com/gzarog/DocMonk. It follows plans/plan.schema.json; read both fully, then inspect current main (the plan was written against b9f38da, v0.3.25) and adapt where the code has moved. Work in execution.order, starting with execution.start_with, one roadmap/ branch and one PR per work package, respecting depends_on. Do only tasks whose executor (task-level, else work-package-level) is not human; for claude_code_then_human_review, open the PR and stop for review; for claude_code_with_cluster, use the service containers from .github/workflows/rust.yml. Obey policy.protected_paths and execution.stop_and_ask_when. Every PR runs all keys in its verification.commands and must pass the clean-slate and branding audits; attach before/after held-out reports when eval_report_required is true. Never decide D1-D4 yourself. Report each PR as execution.pr_report says, and update status fields and progress_log in this file as execution.status_updates says, validating with commands.validate_plan."
