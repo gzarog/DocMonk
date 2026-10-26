@@ -24,6 +24,7 @@ pub mod graph;
 pub mod grounding;
 pub mod hybrid;
 pub mod lexical;
+pub mod messaging;
 pub mod pipeline;
 pub mod pool;
 pub mod route;

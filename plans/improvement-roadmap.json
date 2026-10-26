@@ -2469,7 +2469,7 @@
       "milestone": "M2",
       "priority": "P2",
       "executor": "claude_code",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [],
       "addresses": [
         "V19"
@@ -2497,13 +2497,13 @@
           "id": "P6-01",
           "title": "Design ADR",
           "details": "Choose system git versus a Rust git library under ADR 0003; credentials come only from git's own helpers and are never stored by DocMonk.",
-          "done": false
+          "done": true
         },
         {
           "id": "P6-02",
           "title": "Source kind git",
           "details": "url, branch, optional subpath; shallow clone/fetch under <home>/sources/<id>; poll for new commits; record the indexed commit in source state and status.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -2526,14 +2526,20 @@
             "kind": "test",
             "ref": "bare-repository fixture tests"
           },
-          "met": false
+          "met": true
         }
       ],
       "deliverables": [
         "design ADR",
         "git source kind"
       ],
-      "rollback": "Revert; folder sources are unaffected."
+      "rollback": "Revert; folder sources are unaffected.",
+      "notes": [
+        "System git, not a Rust git library (ADR 0043): credentials come only from git's own helpers; URLs with a password are refused.",
+        "Checkouts live under <home>/sources/git/<key>/checkout with remote.json (url, branch, subpath, commit, indexed_commit, last_error); every full pass fetches first and the daemon polls with git ls-remote every indexing.git_poll_seconds (300).",
+        "Git sources are local-mode only; server mode refuses a URL.",
+        "Tests: crates/docmonk-cli/tests/it/git_source.rs (local bare repository: add, index, new commit, branch deleted, remove) and crates/docmonk-indexing/src/watcher/git.rs."
+      ]
     },
     {
       "id": "P7",
@@ -2541,7 +2547,7 @@
       "milestone": "M2",
       "priority": "P2",
       "executor": "claude_code",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [],
       "addresses": [
         "V16"
@@ -2569,19 +2575,19 @@
           "id": "P7-01",
           "title": "Message endpoint nodes",
           "details": "Model broker endpoints (exchange or topic plus routing key or queue) like route nodes, with deterministic ids.",
-          "done": false
+          "done": true
         },
         {
           "id": "P7-02",
           "title": "Framework rules",
           "details": "RabbitMQ.Client (BasicPublish, BasicConsume, ExchangeDeclare, QueueBind), MassTransit (Publish, Send, IConsumer), Confluent.Kafka and kafkajs producers/consumers, Spring @KafkaListener; resolve literal and constant names.",
-          "done": false
+          "done": true
         },
         {
           "id": "P7-03",
           "title": "Cross-source bindings",
           "details": "Bind publishers and consumers across sources like HTTP routes; impact, explore and MCP impact traverse them.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -2605,7 +2611,7 @@
             "kind": "test",
             "ref": "messaging fixture tests"
           },
-          "met": false
+          "met": true
         },
         {
           "id": "P7-AC2",
@@ -2614,7 +2620,7 @@
             "kind": "test",
             "ref": "determinism tests"
           },
-          "met": false
+          "met": true
         }
       ],
       "deliverables": [
@@ -2623,7 +2629,12 @@
         "fixture",
         "ADR"
       ],
-      "rollback": "Disable the messaging rules; graphs rebuild without them."
+      "rollback": "Disable the messaging rules; graphs rebuild without them.",
+      "notes": [
+        "Message endpoints are message:<key> reference targets (kafka/<topic>, amqp/queue/<q>, amqp/exchange/<x>, type/<T>), graph derivation graph-4 (ADR 0044).",
+        "Bindings are resolved at query time across sources (docmonk-retrieval::messaging), following AMQP queue bindings one hop with topic routing-key matching.",
+        "Tests: crates/docmonk-code/src/messaging.rs (rules, determinism), crates/docmonk-cli/tests/it/messaging.rs over fixtures/messaging (impact across four sources; identical across fresh indexes)."
+      ]
     },
     {
       "id": "P8",
@@ -3118,7 +3129,7 @@
       "milestone": "M3",
       "priority": "P1",
       "executor": "claude_code",
-      "status": "in_review",
+      "status": "done",
       "depends_on": [],
       "addresses": [
         "V20"
@@ -4382,6 +4393,25 @@
       "work_package": "A3",
       "event": "started",
       "summary": "A3-02 test-binary consolidation implemented on ccr-23ab38cd-ni2rvm: full debug test build 4,924 MiB in 193 s (was 8,995 MiB, 229 s)."
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "A3",
+      "event": "merged",
+      "summary": "A3: merged to main with #148.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/148"
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "P6",
+      "event": "started",
+      "summary": "P6 implemented on ccr-23ab38cd-ni2rvm (git remote sources)."
+    },
+    {
+      "date": "2026-10-26",
+      "work_package": "P7",
+      "event": "started",
+      "summary": "P7 implemented on ccr-23ab38cd-ni2rvm (messaging topology)."
     }
   ],
   "agent_prompt": "Implement plans/improvement-roadmap.json in https://github.com/gzarog/DocMonk. It follows plans/plan.schema.json; read both fully, then inspect current main (the plan was written against b9f38da, v0.3.25) and adapt where the code has moved. Work in execution.order, starting with execution.start_with, one roadmap/ branch and one PR per work package, respecting depends_on. Do only tasks whose executor (task-level, else work-package-level) is not human; for claude_code_then_human_review, open the PR and stop for review; for claude_code_with_cluster, use the service containers from .github/workflows/rust.yml. Obey policy.protected_paths and execution.stop_and_ask_when. Every PR runs all keys in its verification.commands and must pass the clean-slate and branding audits; attach before/after held-out reports when eval_report_required is true. Never decide D1-D4 yourself. Report each PR as execution.pr_report says, and update status fields and progress_log in this file as execution.status_updates says, validating with commands.validate_plan."

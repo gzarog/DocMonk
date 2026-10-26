@@ -8,6 +8,7 @@ pub mod framework;
 pub mod graph;
 pub mod graph_stage;
 pub mod lang;
+pub mod messaging;
 pub mod passages;
 pub mod process;
 pub mod resolve;

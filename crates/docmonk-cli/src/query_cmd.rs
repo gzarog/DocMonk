@@ -190,6 +190,10 @@ pub fn impact(a: &GraphArgs) -> Result<(), DocMonkError> {
     }
     println!("Callers: {}", list("callers"));
     println!("Callees: {}", list("callees"));
+    if payload.get("messaging").is_some() {
+        println!("Publishers: {}", list("publishers"));
+        println!("Consumers: {}", list("consumers"));
+    }
     println!("Tests: {}", list("tests"));
     let docs: Vec<String> = payload["documentation"]
         .as_array()

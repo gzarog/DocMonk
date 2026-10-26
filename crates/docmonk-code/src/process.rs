@@ -37,8 +37,9 @@ pub const CODE_DERIVATION_VERSION: &str = "rust-code-3";
 /// resolution and linking). Independent of the base index identity: a
 /// change recomputes graphs only, never reindexes content. (3: URL string
 /// literals and statically composed framework routes are recorded as
-/// `url_literal:` / `route:` references, the exact-occurrence projection.)
-pub const GRAPH_DERIVATION_VERSION: &str = "graph-3";
+/// `url_literal:` / `route:` references, the exact-occurrence projection.
+/// 4: message broker sites as `message:` references, ADR 0044.)
+pub const GRAPH_DERIVATION_VERSION: &str = "graph-4";
 
 /// The full graph identity recorded with every graph generation (it
 /// includes the code derivation, whose entity ids the graph points at, and
@@ -61,7 +62,7 @@ pub enum PreparedCode {
     Unsupported,
     Parsed {
         language: &'static str,
-        extraction: Extraction,
+        extraction: Box<Extraction>,
     },
 }
 
@@ -82,10 +83,15 @@ pub fn prepare_source(source: &[u8], rel_path: &str) -> Result<PreparedCode, Par
         return Err(ParseFailure { language });
     }
     let (name, qualified) = default_namespace_for_path(rel_path);
-    let extraction = extract_tree(source, &tree, query, &name, &qualified);
+    let mut extraction = extract_tree(source, &tree, query, &name, &qualified);
+    extraction.messages = crate::messaging::detect(
+        language,
+        &String::from_utf8_lossy(source),
+        &extraction.entities,
+    );
     Ok(PreparedCode::Parsed {
         language,
-        extraction,
+        extraction: Box::new(extraction),
     })
 }
 
@@ -349,6 +355,37 @@ pub fn build_relationships(
                 confidence: Confidence::Heuristic.as_str().into(),
                 source_location: location(route.line),
                 evidence: Some(format!("{} {}", route.method, route.path)),
+                ..RelationshipRow::default()
+            },
+        );
+    }
+    // Message endpoints (ADR 0044): `message:<key>` references, read across
+    // sources at query time like routes.
+    for m in &extraction.messages {
+        let source = m
+            .owner_local_id
+            .map_or(namespace.as_str(), |o| ids[o].as_str());
+        let target = format!("{}{}", docmonk_core::messaging::MESSAGE_PREFIX, m.key);
+        let resolver = docmonk_core::messaging::resolver(m.framework, m.role);
+        push(
+            &mut out,
+            RelationshipType::References,
+            source,
+            &format!("{resolver}#{target}"),
+            RelationshipRow {
+                file_id: file_id.to_owned(),
+                relationship_type: RelationshipType::References.as_str().into(),
+                source_entity_id: source.to_owned(),
+                target_symbol: Some(target),
+                resolver,
+                confidence: Confidence::Heuristic.as_str().into(),
+                source_location: location(m.line),
+                evidence: Some(docmonk_core::messaging::evidence(
+                    m.role,
+                    &m.key,
+                    m.routing_key.as_deref(),
+                    m.bound.as_deref(),
+                )),
                 ..RelationshipRow::default()
             },
         );

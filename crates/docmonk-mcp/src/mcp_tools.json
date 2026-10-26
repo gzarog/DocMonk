@@ -2528,6 +2528,28 @@
      "title": "Callees",
      "type": "array"
     },
+    "publishers": {
+     "description": "Message contracts only: functions and types that publish to the endpoint (topic, queue, exchange or message type), across sources.",
+     "items": {
+      "type": "string"
+     },
+     "title": "Publishers",
+     "type": "array"
+    },
+    "consumers": {
+     "description": "Message contracts only: functions and types that consume from the endpoint, across sources (AMQP queues bound to the exchange included).",
+     "items": {
+      "type": "string"
+     },
+     "title": "Consumers",
+     "type": "array"
+    },
+    "messaging": {
+     "description": "Message contracts only: every publish, consume, bind and declare site with its source, path, line, framework, endpoint key and routing key.",
+     "additionalProperties": true,
+     "title": "Messaging",
+     "type": "object"
+    },
     "tests": {
      "items": {
       "type": "string"
@@ -4407,6 +4429,10 @@
        "items": {
         "type": "string"
        }
+      },
+      "git": {
+       "description": "Git sources only (absent for folder sources): the remote, the fetched commit and the commit the published index was built from.",
+       "$ref": "#/$defs/GitSourceStatus"
       }
      },
      "required": [
@@ -4423,6 +4449,56 @@
       "last_error_at",
       "last_error",
       "warnings"
+     ]
+    },
+    "GitSourceStatus": {
+     "type": "object",
+     "properties": {
+      "url": {
+       "type": "string"
+      },
+      "branch": {
+       "type": "string"
+      },
+      "subpath": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "commit": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "indexed_commit": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "fetched_at": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "last_error": {
+       "type": [
+        "string",
+        "null"
+       ]
+      }
+     },
+     "required": [
+      "url",
+      "branch",
+      "subpath",
+      "commit",
+      "indexed_commit",
+      "fetched_at",
+      "last_error"
      ]
     },
     "PublishedCounts": {

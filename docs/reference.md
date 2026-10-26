@@ -190,6 +190,8 @@ docmonk link add <entity> <document> [--section ID]
 docmonk link remove <ID>
 ```
 
+**Messaging topology** (ADR 0044). Broker sites become graph edges to message endpoints: Kafka topics, RabbitMQ queues and exchanges, and MassTransit message types. Recognised: RabbitMQ.Client (`BasicPublish`, `BasicConsume`, `QueueBind`, `ExchangeDeclare`), MassTransit (`Publish<T>`, `Send<T>`, `Publish(new T(...))`, `IConsumer<T>`), Confluent.Kafka (`Produce`/`ProduceAsync`, `Subscribe`), kafkajs (`send({ topic })`, `subscribe({ topics })`) and Spring Kafka (`@KafkaListener(topics = ...)`, `KafkaTemplate.send`). An endpoint is read when it is a string literal or a constant defined in the same file; names from configuration or other files are not seen. `impact <topic | queue | exchange | MessageType>` lists the `publishers` and `consumers` across every source, following RabbitMQ queue bindings whose key matches a published routing key (`*` one word, `#` any), with each site in `messaging` (source, path, line, framework, endpoint, routing key). The text view prints `Publishers:` and `Consumers:`, `explore` adds `publishes`/`consumes` evidence, and MCP `docmonk_impact` returns the same fields. The edges are part of graph derivation `graph-4`: the first `docmonk index` after upgrading recomputes graphs (never content).
+
 ## Indexing speed
 
 | Setting | Default | Effect |
@@ -232,6 +234,27 @@ The run summary adds the same phase totals over all sources. While a graph is bu
 **Troubleshooting a long `building` or `publishing` graph.** Look at the phase first. `deriving` scales with the changed code files (each is read, hashed and parsed; `indexing.graph_fact_cache` removes the parse). `resolving` scales with the files that reference a changed symbol: renaming a method called by bare name from thousands of files re-resolves all of them (in bounded batches, so it stays a few seconds). `linking` after a document edit matches that document against every entity. On a server, `writing` and `closing` grow with the changed files only: unchanged records are never rewritten. A pass whose heartbeat stays fresh is working, whatever the phase; `stalled` means it stopped heartbeating.
 
 `docmonk-graph-bench` (in `docmonk-service`) reproduces these measurements on a generated C# and Markdown corpus of any size, with no proprietary source: see `benchmarks/relationships/README.md`.
+
+## Git sources
+
+A repository can be registered by URL instead of a local folder (ADR 0043):
+
+```bash
+docmonk source add https://github.com/org/service.git            # default branch
+docmonk source add git@github.com:org/docs.git --branch release --subpath handbook
+```
+
+- DocMonk makes a shallow clone of one branch under `<home>/sources/git/<key>/checkout` and indexes it like a folder (`--subpath` indexes one directory of the repository). Adding the same URL, branch and subpath again returns the same source. The Admin UI's *Add source* form takes the same fields.
+- Before every full pass (`docmonk index`, the daemon's startup and reconciliation passes) the checkout is fetched and reset to the branch head. The daemon also asks each remote for its branch head every `indexing.git_poll_seconds` (default 300, `git ls-remote`) and queues a full pass when it moved.
+- `source info`, `docmonk status --json` and MCP `docmonk_status` show a `git` object per git source: `url`, `branch`, `subpath`, `commit` (fetched), `indexed_commit` and `last_error`; `docmonk status` prints `git <url> <branch>: indexed <commit>` under the source, and `source list` shows the type `git`.
+- A failed fetch (unreachable remote, refused credentials, deleted branch) keeps the checkout and its published index. The source is marked **OFFLINE** with the reason, for example `git: branch 'release' no longer exists on <url>`, until a later fetch succeeds.
+- Credentials come only from git itself (credential helpers and managers, `.netrc`, SSH agents and keys). DocMonk never stores credentials or prompts for them, and refuses URLs that contain a password or token. Git sources need `git` on the `PATH`.
+- `source remove` deletes the checkout along with the indexed data.
+- Git sources are local-mode only: in server mode, check the repository out on each indexing host and add the directory.
+
+| Setting | Default | Effect |
+|---|---|---|
+| `indexing.git_poll_seconds` | `300` | How often the daemon asks each git source's remote for new commits. |
 
 ## Secrets
 
@@ -385,7 +408,7 @@ Capability matrix (server mode):
 
 | Command / tool | Server mode |
 |---|---|
-| `source add/list/info/enable/disable/remove` | ✅ server catalog |
+| `source add/list/info/enable/disable/remove` | ✅ server catalog (directories; git URLs are local-mode only) |
 | `index`, `rebuild`, `daemon`, `watch`, Admin UI indexing | ✅ |
 | `status`, `doctor`, Admin UI status | ✅ counts, retries and errors from the published builds; cluster health |
 | `search` (lexical, semantic, hybrid), `explore`, `ask`, `docs` | ✅ |

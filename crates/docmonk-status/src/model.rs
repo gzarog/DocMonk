@@ -578,6 +578,38 @@ pub struct SourceStatus {
     pub last_error_at: Option<String>,
     pub last_error: Option<String>,
     pub warnings: Vec<String>,
+    /// Git sources only (ADR 0043; absent for folder sources).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git: Option<GitSourceStatus>,
+}
+
+/// A git source's remote and commits.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GitSourceStatus {
+    pub url: String,
+    pub branch: String,
+    pub subpath: Option<String>,
+    /// The commit the last successful fetch checked out.
+    pub commit: Option<String>,
+    /// The commit of the last pass that indexed the checkout.
+    pub indexed_commit: Option<String>,
+    pub fetched_at: Option<String>,
+    /// Why the last fetch failed.
+    pub last_error: Option<String>,
+}
+
+impl From<docmonk_indexing::git::GitRemote> for GitSourceStatus {
+    fn from(g: docmonk_indexing::git::GitRemote) -> Self {
+        Self {
+            url: g.url,
+            branch: g.branch,
+            subpath: g.subpath,
+            commit: g.commit,
+            indexed_commit: g.indexed_commit,
+            fetched_at: g.fetched_at,
+            last_error: g.last_error,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

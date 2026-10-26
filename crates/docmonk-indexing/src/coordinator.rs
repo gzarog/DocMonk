@@ -593,6 +593,44 @@ pub fn run_source_with(
     targets: Option<&std::collections::BTreeSet<PathBuf>>,
     progress: &mut dyn Progress,
 ) -> Result<SourceResult, DocMonkError> {
+    // A git source is fetched before every full pass. A failed fetch keeps
+    // the checkout and its published index, and the source reads offline
+    // with the reason until a later fetch succeeds.
+    let git = match crate::git::remote_dir_of(Path::new(&source.path)) {
+        Some(dir) if targets.is_none() => match crate::git::sync(&dir) {
+            Ok(meta) => Some((dir, meta.commit)),
+            Err(reason) => {
+                control
+                    .set_online(&source.id, false, Some(&reason))
+                    .map_err(db_err)?;
+                tracing::warn!(component = "indexing", event = "git_fetch_failed", source_id = %source.id, error = %reason);
+                return Ok(SourceResult {
+                    source_id: source.id.clone(),
+                    offline: Some(reason),
+                    ..SourceResult::default()
+                });
+            }
+        },
+        _ => None,
+    };
+    let result = run_local_source(layout, control, source, registry, opts, targets, progress)?;
+    if let Some((dir, Some(commit))) = git.filter(|_| result.offline.is_none()) {
+        if let Err(e) = crate::git::mark_indexed(&dir, &commit) {
+            tracing::warn!(component = "indexing", event = "git_commit_not_recorded", source_id = %source.id, error = %e);
+        }
+    }
+    Ok(result)
+}
+
+fn run_local_source(
+    layout: &StorageLayout,
+    control: &mut ControlPlane,
+    source: &SourceRecord,
+    registry: &Registry,
+    opts: &Options,
+    targets: Option<&std::collections::BTreeSet<PathBuf>>,
+    progress: &mut dyn Progress,
+) -> Result<SourceResult, DocMonkError> {
     let mut result = SourceResult {
         source_id: source.id.clone(),
         ..SourceResult::default()

@@ -10,6 +10,8 @@
 //!   without `unsafe`.
 //! * [`governor`]: process-wide CPU/OCR/embedding/I-O/byte permits shared
 //!   by every concurrently running source.
+//! * [`git`]: git remote sources, shallow checkouts fetched before each
+//!   full pass (ADR 0043).
 //! * [`coordinator`]: per-source builds with bounded parallel prepare,
 //!   a single writer, per-source failure isolation and atomic publication.
 
@@ -19,6 +21,7 @@ pub mod daemon;
 pub mod diff;
 pub mod executor;
 pub mod fingerprint;
+pub mod git;
 pub mod governor;
 pub mod ignore;
 pub mod lock;
