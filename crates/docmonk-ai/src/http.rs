@@ -17,9 +17,9 @@ use crate::text::json_body;
 use crate::AiProvider;
 use docmonk_core::errors::DocMonkError;
 
-pub const OPENAI_DEFAULT_MODEL: &str = "gpt-4o-mini";
+pub const OPENAI_DEFAULT_MODEL: &str = "gpt-6-luna";
 pub const OPENAI_DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
-pub const ANTHROPIC_DEFAULT_MODEL: &str = "claude-3-5-haiku-latest";
+pub const ANTHROPIC_DEFAULT_MODEL: &str = "claude-haiku-5-5";
 pub const ANTHROPIC_DEFAULT_BASE_URL: &str = "https://api.anthropic.com";
 pub const ANTHROPIC_DEFAULT_MAX_TOKENS: i64 = 1024;
 pub const ANTHROPIC_VERSION: &str = "2023-06-01";

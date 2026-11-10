@@ -75,6 +75,14 @@ R4), which have not been run yet.
   `docmonk_impact` carry the same sites. Graph derivation `graph-4`: the
   first index after upgrading recomputes graphs, not content.
 
+### AI
+
+- The cloud providers' default models are current ones: `gpt-6-luna` for
+  OpenAI (was `gpt-4o-mini`, shut down by OpenAI on 2027-01-14) and
+  `claude-haiku-5-5` for Anthropic (was `claude-3-5-haiku-latest`,
+  retired by Anthropic on 2026-02-19). `ai.model` overrides them as
+  before.
+
 ### Project
 
 - Code owners for held-out labels, quality floors, the remediation
