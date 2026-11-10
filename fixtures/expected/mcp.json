@@ -70,11 +70,10 @@
     "tools": [
      {
       "name": "docmonk_explore",
-      "description": "Primary retrieval tool: plan + run the best deterministic strategies for a query and assemble a budgeted evidence package.",
+      "description": "Primary retrieval tool. Use it first for a natural-language or identifier query: it plans and runs the best deterministic strategies and returns a budgeted evidence package.",
       "inputSchema": {
        "properties": {
         "query": {
-         "title": "Query",
          "type": "string"
         },
         "max_chars": {
@@ -88,8 +87,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Max Chars"
+         "default": null
         },
         "max_files": {
          "anyOf": [
@@ -102,8 +100,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Max Files"
+         "default": null
         },
         "max_graph_nodes": {
          "anyOf": [
@@ -116,323 +113,78 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Max Graph Nodes"
+         "default": null
         },
         "explain": {
          "type": "boolean",
          "default": false,
-         "title": "Explain",
          "description": "Add a diagnostics object: routing decision, per-stage timings, source counts, backend request counters and build ids."
         }
        },
        "required": [
         "query"
        ],
-       "title": "docmonk_exploreArguments",
        "type": "object",
        "additionalProperties": false
       },
       "outputSchema": {
-       "$defs": {
-        "EvidenceRef": {
-         "description": "An ``EvidenceFact`` plus the source snippet that lets a reader\ninterpret it -- ``retrieval/context_builder.py``'s budgeted\n``EvidenceItem.to_dict()`` shape, used by ``docmonk_explore``.",
-         "properties": {
-          "source": {
-           "title": "Source",
-           "type": "string"
-          },
-          "path": {
-           "title": "Path",
-           "type": "string"
-          },
-          "location": {
-           "additionalProperties": true,
-           "title": "Location",
-           "type": "object"
-          },
-          "entity": {
-           "title": "Entity",
-           "type": "string"
-          },
-          "relationship": {
-           "title": "Relationship",
-           "type": "string"
-          },
-          "confidence": {
-           "title": "Confidence",
-           "type": "string"
-          },
-          "snippet": {
-           "title": "Snippet",
-           "type": "string"
-          }
-         },
-         "required": [
-          "source",
-          "path",
-          "location",
-          "entity",
-          "relationship",
-          "confidence",
-          "snippet"
-         ],
-         "title": "EvidenceRef",
-         "type": "object"
-        },
-        "ExploreEntity": {
-         "description": "A resolved symbol as ``explore``'s query planner sees it -- fewer\nfields than a full ``EntityMatch`` (no file/line/signature detail;\nthat lives in ``evidence`` instead).",
-         "properties": {
-          "entity_id": {
-           "title": "Entity Id",
-           "type": "string"
-          },
-          "qualified_name": {
-           "title": "Qualified Name",
-           "type": "string"
-          },
-          "kind": {
-           "title": "Kind",
-           "type": "string"
-          },
-          "source_id": {
-           "title": "Source Id",
-           "type": "string"
-          }
-         },
-         "required": [
-          "entity_id",
-          "qualified_name",
-          "kind",
-          "source_id"
-         ],
-         "title": "ExploreEntity",
-         "type": "object"
-        },
-        "LexicalHit": {
-         "description": "One ranked lexical result -- ``retrieval/lexical.py``'s\n``SearchResult.to_dict()`` shape, shared by ``docmonk_search`` and\n``docmonk_explore``'s ``documents`` list.",
-         "properties": {
-          "kind": {
-           "title": "Kind",
-           "type": "string"
-          },
-          "tier": {
-           "title": "Tier",
-           "type": "string"
-          },
-          "id": {
-           "title": "Id",
-           "type": "string"
-          },
-          "title": {
-           "title": "Title",
-           "type": "string"
-          },
-          "path": {
-           "title": "Path",
-           "type": "string"
-          },
-          "source_id": {
-           "title": "Source Id",
-           "type": "string"
-          },
-          "snippet": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Snippet"
-          },
-          "location": {
-           "anyOf": [
-            {
-             "additionalProperties": true,
-             "type": "object"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Location"
-          }
-         },
-         "required": [
-          "kind",
-          "tier",
-          "id",
-          "title",
-          "path",
-          "source_id"
-         ],
-         "title": "LexicalHit",
-         "type": "object"
-        },
-        "RelationshipEdge": {
-         "properties": {
-          "source": {
-           "title": "Source",
-           "type": "string"
-          },
-          "relationship": {
-           "title": "Relationship",
-           "type": "string"
-          },
-          "target": {
-           "title": "Target",
-           "type": "string"
-          },
-          "confidence": {
-           "title": "Confidence",
-           "type": "string"
-          }
-         },
-         "required": [
-          "source",
-          "relationship",
-          "target",
-          "confidence"
-         ],
-         "title": "RelationshipEdge",
-         "type": "object"
-        },
-        "ToolError": {
-         "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
-         "properties": {
-          "type": {
-           "title": "Type",
-           "type": "string"
-          },
-          "message": {
-           "title": "Message",
-           "type": "string"
-          }
-         },
-         "required": [
-          "type",
-          "message"
-         ],
-         "title": "ToolError",
-         "type": "object"
-        }
-       },
+       "type": "object",
        "properties": {
         "schema_version": {
-         "default": "1",
-         "title": "Schema Version",
          "type": "string"
         },
         "ok": {
-         "title": "Ok",
          "type": "boolean"
         },
         "error": {
-         "anyOf": [
-          {
-           "$ref": "#/$defs/ToolError"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null
+         "type": [
+          "object",
+          "null"
+         ]
         },
         "query": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Query"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "intent": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Intent"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "strategies": {
-         "items": {
-          "type": "string"
-         },
-         "title": "Strategies",
          "type": "array"
         },
         "answer_context": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Answer Context"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "entities": {
-         "items": {
-          "$ref": "#/$defs/ExploreEntity"
-         },
-         "title": "Entities",
          "type": "array"
         },
         "relationships": {
-         "items": {
-          "$ref": "#/$defs/RelationshipEdge"
-         },
-         "title": "Relationships",
          "type": "array"
         },
         "documents": {
-         "items": {
-          "$ref": "#/$defs/LexicalHit"
-         },
-         "title": "Documents",
          "type": "array"
         },
         "tests": {
-         "items": {
-          "type": "string"
-         },
-         "title": "Tests",
          "type": "array"
         },
         "evidence": {
-         "items": {
-          "$ref": "#/$defs/EvidenceRef"
-         },
-         "title": "Evidence",
          "type": "array"
         },
         "warnings": {
-         "items": {
-          "type": "string"
-         },
-         "title": "Warnings",
          "type": "array"
         }
        },
        "required": [
         "ok"
-       ],
-       "title": "ExploreOutput",
-       "type": "object"
+       ]
       },
       "annotations": {
        "readOnlyHint": true,
@@ -443,11 +195,10 @@
      },
      {
       "name": "docmonk_search",
-      "description": "Lexical search across indexed code and documents.",
+      "description": "Lexical search across indexed code and documents. Use it for a plain keyword lookup.",
       "inputSchema": {
        "properties": {
         "query": {
-         "title": "Query",
          "type": "string"
         },
         "limit": {
@@ -461,149 +212,43 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Limit"
+         "default": null
         }
        },
        "required": [
         "query"
        ],
-       "title": "docmonk_searchArguments",
        "type": "object",
        "additionalProperties": false
       },
       "outputSchema": {
-       "$defs": {
-        "LexicalHit": {
-         "description": "One ranked lexical result -- ``retrieval/lexical.py``'s\n``SearchResult.to_dict()`` shape, shared by ``docmonk_search`` and\n``docmonk_explore``'s ``documents`` list.",
-         "properties": {
-          "kind": {
-           "title": "Kind",
-           "type": "string"
-          },
-          "tier": {
-           "title": "Tier",
-           "type": "string"
-          },
-          "id": {
-           "title": "Id",
-           "type": "string"
-          },
-          "title": {
-           "title": "Title",
-           "type": "string"
-          },
-          "path": {
-           "title": "Path",
-           "type": "string"
-          },
-          "source_id": {
-           "title": "Source Id",
-           "type": "string"
-          },
-          "snippet": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Snippet"
-          },
-          "location": {
-           "anyOf": [
-            {
-             "additionalProperties": true,
-             "type": "object"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Location"
-          }
-         },
-         "required": [
-          "kind",
-          "tier",
-          "id",
-          "title",
-          "path",
-          "source_id"
-         ],
-         "title": "LexicalHit",
-         "type": "object"
-        },
-        "ToolError": {
-         "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
-         "properties": {
-          "type": {
-           "title": "Type",
-           "type": "string"
-          },
-          "message": {
-           "title": "Message",
-           "type": "string"
-          }
-         },
-         "required": [
-          "type",
-          "message"
-         ],
-         "title": "ToolError",
-         "type": "object"
-        }
-       },
+       "type": "object",
        "properties": {
         "schema_version": {
-         "default": "1",
-         "title": "Schema Version",
          "type": "string"
         },
         "ok": {
-         "title": "Ok",
          "type": "boolean"
         },
         "error": {
-         "anyOf": [
-          {
-           "$ref": "#/$defs/ToolError"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null
+         "type": [
+          "object",
+          "null"
+         ]
         },
         "query": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Query"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "results": {
-         "items": {
-          "$ref": "#/$defs/LexicalHit"
-         },
-         "title": "Results",
          "type": "array"
         }
        },
        "required": [
         "ok"
-       ],
-       "title": "SearchOutput",
-       "type": "object"
+       ]
       },
       "annotations": {
        "readOnlyHint": true,
@@ -614,11 +259,10 @@
      },
      {
       "name": "docmonk_evidence",
-      "description": "Grounded evidence for a question: deterministic intent routing, hard source/path/kind/document filters applied before retrieval, bounded decomposition, dedup and diversity, and typed [E#] citations re-verified against the index, with a supported / partial / insufficient_evidence verdict. Never calls an LLM or the network.",
+      "description": "Grounded evidence for a question: [E#] citations re-verified against the index and a supported / partial / insufficient_evidence verdict. Use it when you need hard source, path, kind or document filters or citable evidence; it never calls an LLM or the network.",
       "inputSchema": {
        "properties": {
         "query": {
-         "title": "Query",
          "type": "string"
         },
         "source_ids": {
@@ -633,8 +277,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Source Ids"
+         "default": null
         },
         "path_prefixes": {
          "anyOf": [
@@ -648,8 +291,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Path Prefixes"
+         "default": null
         },
         "kinds": {
          "anyOf": [
@@ -663,8 +305,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Kinds"
+         "default": null
         },
         "document_ids": {
          "anyOf": [
@@ -678,8 +319,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Document Ids"
+         "default": null
         },
         "exclude_attachments": {
          "anyOf": [
@@ -690,8 +330,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Exclude Attachments"
+         "default": null
         },
         "limit": {
          "anyOf": [
@@ -704,230 +343,54 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Limit"
+         "default": null
         }
        },
        "required": [
         "query"
        ],
-       "title": "docmonk_evidenceArguments",
        "type": "object",
        "additionalProperties": false
       },
       "outputSchema": {
-       "additionalProperties": true,
+       "type": "object",
        "properties": {
         "schema_version": {
-         "default": "1",
-         "title": "Schema Version",
          "type": "string"
         },
         "ok": {
-         "title": "Ok",
          "type": "boolean"
         },
         "error": {
-         "anyOf": [
-          {
-           "$ref": "#/$defs/ToolError"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null
+         "type": [
+          "object",
+          "null"
+         ]
         },
         "query": {
-         "title": "Query",
          "type": "string"
         },
         "verdict": {
-         "title": "Verdict",
          "type": "string"
         },
         "plan": {
-         "additionalProperties": true,
-         "title": "Plan",
          "type": "object"
         },
         "evidence": {
-         "items": {
-          "additionalProperties": true,
-          "type": "object"
-         },
-         "title": "Evidence",
          "type": "array"
         },
         "provenance": {
-         "additionalProperties": true,
-         "title": "Provenance",
          "type": "object"
         },
         "support": {
-         "items": {
-          "additionalProperties": true,
-          "type": "object"
-         },
-         "title": "Support",
          "type": "array"
         }
        },
        "required": [
         "schema_version",
         "ok",
-        "error",
-        "query",
-        "verdict",
-        "plan",
-        "evidence",
-        "provenance",
-        "support"
-       ],
-       "title": "docmonk_evidenceOutput",
-       "type": "object",
-       "$defs": {
-        "DocumentRow": {
-         "properties": {
-          "source_id": {
-           "title": "Source Id",
-           "type": "string"
-          },
-          "file_id": {
-           "title": "File Id",
-           "type": "string"
-          },
-          "path": {
-           "title": "Path",
-           "type": "string"
-          },
-          "status": {
-           "title": "Status",
-           "type": "string"
-          },
-          "format": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Format"
-          },
-          "title": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Title"
-          },
-          "page_count": {
-           "anyOf": [
-            {
-             "type": "integer"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Page Count"
-          },
-          "section_count": {
-           "title": "Section Count",
-           "type": "integer"
-          },
-          "paragraph_count": {
-           "title": "Paragraph Count",
-           "type": "integer"
-          },
-          "table_count": {
-           "title": "Table Count",
-           "type": "integer"
-          },
-          "is_scanned": {
-           "title": "Is Scanned",
-           "type": "boolean"
-          },
-          "language": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Language"
-          },
-          "script": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Script"
-          },
-          "pages": {
-           "anyOf": [
-            {
-             "additionalProperties": true,
-             "type": "object"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Pages"
-          }
-         },
-         "required": [
-          "source_id",
-          "file_id",
-          "path",
-          "status",
-          "section_count",
-          "paragraph_count",
-          "table_count",
-          "is_scanned"
-         ],
-         "title": "DocumentRow",
-         "type": "object"
-        },
-        "ToolError": {
-         "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
-         "properties": {
-          "type": {
-           "title": "Type",
-           "type": "string"
-          },
-          "message": {
-           "title": "Message",
-           "type": "string"
-          }
-         },
-         "required": [
-          "type",
-          "message"
-         ],
-         "title": "ToolError",
-         "type": "object"
-        }
-       }
+        "error"
+       ]
       },
       "annotations": {
        "readOnlyHint": true,
@@ -938,23 +401,19 @@
      },
      {
       "name": "docmonk_read",
-      "description": "Read what a citation stands for: pass back the fields of one docmonk_evidence (or docmonk_ask) evidence entry. The citation is re-verified against the current index first; a stale citation (another build, a changed or missing record, a wrong location) is refused with `valid: false` and the reason instead of answering from old text. Code comes back as numbered lines with the cited lines marked `>` and `context` lines around them; a document chunk comes back with its heading and neighbouring chunks. Every field of an evidence entry is accepted, so an entry can be passed back unchanged; `context_lines` sets how much surrounding text to return.",
+      "description": "Read what a citation stands for: pass back one docmonk_evidence (or docmonk_ask) evidence entry unchanged. The citation is re-verified first; a stale one is refused with `valid: false` and the reason.",
       "inputSchema": {
        "properties": {
         "source_id": {
-         "title": "Source Id",
          "type": "string"
         },
         "build_id": {
-         "title": "Build Id",
          "type": "string"
         },
         "kind": {
-         "title": "Kind",
          "type": "string"
         },
         "record_id": {
-         "title": "Record Id",
          "type": "string"
         },
         "id": {
@@ -966,8 +425,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Id"
+         "default": null
         },
         "path": {
          "anyOf": [
@@ -978,8 +436,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Path"
+         "default": null
         },
         "line_start": {
          "anyOf": [
@@ -992,8 +449,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Line Start"
+         "default": null
         },
         "line_end": {
          "anyOf": [
@@ -1006,8 +462,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Line End"
+         "default": null
         },
         "page_start": {
          "anyOf": [
@@ -1020,8 +475,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Page Start"
+         "default": null
         },
         "page_end": {
          "anyOf": [
@@ -1034,8 +488,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Page End"
+         "default": null
         },
         "content_fingerprint": {
          "anyOf": [
@@ -1046,8 +499,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Content Fingerprint"
+         "default": null
         },
         "context_lines": {
          "anyOf": [
@@ -1061,7 +513,6 @@
           }
          ],
          "default": null,
-         "title": "Context Lines",
          "description": "Code lines (or document chunks, at most 10) shown around the cited span; default 5."
         },
         "invalid_reason": {
@@ -1073,8 +524,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Invalid Reason"
+         "default": null
         },
         "title": {
          "anyOf": [
@@ -1085,8 +535,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Title"
+         "default": null
         },
         "heading": {
          "anyOf": [
@@ -1097,8 +546,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Heading"
+         "default": null
         },
         "fingerprint": {
          "anyOf": [
@@ -1109,8 +557,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Fingerprint"
+         "default": null
         },
         "language": {
          "anyOf": [
@@ -1121,8 +568,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Language"
+         "default": null
         },
         "tier": {
          "anyOf": [
@@ -1133,8 +579,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Tier"
+         "default": null
         },
         "text": {
          "anyOf": [
@@ -1145,8 +590,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Text"
+         "default": null
         },
         "valid": {
          "anyOf": [
@@ -1157,8 +601,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Valid"
+         "default": null
         },
         "retrieval": {
          "anyOf": [
@@ -1170,7 +613,6 @@
           }
          ],
          "default": null,
-         "title": "Retrieval",
          "description": "Accepted so an evidence entry can be passed back as is; ignored."
         },
         "context": {
@@ -1183,7 +625,6 @@
           }
          ],
          "default": null,
-         "title": "Context",
          "description": "Accepted so an evidence entry can be passed back as is; ignored."
         }
        },
@@ -1193,388 +634,132 @@
         "kind",
         "record_id"
        ],
-       "title": "docmonk_readArguments",
        "type": "object",
        "additionalProperties": false
       },
       "outputSchema": {
+       "type": "object",
        "properties": {
         "schema_version": {
-         "default": "1",
-         "title": "Schema Version",
          "type": "string"
         },
         "ok": {
-         "title": "Ok",
          "type": "boolean"
         },
         "error": {
-         "anyOf": [
-          {
-           "$ref": "#/$defs/ToolError"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null
+         "type": [
+          "object",
+          "null"
+         ]
         },
         "citation": {
-         "title": "Citation",
          "type": "string"
         },
         "valid": {
-         "title": "Valid",
          "type": "boolean"
         },
         "reason": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "title": "Reason"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "text": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "title": "Text"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "source_id": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Source Id"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "build_id": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Build Id"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "kind": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Kind"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "record_id": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Record Id"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "path": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Path"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "hint": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Hint"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "language": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Language"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "line_start": {
-         "anyOf": [
-          {
-           "type": "integer"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Line Start"
+         "type": [
+          "integer",
+          "null"
+         ]
         },
         "line_end": {
-         "anyOf": [
-          {
-           "type": "integer"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Line End"
+         "type": [
+          "integer",
+          "null"
+         ]
         },
         "page_start": {
-         "anyOf": [
-          {
-           "type": "integer"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Page Start"
+         "type": [
+          "integer",
+          "null"
+         ]
         },
         "page_end": {
-         "anyOf": [
-          {
-           "type": "integer"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Page End"
+         "type": [
+          "integer",
+          "null"
+         ]
         },
         "record_lines": {
-         "anyOf": [
-          {
-           "items": {
-            "type": "integer"
-           },
-           "type": "array"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Record Lines"
+         "type": [
+          "array",
+          "null"
+         ]
         },
         "context_clipped": {
-         "anyOf": [
-          {
-           "type": "boolean"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Context Clipped"
+         "type": [
+          "boolean",
+          "null"
+         ]
         },
         "context": {
-         "anyOf": [
-          {
-           "additionalProperties": true,
-           "type": "object"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Context"
+         "type": [
+          "object",
+          "null"
+         ]
         }
        },
        "required": [
         "schema_version",
         "ok",
-        "error",
-        "citation",
-        "valid",
-        "reason",
-        "text"
-       ],
-       "title": "docmonk_readOutput",
-       "type": "object",
-       "$defs": {
-        "DocumentRow": {
-         "properties": {
-          "source_id": {
-           "title": "Source Id",
-           "type": "string"
-          },
-          "file_id": {
-           "title": "File Id",
-           "type": "string"
-          },
-          "path": {
-           "title": "Path",
-           "type": "string"
-          },
-          "status": {
-           "title": "Status",
-           "type": "string"
-          },
-          "format": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Format"
-          },
-          "title": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Title"
-          },
-          "page_count": {
-           "anyOf": [
-            {
-             "type": "integer"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Page Count"
-          },
-          "section_count": {
-           "title": "Section Count",
-           "type": "integer"
-          },
-          "paragraph_count": {
-           "title": "Paragraph Count",
-           "type": "integer"
-          },
-          "table_count": {
-           "title": "Table Count",
-           "type": "integer"
-          },
-          "is_scanned": {
-           "title": "Is Scanned",
-           "type": "boolean"
-          },
-          "language": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Language"
-          },
-          "script": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Script"
-          },
-          "pages": {
-           "anyOf": [
-            {
-             "additionalProperties": true,
-             "type": "object"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Pages"
-          }
-         },
-         "required": [
-          "source_id",
-          "file_id",
-          "path",
-          "status",
-          "section_count",
-          "paragraph_count",
-          "table_count",
-          "is_scanned"
-         ],
-         "title": "DocumentRow",
-         "type": "object"
-        },
-        "ToolError": {
-         "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
-         "properties": {
-          "type": {
-           "title": "Type",
-           "type": "string"
-          },
-          "message": {
-           "title": "Message",
-           "type": "string"
-          }
-         },
-         "required": [
-          "type",
-          "message"
-         ],
-         "title": "ToolError",
-         "type": "object"
-        }
-       }
+        "error"
+       ]
       },
       "annotations": {
        "readOnlyHint": true,
@@ -1589,170 +774,43 @@
       "inputSchema": {
        "properties": {
         "name": {
-         "title": "Name",
          "type": "string"
         }
        },
        "required": [
         "name"
        ],
-       "title": "docmonk_symbolArguments",
        "type": "object",
        "additionalProperties": false
       },
       "outputSchema": {
-       "$defs": {
-        "EntityMatch": {
-         "description": "One resolved code entity -- the same shape ``cli/_code_common.py``'s\n``match_to_dict`` produces for ``docmonk symbol --json`` etc.",
-         "properties": {
-          "entity_id": {
-           "title": "Entity Id",
-           "type": "string"
-          },
-          "kind": {
-           "title": "Kind",
-           "type": "string"
-          },
-          "name": {
-           "title": "Name",
-           "type": "string"
-          },
-          "qualified_name": {
-           "title": "Qualified Name",
-           "type": "string"
-          },
-          "language": {
-           "title": "Language",
-           "type": "string"
-          },
-          "file_id": {
-           "title": "File Id",
-           "type": "string"
-          },
-          "start_line": {
-           "title": "Start Line",
-           "type": "integer"
-          },
-          "end_line": {
-           "title": "End Line",
-           "type": "integer"
-          },
-          "signature": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Signature"
-          },
-          "source_id": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Source Id"
-          },
-          "source_path": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Source Path"
-          }
-         },
-         "required": [
-          "entity_id",
-          "kind",
-          "name",
-          "qualified_name",
-          "language",
-          "file_id",
-          "start_line",
-          "end_line"
-         ],
-         "title": "EntityMatch",
-         "type": "object"
-        },
-        "ToolError": {
-         "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
-         "properties": {
-          "type": {
-           "title": "Type",
-           "type": "string"
-          },
-          "message": {
-           "title": "Message",
-           "type": "string"
-          }
-         },
-         "required": [
-          "type",
-          "message"
-         ],
-         "title": "ToolError",
-         "type": "object"
-        }
-       },
+       "type": "object",
        "properties": {
         "schema_version": {
-         "default": "1",
-         "title": "Schema Version",
          "type": "string"
         },
         "ok": {
-         "title": "Ok",
          "type": "boolean"
         },
         "error": {
-         "anyOf": [
-          {
-           "$ref": "#/$defs/ToolError"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null
+         "type": [
+          "object",
+          "null"
+         ]
         },
         "query": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Query"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "matches": {
-         "items": {
-          "$ref": "#/$defs/EntityMatch"
-         },
-         "title": "Matches",
          "type": "array"
         }
        },
        "required": [
         "ok"
-       ],
-       "title": "SymbolOutput",
-       "type": "object"
+       ]
       },
       "annotations": {
        "readOnlyHint": true,
@@ -1767,7 +825,6 @@
       "inputSchema": {
        "properties": {
         "name": {
-         "title": "Name",
          "type": "string"
         },
         "max_depth": {
@@ -1781,8 +838,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Max Depth"
+         "default": null
         },
         "limit": {
          "anyOf": [
@@ -1795,265 +851,49 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Limit"
+         "default": null
         }
        },
        "required": [
         "name"
        ],
-       "title": "docmonk_callersArguments",
        "type": "object",
        "additionalProperties": false
       },
       "outputSchema": {
-       "$defs": {
-        "EntityMatch": {
-         "description": "One resolved code entity -- the same shape ``cli/_code_common.py``'s\n``match_to_dict`` produces for ``docmonk symbol --json`` etc.",
-         "properties": {
-          "entity_id": {
-           "title": "Entity Id",
-           "type": "string"
-          },
-          "kind": {
-           "title": "Kind",
-           "type": "string"
-          },
-          "name": {
-           "title": "Name",
-           "type": "string"
-          },
-          "qualified_name": {
-           "title": "Qualified Name",
-           "type": "string"
-          },
-          "language": {
-           "title": "Language",
-           "type": "string"
-          },
-          "file_id": {
-           "title": "File Id",
-           "type": "string"
-          },
-          "start_line": {
-           "title": "Start Line",
-           "type": "integer"
-          },
-          "end_line": {
-           "title": "End Line",
-           "type": "integer"
-          },
-          "signature": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Signature"
-          },
-          "source_id": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Source Id"
-          },
-          "source_path": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Source Path"
-          }
-         },
-         "required": [
-          "entity_id",
-          "kind",
-          "name",
-          "qualified_name",
-          "language",
-          "file_id",
-          "start_line",
-          "end_line"
-         ],
-         "title": "EntityMatch",
-         "type": "object"
-        },
-        "GraphEdge": {
-         "description": "One traversal hop -- the same shape ``edge_to_dict`` produces for\n``docmonk callers/callees --json``.",
-         "properties": {
-          "depth": {
-           "title": "Depth",
-           "type": "integer"
-          },
-          "relationship_type": {
-           "title": "Relationship Type",
-           "type": "string"
-          },
-          "source_entity_id": {
-           "title": "Source Entity Id",
-           "type": "string"
-          },
-          "target_entity_id": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Target Entity Id"
-          },
-          "target_symbol": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Target Symbol"
-          },
-          "confidence": {
-           "title": "Confidence",
-           "type": "string"
-          },
-          "resolver": {
-           "title": "Resolver",
-           "type": "string"
-          },
-          "source_location": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Source Location"
-          },
-          "evidence": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Evidence"
-          }
-         },
-         "required": [
-          "depth",
-          "relationship_type",
-          "source_entity_id",
-          "confidence",
-          "resolver"
-         ],
-         "title": "GraphEdge",
-         "type": "object"
-        },
-        "ToolError": {
-         "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
-         "properties": {
-          "type": {
-           "title": "Type",
-           "type": "string"
-          },
-          "message": {
-           "title": "Message",
-           "type": "string"
-          }
-         },
-         "required": [
-          "type",
-          "message"
-         ],
-         "title": "ToolError",
-         "type": "object"
-        }
-       },
+       "type": "object",
        "properties": {
         "schema_version": {
-         "default": "1",
-         "title": "Schema Version",
          "type": "string"
         },
         "ok": {
-         "title": "Ok",
          "type": "boolean"
         },
         "error": {
-         "anyOf": [
-          {
-           "$ref": "#/$defs/ToolError"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null
+         "type": [
+          "object",
+          "null"
+         ]
         },
         "query": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Query"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "matches": {
-         "items": {
-          "$ref": "#/$defs/EntityMatch"
-         },
-         "title": "Matches",
          "type": "array"
         },
         "edges": {
-         "items": {
-          "$ref": "#/$defs/GraphEdge"
-         },
-         "title": "Edges",
          "type": "array"
         },
         "truncated": {
-         "default": false,
-         "description": "The result limit was reached: more edges may exist than were returned.",
-         "title": "Truncated",
          "type": "boolean"
         }
        },
        "required": [
         "ok"
-       ],
-       "title": "GraphTraversalOutput",
-       "type": "object"
+       ]
       },
       "annotations": {
        "readOnlyHint": true,
@@ -2068,7 +908,6 @@
       "inputSchema": {
        "properties": {
         "name": {
-         "title": "Name",
          "type": "string"
         },
         "max_depth": {
@@ -2082,8 +921,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Max Depth"
+         "default": null
         },
         "limit": {
          "anyOf": [
@@ -2096,265 +934,49 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Limit"
+         "default": null
         }
        },
        "required": [
         "name"
        ],
-       "title": "docmonk_calleesArguments",
        "type": "object",
        "additionalProperties": false
       },
       "outputSchema": {
-       "$defs": {
-        "EntityMatch": {
-         "description": "One resolved code entity -- the same shape ``cli/_code_common.py``'s\n``match_to_dict`` produces for ``docmonk symbol --json`` etc.",
-         "properties": {
-          "entity_id": {
-           "title": "Entity Id",
-           "type": "string"
-          },
-          "kind": {
-           "title": "Kind",
-           "type": "string"
-          },
-          "name": {
-           "title": "Name",
-           "type": "string"
-          },
-          "qualified_name": {
-           "title": "Qualified Name",
-           "type": "string"
-          },
-          "language": {
-           "title": "Language",
-           "type": "string"
-          },
-          "file_id": {
-           "title": "File Id",
-           "type": "string"
-          },
-          "start_line": {
-           "title": "Start Line",
-           "type": "integer"
-          },
-          "end_line": {
-           "title": "End Line",
-           "type": "integer"
-          },
-          "signature": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Signature"
-          },
-          "source_id": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Source Id"
-          },
-          "source_path": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Source Path"
-          }
-         },
-         "required": [
-          "entity_id",
-          "kind",
-          "name",
-          "qualified_name",
-          "language",
-          "file_id",
-          "start_line",
-          "end_line"
-         ],
-         "title": "EntityMatch",
-         "type": "object"
-        },
-        "GraphEdge": {
-         "description": "One traversal hop -- the same shape ``edge_to_dict`` produces for\n``docmonk callers/callees --json``.",
-         "properties": {
-          "depth": {
-           "title": "Depth",
-           "type": "integer"
-          },
-          "relationship_type": {
-           "title": "Relationship Type",
-           "type": "string"
-          },
-          "source_entity_id": {
-           "title": "Source Entity Id",
-           "type": "string"
-          },
-          "target_entity_id": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Target Entity Id"
-          },
-          "target_symbol": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Target Symbol"
-          },
-          "confidence": {
-           "title": "Confidence",
-           "type": "string"
-          },
-          "resolver": {
-           "title": "Resolver",
-           "type": "string"
-          },
-          "source_location": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Source Location"
-          },
-          "evidence": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Evidence"
-          }
-         },
-         "required": [
-          "depth",
-          "relationship_type",
-          "source_entity_id",
-          "confidence",
-          "resolver"
-         ],
-         "title": "GraphEdge",
-         "type": "object"
-        },
-        "ToolError": {
-         "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
-         "properties": {
-          "type": {
-           "title": "Type",
-           "type": "string"
-          },
-          "message": {
-           "title": "Message",
-           "type": "string"
-          }
-         },
-         "required": [
-          "type",
-          "message"
-         ],
-         "title": "ToolError",
-         "type": "object"
-        }
-       },
+       "type": "object",
        "properties": {
         "schema_version": {
-         "default": "1",
-         "title": "Schema Version",
          "type": "string"
         },
         "ok": {
-         "title": "Ok",
          "type": "boolean"
         },
         "error": {
-         "anyOf": [
-          {
-           "$ref": "#/$defs/ToolError"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null
+         "type": [
+          "object",
+          "null"
+         ]
         },
         "query": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Query"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "matches": {
-         "items": {
-          "$ref": "#/$defs/EntityMatch"
-         },
-         "title": "Matches",
          "type": "array"
         },
         "edges": {
-         "items": {
-          "$ref": "#/$defs/GraphEdge"
-         },
-         "title": "Edges",
          "type": "array"
         },
         "truncated": {
-         "default": false,
-         "description": "The result limit was reached: more edges may exist than were returned.",
-         "title": "Truncated",
          "type": "boolean"
         }
        },
        "required": [
         "ok"
-       ],
-       "title": "GraphTraversalOutput",
-       "type": "object"
+       ]
       },
       "annotations": {
        "readOnlyHint": true,
@@ -2365,11 +987,10 @@
      },
      {
       "name": "docmonk_impact",
-      "description": "Blast-radius impact analysis for a symbol: callers, callees, tests, documentation.",
+      "description": "Blast-radius analysis for a symbol: callers, callees, tests and documentation. Use it before changing a symbol.",
       "inputSchema": {
        "properties": {
         "name": {
-         "title": "Name",
          "type": "string"
         },
         "max_depth": {
@@ -2383,8 +1004,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Max Depth"
+         "default": null
         },
         "limit": {
          "anyOf": [
@@ -2397,283 +1017,85 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Limit"
+         "default": null
         }
        },
        "required": [
         "name"
        ],
-       "title": "docmonk_impactArguments",
        "type": "object",
        "additionalProperties": false
       },
       "outputSchema": {
-       "$defs": {
-        "ConfidenceSummary": {
-         "properties": {
-          "code_references": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Code References"
-          },
-          "document_links": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Document Links"
-          }
-         },
-         "title": "ConfidenceSummary",
-         "type": "object"
-        },
-        "DefinedLocation": {
-         "properties": {
-          "entity_id": {
-           "title": "Entity Id",
-           "type": "string"
-          },
-          "qualified_name": {
-           "title": "Qualified Name",
-           "type": "string"
-          },
-          "path": {
-           "title": "Path",
-           "type": "string"
-          },
-          "start_line": {
-           "title": "Start Line",
-           "type": "integer"
-          },
-          "end_line": {
-           "title": "End Line",
-           "type": "integer"
-          },
-          "source_id": {
-           "title": "Source Id",
-           "type": "string"
-          }
-         },
-         "required": [
-          "entity_id",
-          "qualified_name",
-          "path",
-          "start_line",
-          "end_line",
-          "source_id"
-         ],
-         "title": "DefinedLocation",
-         "type": "object"
-        },
-        "EvidenceFact": {
-         "description": "``knowledge/evidence.py``'s ``Evidence.to_dict()`` shape: a bare\nrelationship-shaped fact with no source snippet attached -- what\n``docmonk_impact``'s ``documentation`` list carries.",
-         "properties": {
-          "source": {
-           "title": "Source",
-           "type": "string"
-          },
-          "path": {
-           "title": "Path",
-           "type": "string"
-          },
-          "location": {
-           "additionalProperties": true,
-           "title": "Location",
-           "type": "object"
-          },
-          "entity": {
-           "title": "Entity",
-           "type": "string"
-          },
-          "relationship": {
-           "title": "Relationship",
-           "type": "string"
-          },
-          "confidence": {
-           "title": "Confidence",
-           "type": "string"
-          }
-         },
-         "required": [
-          "source",
-          "path",
-          "location",
-          "entity",
-          "relationship",
-          "confidence"
-         ],
-         "title": "EvidenceFact",
-         "type": "object"
-        },
-        "ToolError": {
-         "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
-         "properties": {
-          "type": {
-           "title": "Type",
-           "type": "string"
-          },
-          "message": {
-           "title": "Message",
-           "type": "string"
-          }
-         },
-         "required": [
-          "type",
-          "message"
-         ],
-         "title": "ToolError",
-         "type": "object"
-        }
-       },
+       "type": "object",
        "properties": {
         "schema_version": {
-         "default": "1",
-         "title": "Schema Version",
          "type": "string"
         },
         "ok": {
-         "title": "Ok",
          "type": "boolean"
         },
         "error": {
-         "anyOf": [
-          {
-           "$ref": "#/$defs/ToolError"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null
+         "type": [
+          "object",
+          "null"
+         ]
         },
         "query": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Query"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "found": {
-         "default": false,
-         "title": "Found",
          "type": "boolean"
         },
         "defined": {
-         "items": {
-          "$ref": "#/$defs/DefinedLocation"
-         },
-         "title": "Defined",
          "type": "array"
         },
         "callers": {
-         "items": {
-          "type": "string"
-         },
-         "title": "Callers",
          "type": "array"
         },
         "callees": {
-         "items": {
-          "type": "string"
-         },
-         "title": "Callees",
          "type": "array"
         },
         "publishers": {
-         "description": "Message contracts only: functions and types that publish to the endpoint (topic, queue, exchange or message type), across sources.",
-         "items": {
-          "type": "string"
-         },
-         "title": "Publishers",
          "type": "array"
         },
         "consumers": {
-         "description": "Message contracts only: functions and types that consume from the endpoint, across sources (AMQP queues bound to the exchange included).",
-         "items": {
-          "type": "string"
-         },
-         "title": "Consumers",
          "type": "array"
         },
         "messaging": {
-         "description": "Message contracts only: every publish, consume, bind and declare site with its source, path, line, framework, endpoint key and routing key.",
-         "additionalProperties": true,
-         "title": "Messaging",
          "type": "object"
         },
         "tests": {
-         "items": {
-          "type": "string"
-         },
-         "title": "Tests",
          "type": "array"
         },
         "documentation": {
-         "items": {
-          "$ref": "#/$defs/EvidenceFact"
-         },
-         "title": "Documentation",
          "type": "array"
         },
         "confidence": {
-         "anyOf": [
-          {
-           "$ref": "#/$defs/ConfidenceSummary"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null
+         "type": [
+          "object",
+          "null"
+         ]
         },
         "blast_radius": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Blast Radius"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "blast_radius_score": {
-         "anyOf": [
-          {
-           "type": "integer"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Blast Radius Score"
+         "type": [
+          "integer",
+          "null"
+         ]
         }
        },
        "required": [
         "ok"
-       ],
-       "title": "ImpactOutput",
-       "type": "object"
+       ]
       },
       "annotations": {
        "readOnlyHint": true,
@@ -2684,11 +1106,10 @@
      },
      {
       "name": "docmonk_references",
-      "description": "Every graph edge touching a symbol, in both directions (calls, references, inheritance, imports, routes and links), like `docmonk references`. Use it to see where a cited symbol is used before changing it.",
+      "description": "Every graph edge touching a symbol, in both directions (calls, references, inheritance, imports, routes and links). Use it to see where a symbol is used before changing it.",
       "inputSchema": {
        "properties": {
         "name": {
-         "title": "Name",
          "type": "string"
         },
         "max_depth": {
@@ -2702,8 +1123,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Max Depth"
+         "default": null
         },
         "limit": {
          "anyOf": [
@@ -2716,265 +1136,49 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Limit"
+         "default": null
         }
        },
        "required": [
         "name"
        ],
-       "title": "docmonk_referencesArguments",
        "type": "object",
        "additionalProperties": false
       },
       "outputSchema": {
-       "$defs": {
-        "EntityMatch": {
-         "description": "One resolved code entity -- the same shape ``cli/_code_common.py``'s\n``match_to_dict`` produces for ``docmonk symbol --json`` etc.",
-         "properties": {
-          "entity_id": {
-           "title": "Entity Id",
-           "type": "string"
-          },
-          "kind": {
-           "title": "Kind",
-           "type": "string"
-          },
-          "name": {
-           "title": "Name",
-           "type": "string"
-          },
-          "qualified_name": {
-           "title": "Qualified Name",
-           "type": "string"
-          },
-          "language": {
-           "title": "Language",
-           "type": "string"
-          },
-          "file_id": {
-           "title": "File Id",
-           "type": "string"
-          },
-          "start_line": {
-           "title": "Start Line",
-           "type": "integer"
-          },
-          "end_line": {
-           "title": "End Line",
-           "type": "integer"
-          },
-          "signature": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Signature"
-          },
-          "source_id": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Source Id"
-          },
-          "source_path": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Source Path"
-          }
-         },
-         "required": [
-          "entity_id",
-          "kind",
-          "name",
-          "qualified_name",
-          "language",
-          "file_id",
-          "start_line",
-          "end_line"
-         ],
-         "title": "EntityMatch",
-         "type": "object"
-        },
-        "GraphEdge": {
-         "description": "One traversal hop -- the same shape ``edge_to_dict`` produces for\n``docmonk callers/callees --json``.",
-         "properties": {
-          "depth": {
-           "title": "Depth",
-           "type": "integer"
-          },
-          "relationship_type": {
-           "title": "Relationship Type",
-           "type": "string"
-          },
-          "source_entity_id": {
-           "title": "Source Entity Id",
-           "type": "string"
-          },
-          "target_entity_id": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Target Entity Id"
-          },
-          "target_symbol": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Target Symbol"
-          },
-          "confidence": {
-           "title": "Confidence",
-           "type": "string"
-          },
-          "resolver": {
-           "title": "Resolver",
-           "type": "string"
-          },
-          "source_location": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Source Location"
-          },
-          "evidence": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Evidence"
-          }
-         },
-         "required": [
-          "depth",
-          "relationship_type",
-          "source_entity_id",
-          "confidence",
-          "resolver"
-         ],
-         "title": "GraphEdge",
-         "type": "object"
-        },
-        "ToolError": {
-         "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
-         "properties": {
-          "type": {
-           "title": "Type",
-           "type": "string"
-          },
-          "message": {
-           "title": "Message",
-           "type": "string"
-          }
-         },
-         "required": [
-          "type",
-          "message"
-         ],
-         "title": "ToolError",
-         "type": "object"
-        }
-       },
+       "type": "object",
        "properties": {
         "schema_version": {
-         "default": "1",
-         "title": "Schema Version",
          "type": "string"
         },
         "ok": {
-         "title": "Ok",
          "type": "boolean"
         },
         "error": {
-         "anyOf": [
-          {
-           "$ref": "#/$defs/ToolError"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null
+         "type": [
+          "object",
+          "null"
+         ]
         },
         "query": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Query"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "matches": {
-         "items": {
-          "$ref": "#/$defs/EntityMatch"
-         },
-         "title": "Matches",
          "type": "array"
         },
         "edges": {
-         "items": {
-          "$ref": "#/$defs/GraphEdge"
-         },
-         "title": "Edges",
          "type": "array"
         },
         "truncated": {
-         "default": false,
-         "description": "The result limit was reached: more edges may exist than were returned.",
-         "title": "Truncated",
          "type": "boolean"
         }
        },
        "required": [
         "ok"
-       ],
-       "title": "docmonk_referencesOutput",
-       "type": "object"
+       ]
       },
       "annotations": {
        "readOnlyHint": true,
@@ -2985,7 +1189,7 @@
      },
      {
       "name": "docmonk_links",
-      "description": "Code-document links (automatic and user-added) for an entity, a document, or everything in a source, like `docmonk link list`: which specification sections a function implements, and which code a document describes. Read-only.",
+      "description": "Code-document links for an entity, a document or a whole source: which specification sections a function implements and which code a document describes.",
       "inputSchema": {
        "properties": {
         "entity": {
@@ -2997,8 +1201,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Entity"
+         "default": null
         },
         "document": {
          "anyOf": [
@@ -3009,8 +1212,7 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Document"
+         "default": null
         },
         "source_id": {
          "anyOf": [
@@ -3021,195 +1223,36 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Source Id"
+         "default": null
         }
        },
-       "title": "docmonk_linksArguments",
        "type": "object",
        "additionalProperties": false
       },
       "outputSchema": {
+       "type": "object",
        "properties": {
         "schema_version": {
-         "default": "1",
-         "title": "Schema Version",
          "type": "string"
         },
         "ok": {
-         "title": "Ok",
          "type": "boolean"
         },
         "error": {
-         "anyOf": [
-          {
-           "$ref": "#/$defs/ToolError"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null
+         "type": [
+          "object",
+          "null"
+         ]
         },
         "links": {
-         "items": {
-          "additionalProperties": true,
-          "type": "object"
-         },
-         "title": "Links",
          "type": "array"
         }
        },
        "required": [
         "schema_version",
         "ok",
-        "error",
-        "links"
-       ],
-       "title": "docmonk_linksOutput",
-       "type": "object",
-       "$defs": {
-        "DocumentRow": {
-         "properties": {
-          "source_id": {
-           "title": "Source Id",
-           "type": "string"
-          },
-          "file_id": {
-           "title": "File Id",
-           "type": "string"
-          },
-          "path": {
-           "title": "Path",
-           "type": "string"
-          },
-          "status": {
-           "title": "Status",
-           "type": "string"
-          },
-          "format": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Format"
-          },
-          "title": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Title"
-          },
-          "page_count": {
-           "anyOf": [
-            {
-             "type": "integer"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Page Count"
-          },
-          "section_count": {
-           "title": "Section Count",
-           "type": "integer"
-          },
-          "paragraph_count": {
-           "title": "Paragraph Count",
-           "type": "integer"
-          },
-          "table_count": {
-           "title": "Table Count",
-           "type": "integer"
-          },
-          "is_scanned": {
-           "title": "Is Scanned",
-           "type": "boolean"
-          },
-          "language": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Language"
-          },
-          "script": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Script"
-          },
-          "pages": {
-           "anyOf": [
-            {
-             "additionalProperties": true,
-             "type": "object"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Pages"
-          }
-         },
-         "required": [
-          "source_id",
-          "file_id",
-          "path",
-          "status",
-          "section_count",
-          "paragraph_count",
-          "table_count",
-          "is_scanned"
-         ],
-         "title": "DocumentRow",
-         "type": "object"
-        },
-        "ToolError": {
-         "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
-         "properties": {
-          "type": {
-           "title": "Type",
-           "type": "string"
-          },
-          "message": {
-           "title": "Message",
-           "type": "string"
-          }
-         },
-         "required": [
-          "type",
-          "message"
-         ],
-         "title": "ToolError",
-         "type": "object"
-        }
-       }
+        "error"
+       ]
       },
       "annotations": {
        "readOnlyHint": true,
@@ -3232,191 +1275,34 @@
            "type": "null"
           }
          ],
-         "default": null,
-         "title": "Source Id"
+         "default": null
         }
        },
-       "title": "docmonk_documentsArguments",
        "type": "object",
        "additionalProperties": false
       },
       "outputSchema": {
-       "$defs": {
-        "DocumentRow": {
-         "properties": {
-          "source_id": {
-           "title": "Source Id",
-           "type": "string"
-          },
-          "file_id": {
-           "title": "File Id",
-           "type": "string"
-          },
-          "path": {
-           "title": "Path",
-           "type": "string"
-          },
-          "status": {
-           "title": "Status",
-           "type": "string"
-          },
-          "format": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Format"
-          },
-          "title": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Title"
-          },
-          "page_count": {
-           "anyOf": [
-            {
-             "type": "integer"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Page Count"
-          },
-          "section_count": {
-           "title": "Section Count",
-           "type": "integer"
-          },
-          "paragraph_count": {
-           "title": "Paragraph Count",
-           "type": "integer"
-          },
-          "table_count": {
-           "title": "Table Count",
-           "type": "integer"
-          },
-          "is_scanned": {
-           "title": "Is Scanned",
-           "type": "boolean"
-          },
-          "language": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Language"
-          },
-          "script": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Script"
-          },
-          "pages": {
-           "anyOf": [
-            {
-             "additionalProperties": true,
-             "type": "object"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Pages"
-          }
-         },
-         "required": [
-          "source_id",
-          "file_id",
-          "path",
-          "status",
-          "section_count",
-          "paragraph_count",
-          "table_count",
-          "is_scanned"
-         ],
-         "title": "DocumentRow",
-         "type": "object"
-        },
-        "ToolError": {
-         "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
-         "properties": {
-          "type": {
-           "title": "Type",
-           "type": "string"
-          },
-          "message": {
-           "title": "Message",
-           "type": "string"
-          }
-         },
-         "required": [
-          "type",
-          "message"
-         ],
-         "title": "ToolError",
-         "type": "object"
-        }
-       },
+       "type": "object",
        "properties": {
         "schema_version": {
-         "default": "1",
-         "title": "Schema Version",
          "type": "string"
         },
         "ok": {
-         "title": "Ok",
          "type": "boolean"
         },
         "error": {
-         "anyOf": [
-          {
-           "$ref": "#/$defs/ToolError"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null
+         "type": [
+          "object",
+          "null"
+         ]
         },
         "documents": {
-         "items": {
-          "$ref": "#/$defs/DocumentRow"
-         },
-         "title": "Documents",
          "type": "array"
         }
        },
        "required": [
         "ok"
-       ],
-       "title": "DocumentsOutput",
-       "type": "object"
+       ]
       },
       "annotations": {
        "readOnlyHint": true,
@@ -3427,7 +1313,7 @@
      },
      {
       "name": "docmonk_status",
-      "description": "Authoritative indexing status (local SQLite or the configured OpenSearch/Elasticsearch): health and problems, live passes on every host, published counts per source, globally ordered recent errors and diagnostics. Unknown values are null, never 0. An unreachable server is an error result.",
+      "description": "Authoritative indexing status: health and problems, live passes, published counts per source and recent errors. Unknown values are null, never 0.",
       "inputSchema": {
        "properties": {
         "source_id": {
@@ -3440,8 +1326,7 @@
           }
          ],
          "default": null,
-         "description": "Only this source's row and errors (summary and problems stay global).",
-         "title": "Source Id"
+         "description": "Only this source's row and errors (summary and problems stay global)."
         },
         "error_limit": {
          "anyOf": [
@@ -3455,1856 +1340,91 @@
           }
          ],
          "default": null,
-         "description": "Recent errors to return (default 25, at most 200).",
-         "title": "Error Limit"
+         "description": "Recent errors to return (default 25, at most 200)."
         }
        },
-       "title": "docmonk_statusArguments",
        "type": "object",
        "additionalProperties": false
       },
       "outputSchema": {
-       "$defs": {
-        "StatusReport": {
-         "type": "object",
-         "properties": {
-          "schema_version": {
-           "type": "integer"
-          },
-          "snapshot_id": {
-           "type": "string"
-          },
-          "observed_at": {
-           "type": "string"
-          },
-          "mode": {
-           "type": "string",
-           "enum": [
-            "local",
-            "server"
-           ]
-          },
-          "backend": {
-           "type": "object",
-           "properties": {
-            "kind": {
-             "type": "string",
-             "enum": [
-              "sqlite",
-              "opensearch",
-              "elasticsearch"
-             ]
-            },
-            "index_prefix": {
-             "anyOf": [
-              {
-               "type": "string"
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            },
-            "endpoint": {
-             "anyOf": [
-              {
-               "type": "string"
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            },
-            "reachable": {
-             "type": "boolean"
-            },
-            "authoritative": {
-             "type": "boolean"
-            },
-            "cluster": {
-             "anyOf": [
-              {
-               "type": "object",
-               "properties": {
-                "health": {
-                 "anyOf": [
-                  {
-                   "type": "string",
-                   "enum": [
-                    "green",
-                    "yellow",
-                    "red"
-                   ]
-                  },
-                  {
-                   "type": "null"
-                  }
-                 ],
-                 "default": null
-                },
-                "unassigned_shards": {
-                 "anyOf": [
-                  {
-                   "type": "integer"
-                  },
-                  {
-                   "type": "null"
-                  }
-                 ],
-                 "default": null
-                },
-                "number_of_nodes": {
-                 "anyOf": [
-                  {
-                   "type": "integer"
-                  },
-                  {
-                   "type": "null"
-                  }
-                 ],
-                 "default": null
-                },
-                "indexes": {
-                 "type": "array",
-                 "items": {
-                  "type": "string"
-                 }
-                }
-               },
-               "required": [
-                "health",
-                "unassigned_shards",
-                "number_of_nodes",
-                "indexes"
-               ]
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            },
-            "latency_ms": {
-             "anyOf": [
-              {
-               "type": "integer"
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            }
-           },
-           "required": [
-            "kind",
-            "index_prefix",
-            "endpoint",
-            "reachable",
-            "authoritative",
-            "cluster",
-            "latency_ms"
-           ]
-          },
-          "health": {
-           "type": "object",
-           "properties": {
-            "state": {
-             "type": "string",
-             "enum": [
-              "healthy",
-              "degraded",
-              "failed",
-              "unknown"
-             ]
-            },
-            "problem_count": {
-             "type": "integer"
-            }
-           },
-           "required": [
-            "state",
-            "problem_count"
-           ]
-          },
-          "indexer": {
-           "type": "object",
-           "properties": {
-            "scope": {
-             "type": "string",
-             "enum": [
-              "host",
-              "cluster"
-             ]
-            },
-            "active_run_count": {
-             "type": "integer"
-            },
-            "active_source_count": {
-             "type": "integer"
-            },
-            "max_parallel_sources": {
-             "anyOf": [
-              {
-               "type": "integer"
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            },
-            "workers": {
-             "type": "array",
-             "items": {
-              "$ref": "#/$defs/LiveRun"
-             }
-            },
-            "resources": {
-             "anyOf": [
-              {
-               "type": "object",
-               "additionalProperties": true
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            },
-            "lock": {
-             "anyOf": [
-              {
-               "type": "object",
-               "properties": {
-                "state": {
-                 "type": "string"
-                },
-                "pid": {
-                 "anyOf": [
-                  {
-                   "type": "integer"
-                  },
-                  {
-                   "type": "null"
-                  }
-                 ],
-                 "default": null
-                },
-                "operation": {
-                 "anyOf": [
-                  {
-                   "type": "string"
-                  },
-                  {
-                   "type": "null"
-                  }
-                 ],
-                 "default": null
-                },
-                "hostname": {
-                 "anyOf": [
-                  {
-                   "type": "string"
-                  },
-                  {
-                   "type": "null"
-                  }
-                 ],
-                 "default": null
-                },
-                "source_id": {
-                 "anyOf": [
-                  {
-                   "type": "string"
-                  },
-                  {
-                   "type": "null"
-                  }
-                 ],
-                 "default": null
-                },
-                "acquired_at": {
-                 "anyOf": [
-                  {
-                   "type": "string"
-                  },
-                  {
-                   "type": "null"
-                  }
-                 ],
-                 "default": null
-                }
-               },
-               "required": [
-                "state",
-                "pid",
-                "operation",
-                "hostname",
-                "source_id",
-                "acquired_at"
-               ]
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            },
-            "last_run": {
-             "anyOf": [
-              {
-               "type": "object",
-               "properties": {
-                "run_id": {
-                 "anyOf": [
-                  {
-                   "type": "string"
-                  },
-                  {
-                   "type": "null"
-                  }
-                 ],
-                 "default": null
-                },
-                "operation": {
-                 "anyOf": [
-                  {
-                   "type": "string"
-                  },
-                  {
-                   "type": "null"
-                  }
-                 ],
-                 "default": null
-                },
-                "outcome": {
-                 "type": "string"
-                },
-                "started_at": {
-                 "anyOf": [
-                  {
-                   "type": "string"
-                  },
-                  {
-                   "type": "null"
-                  }
-                 ],
-                 "default": null
-                },
-                "completed_at": {
-                 "anyOf": [
-                  {
-                   "type": "string"
-                  },
-                  {
-                   "type": "null"
-                  }
-                 ],
-                 "default": null
-                },
-                "error": {
-                 "anyOf": [
-                  {
-                   "type": "string"
-                  },
-                  {
-                   "type": "null"
-                  }
-                 ],
-                 "default": null
-                }
-               },
-               "required": [
-                "run_id",
-                "operation",
-                "outcome",
-                "started_at",
-                "completed_at",
-                "error"
-               ]
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            },
-            "stall_threshold_seconds": {
-             "type": "number"
-            }
-           },
-           "required": [
-            "scope",
-            "active_run_count",
-            "active_source_count",
-            "max_parallel_sources",
-            "workers",
-            "resources",
-            "lock",
-            "last_run",
-            "stall_threshold_seconds"
-           ]
-          },
-          "summary": {
-           "type": "object",
-           "properties": {
-            "sources": {
-             "type": "object",
-             "properties": {
-              "registered": {
-               "type": "integer"
-              },
-              "enabled": {
-               "type": "integer"
-              },
-              "active": {
-               "type": "integer"
-              },
-              "failed": {
-               "type": "integer"
-              },
-              "offline": {
-               "type": "integer"
-              }
-             },
-             "required": [
-              "registered",
-              "enabled",
-              "active",
-              "failed",
-              "offline"
-             ]
-            },
-            "files": {
-             "type": "object",
-             "properties": {
-              "discovered": {
-               "anyOf": [
-                {
-                 "type": "integer"
-                },
-                {
-                 "type": "null"
-                }
-               ],
-               "default": null
-              },
-              "published_indexed": {
-               "anyOf": [
-                {
-                 "type": "integer"
-                },
-                {
-                 "type": "null"
-                }
-               ],
-               "default": null
-              },
-              "failed": {
-               "anyOf": [
-                {
-                 "type": "integer"
-                },
-                {
-                 "type": "null"
-                }
-               ],
-               "default": null
-              },
-              "retrying": {
-               "anyOf": [
-                {
-                 "type": "integer"
-                },
-                {
-                 "type": "null"
-                }
-               ],
-               "default": null
-              },
-              "pending_in_current_runs": {
-               "anyOf": [
-                {
-                 "type": "integer"
-                },
-                {
-                 "type": "null"
-                }
-               ],
-               "default": null
-              }
-             },
-             "required": [
-              "discovered",
-              "published_indexed",
-              "failed",
-              "retrying",
-              "pending_in_current_runs"
-             ]
-            },
-            "entities": {
-             "anyOf": [
-              {
-               "type": "integer"
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            },
-            "documents": {
-             "anyOf": [
-              {
-               "type": "integer"
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            },
-            "chunks": {
-             "anyOf": [
-              {
-               "type": "integer"
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            },
-            "passages": {
-             "anyOf": [
-              {
-               "type": "integer"
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            },
-            "relationships": {
-             "anyOf": [
-              {
-               "type": "integer"
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            },
-            "throughput_files_per_second": {
-             "anyOf": [
-              {
-               "type": "number"
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            }
-           },
-           "required": [
-            "sources",
-            "files",
-            "entities",
-            "documents",
-            "chunks",
-            "passages",
-            "relationships",
-            "throughput_files_per_second"
-           ]
-          },
-          "sources": {
-           "type": "array",
-           "items": {
-            "$ref": "#/$defs/SourceStatus"
-           }
-          },
-          "problems": {
-           "type": "array",
-           "items": {
-            "$ref": "#/$defs/Problem"
-           }
-          },
-          "recent_errors": {
-           "type": "array",
-           "items": {
-            "$ref": "#/$defs/ErrorEvent"
-           }
-          },
-          "diagnostics": {
-           "type": "object",
-           "properties": {
-            "partial": {
-             "type": "boolean"
-            },
-            "missing_sections": {
-             "type": "array",
-             "items": {
-              "type": "string"
-             }
-            },
-            "collection_ms": {
-             "anyOf": [
-              {
-               "type": "integer"
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            },
-            "request_count": {
-             "anyOf": [
-              {
-               "type": "integer"
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            },
-            "cached_sections": {
-             "type": "array",
-             "items": {
-              "type": "object",
-              "properties": {
-               "section": {
-                "type": "string"
-               },
-               "age_seconds": {
-                "type": "number"
-               },
-               "ttl_seconds": {
-                "type": "number"
-               }
-              },
-              "required": [
-               "section",
-               "age_seconds",
-               "ttl_seconds"
-              ]
-             }
-            },
-            "consistency": {
-             "type": "string",
-             "enum": [
-              "consistent",
-              "retried",
-              "inconsistent"
-             ]
-            },
-            "inconsistent_sources": {
-             "type": "array",
-             "items": {
-              "type": "string"
-             }
-            }
-           },
-           "required": [
-            "partial",
-            "missing_sections",
-            "collection_ms",
-            "request_count",
-            "cached_sections",
-            "consistency",
-            "inconsistent_sources"
-           ]
-          }
-         },
-         "required": [
-          "schema_version",
-          "snapshot_id",
-          "observed_at",
-          "mode",
-          "backend",
-          "health",
-          "indexer",
-          "summary",
-          "sources",
-          "problems",
-          "recent_errors",
-          "diagnostics"
-         ],
-         "description": "The canonical DocMonk status report (schema_version 1): the same data `docmonk status --json` prints."
-        },
-        "SourceStatus": {
-         "type": "object",
-         "properties": {
-          "source_id": {
-           "type": "string"
-          },
-          "path": {
-           "type": "string"
-          },
-          "source_type": {
-           "type": "string"
-          },
-          "enabled": {
-           "type": "boolean"
-          },
-          "access": {
-           "type": "string",
-           "enum": [
-            "online",
-            "offline",
-            "disabled",
-            "unknown"
-           ]
-          },
-          "index_state": {
-           "type": "string",
-           "enum": [
-            "not_indexed",
-            "queued",
-            "scanning",
-            "indexing",
-            "finalizing",
-            "publishing",
-            "completed",
-            "retrying",
-            "failed",
-            "stalled",
-            "offline",
-            "disabled",
-            "unknown"
-           ]
-          },
-          "relationship_state": {
-           "description": "The relationship graph stage, independent of index_state: the published index is searchable whatever this says.",
-           "anyOf": [
-            {
-             "type": "object",
-             "properties": {
-              "state": {
-               "type": "string",
-               "enum": [
-                "disabled",
-                "pending",
-                "building",
-                "ready",
-                "stale",
-                "failed"
-               ]
-              },
-              "generation": {
-               "anyOf": [
-                {
-                 "type": "string"
-                },
-                {
-                 "type": "null"
-                }
-               ],
-               "default": null
-              },
-              "base_build_id": {
-               "anyOf": [
-                {
-                 "type": "string"
-                },
-                {
-                 "type": "null"
-                }
-               ],
-               "default": null
-              },
-              "last_success_at": {
-               "anyOf": [
-                {
-                 "type": "string"
-                },
-                {
-                 "type": "null"
-                }
-               ],
-               "default": null
-              },
-              "last_error": {
-               "anyOf": [
-                {
-                 "type": "string"
-                },
-                {
-                 "type": "null"
-                }
-               ],
-               "default": null
-              },
-              "stale_reason": {
-               "anyOf": [
-                {
-                 "type": "string"
-                },
-                {
-                 "type": "null"
-                }
-               ],
-               "default": null
-              }
-             },
-             "required": [
-              "state"
-             ]
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "dependency_state": {
-           "description": "The cross-source dependency stage of this source as a consumer (null when it has none or they are unknown); the published index is searchable whatever this says.",
-           "anyOf": [
-            {
-             "type": "object",
-             "properties": {
-              "state": {
-               "type": "string",
-               "enum": [
-                "current",
-                "stale",
-                "pending"
-               ]
-              },
-              "reason": {
-               "anyOf": [
-                {
-                 "type": "string"
-                },
-                {
-                 "type": "null"
-                }
-               ],
-               "default": null
-              },
-              "updated_at": {
-               "anyOf": [
-                {
-                 "type": "string"
-                },
-                {
-                 "type": "null"
-                }
-               ],
-               "default": null
-              },
-              "producers": {
-               "type": "array",
-               "items": {
-                "type": "string"
-               }
-              },
-              "retry": {
-               "anyOf": [
-                {
-                 "type": "object",
-                 "properties": {
-                  "code": {
-                   "type": "string"
-                  },
-                  "last_error": {
-                   "type": "string"
-                  },
-                  "attempts": {
-                   "type": "integer"
-                  },
-                  "last_attempt_at": {
-                   "anyOf": [
-                    {
-                     "type": "string"
-                    },
-                    {
-                     "type": "null"
-                    }
-                   ],
-                   "default": null
-                  },
-                  "next_attempt_at": {
-                   "anyOf": [
-                    {
-                     "type": "string"
-                    },
-                    {
-                     "type": "null"
-                    }
-                   ],
-                   "default": null
-                  }
-                 },
-                 "required": [
-                  "code",
-                  "last_error",
-                  "attempts"
-                 ]
-                },
-                {
-                 "type": "null"
-                }
-               ],
-               "default": null
-              }
-             },
-             "required": [
-              "state",
-              "producers"
-             ]
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "readiness": {
-           "description": "Index readiness and complete-graph readiness, reported independently: complete_graph_ready requires a ready source graph and current cross-source dependencies.",
-           "type": "object",
-           "properties": {
-            "index_ready": {
-             "type": "boolean"
-            },
-            "complete_graph_ready": {
-             "type": "boolean"
-            }
-           },
-           "required": [
-            "index_ready",
-            "complete_graph_ready"
-           ]
-          },
-          "build": {
-           "type": "object",
-           "properties": {
-            "active_id": {
-             "anyOf": [
-              {
-               "type": "string"
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            },
-            "pending_id": {
-             "anyOf": [
-              {
-               "type": "string"
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            },
-            "state": {
-             "type": "string",
-             "enum": [
-              "not_indexed",
-              "building",
-              "ready",
-              "failed",
-              "needs_full_rebuild",
-              "unknown"
-             ]
-            },
-            "published_at": {
-             "anyOf": [
-              {
-               "type": "string"
-              },
-              {
-               "type": "null"
-              }
-             ],
-             "default": null
-            }
-           },
-           "required": [
-            "active_id",
-            "pending_id",
-            "state",
-            "published_at"
-           ]
-          },
-          "published": {
-           "anyOf": [
-            {
-             "$ref": "#/$defs/PublishedCounts"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "live": {
-           "anyOf": [
-            {
-             "$ref": "#/$defs/LiveRun"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "last_scan_at": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "last_error_at": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "last_error": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "warnings": {
-           "type": "array",
-           "items": {
-            "type": "string"
-           }
-          },
-          "git": {
-           "description": "Git sources only (absent for folder sources): the remote, the fetched commit and the commit the published index was built from.",
-           "$ref": "#/$defs/GitSourceStatus"
-          }
-         },
-         "required": [
-          "source_id",
-          "path",
-          "source_type",
-          "enabled",
-          "access",
-          "index_state",
-          "build",
-          "published",
-          "live",
-          "last_scan_at",
-          "last_error_at",
-          "last_error",
-          "warnings"
-         ]
-        },
-        "GitSourceStatus": {
-         "type": "object",
-         "properties": {
-          "url": {
-           "type": "string"
-          },
-          "branch": {
-           "type": "string"
-          },
-          "subpath": {
-           "type": [
-            "string",
-            "null"
-           ]
-          },
-          "commit": {
-           "type": [
-            "string",
-            "null"
-           ]
-          },
-          "indexed_commit": {
-           "type": [
-            "string",
-            "null"
-           ]
-          },
-          "fetched_at": {
-           "type": [
-            "string",
-            "null"
-           ]
-          },
-          "last_error": {
-           "type": [
-            "string",
-            "null"
-           ]
-          }
-         },
-         "required": [
-          "url",
-          "branch",
-          "subpath",
-          "commit",
-          "indexed_commit",
-          "fetched_at",
-          "last_error"
-         ]
-        },
-        "PublishedCounts": {
-         "type": "object",
-         "properties": {
-          "files": {
-           "type": "integer"
-          },
-          "indexed": {
-           "type": "integer"
-          },
-          "failed": {
-           "type": "integer"
-          },
-          "retrying": {
-           "type": "integer"
-          },
-          "code_entities": {
-           "type": "integer"
-          },
-          "documents": {
-           "type": "integer"
-          },
-          "chunks": {
-           "type": "integer"
-          },
-          "passages": {
-           "type": "integer"
-          },
-          "degraded": {
-           "type": "integer"
-          },
-          "relationships": {
-           "type": "integer"
-          },
-          "links": {
-           "type": "integer"
-          },
-          "max_attempt_count": {
-           "type": "integer"
-          },
-          "next_retry_at": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          }
-         },
-         "required": [
-          "files",
-          "indexed",
-          "failed",
-          "retrying",
-          "code_entities",
-          "documents",
-          "chunks",
-          "passages",
-          "degraded",
-          "relationships",
-          "links",
-          "max_attempt_count",
-          "next_retry_at"
-         ],
-         "description": "Counters of the source's published (active) build only."
-        },
-        "LiveRun": {
-         "type": "object",
-         "properties": {
-          "run_id": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "host": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "pid": {
-           "anyOf": [
-            {
-             "type": "integer"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "operation": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "stage": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "scanned": {
-           "anyOf": [
-            {
-             "type": "integer"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "planned": {
-           "anyOf": [
-            {
-             "type": "integer"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "processed": {
-           "anyOf": [
-            {
-             "type": "integer"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "indexed": {
-           "anyOf": [
-            {
-             "type": "integer"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "failed": {
-           "anyOf": [
-            {
-             "type": "integer"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "retry": {
-           "anyOf": [
-            {
-             "type": "integer"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "percentage": {
-           "anyOf": [
-            {
-             "type": "number"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "started_at": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "last_progress_at": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "heartbeat_at": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "heartbeat_age_seconds": {
-           "anyOf": [
-            {
-             "type": "number"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "lease_token": {
-           "anyOf": [
-            {
-             "type": "integer"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "lease_valid": {
-           "anyOf": [
-            {
-             "type": "boolean"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "outcome": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "source_id": {
-           "type": "string"
-          },
-          "liveness": {
-           "type": "string",
-           "enum": [
-            "live",
-            "stalled",
-            "expired",
-            "finished"
-           ]
-          }
-         },
-         "required": [
-          "run_id",
-          "host",
-          "pid",
-          "operation",
-          "stage",
-          "scanned",
-          "planned",
-          "processed",
-          "indexed",
-          "failed",
-          "retry",
-          "percentage",
-          "started_at",
-          "last_progress_at",
-          "heartbeat_at",
-          "heartbeat_age_seconds",
-          "lease_token",
-          "lease_valid",
-          "outcome",
-          "source_id",
-          "liveness"
-         ],
-         "description": "One source pass on this host (local) or any host (server). Remote PIDs are never shown; unknown counters are null."
-        },
-        "Problem": {
-         "type": "object",
-         "properties": {
-          "code": {
-           "type": "string"
-          },
-          "severity": {
-           "type": "string",
-           "enum": [
-            "info",
-            "warning",
-            "error"
-           ]
-          },
-          "scope": {
-           "type": "string",
-           "enum": [
-            "backend",
-            "cluster",
-            "runtime",
-            "source",
-            "file"
-           ]
-          },
-          "source_id": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "host": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "message": {
-           "type": "string"
-          },
-          "hint": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "observed_at": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          }
-         },
-         "required": [
-          "code",
-          "severity",
-          "scope",
-          "source_id",
-          "host",
-          "message",
-          "hint",
-          "observed_at"
-         ]
-        },
-        "ErrorEvent": {
-         "type": "object",
-         "properties": {
-          "source_id": {
-           "type": "string"
-          },
-          "path": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "code": {
-           "type": "string"
-          },
-          "message": {
-           "type": "string"
-          },
-          "status": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "attempt_count": {
-           "anyOf": [
-            {
-             "type": "integer"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          },
-          "occurred_at": {
-           "anyOf": [
-            {
-             "type": "string"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null
-          }
-         },
-         "required": [
-          "source_id",
-          "path",
-          "code",
-          "message",
-          "status",
-          "attempt_count",
-          "occurred_at"
-         ],
-         "description": "A recorded error; the list is globally ordered by occurred_at (newest first)."
-        },
-        "ToolError": {
-         "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
-         "properties": {
-          "type": {
-           "title": "Type",
-           "type": "string"
-          },
-          "message": {
-           "title": "Message",
-           "type": "string"
-          }
-         },
-         "required": [
-          "type",
-          "message"
-         ],
-         "title": "ToolError",
-         "type": "object"
-        }
-       },
+       "type": "object",
        "properties": {
         "schema_version": {
-         "default": "1",
-         "title": "Schema Version",
          "type": "string"
         },
         "ok": {
-         "title": "Ok",
          "type": "boolean"
         },
         "error": {
-         "anyOf": [
-          {
-           "$ref": "#/$defs/ToolError"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null
+         "type": [
+          "object",
+          "null"
+         ]
         },
         "status": {
-         "anyOf": [
-          {
-           "$ref": "#/$defs/StatusReport"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null
+         "type": [
+          "object",
+          "null"
+         ]
         }
        },
        "required": [
         "ok"
-       ],
-       "title": "docmonk_statusOutput",
-       "type": "object"
+       ]
       }
      },
      {
       "name": "docmonk_ask",
-      "description": "Ask a natural-language question, answered by the configured AI provider grounded in the same evidence docmonk_explore would return. Calls out to a real (possibly cloud) AI provider -- unlike every other tool here.",
+      "description": "A natural-language answer from the configured AI provider, grounded in the evidence docmonk_explore would return. Unlike every other tool it calls an AI provider, possibly in the cloud; prefer docmonk_explore when you can reason over the evidence yourself.",
       "inputSchema": {
        "properties": {
         "question": {
-         "title": "Question",
          "type": "string"
         }
        },
        "required": [
         "question"
        ],
-       "title": "docmonk_askArguments",
        "type": "object",
        "additionalProperties": false
       },
       "outputSchema": {
-       "$defs": {
-        "AiAnswerOut": {
-         "properties": {
-          "text": {
-           "title": "Text",
-           "type": "string"
-          },
-          "provider": {
-           "title": "Provider",
-           "type": "string"
-          },
-          "model": {
-           "title": "Model",
-           "type": "string"
-          },
-          "usage": {
-           "$ref": "#/$defs/AiUsageOut"
-          }
-         },
-         "required": [
-          "text",
-          "provider",
-          "model",
-          "usage"
-         ],
-         "title": "AiAnswerOut",
-         "type": "object"
-        },
-        "AiUsageOut": {
-         "properties": {
-          "input_tokens": {
-           "anyOf": [
-            {
-             "type": "integer"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Input Tokens"
-          },
-          "output_tokens": {
-           "anyOf": [
-            {
-             "type": "integer"
-            },
-            {
-             "type": "null"
-            }
-           ],
-           "default": null,
-           "title": "Output Tokens"
-          }
-         },
-         "title": "AiUsageOut",
-         "type": "object"
-        },
-        "EvidenceRef": {
-         "description": "An ``EvidenceFact`` plus the source snippet that lets a reader\ninterpret it -- ``retrieval/context_builder.py``'s budgeted\n``EvidenceItem.to_dict()`` shape, used by ``docmonk_explore``.",
-         "properties": {
-          "source": {
-           "title": "Source",
-           "type": "string"
-          },
-          "path": {
-           "title": "Path",
-           "type": "string"
-          },
-          "location": {
-           "additionalProperties": true,
-           "title": "Location",
-           "type": "object"
-          },
-          "entity": {
-           "title": "Entity",
-           "type": "string"
-          },
-          "relationship": {
-           "title": "Relationship",
-           "type": "string"
-          },
-          "confidence": {
-           "title": "Confidence",
-           "type": "string"
-          },
-          "snippet": {
-           "title": "Snippet",
-           "type": "string"
-          }
-         },
-         "required": [
-          "source",
-          "path",
-          "location",
-          "entity",
-          "relationship",
-          "confidence",
-          "snippet"
-         ],
-         "title": "EvidenceRef",
-         "type": "object"
-        },
-        "ToolError": {
-         "description": "A clear, typed error -- never a raw traceback. ``type`` is the\nDocMonk exception class name (``\"UsageError\"``, ``\"ConfigError\"``,\n...) or one of this module's own boundary types (``\"timeout\"``,\n``\"internal_error\"``), so a client can branch on it without parsing\nprose.",
-         "properties": {
-          "type": {
-           "title": "Type",
-           "type": "string"
-          },
-          "message": {
-           "title": "Message",
-           "type": "string"
-          }
-         },
-         "required": [
-          "type",
-          "message"
-         ],
-         "title": "ToolError",
-         "type": "object"
-        }
-       },
-       "description": "Not read-only and not network-free like the other 8 tools (see\n``mcp/server.py``'s per-tool annotations/instructions) -- calling this\ntool reaches the configured ``ai:`` provider, which may be a real\ncloud/network endpoint gated by ``privacy.external_ai_allowed``\nexactly like ``docmonk ask`` itself.",
+       "type": "object",
        "properties": {
         "schema_version": {
-         "default": "1",
-         "title": "Schema Version",
          "type": "string"
         },
         "ok": {
-         "title": "Ok",
          "type": "boolean"
         },
         "error": {
-         "anyOf": [
-          {
-           "$ref": "#/$defs/ToolError"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null
+         "type": [
+          "object",
+          "null"
+         ]
         },
         "question": {
-         "anyOf": [
-          {
-           "type": "string"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null,
-         "title": "Question"
+         "type": [
+          "string",
+          "null"
+         ]
         },
         "answer": {
-         "anyOf": [
-          {
-           "$ref": "#/$defs/AiAnswerOut"
-          },
-          {
-           "type": "null"
-          }
-         ],
-         "default": null
+         "type": [
+          "object",
+          "null"
+         ]
         },
         "evidence": {
-         "items": {
-          "$ref": "#/$defs/EvidenceRef"
-         },
-         "title": "Evidence",
          "type": "array"
         },
         "warnings": {
-         "items": {
-          "type": "string"
-         },
-         "title": "Warnings",
          "type": "array"
         }
        },
        "required": [
         "ok"
-       ],
-       "title": "AskOutput",
-       "type": "object"
+       ]
       },
       "annotations": {
        "readOnlyHint": true,

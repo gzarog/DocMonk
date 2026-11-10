@@ -5,6 +5,7 @@
 
 mod agent_flow;
 mod execution;
+mod manifest_budget;
 mod protocol;
 mod secrets;
 mod visibility;

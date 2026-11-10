@@ -1,11 +1,10 @@
 [
  {
   "name": "docmonk_explore",
-  "description": "Primary retrieval tool: plan + run the best deterministic strategies for a query and assemble a budgeted evidence package.",
+  "description": "Primary retrieval tool. Use it first for a natural-language or identifier query: it plans and runs the best deterministic strategies and returns a budgeted evidence package.",
   "inputSchema": {
    "properties": {
     "query": {
-     "title": "Query",
      "type": "string"
     },
     "max_chars": {
@@ -19,8 +18,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Max Chars"
+     "default": null
     },
     "max_files": {
      "anyOf": [
@@ -33,8 +31,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Max Files"
+     "default": null
     },
     "max_graph_nodes": {
      "anyOf": [
@@ -47,20 +44,17 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Max Graph Nodes"
+     "default": null
     },
     "explain": {
      "type": "boolean",
      "default": false,
-     "title": "Explain",
      "description": "Add a diagnostics object: routing decision, per-stage timings, source counts, backend request counters and build ids."
     }
    },
    "required": [
     "query"
    ],
-   "title": "docmonk_exploreArguments",
    "type": "object",
    "additionalProperties": false
   },
@@ -374,11 +368,10 @@
  },
  {
   "name": "docmonk_search",
-  "description": "Lexical search across indexed code and documents.",
+  "description": "Lexical search across indexed code and documents. Use it for a plain keyword lookup.",
   "inputSchema": {
    "properties": {
     "query": {
-     "title": "Query",
      "type": "string"
     },
     "limit": {
@@ -392,14 +385,12 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Limit"
+     "default": null
     }
    },
    "required": [
     "query"
    ],
-   "title": "docmonk_searchArguments",
    "type": "object",
    "additionalProperties": false
   },
@@ -545,11 +536,10 @@
  },
  {
   "name": "docmonk_evidence",
-  "description": "Grounded evidence for a question: deterministic intent routing, hard source/path/kind/document filters applied before retrieval, bounded decomposition, dedup and diversity, and typed [E#] citations re-verified against the index, with a supported / partial / insufficient_evidence verdict. Never calls an LLM or the network.",
+  "description": "Grounded evidence for a question: [E#] citations re-verified against the index and a supported / partial / insufficient_evidence verdict. Use it when you need hard source, path, kind or document filters or citable evidence; it never calls an LLM or the network.",
   "inputSchema": {
    "properties": {
     "query": {
-     "title": "Query",
      "type": "string"
     },
     "source_ids": {
@@ -564,8 +554,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Source Ids"
+     "default": null
     },
     "path_prefixes": {
      "anyOf": [
@@ -579,8 +568,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Path Prefixes"
+     "default": null
     },
     "kinds": {
      "anyOf": [
@@ -594,8 +582,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Kinds"
+     "default": null
     },
     "document_ids": {
      "anyOf": [
@@ -609,8 +596,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Document Ids"
+     "default": null
     },
     "exclude_attachments": {
      "anyOf": [
@@ -621,8 +607,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Exclude Attachments"
+     "default": null
     },
     "limit": {
      "anyOf": [
@@ -635,14 +620,12 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Limit"
+     "default": null
     }
    },
    "required": [
     "query"
    ],
-   "title": "docmonk_evidenceArguments",
    "type": "object",
    "additionalProperties": false
   },
@@ -869,23 +852,19 @@
  },
  {
   "name": "docmonk_read",
-  "description": "Read what a citation stands for: pass back the fields of one docmonk_evidence (or docmonk_ask) evidence entry. The citation is re-verified against the current index first; a stale citation (another build, a changed or missing record, a wrong location) is refused with `valid: false` and the reason instead of answering from old text. Code comes back as numbered lines with the cited lines marked `>` and `context` lines around them; a document chunk comes back with its heading and neighbouring chunks. Every field of an evidence entry is accepted, so an entry can be passed back unchanged; `context_lines` sets how much surrounding text to return.",
+  "description": "Read what a citation stands for: pass back one docmonk_evidence (or docmonk_ask) evidence entry unchanged. The citation is re-verified first; a stale one is refused with `valid: false` and the reason.",
   "inputSchema": {
    "properties": {
     "source_id": {
-     "title": "Source Id",
      "type": "string"
     },
     "build_id": {
-     "title": "Build Id",
      "type": "string"
     },
     "kind": {
-     "title": "Kind",
      "type": "string"
     },
     "record_id": {
-     "title": "Record Id",
      "type": "string"
     },
     "id": {
@@ -897,8 +876,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Id"
+     "default": null
     },
     "path": {
      "anyOf": [
@@ -909,8 +887,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Path"
+     "default": null
     },
     "line_start": {
      "anyOf": [
@@ -923,8 +900,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Line Start"
+     "default": null
     },
     "line_end": {
      "anyOf": [
@@ -937,8 +913,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Line End"
+     "default": null
     },
     "page_start": {
      "anyOf": [
@@ -951,8 +926,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Page Start"
+     "default": null
     },
     "page_end": {
      "anyOf": [
@@ -965,8 +939,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Page End"
+     "default": null
     },
     "content_fingerprint": {
      "anyOf": [
@@ -977,8 +950,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Content Fingerprint"
+     "default": null
     },
     "context_lines": {
      "anyOf": [
@@ -992,7 +964,6 @@
       }
      ],
      "default": null,
-     "title": "Context Lines",
      "description": "Code lines (or document chunks, at most 10) shown around the cited span; default 5."
     },
     "invalid_reason": {
@@ -1004,8 +975,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Invalid Reason"
+     "default": null
     },
     "title": {
      "anyOf": [
@@ -1016,8 +986,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Title"
+     "default": null
     },
     "heading": {
      "anyOf": [
@@ -1028,8 +997,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Heading"
+     "default": null
     },
     "fingerprint": {
      "anyOf": [
@@ -1040,8 +1008,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Fingerprint"
+     "default": null
     },
     "language": {
      "anyOf": [
@@ -1052,8 +1019,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Language"
+     "default": null
     },
     "tier": {
      "anyOf": [
@@ -1064,8 +1030,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Tier"
+     "default": null
     },
     "text": {
      "anyOf": [
@@ -1076,8 +1041,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Text"
+     "default": null
     },
     "valid": {
      "anyOf": [
@@ -1088,8 +1052,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Valid"
+     "default": null
     },
     "retrieval": {
      "anyOf": [
@@ -1101,7 +1064,6 @@
       }
      ],
      "default": null,
-     "title": "Retrieval",
      "description": "Accepted so an evidence entry can be passed back as is; ignored."
     },
     "context": {
@@ -1114,7 +1076,6 @@
       }
      ],
      "default": null,
-     "title": "Context",
      "description": "Accepted so an evidence entry can be passed back as is; ignored."
     }
    },
@@ -1124,7 +1085,6 @@
     "kind",
     "record_id"
    ],
-   "title": "docmonk_readArguments",
    "type": "object",
    "additionalProperties": false
   },
@@ -1520,14 +1480,12 @@
   "inputSchema": {
    "properties": {
     "name": {
-     "title": "Name",
      "type": "string"
     }
    },
    "required": [
     "name"
    ],
-   "title": "docmonk_symbolArguments",
    "type": "object",
    "additionalProperties": false
   },
@@ -1698,7 +1656,6 @@
   "inputSchema": {
    "properties": {
     "name": {
-     "title": "Name",
      "type": "string"
     },
     "max_depth": {
@@ -1712,8 +1669,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Max Depth"
+     "default": null
     },
     "limit": {
      "anyOf": [
@@ -1726,14 +1682,12 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Limit"
+     "default": null
     }
    },
    "required": [
     "name"
    ],
-   "title": "docmonk_callersArguments",
    "type": "object",
    "additionalProperties": false
   },
@@ -1999,7 +1953,6 @@
   "inputSchema": {
    "properties": {
     "name": {
-     "title": "Name",
      "type": "string"
     },
     "max_depth": {
@@ -2013,8 +1966,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Max Depth"
+     "default": null
     },
     "limit": {
      "anyOf": [
@@ -2027,14 +1979,12 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Limit"
+     "default": null
     }
    },
    "required": [
     "name"
    ],
-   "title": "docmonk_calleesArguments",
    "type": "object",
    "additionalProperties": false
   },
@@ -2296,11 +2246,10 @@
  },
  {
   "name": "docmonk_impact",
-  "description": "Blast-radius impact analysis for a symbol: callers, callees, tests, documentation.",
+  "description": "Blast-radius analysis for a symbol: callers, callees, tests and documentation. Use it before changing a symbol.",
   "inputSchema": {
    "properties": {
     "name": {
-     "title": "Name",
      "type": "string"
     },
     "max_depth": {
@@ -2314,8 +2263,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Max Depth"
+     "default": null
     },
     "limit": {
      "anyOf": [
@@ -2328,14 +2276,12 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Limit"
+     "default": null
     }
    },
    "required": [
     "name"
    ],
-   "title": "docmonk_impactArguments",
    "type": "object",
    "additionalProperties": false
   },
@@ -2615,11 +2561,10 @@
  },
  {
   "name": "docmonk_references",
-  "description": "Every graph edge touching a symbol, in both directions (calls, references, inheritance, imports, routes and links), like `docmonk references`. Use it to see where a cited symbol is used before changing it.",
+  "description": "Every graph edge touching a symbol, in both directions (calls, references, inheritance, imports, routes and links). Use it to see where a symbol is used before changing it.",
   "inputSchema": {
    "properties": {
     "name": {
-     "title": "Name",
      "type": "string"
     },
     "max_depth": {
@@ -2633,8 +2578,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Max Depth"
+     "default": null
     },
     "limit": {
      "anyOf": [
@@ -2647,14 +2591,12 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Limit"
+     "default": null
     }
    },
    "required": [
     "name"
    ],
-   "title": "docmonk_referencesArguments",
    "type": "object",
    "additionalProperties": false
   },
@@ -2916,7 +2858,7 @@
  },
  {
   "name": "docmonk_links",
-  "description": "Code-document links (automatic and user-added) for an entity, a document, or everything in a source, like `docmonk link list`: which specification sections a function implements, and which code a document describes. Read-only.",
+  "description": "Code-document links for an entity, a document or a whole source: which specification sections a function implements and which code a document describes.",
   "inputSchema": {
    "properties": {
     "entity": {
@@ -2928,8 +2870,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Entity"
+     "default": null
     },
     "document": {
      "anyOf": [
@@ -2940,8 +2881,7 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Document"
+     "default": null
     },
     "source_id": {
      "anyOf": [
@@ -2952,11 +2892,9 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Source Id"
+     "default": null
     }
    },
-   "title": "docmonk_linksArguments",
    "type": "object",
    "additionalProperties": false
   },
@@ -3163,11 +3101,9 @@
        "type": "null"
       }
      ],
-     "default": null,
-     "title": "Source Id"
+     "default": null
     }
    },
-   "title": "docmonk_documentsArguments",
    "type": "object",
    "additionalProperties": false
   },
@@ -3358,7 +3294,7 @@
  },
  {
   "name": "docmonk_status",
-  "description": "Authoritative indexing status (local SQLite or the configured OpenSearch/Elasticsearch): health and problems, live passes on every host, published counts per source, globally ordered recent errors and diagnostics. Unknown values are null, never 0. An unreachable server is an error result.",
+  "description": "Authoritative indexing status: health and problems, live passes, published counts per source and recent errors. Unknown values are null, never 0.",
   "inputSchema": {
    "properties": {
     "source_id": {
@@ -3371,8 +3307,7 @@
       }
      ],
      "default": null,
-     "description": "Only this source's row and errors (summary and problems stay global).",
-     "title": "Source Id"
+     "description": "Only this source's row and errors (summary and problems stay global)."
     },
     "error_limit": {
      "anyOf": [
@@ -3386,11 +3321,9 @@
       }
      ],
      "default": null,
-     "description": "Recent errors to return (default 25, at most 200).",
-     "title": "Error Limit"
+     "description": "Recent errors to return (default 25, at most 200)."
     }
    },
-   "title": "docmonk_statusArguments",
    "type": "object",
    "additionalProperties": false
   },
@@ -5032,18 +4965,16 @@
  },
  {
   "name": "docmonk_ask",
-  "description": "Ask a natural-language question, answered by the configured AI provider grounded in the same evidence docmonk_explore would return. Calls out to a real (possibly cloud) AI provider -- unlike every other tool here.",
+  "description": "A natural-language answer from the configured AI provider, grounded in the evidence docmonk_explore would return. Unlike every other tool it calls an AI provider, possibly in the cloud; prefer docmonk_explore when you can reason over the evidence yourself.",
   "inputSchema": {
    "properties": {
     "question": {
-     "title": "Question",
      "type": "string"
     }
    },
    "required": [
     "question"
    ],
-   "title": "docmonk_askArguments",
    "type": "object",
    "additionalProperties": false
   },
