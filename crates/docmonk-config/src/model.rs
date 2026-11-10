@@ -713,6 +713,10 @@ section! {
         max_result_bytes: i64 = 262_144, check = |v| {
             if (4096..=67_108_864).contains(v) { Ok(()) } else { Err("must be between 4096 and 67108864".into()) }
         };
+        // tools/list serves each tool's output schema cut down to its
+        // top-level keys and types, which keeps the manifest small for
+        // agents. true serves the full schemas; results are the same.
+        full_output_schemas: bool = false;
         // mcp.jsonl is rotated to mcp.jsonl.1 (one generation) past this size.
         query_log_max_bytes: i64 = 10_485_760, check = |v| {
             if (4096..=1_073_741_824).contains(v) { Ok(()) } else { Err("must be between 4096 and 1073741824".into()) }

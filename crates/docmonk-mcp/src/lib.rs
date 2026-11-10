@@ -1,7 +1,8 @@
 //! The DocMonk MCP server (`docmonk serve --mcp`) over stdio.
 //!
 //! A JSON-RPC 2.0 loop over newline-delimited stdin/stdout exposing the
-//! read-only `docmonk_*` tools (catalog in `mcp_tools.json`) with
+//! read-only `docmonk_*` tools (catalog in `mcp_tools.json`; `tools/list`
+//! serves it with minimal output schemas unless `mcp.full_output_schemas`) with
 //! `{schema_version, ok, error, ...}` results. `docmonk_ask` answers
 //! through the configured AI provider, like `docmonk ask`.
 //!
@@ -54,7 +55,7 @@ docmonk_explore would return -- prefer docmonk_explore when the calling agent ca
 evidence itself; use docmonk_ask only when a synthesized natural-language answer is \
 specifically wanted.";
 
-/// The tool catalog `tools/list` returns.
+/// The tool catalog with full output schemas, which shape every result.
 pub fn tools() -> &'static [Value] {
     static TOOLS: OnceLock<Vec<Value>> = OnceLock::new();
     TOOLS.get_or_init(|| {
@@ -64,6 +65,78 @@ pub fn tools() -> &'static [Value] {
 
 fn tool(name: &str) -> Option<&'static Value> {
     tools().iter().find(|t| t["name"] == name)
+}
+
+/// The JSON type (or types) of one top-level output property: a `$ref` is
+/// followed, a nullable `anyOf` becomes a type list.
+fn top_level_type(prop: &Value, root: &Value) -> Value {
+    let prop = resolve(prop, root);
+    let Some(options) = prop["anyOf"].as_array() else {
+        return prop.get("type").cloned().unwrap_or_else(|| json!("object"));
+    };
+    let mut types: Vec<Value> = Vec::new();
+    for option in options {
+        match top_level_type(option, root) {
+            Value::Array(many) => types.extend(many),
+            one => types.push(one),
+        }
+    }
+    types.dedup();
+    Value::Array(types)
+}
+
+/// The keys every result carries, failed ones included ([`failure`]).
+const ENVELOPE: &[&str] = &["schema_version", "ok", "error"];
+
+/// A tool's output schema cut down to its top-level keys and their types.
+/// Only envelope keys stay required: a failed result (`ok: false`) has
+/// the envelope and none of the tool's own required fields, so every
+/// result, failed or not, is valid against this schema.
+fn minimal_output_schema(full: &Value) -> Value {
+    let properties: Map<String, Value> = full["properties"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(key, prop)| (key.clone(), json!({"type": top_level_type(prop, full)})))
+        .collect();
+    let mut schema = json!({"type": "object", "properties": properties});
+    let required: Vec<&Value> = full["required"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|key| key.as_str().is_some_and(|k| ENVELOPE.contains(&k)))
+        .collect();
+    if !required.is_empty() {
+        schema["required"] = json!(required);
+    }
+    schema
+}
+
+/// The catalog as `tools/list` serves it: every tool with a minimal
+/// output schema (top-level keys and types), or with its full output
+/// schema when `full_output_schemas` (`mcp.full_output_schemas`) is set.
+/// Results are shaped by the full schema either way.
+pub fn listed_tools(full_output_schemas: bool) -> &'static [Value] {
+    if full_output_schemas {
+        return tools();
+    }
+    static MINIMAL: OnceLock<Vec<Value>> = OnceLock::new();
+    MINIMAL.get_or_init(|| {
+        tools()
+            .iter()
+            .map(|tool| {
+                let mut tool = tool.clone();
+                tool["outputSchema"] = minimal_output_schema(&tool["outputSchema"]);
+                tool
+            })
+            .collect()
+    })
+}
+
+/// `mcp.full_output_schemas` (false when the config cannot be read).
+/// Listing the tools never creates the home.
+fn full_output_schemas() -> bool {
+    load(&Home::discover()).is_ok_and(|c| c.mcp.full_output_schemas)
 }
 
 /// `docmonk serve [--mcp]`.
@@ -178,7 +251,7 @@ pub fn handle_line(line: &str) -> Option<Value> {
     let outcome = match method {
         "initialize" => Ok(initialize(&params)),
         "ping" => Ok(json!({})),
-        "tools/list" => Ok(json!({"tools": tools()})),
+        "tools/list" => Ok(json!({"tools": listed_tools(full_output_schemas())})),
         "prompts/list" => Ok(json!({"prompts": []})),
         "resources/list" => Ok(json!({"resources": []})),
         "resources/templates/list" => Ok(json!({"resourceTemplates": []})),

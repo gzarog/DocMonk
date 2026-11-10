@@ -75,6 +75,16 @@ R4), which have not been run yet.
   `docmonk_impact` carry the same sites. Graph derivation `graph-4`: the
   first index after upgrading recomputes graphs, not content.
 
+### MCP
+
+- `tools/list` is about 14 KB instead of about 60 KB (roughly 3,500
+  tokens of agent context instead of 15,000). Tool descriptions are one
+  or two sentences, input schemas lose their generated titles, and each
+  output schema lists only the result's top-level keys and types.
+  Results are unchanged. `mcp.full_output_schemas: true` serves the full
+  output schemas for clients that validate against them. A test fails
+  when the default manifest exceeds 20,000 bytes.
+
 ### Project
 
 - Code owners for held-out labels, quality floors, the remediation

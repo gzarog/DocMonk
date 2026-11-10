@@ -352,11 +352,15 @@ docmonk serve --mcp --http [--host 127.0.0.1] [--port 8766]   # the same tools o
 
 Tools: `docmonk_explore`, `docmonk_search`, `docmonk_evidence`, `docmonk_read`, `docmonk_documents`, `docmonk_symbol`, `docmonk_callers`, `docmonk_callees`, `docmonk_impact`, `docmonk_references`, `docmonk_links`, `docmonk_status`, `docmonk_ask`.
 
+**Choosing a tool.** `docmonk_explore` is the primary tool: it runs the deterministic query planner and returns a budgeted evidence package. `docmonk_evidence` adds hard source, path, kind and document filters applied before retrieval, bounded decomposition, deduplication and diversity, and typed `[E#]` citations re-verified against the index, with a `supported` / `partial` / `insufficient_evidence` verdict. Neither calls an LLM or the network. `docmonk_status` reports the authoritative indexing status (local SQLite or the configured OpenSearch/Elasticsearch): health and problems, live passes on every host, published counts per source, globally ordered recent errors and diagnostics; an unreachable server is an error result. `docmonk_ask` is the one tool that calls the configured AI provider.
+
 **Following an answer.** An agent can go from an answer to its sources without reading files itself:
 
 - `docmonk_read` takes one evidence entry from `docmonk_evidence` (or `docmonk_ask`), passed back unchanged. It re-verifies the citation against the current index (source, build, record, location, content fingerprint). A stale citation is refused (`valid: false`, `reason`, `text: null`) instead of being answered from old text. Code comes back as numbered lines with the cited lines marked `>` and `context_lines` (default 5, at most 200) around them. A document chunk comes back with its heading and up to 10 neighbouring chunks.
-- `docmonk_references` lists every graph edge touching a symbol, like `docmonk references`.
-- `docmonk_links` lists the code-document links of an entity (id, qualified or short name) or a document (id or path), like `docmonk link list`. It is read-only: links are added and removed with the CLI or the Admin UI.
+- `docmonk_references` lists every graph edge touching a symbol, in both directions (calls, references, inheritance, imports, routes and links), like `docmonk references`.
+- `docmonk_links` lists the code-document links (automatic and user-added) of an entity (id, qualified or short name), a document (id or path) or everything in a source, like `docmonk link list`. It is read-only: links are added and removed with the CLI or the Admin UI.
+
+**Manifest size.** `tools/list` serves each tool with a short description, its full input schema and a minimal output schema: the result's top-level keys and their types, about 14 KB in all (roughly 3,500 tokens of agent context). Results themselves do not change: `structuredContent` is always shaped by the full schema. A client that validates results against nested schemas sets `mcp.full_output_schemas: true` and gets the full output schemas (about 57 KB). The details the short descriptions leave out are in this section.
 
 **Result budgets.** Every tool answer is limited to `mcp.max_result_items` items per list (default 200) and `mcp.max_result_bytes` in total (default 256 KiB). Lists are cut first, then the largest list is shortened, then the longest text. A cut answer carries `truncated: true` and one `truncation` entry per cut (`path`, `dropped` items or `chars`, `reason`), so the agent knows to narrow its query.
 
@@ -371,6 +375,7 @@ Tools: `docmonk_explore`, `docmonk_search`, `docmonk_evidence`, `docmonk_read`, 
 | `mcp.hidden_sources` | `[]` | Source ids or paths no MCP tool reads, returns or names. |
 | `mcp.query_log` | `false` | Log every tool call to `<home>/logs/mcp.jsonl`. |
 | `mcp.query_log_max_bytes` | `10485760` | Size at which the log is rotated (one generation kept). |
+| `mcp.full_output_schemas` | `false` | Serve full output schemas in `tools/list` instead of the minimal ones. |
 | `mcp.max_result_items` | `200` | Items per list in a tool answer; longer lists are cut and reported. |
 | `mcp.max_result_bytes` | `262144` | Size of a tool answer; larger answers are trimmed and reported. |
 
