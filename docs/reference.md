@@ -385,6 +385,8 @@ docmonk ask "how are settlement retries handled?"
 
 Providers: Ollama, OpenAI-compatible, OpenAI and Anthropic (require `privacy.external_ai_allowed: true`), Codex and GitHub Copilot (beta, `docmonk ai login <provider>`; see [providers/](providers/)).
 
+When `ai.model` is not set, each provider uses its default: `llama3.2` (Ollama), `gpt-6-luna` (OpenAI) and `claude-haiku-5-5` (Anthropic). An OpenAI-compatible endpoint has no default and needs `ai.model`. The cloud defaults are each provider's current small model and are re-checked against the providers' model lists at every minor release.
+
 ## Server storage (OpenSearch / Elasticsearch)
 
 ```bash
