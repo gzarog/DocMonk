@@ -1,0 +1,3443 @@
+{
+  "$schema": "./plan.schema.json",
+  "schema_version": "2.0",
+  "plan": {
+    "id": "docmonk-upgrade-plan",
+    "title": "DocMonk upgrade plan: ship 1.0, retrieval quality, agents and MCP, team use",
+    "created_on": "2026-11-10",
+    "status": "active",
+    "sources": [
+      {
+        "kind": "roadmap",
+        "title": "DocMonk Improvement Roadmap (plans/improvement-roadmap.json)",
+        "url": "https://github.com/gzarog/DocMonk/blob/main/plans/improvement-roadmap.json"
+      },
+      {
+        "kind": "analysis",
+        "title": "DocMonk upgrade plan whiteboard",
+        "url": "https://claude.ai/artifact/L791KmDNsGubtXZKNAL59b"
+      }
+    ],
+    "repository": {
+      "url": "https://github.com/gzarog/DocMonk",
+      "base_branch": "main",
+      "base_commit": "710200ab5783bceafef11353cdb336436bc4689d",
+      "base_release": "v0.3.25",
+      "language": "Rust",
+      "toolchain": "1.90.0 (rust-toolchain.toml)",
+      "msrv": "1.89",
+      "storage_backends": [
+        "SQLite",
+        "OpenSearch",
+        "Elasticsearch"
+      ]
+    }
+  },
+  "context": {
+    "summary": "A read of main at 710200a (no build or test run) found local mode feature-complete and v1.0.0 blocked on human tasks rather than code. This plan complements plans/improvement-roadmap.json: it sequences the roadmap's open packages and adds work the roadmap does not cover, namely the MCP manifest size, MCP resources and prompts, streaming and a UI page for ask, HTTP route detection for more frameworks, connectors, server-mode git sources, built-in authentication for HTTP MCP, and a few dependency and packaging items.",
+    "baseline": [
+      {
+        "id": "B01",
+        "metric": "MCP tool manifest size",
+        "value": 102362,
+        "unit": "bytes",
+        "scope": "13 tools, mostly outputSchema; roughly 25k tokens if a client loads it whole",
+        "source": "wc -c crates/docmonk-mcp/src/mcp_tools.json at 710200a"
+      },
+      {
+        "id": "B02",
+        "metric": "MCP resources and prompts exposed",
+        "value": 0,
+        "source": "crates/docmonk-mcp/src/lib.rs lines 182-184"
+      },
+      {
+        "id": "B03",
+        "metric": "evidence recall@10, MiniLM vs multilingual-e5-small",
+        "value": "0.854 vs 0.979",
+        "scope": "held-out, SQLite",
+        "source": "plans/improvement-roadmap.json B03 and B08"
+      },
+      {
+        "id": "B04",
+        "metric": "evidence cross-language recall@10, MiniLM vs multilingual-e5-small",
+        "value": "0.231 vs 1.0",
+        "scope": "held-out, SQLite, 13 queries",
+        "source": "plans/improvement-roadmap.json B05 and B09"
+      },
+      {
+        "id": "B05",
+        "metric": "false support rate / false abstention rate",
+        "value": "0.083 / 0.136",
+        "scope": "held-out, SQLite, default model",
+        "source": "plans/improvement-roadmap.json B06 and B07"
+      },
+      {
+        "id": "B06",
+        "metric": "frameworks with HTTP route detection",
+        "value": "Flask, FastAPI, ASP.NET attributes",
+        "scope": "7 languages are parsed for symbols",
+        "source": "crates/docmonk-code/src/framework.rs"
+      },
+      {
+        "id": "B07",
+        "metric": "native release targets",
+        "value": 4,
+        "scope": "linux x86_64, macOS arm64 and x86_64, windows x86_64",
+        "source": ".github/workflows/rust-release.yml lines 139-145"
+      },
+      {
+        "id": "B08",
+        "metric": "roadmap work packages blocked on a human",
+        "value": "H3, R1 (and R2 behind it), Q1, decision D1",
+        "source": "plans/improvement-roadmap.json"
+      }
+    ],
+    "findings": [
+      {
+        "id": "V01",
+        "severity": "medium",
+        "summary": "The MCP tool manifest is about 102 KB, most of it output schemas, which costs an agent roughly 25k tokens of context when loaded whole.",
+        "evidence": [
+          {
+            "path": "crates/docmonk-mcp/src/mcp_tools.json"
+          }
+        ]
+      },
+      {
+        "id": "V02",
+        "severity": "low",
+        "summary": "MCP resources, resource templates and prompts are advertised but always empty.",
+        "evidence": [
+          {
+            "path": "crates/docmonk-mcp/src/lib.rs",
+            "lines": "182-184"
+          }
+        ]
+      },
+      {
+        "id": "V03",
+        "severity": "medium",
+        "summary": "The cloud provider defaults are dated model names (gpt-4o-mini, claude-3-5-haiku-latest) and ask never streams.",
+        "evidence": [
+          {
+            "path": "crates/docmonk-ai/src/http.rs",
+            "lines": "20-22,279"
+          }
+        ]
+      },
+      {
+        "id": "V04",
+        "severity": "medium",
+        "summary": "HTTP route detection covers Python decorators and C# attributes only; Express, Fastify, Spring, Go routers and ASP.NET minimal APIs are not detected although their languages are parsed.",
+        "evidence": [
+          {
+            "path": "crates/docmonk-code/src/framework.rs"
+          },
+          {
+            "path": "README.md",
+            "lines": "152"
+          }
+        ]
+      },
+      {
+        "id": "V05",
+        "severity": "medium",
+        "summary": "Sources are local folders and git repositories only, and git sources work in local mode only; there is no connector for Confluence, Slack or Jira.",
+        "evidence": [
+          {
+            "path": "docs/adr/0043-git-remote-sources.md"
+          },
+          {
+            "path": "CHANGELOG.md",
+            "note": "Sources section: Local mode only"
+          }
+        ]
+      },
+      {
+        "id": "V06",
+        "severity": "low",
+        "summary": "The Admin UI has search and a provider test but no page to ask a question and read a cited answer.",
+        "evidence": [
+          {
+            "path": "crates/docmonk-ui/src/lib.rs",
+            "lines": "1086-1117"
+          }
+        ]
+      },
+      {
+        "id": "V07",
+        "severity": "low",
+        "summary": "There is no native Linux arm64 release archive; arm64 Linux is served by the container image only.",
+        "evidence": [
+          {
+            "path": ".github/workflows/rust-release.yml",
+            "lines": "139-145"
+          }
+        ]
+      },
+      {
+        "id": "V08",
+        "severity": "low",
+        "summary": "rusqlite is at 0.32, and three zip advisories are ignored in deny.toml until a 2027-01-31 review.",
+        "evidence": [
+          {
+            "path": "Cargo.toml"
+          },
+          {
+            "path": "deny.toml"
+          }
+        ]
+      },
+      {
+        "id": "V09",
+        "severity": "medium",
+        "summary": "MCP over HTTP has no authentication of its own: it relies on a loopback bind or on an authenticating reverse proxy.",
+        "evidence": [
+          {
+            "path": "crates/docmonk-ui/src/mcp_http.rs",
+            "lines": "5-11"
+          }
+        ]
+      },
+      {
+        "id": "V10",
+        "severity": "high",
+        "summary": "v1.0.0 is blocked on human tasks: no signing key is configured, the 100 held-out labels are unreviewed with empty floors, code-owner review is not enforced, and the server-mode decision is open.",
+        "evidence": [
+          {
+            "path": "plans/improvement-roadmap.json",
+            "note": "H3 blocked, R1 not_started, Q1 blocked, D1 proposed"
+          },
+          {
+            "path": "fixtures/eval/heldout-gates.json"
+          }
+        ]
+      },
+      {
+        "id": "V11",
+        "severity": "high",
+        "summary": "The default embedding model is far behind multilingual-e5-small on the held-out set, in English as well as across languages.",
+        "evidence": [
+          {
+            "path": "benchmarks/heldout-eval/phase-3.json"
+          },
+          {
+            "path": "benchmarks/heldout-eval/phase-4-multilingual-e5-small.json"
+          }
+        ]
+      }
+    ],
+    "do_not_duplicate": [
+      {
+        "summary": "The improvement roadmap already specifies H3, R1 to R7, P1 to P5, P9, P11, A1 to A6 and Q1, Q2, Q6 with tasks and acceptance criteria. S1, S3, Q1 and T5 of this plan only sequence them.",
+        "paths": [
+          "plans/improvement-roadmap.json"
+        ]
+      },
+      {
+        "summary": "Messaging topology (RabbitMQ, MassTransit, Kafka) is implemented; route work must reuse its graph-row and cross-source binding approach.",
+        "paths": [
+          "crates/docmonk-code/src/messaging.rs",
+          "docs/adr/0044-messaging-topology.md"
+        ]
+      },
+      {
+        "summary": "MCP visibility, query log, budgets and secret redaction exist; new MCP surfaces must go through them.",
+        "paths": [
+          "crates/docmonk-mcp/src/visibility.rs",
+          "crates/docmonk-mcp/src/query_log.rs",
+          "crates/docmonk-mcp/src/budget.rs",
+          "docs/adr/0042-secret-redaction.md"
+        ]
+      },
+      {
+        "summary": "The Admin UI access model, CSRF and Host/Origin guards exist and cover the HTTP MCP router.",
+        "paths": [
+          "crates/docmonk-ui/src/access.rs",
+          "crates/docmonk-ui/src/mcp_http.rs",
+          "docs/ui.md"
+        ]
+      },
+      {
+        "summary": "An embedding-model switch test and embedding ETA already exist.",
+        "paths": [
+          "crates/docmonk-service/tests/it/embedding_model_switch.rs",
+          "crates/docmonk-indexing/src/progress.rs"
+        ]
+      }
+    ]
+  },
+  "policy": {
+    "branching": {
+      "prefix": "roadmap/",
+      "merge_target": "main",
+      "one_pr_per": "work_package",
+      "rules": [
+        "Branch from the latest main after every depends_on package is merged.",
+        "Keep security, retrieval-quality and refactor changes in separate PRs.",
+        "Tracking packages (S1, Q1, T5) use the branches of the roadmap packages they sequence."
+      ]
+    },
+    "protected_paths": [
+      {
+        "path": "fixtures/eval/queries.json",
+        "rule": "human_approval_required",
+        "reason": "Held-out labels judge the code; a model must not approve its own labels."
+      },
+      {
+        "path": "fixtures/eval/heldout-gates.json",
+        "rule": "never_lower",
+        "reason": "Floors only move up, with human approval."
+      },
+      {
+        "path": "fixtures/search_quality/gates.json",
+        "rule": "never_lower",
+        "reason": "Golden-query floors."
+      },
+      {
+        "path": "fixtures/search_quality/repo-eval-gates.json",
+        "rule": "never_lower",
+        "reason": "Repository eval floors."
+      },
+      {
+        "path": "fixtures/p0/eval-gates.json",
+        "rule": "never_lower",
+        "reason": "Planted-fact eval floors."
+      },
+      {
+        "path": "audit/remediation/ledger.json",
+        "rule": "human_approval_required",
+        "reason": "Finding statuses are claims about verification."
+      },
+      {
+        "path": "audit/clean-slate-baseline.tsv",
+        "rule": "read_only",
+        "reason": "Must stay empty for the release gate."
+      },
+      {
+        "path": "xtask/src/audit.rs",
+        "rule": "human_approval_required",
+        "reason": "Audits are never weakened to get CI green."
+      }
+    ],
+    "required_checks": [
+      "fmt",
+      "clippy",
+      "test",
+      "audits"
+    ],
+    "principles": [
+      "Inspect current main before each work package; this plan was written from a read of 710200a without building or running the tests, so confirm each finding first and adapt where the code differs.",
+      "Measure before and after; never claim an improvement without a committed report.",
+      "Keep determinism: identical rankings, citations and verdicts on repeated runs over the same snapshot.",
+      "Every new read surface (resources, connectors, UI pages) goes through KnowledgeRead, secret redaction, MCP visibility and the query log.",
+      "Record design decisions as new ADRs in docs/adr/ with the next free number; the ADR numbers in this plan are placeholders.",
+      "Look up third-party API and model details at implementation time; do not take them from memory."
+    ],
+    "non_goals": [
+      "No hosted or cloud service and no telemetry.",
+      "No connector that writes to the remote system.",
+      "No change to the ADR 0032 clean-slate policy.",
+      "No lowering of floors or loosening of audits to land a change.",
+      "No reranker enabled by default.",
+      "No change of the default embedding model before roadmap decision D2 is recorded."
+    ]
+  },
+  "commands": {
+    "fetch_models": {
+      "run": "scripts/fetch_models.sh <models dir> --multilingual",
+      "purpose": "Download and verify the pinned embedding, reranker, OCR and E5 models."
+    },
+    "fmt": {
+      "run": "cargo fmt --all --check",
+      "purpose": "Formatting."
+    },
+    "clippy": {
+      "run": "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+      "purpose": "Lints, warnings denied."
+    },
+    "test": {
+      "run": "cargo test --workspace --no-fail-fast",
+      "purpose": "Workspace tests with pinned models required, as in CI.",
+      "env": {
+        "DOCMONK_MODELS_DIR": "<models dir>",
+        "DOCMONK_OCR_MODELS_DIR": "<models dir>/ocrs",
+        "DOCMONK_REQUIRE_MODELS": "1",
+        "DOCMONK_REQUIRE_OCR": "1"
+      }
+    },
+    "audits": {
+      "run": "cargo xtask clean-slate-audit && cargo xtask branding-audit",
+      "purpose": "Repository audits every new line must pass."
+    },
+    "release_gate_audit": {
+      "run": "cargo xtask clean-slate-audit --require-empty-baseline",
+      "purpose": "Release gate of ADR 0032."
+    },
+    "deny": {
+      "run": "cargo deny check",
+      "purpose": "Advisories, licences, bans and sources."
+    },
+    "eval_default": {
+      "run": "cargo test --release -p docmonk-service --test it -- heldout_eval::",
+      "purpose": "Held-out eval with the default embedding model; attach the report.",
+      "env": {
+        "DOCMONK_MODELS_DIR": "<models dir>",
+        "DOCMONK_OCR_MODELS_DIR": "<models dir>/ocrs",
+        "DOCMONK_EVAL_OUT": "<report path>.json"
+      }
+    },
+    "eval_e5": {
+      "run": "cargo test --release -p docmonk-service --test it -- heldout_eval::",
+      "purpose": "Held-out eval with multilingual-e5-small; attach the report.",
+      "env": {
+        "DOCMONK_MODELS_DIR": "<models dir>",
+        "DOCMONK_OCR_MODELS_DIR": "<models dir>/ocrs",
+        "DOCMONK_EVAL_EMBEDDING_MODEL": "multilingual-e5-small",
+        "DOCMONK_EVAL_OUT": "<report path>.json"
+      }
+    },
+    "server_tests": {
+      "run": "cargo test --workspace",
+      "purpose": "Live OpenSearch/Elasticsearch suites.",
+      "env": {
+        "DOCMONK_TEST_OPENSEARCH_URL": "http://localhost:9201",
+        "DOCMONK_TEST_ELASTICSEARCH_URL": "http://localhost:9202",
+        "DOCMONK_REQUIRE_LIVE_SERVER": "1"
+      },
+      "requires": [
+        {
+          "kind": "cluster",
+          "description": "OpenSearch 2.17 on :9201 and Elasticsearch 8.15 on :9202."
+        }
+      ]
+    },
+    "validate_plan": {
+      "run": "npx --yes ajv-cli@5 validate --spec=draft2020 --strict=false -s plans/plan.schema.json -d plans/upgrade-plan.json",
+      "purpose": "Validate this plan against its schema after every edit; then re-check x-integrity-rules by reading."
+    }
+  },
+  "objectives": [
+    {
+      "id": "O1",
+      "objective": "Ship v1.0.0 with human-verified quality gates.",
+      "success_criteria": [
+        "v1.0.0 is signed and installs on Linux, macOS, Windows and as a container.",
+        "Held-out floors on human-approved labels run nightly."
+      ]
+    },
+    {
+      "id": "O2",
+      "objective": "Make the better embedder the default without breaking existing homes.",
+      "success_criteria": [
+        "multilingual-e5-small is the default and installs with one command.",
+        "False support 0 and false abstention below 0.10 on approved labels.",
+        "A home indexed with another model never mixes vector spaces."
+      ]
+    },
+    {
+      "id": "O3",
+      "objective": "Make DocMonk cheap and complete for agents.",
+      "success_criteria": [
+        "Default tools/list under 20 KB.",
+        "Resources and prompts are available under the same visibility and redaction rules as tools.",
+        "Agent-flow ceilings are enforced in CI."
+      ]
+    },
+    {
+      "id": "O4",
+      "objective": "Make DocMonk useful to a team sharing one index.",
+      "success_criteria": [
+        "Server mode is GA with published measurements.",
+        "HTTP routes are detected for the main frameworks of all parsed web languages.",
+        "At least one connector (Confluence) indexes incrementally.",
+        "HTTP MCP can authenticate without a reverse proxy."
+      ]
+    },
+    {
+      "id": "O5",
+      "objective": "Keep dependencies and packaging current.",
+      "success_criteria": [
+        "No ignore in deny.toml carries a past review date.",
+        "A native Linux arm64 archive ships with every release."
+      ]
+    }
+  ],
+  "milestones": [
+    {
+      "id": "M0",
+      "name": "Ship 1.0",
+      "summary": "Clear the human blockers, fix the dated AI defaults, tag.",
+      "work_packages": [
+        "S1",
+        "S2",
+        "S3"
+      ],
+      "gate": [
+        {
+          "id": "G0-1",
+          "criterion": "Every held-out label is human-reviewed and floors are set.",
+          "verify": {
+            "kind": "manual"
+          }
+        },
+        {
+          "id": "G0-2",
+          "criterion": "The release gate audit passes with an empty baseline.",
+          "verify": {
+            "kind": "command",
+            "ref": "release_gate_audit"
+          }
+        },
+        {
+          "id": "G0-3",
+          "criterion": "v1.0.0 is published and signed.",
+          "verify": {
+            "kind": "manual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "M1",
+      "name": "Retrieval quality (1.1)",
+      "summary": "The better embedder by default, safer verdicts, clean model switch.",
+      "work_packages": [
+        "Q1",
+        "Q2"
+      ],
+      "gate": [
+        {
+          "id": "G1-1",
+          "criterion": "Held-out report with the new default meets every approved floor.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_e5"
+          }
+        },
+        {
+          "id": "G1-2",
+          "criterion": "The model-switch test passes.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-service/tests/it/embedding_model_switch.rs"
+          }
+        }
+      ]
+    },
+    {
+      "id": "M2",
+      "name": "Agents and MCP",
+      "summary": "A small manifest, compact outputs, resources and prompts, streaming ask, an ask page, and a measured agent flow.",
+      "work_packages": [
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6"
+      ],
+      "gate": [
+        {
+          "id": "G2-1",
+          "criterion": "Default tools/list is under 20 KB.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-mcp/tests/it/manifest_budget.rs"
+          }
+        },
+        {
+          "id": "G2-2",
+          "criterion": "Agent-flow ceilings pass in CI.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-mcp/tests/it/agent_flow.rs"
+          }
+        }
+      ]
+    },
+    {
+      "id": "M3",
+      "name": "Team use",
+      "summary": "More route coverage, server mode GA, git sources in server mode, connectors, authenticated HTTP MCP.",
+      "work_packages": [
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6",
+        "T7",
+        "T8",
+        "T9",
+        "T10",
+        "T11"
+      ],
+      "gate": [
+        {
+          "id": "G3-1",
+          "criterion": "Live server suites pass on both engines.",
+          "verify": {
+            "kind": "command",
+            "ref": "server_tests"
+          }
+        },
+        {
+          "id": "G3-2",
+          "criterion": "Route fixtures for Express, Fastify, Spring, Go and minimal APIs pass.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-code/tests/it/golden.rs"
+          }
+        },
+        {
+          "id": "G3-3",
+          "criterion": "A live Confluence sync has been run by a maintainer.",
+          "verify": {
+            "kind": "manual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "M4",
+      "name": "Housekeeping",
+      "summary": "Independent dependency and packaging items; do them whenever convenient.",
+      "work_packages": [
+        "H1",
+        "H2",
+        "H3"
+      ],
+      "gate": [
+        {
+          "id": "G4-1",
+          "criterion": "cargo deny check passes with no expired ignore.",
+          "verify": {
+            "kind": "command",
+            "ref": "deny"
+          }
+        }
+      ]
+    }
+  ],
+  "work_packages": [
+    {
+      "id": "S1",
+      "title": "Clear the human release blockers from the roadmap",
+      "milestone": "M0",
+      "priority": "P0",
+      "executor": "human",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V10"
+      ],
+      "branch": null,
+      "pr": null,
+      "purpose": "Four items in plans/improvement-roadmap.json wait on a maintainer, not on code: the signing key (H3), the held-out label review (R1), code-owner review on main (Q1-03) and the server-mode decision (roadmap D1). Nothing else in this plan is trustworthy until the labels are human-reviewed.",
+      "scope": {
+        "modify": [
+          "install.sh",
+          "install.ps1",
+          "fixtures/eval/queries.json",
+          "fixtures/eval/heldout-gates.json",
+          "plans/improvement-roadmap.json"
+        ],
+        "create": [],
+        "review": [
+          ".github/workflows/rust-release.yml",
+          ".github/CODEOWNERS",
+          "docs/evaluation.md"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "S1-01",
+          "title": "Create the signing key",
+          "details": "Generate a minisign keypair, keep the secret key offline, commit the public key to install.sh and install.ps1, and set vars.MINISIGN_PUBLIC_KEY plus the signing secrets in the repository (roadmap H3-01, H3-02).",
+          "executor": "human",
+          "done": false
+        },
+        {
+          "id": "S1-02",
+          "title": "Review the held-out labels",
+          "details": "Review all 100 queries in fixtures/eval/queries.json, mark each approved or corrected, then set the floors in fixtures/eval/heldout-gates.json (roadmap R1-01, R1-02).",
+          "executor": "human",
+          "done": false
+        },
+        {
+          "id": "S1-03",
+          "title": "Require code-owner review",
+          "details": "Turn on required code-owner review for main in the repository settings (roadmap Q1-03).",
+          "executor": "human",
+          "done": false
+        },
+        {
+          "id": "S1-04",
+          "title": "Decide server mode for 1.0",
+          "details": "Record roadmap decision D1. Recommendation: preview, so the tag does not wait for the live 8k and 50k file measurements.",
+          "executor": "human",
+          "done": false
+        },
+        {
+          "id": "S1-05",
+          "title": "Update the roadmap file",
+          "details": "Set the status fields and progress_log entries for H3, R1, Q1 and D1 in plans/improvement-roadmap.json.",
+          "executor": "claude_code",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "S1-AC1",
+          "criterion": "A release built by the workflow carries a valid SHA256SUMS.minisig and the installers refuse a tampered archive.",
+          "verify": {
+            "kind": "test",
+            "ref": "install-script CI job"
+          },
+          "met": false
+        },
+        {
+          "id": "S1-AC2",
+          "criterion": "Every held-out query has a human review mark and heldout-gates.json has non-empty floors.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        },
+        {
+          "id": "S1-AC3",
+          "criterion": "Roadmap decision D1 has status decided.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Committed public key",
+        "Reviewed labels and floors",
+        "Decided D1"
+      ],
+      "rollback": "Not applicable for the review and the decision. To rotate the key, commit a new public key and re-sign the latest release.",
+      "notes": [
+        "This package only tracks roadmap items; the detailed tasks and acceptance criteria stay in plans/improvement-roadmap.json."
+      ]
+    },
+    {
+      "id": "S2",
+      "title": "Current default models for the cloud AI providers",
+      "milestone": "M0",
+      "priority": "P1",
+      "executor": "claude_code_then_human_review",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V03"
+      ],
+      "branch": "roadmap/s2-ai-default-models",
+      "pr": null,
+      "purpose": "The OpenAI and Anthropic defaults in docmonk-ai are dated model names. A first-time user of docmonk ask with a cloud provider should get a model that is current and still served.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-ai/src/http.rs",
+          "crates/docmonk-ai/src/registry.rs",
+          "fixtures/expected/ai.json",
+          "fixtures/expected/ai_cli.json",
+          "docs/reference.md",
+          "CHANGELOG.md"
+        ],
+        "create": [],
+        "review": [
+          "crates/docmonk-ai/tests/golden.rs",
+          "crates/docmonk-ui/assets/templates/ai/index.html"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "S2-01",
+          "title": "Pick the models",
+          "details": "Read each provider's current model list and deprecation page at implementation time and propose one small, cheap default per provider. Do not take model names from memory. Decision D1 of this plan records the choice.",
+          "done": false
+        },
+        {
+          "id": "S2-02",
+          "title": "Change the constants",
+          "details": "Update OPENAI_DEFAULT_MODEL and ANTHROPIC_DEFAULT_MODEL in crates/docmonk-ai/src/http.rs and any registry entry that repeats them.",
+          "done": false
+        },
+        {
+          "id": "S2-03",
+          "title": "Refresh fixtures and docs",
+          "details": "Regenerate the golden fixtures with DOCMONK_BLESS=1, check the diff contains only the model names, and update the ai.model rows in docs/reference.md.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "S2-AC1",
+          "criterion": "No retired or deprecated model name remains in crates/docmonk-ai or docs/reference.md.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        },
+        {
+          "id": "S2-AC2",
+          "criterion": "The docmonk-ai golden tests pass with the new defaults.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-ai/tests/golden.rs"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Updated defaults",
+        "Refreshed golden fixtures",
+        "CHANGELOG entry"
+      ],
+      "rollback": "Revert the commit."
+    },
+    {
+      "id": "S3",
+      "title": "Cut v1.0.0",
+      "milestone": "M0",
+      "priority": "P0",
+      "executor": "claude_code_then_human_review",
+      "status": "not_started",
+      "depends_on": [
+        "S1",
+        "S2"
+      ],
+      "addresses": [
+        "V10"
+      ],
+      "branch": "roadmap/s3-cut-1-0",
+      "pr": null,
+      "purpose": "Finish the roadmap's release packages (R2 nightly held-out eval, R6 hygiene, R7 tag) once the human blockers are cleared.",
+      "scope": {
+        "modify": [
+          ".github/workflows/rust-nightly.yml",
+          "CHANGELOG.md",
+          "README.md",
+          "docs/reference.md",
+          "plans/improvement-roadmap.json"
+        ],
+        "create": [],
+        "review": [
+          ".github/workflows/rust-release.yml",
+          "docs/adr/0030-release-and-container.md",
+          "docs/adr/0032-docmonk-1.0-clean-slate.md"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "S3-01",
+          "title": "Nightly held-out eval",
+          "details": "Add the held-out eval job with failure reporting to the nightly workflow (roadmap R2).",
+          "done": false
+        },
+        {
+          "id": "S3-02",
+          "title": "Mark server mode as decided",
+          "details": "Apply roadmap decision D1 to README.md, CHANGELOG.md and docs/reference.md.",
+          "done": false
+        },
+        {
+          "id": "S3-03",
+          "title": "Check the gates",
+          "details": "Run every roadmap M0 and M1 gate, including the release gate audit, and list the results in the PR (roadmap R7-01).",
+          "done": false
+        },
+        {
+          "id": "S3-04",
+          "title": "Tag",
+          "details": "A maintainer tags v1.0.0 from a green main (roadmap R7-02).",
+          "executor": "human",
+          "done": false
+        },
+        {
+          "id": "S3-05",
+          "title": "Verify installs",
+          "details": "Install and run docmonk update on Linux, macOS and Windows and pull the container image; record the versions seen (roadmap R7-03).",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "release_gate_audit"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "S3-AC1",
+          "criterion": "The release gate audit passes with an empty baseline.",
+          "verify": {
+            "kind": "command",
+            "ref": "release_gate_audit"
+          },
+          "met": false
+        },
+        {
+          "id": "S3-AC2",
+          "criterion": "v1.0.0 is published, signed, and installs on all three platforms and as a container.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "v1.0.0 release",
+        "Install verification notes"
+      ],
+      "rollback": "Delete the tag and the release, fix, and tag again; installed binaries roll back with docmonk update."
+    },
+    {
+      "id": "Q1",
+      "title": "Run the roadmap's retrieval packages",
+      "milestone": "M1",
+      "priority": "P1",
+      "executor": "claude_code_then_human_review",
+      "status": "not_started",
+      "depends_on": [
+        "S1"
+      ],
+      "addresses": [
+        "V11"
+      ],
+      "branch": null,
+      "pr": null,
+      "purpose": "The measured gap is the default embedder: evidence recall at 10 is 0.854 with all-MiniLM-L6-v2 and 0.979 with multilingual-e5-small, and cross-language recall is 0.231 against 1.0. The roadmap already specifies the work (P1, P2, P3, P4, Q2 and decisions D2, D3); this package sequences it.",
+      "scope": {
+        "modify": [
+          "plans/improvement-roadmap.json"
+        ],
+        "create": [],
+        "review": [
+          "docs/adr/0040-multilingual-embedding-profile.md",
+          "docs/adr/0013-embeddings.md",
+          "docs/evaluation.md",
+          "benchmarks/heldout-eval/phase-3.json",
+          "benchmarks/heldout-eval/phase-4-multilingual-e5-small.json"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "Q1-01",
+          "title": "Models command",
+          "details": "Roadmap P1: docmonk models list, install and remove with checksum verification, plus the optional full release asset.",
+          "done": false
+        },
+        {
+          "id": "Q1-02",
+          "title": "Model-aware chunk budget",
+          "details": "Roadmap P2: resolve documents.chunking.max_tokens auto per model and count with that model's tokenizer; re-run the held-out eval.",
+          "done": false
+        },
+        {
+          "id": "Q1-03",
+          "title": "Record D2 and D3",
+          "details": "Roadmap decisions D2 (default model) and D3 (bundled or on demand). Recommendation: multilingual-e5-small as default, installed on demand, MiniLM kept as a lite profile.",
+          "executor": "human",
+          "done": false
+        },
+        {
+          "id": "Q1-04",
+          "title": "Abstention and ambiguity",
+          "details": "Roadmap P4: bring false support (0.083) to 0 and false abstention (0.136) under 0.10 on approved labels.",
+          "done": false
+        },
+        {
+          "id": "Q1-05",
+          "title": "Reranker language guard",
+          "details": "Roadmap P3-01: never run the English cross-encoder on non-English queries. Keep the reranker off by default.",
+          "done": false
+        },
+        {
+          "id": "Q1-06",
+          "title": "Grow the held-out set",
+          "details": "Roadmap Q2: at least 300 approved queries with a sealed split.",
+          "executor": "claude_code_then_human_review",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "eval_default",
+          "eval_e5"
+        ],
+        "tests": [],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "Q1-AC1",
+          "criterion": "multilingual-e5-small installs with one command on every platform.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        },
+        {
+          "id": "Q1-AC2",
+          "criterion": "False support is 0 and false abstention is below 0.10 on approved labels, with no floor lowered.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_e5"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Roadmap P1 to P4 and Q2 merged",
+        "Decided D2 and D3"
+      ],
+      "rollback": "Each roadmap package has its own rollback; the default model reverts with one config constant.",
+      "notes": [
+        "Tracking package: branches and PRs are those of the roadmap packages, one each."
+      ]
+    },
+    {
+      "id": "Q2",
+      "title": "Switching the embedding model on an existing home",
+      "milestone": "M1",
+      "priority": "P1",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "Q1"
+      ],
+      "addresses": [
+        "V11"
+      ],
+      "branch": "roadmap/q2-model-switch",
+      "pr": null,
+      "purpose": "Changing the default embedder changes the vector space. A home indexed with MiniLM must not silently mix vectors, and the user needs one clear command and an estimate.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-service/src/indexing.rs",
+          "crates/docmonk-ops/src/vectors.rs",
+          "crates/docmonk-ops/src/doctor.rs",
+          "crates/docmonk-cli/src/status_cmd.rs",
+          "README.md",
+          "docs/reference.md",
+          "CHANGELOG.md"
+        ],
+        "create": [],
+        "review": [
+          "crates/docmonk-service/tests/it/embedding_model_switch.rs",
+          "crates/docmonk-ml/src/manifest.rs",
+          "docs/adr/0041-bounded-embedding-and-server-hydration.md"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "Q2-01",
+          "title": "Audit current behaviour",
+          "details": "Read embedding_model_switch.rs and the fingerprint code to establish what already happens when search.embedding_model changes; write the gaps down in the PR before changing anything.",
+          "done": false
+        },
+        {
+          "id": "Q2-02",
+          "title": "Detect and report",
+          "details": "status and doctor report a source whose stored vectors come from another model, with the command that fixes it and the embedding ETA that status already computes.",
+          "done": false
+        },
+        {
+          "id": "Q2-03",
+          "title": "Keep serving meanwhile",
+          "details": "Until re-embedding finishes, semantic search for that source is skipped with a reported state; lexical, symbol and graph results are unaffected.",
+          "done": false
+        },
+        {
+          "id": "Q2-04",
+          "title": "Document the upgrade",
+          "details": "A short section in README.md and the CHANGELOG entry for the release that flips the default.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "Q2-AC1",
+          "criterion": "A home indexed with MiniLM, switched to E5, never returns a semantic hit computed across two models.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-service/tests/it/embedding_model_switch.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "Q2-AC2",
+          "criterion": "docmonk status names the affected sources and the fix.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-cli/tests/it/status.rs"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Mixed-model guard",
+        "Status and doctor messages",
+        "Upgrade notes"
+      ],
+      "rollback": "Revert the PR; stored vectors are untouched by the guard."
+    },
+    {
+      "id": "A1",
+      "title": "A token budget for the MCP tool manifest",
+      "milestone": "M2",
+      "priority": "P1",
+      "executor": "claude_code_then_human_review",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V01"
+      ],
+      "branch": "roadmap/a1-mcp-manifest-budget",
+      "pr": null,
+      "purpose": "crates/docmonk-mcp/src/mcp_tools.json is about 102 KB for 13 tools, most of it outputSchema. A client that loads tools/list whole spends roughly 25k tokens of agent context before the first call.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-mcp/src/mcp_tools.json",
+          "crates/docmonk-mcp/src/lib.rs",
+          "crates/docmonk-config/src/model.rs",
+          "fixtures/expected/mcp.json",
+          "docs/reference.md"
+        ],
+        "create": [
+          "crates/docmonk-mcp/tests/it/manifest_budget.rs"
+        ],
+        "review": [
+          "crates/docmonk-mcp/tests/it/protocol.rs",
+          "crates/docmonk-mcp/src/budget.rs",
+          "docs/adr/0025-mcp-stdio-server.md"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "A1-01",
+          "title": "Measure",
+          "details": "Add a test that serialises the tools/list result and reports its bytes and an approximate token count, per tool and in total. Commit the baseline numbers in the PR.",
+          "done": false
+        },
+        {
+          "id": "A1-02",
+          "title": "Collapse output schemas",
+          "details": "Serve a minimal outputSchema by default (top-level keys and types only) and keep the full schemas behind a config key, pending decision D2 of this plan. structuredContent itself does not change.",
+          "done": false
+        },
+        {
+          "id": "A1-03",
+          "title": "Shorten descriptions",
+          "details": "Rewrite tool and parameter descriptions to one or two sentences that say when to use the tool; move reference detail to docs/reference.md.",
+          "done": false
+        },
+        {
+          "id": "A1-04",
+          "title": "Gate it",
+          "details": "The manifest test fails when tools/list exceeds the budget, so the manifest cannot grow back unnoticed.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "A1-AC1",
+          "criterion": "The default tools/list result is under 20 KB (about 5k tokens).",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-mcp/tests/it/manifest_budget.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "A1-AC2",
+          "criterion": "Every tool call still validates against the full schema in tests.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-mcp/tests/it/protocol.rs"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Smaller manifest",
+        "Budget test",
+        "Config key for full schemas"
+      ],
+      "rollback": "Revert the PR; the previous manifest is one file."
+    },
+    {
+      "id": "A2",
+      "title": "Compact output mode for retrieval tools",
+      "milestone": "M2",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "A1"
+      ],
+      "addresses": [
+        "V01"
+      ],
+      "branch": "roadmap/a2-mcp-compact-output",
+      "pr": null,
+      "purpose": "Agents often need only the citation list to decide the next call. A compact mode lets them trade detail for context without changing ranking or verification.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-mcp/src/exec.rs",
+          "crates/docmonk-mcp/src/budget.rs",
+          "crates/docmonk-mcp/src/mcp_tools.json",
+          "fixtures/expected/mcp.json",
+          "docs/reference.md"
+        ],
+        "create": [],
+        "review": [
+          "crates/docmonk-mcp/tests/it/agent_flow.rs",
+          "crates/docmonk-retrieval/src/context.rs"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "A2-01",
+          "title": "Add the parameter",
+          "details": "A detail parameter (compact or full, default full) on docmonk_explore, docmonk_search and docmonk_evidence.",
+          "done": false
+        },
+        {
+          "id": "A2-02",
+          "title": "Define compact",
+          "details": "Compact returns each citation's source, path, location, evidence class and a one-line snippet, and omits expanded context. Verdicts and citation fingerprints stay.",
+          "done": false
+        },
+        {
+          "id": "A2-03",
+          "title": "Follow-up path",
+          "details": "Confirm docmonk_read can fetch the full span for any compact citation, and say so in the tool description.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "A2-AC1",
+          "criterion": "Compact and full return the same citations in the same order for every golden MCP query.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-mcp/tests/it/agent_flow.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "A2-AC2",
+          "criterion": "Compact responses are at most a third of the full response size on the golden queries.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-mcp/tests/it/execution.rs"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "detail parameter",
+        "Golden fixtures for both modes"
+      ],
+      "rollback": "Revert the PR; the default stays full."
+    },
+    {
+      "id": "A3",
+      "title": "MCP resources and prompts",
+      "milestone": "M2",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V02"
+      ],
+      "branch": "roadmap/a3-mcp-resources-prompts",
+      "pr": null,
+      "purpose": "resources/list, resources/templates/list and prompts/list return empty lists today. Resources let clients attach a document or symbol by URI; prompts give users the evidence-first workflow in one pick.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-mcp/src/lib.rs",
+          "crates/docmonk-mcp/src/visibility.rs",
+          "crates/docmonk-mcp/src/query_log.rs",
+          "fixtures/expected/mcp.json",
+          "docs/reference.md"
+        ],
+        "create": [
+          "crates/docmonk-mcp/src/resources.rs",
+          "crates/docmonk-mcp/src/prompts.rs",
+          "crates/docmonk-mcp/tests/it/resources.rs",
+          "docs/adr/0045-mcp-resources-and-prompts.md"
+        ],
+        "review": [
+          "crates/docmonk-mcp/tests/it/visibility.rs",
+          "crates/docmonk-mcp/tests/it/secrets.rs",
+          "docs/adr/0025-mcp-stdio-server.md"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "A3-01",
+          "title": "ADR",
+          "details": "Write the ADR with the next free number: URI scheme for documents, chunks and symbols, pagination, and how mcp.hidden_sources and redaction apply.",
+          "done": false
+        },
+        {
+          "id": "A3-02",
+          "title": "Resource templates and reads",
+          "details": "Implement resources/templates/list and resources/read over the KnowledgeRead port, pinned to the published build like every other read.",
+          "done": false
+        },
+        {
+          "id": "A3-03",
+          "title": "Prompts",
+          "details": "Two prompts: answer with evidence (explore then evidence, cite or abstain) and impact review (impact on a symbol, then linked specs).",
+          "done": false
+        },
+        {
+          "id": "A3-04",
+          "title": "Same guards as tools",
+          "details": "Hidden sources are not listed or readable, secrets stay redacted, and every read is written to the MCP query log.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "A3-AC1",
+          "criterion": "A hidden source cannot be listed or read as a resource.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-mcp/tests/it/visibility.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "A3-AC2",
+          "criterion": "No planted secret is readable through resources/read.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-mcp/tests/it/secrets.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "A3-AC3",
+          "criterion": "The initialize result advertises resources and prompts and both lists are non-empty.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-mcp/tests/it/protocol.rs"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Resources",
+        "Prompts",
+        "ADR"
+      ],
+      "rollback": "Revert the PR; the lists return empty again."
+    },
+    {
+      "id": "A4",
+      "title": "Streaming answers for docmonk ask",
+      "milestone": "M2",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "S2"
+      ],
+      "addresses": [
+        "V03"
+      ],
+      "branch": "roadmap/a4-ask-streaming",
+      "pr": null,
+      "purpose": "ask sends stream false and prints the answer when the provider finishes. Streaming makes local models usable interactively and is a precondition for a chat page.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-ai/src/http.rs",
+          "crates/docmonk-ai/src/transport.rs",
+          "crates/docmonk-ai/src/runtime.rs",
+          "crates/docmonk-service/src/ask.rs",
+          "crates/docmonk-cli/src/ai_cmd.rs",
+          "fixtures/expected/ai.json",
+          "docs/reference.md"
+        ],
+        "create": [],
+        "review": [
+          "crates/docmonk-ai/src/codex.rs",
+          "crates/docmonk-ai/src/copilot.rs",
+          "docs/adr/0026-ai-providers-and-ask.md",
+          "docs/adr/0038-shared-ranking-and-citation-verification.md"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "A4-01",
+          "title": "Provider trait",
+          "details": "Add a streaming call to the provider abstraction with a non-streaming fallback, so Codex and Copilot keep working unchanged.",
+          "done": false
+        },
+        {
+          "id": "A4-02",
+          "title": "HTTP providers",
+          "details": "Implement server-sent-event streaming for the Ollama, OpenAI-compatible, OpenAI and Anthropic providers within the existing deadline handling.",
+          "done": false
+        },
+        {
+          "id": "A4-03",
+          "title": "CLI",
+          "details": "docmonk ask prints tokens as they arrive on a terminal and stays buffered for --json and for pipes.",
+          "done": false
+        },
+        {
+          "id": "A4-04",
+          "title": "Citations",
+          "details": "Citation verification still runs on the complete answer; the verdict is printed after the stream ends.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "A4-AC1",
+          "criterion": "The final text and verdict of a streamed answer equal the non-streamed ones against the mock provider.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-ai/tests/golden.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "A4-AC2",
+          "criterion": "--json output is byte-identical to before.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-cli/tests/it/ai.rs"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Streaming provider call",
+        "CLI streaming"
+      ],
+      "rollback": "Revert the PR; ask falls back to buffered answers."
+    },
+    {
+      "id": "A5",
+      "title": "Ask page in the Admin UI",
+      "milestone": "M2",
+      "priority": "P3",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "A4"
+      ],
+      "addresses": [
+        "V06"
+      ],
+      "branch": "roadmap/a5-ui-ask-page",
+      "pr": null,
+      "purpose": "The Admin UI can test a provider and run search but has no page to ask a question and read a cited answer. Roadmap P9 adds a search playground; this adds the ask counterpart.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-ui/src/lib.rs",
+          "crates/docmonk-ui/src/data.rs",
+          "crates/docmonk-ui/assets/templates/base.html",
+          "crates/docmonk-ui/assets/static/css/app.css",
+          "fixtures/expected/ui.json",
+          "docs/ui.md"
+        ],
+        "create": [
+          "crates/docmonk-ui/assets/templates/ask/index.html"
+        ],
+        "review": [
+          "crates/docmonk-ui/src/access.rs",
+          "crates/docmonk-ui/tests/it/security.rs",
+          "crates/docmonk-ui/assets/templates/search/index.html"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "A5-01",
+          "title": "Route and template",
+          "details": "GET and POST /ask under the existing access model and CSRF protection, rendering the answer, its verdict and each citation as a link to the document or symbol page.",
+          "done": false
+        },
+        {
+          "id": "A5-02",
+          "title": "Streaming",
+          "details": "Stream the answer over the same server-sent-event mechanism the indexing page uses.",
+          "done": false
+        },
+        {
+          "id": "A5-03",
+          "title": "No provider configured",
+          "details": "Without a provider the page shows the evidence package only and links to the AI settings page.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "A5-AC1",
+          "criterion": "POST /ask without a CSRF token is refused.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-ui/tests/it/security.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "A5-AC2",
+          "criterion": "The page renders an answer with citations against the mock provider.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-cli/tests/it/ui.rs"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Ask page",
+        "UI guide section"
+      ],
+      "rollback": "Revert the PR."
+    },
+    {
+      "id": "A6",
+      "title": "Agent-flow evaluation",
+      "milestone": "M2",
+      "priority": "P2",
+      "executor": "claude_code_then_human_review",
+      "status": "not_started",
+      "depends_on": [
+        "A1",
+        "A2"
+      ],
+      "addresses": [
+        "V01"
+      ],
+      "branch": "roadmap/a6-agent-flow-eval",
+      "pr": null,
+      "purpose": "Retrieval quality is measured; the cost of using DocMonk from an agent is not. Track manifest size, tool calls and response bytes per answered question so A1 and A2 are proven and regressions show.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-mcp/tests/it/agent_flow.rs",
+          "docs/evaluation.md"
+        ],
+        "create": [
+          "benchmarks/mcp/agent-flow-baseline.json",
+          "fixtures/mcp/agent-flow-gates.json"
+        ],
+        "review": [
+          "fixtures/eval/queries.json",
+          "crates/docmonk-service/src/personal_eval.rs"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "A6-01",
+          "title": "Scripted flows",
+          "details": "A deterministic scripted client answers a subset of the held-out queries through MCP alone, using fixed tool sequences per query category.",
+          "done": false
+        },
+        {
+          "id": "A6-02",
+          "title": "Report",
+          "details": "Write a report with manifest bytes, calls per query, response bytes per query and whether the gold evidence was reached.",
+          "done": false
+        },
+        {
+          "id": "A6-03",
+          "title": "Gates",
+          "details": "Add ceilings in fixtures/mcp/agent-flow-gates.json; a human approves the initial values.",
+          "executor": "claude_code_then_human_review",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "A6-AC1",
+          "criterion": "The report is reproducible byte for byte on repeated runs.",
+          "verify": {
+            "kind": "report",
+            "ref": "benchmarks/mcp/agent-flow-baseline.json"
+          },
+          "met": false
+        },
+        {
+          "id": "A6-AC2",
+          "criterion": "CI fails when a ceiling is exceeded.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-mcp/tests/it/agent_flow.rs"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Agent-flow report",
+        "Gate file"
+      ],
+      "rollback": "Revert the PR.",
+      "notes": [
+        "Protect fixtures/mcp/agent-flow-gates.json as a never-raise ceiling once merged (add it to CODEOWNERS)."
+      ]
+    },
+    {
+      "id": "T1",
+      "title": "HTTP routes for Express and Fastify",
+      "milestone": "M3",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V04"
+      ],
+      "branch": "roadmap/t1-routes-js",
+      "pr": null,
+      "purpose": "Route detection covers Flask, FastAPI and ASP.NET attributes only. JavaScript and TypeScript is parsed for symbols, but its HTTP routes are not graph rows, so URL anchors, impact and cross-service questions miss them.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-code/src/framework.rs",
+          "crates/docmonk-code/src/graph_stage.rs",
+          "crates/docmonk-code/queries/typescript.scm",
+          "fixtures/expected/code.json",
+          "fixtures/expected/graph.json",
+          "README.md",
+          "docs/reference.md",
+          "CHANGELOG.md"
+        ],
+        "create": [
+          "fixtures/endpoints/src/web/server.ts"
+        ],
+        "review": [
+          "crates/docmonk-code/src/extract.rs",
+          "crates/docmonk-code/src/messaging.rs",
+          "docs/adr/0009-code-intelligence.md",
+          "docs/adr/0036-retrieval-anchors-and-exact-occurrences.md",
+          "fixtures/endpoints/src/Content/ContentController.cs"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "T1-01",
+          "title": "Rules",
+          "details": "Detect app.get/post/put/patch/delete and router equivalents in Express, route registrations and shorthand methods in Fastify, and router mounting with a path prefix. Compose group or class prefixes with handler paths the way compose_routes does for C# controllers.",
+          "done": false
+        },
+        {
+          "id": "T1-02",
+          "title": "Graph rows",
+          "details": "Emit the same route rows as the existing rules so exact URL occurrences, explore and impact pick them up with no retrieval change. Bump the graph derivation so graphs, not content, are recomputed.",
+          "done": false
+        },
+        {
+          "id": "T1-03",
+          "title": "Fixtures and tests",
+          "details": "Add the fixture, extend the golden and endpoint tests, and include negative cases: a string that looks like a path but is not a route.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "eval_default"
+        ],
+        "tests": [],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "T1-AC1",
+          "criterion": "Every route in the new fixture is found with its method and full path, and no negative case is reported.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-code/tests/it/golden.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T1-AC2",
+          "criterion": "A URL query for a fixture route returns its handler as an exact occurrence.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-retrieval/tests/it/endpoints.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T1-AC3",
+          "criterion": "Held-out and repository eval reports are unchanged apart from added route hits.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_default"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Route rules",
+        "Fixture",
+        "Updated language table in README.md"
+      ],
+      "rollback": "Revert the PR; the next index recomputes graphs with the previous derivation."
+    },
+    {
+      "id": "T2",
+      "title": "HTTP routes for Spring MVC",
+      "milestone": "M3",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V04"
+      ],
+      "branch": "roadmap/t2-routes-spring",
+      "pr": null,
+      "purpose": "Route detection covers Flask, FastAPI and ASP.NET attributes only. Java is parsed for symbols, but its HTTP routes are not graph rows, so URL anchors, impact and cross-service questions miss them.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-code/src/framework.rs",
+          "crates/docmonk-code/src/graph_stage.rs",
+          "crates/docmonk-code/queries/java.scm",
+          "fixtures/expected/code.json",
+          "fixtures/expected/graph.json",
+          "README.md",
+          "docs/reference.md",
+          "CHANGELOG.md"
+        ],
+        "create": [
+          "fixtures/endpoints/src/java/OrderController.java"
+        ],
+        "review": [
+          "crates/docmonk-code/src/extract.rs",
+          "crates/docmonk-code/src/messaging.rs",
+          "docs/adr/0009-code-intelligence.md",
+          "docs/adr/0036-retrieval-anchors-and-exact-occurrences.md",
+          "fixtures/endpoints/src/Content/ContentController.cs"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "T2-01",
+          "title": "Rules",
+          "details": "Detect RequestMapping, GetMapping, PostMapping, PutMapping, PatchMapping and DeleteMapping on classes and methods. Compose group or class prefixes with handler paths the way compose_routes does for C# controllers.",
+          "done": false
+        },
+        {
+          "id": "T2-02",
+          "title": "Graph rows",
+          "details": "Emit the same route rows as the existing rules so exact URL occurrences, explore and impact pick them up with no retrieval change. Bump the graph derivation so graphs, not content, are recomputed.",
+          "done": false
+        },
+        {
+          "id": "T2-03",
+          "title": "Fixtures and tests",
+          "details": "Add the fixture, extend the golden and endpoint tests, and include negative cases: a string that looks like a path but is not a route.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "eval_default"
+        ],
+        "tests": [],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "T2-AC1",
+          "criterion": "Every route in the new fixture is found with its method and full path, and no negative case is reported.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-code/tests/it/golden.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T2-AC2",
+          "criterion": "A URL query for a fixture route returns its handler as an exact occurrence.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-retrieval/tests/it/endpoints.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T2-AC3",
+          "criterion": "Held-out and repository eval reports are unchanged apart from added route hits.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_default"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Route rules",
+        "Fixture",
+        "Updated language table in README.md"
+      ],
+      "rollback": "Revert the PR; the next index recomputes graphs with the previous derivation."
+    },
+    {
+      "id": "T3",
+      "title": "HTTP routes for Go",
+      "milestone": "M3",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V04"
+      ],
+      "branch": "roadmap/t3-routes-go",
+      "pr": null,
+      "purpose": "Route detection covers Flask, FastAPI and ASP.NET attributes only. Go is parsed for symbols, but its HTTP routes are not graph rows, so URL anchors, impact and cross-service questions miss them.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-code/src/framework.rs",
+          "crates/docmonk-code/src/graph_stage.rs",
+          "crates/docmonk-code/queries/go.scm",
+          "fixtures/expected/code.json",
+          "fixtures/expected/graph.json",
+          "README.md",
+          "docs/reference.md",
+          "CHANGELOG.md"
+        ],
+        "create": [
+          "fixtures/endpoints/src/go/server.go"
+        ],
+        "review": [
+          "crates/docmonk-code/src/extract.rs",
+          "crates/docmonk-code/src/messaging.rs",
+          "docs/adr/0009-code-intelligence.md",
+          "docs/adr/0036-retrieval-anchors-and-exact-occurrences.md",
+          "fixtures/endpoints/src/Content/ContentController.cs"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "T3-01",
+          "title": "Rules",
+          "details": "Detect net/http HandleFunc and Handle including method patterns, and the gin, chi and echo method helpers with route groups. Compose group or class prefixes with handler paths the way compose_routes does for C# controllers.",
+          "done": false
+        },
+        {
+          "id": "T3-02",
+          "title": "Graph rows",
+          "details": "Emit the same route rows as the existing rules so exact URL occurrences, explore and impact pick them up with no retrieval change. Bump the graph derivation so graphs, not content, are recomputed.",
+          "done": false
+        },
+        {
+          "id": "T3-03",
+          "title": "Fixtures and tests",
+          "details": "Add the fixture, extend the golden and endpoint tests, and include negative cases: a string that looks like a path but is not a route.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "eval_default"
+        ],
+        "tests": [],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "T3-AC1",
+          "criterion": "Every route in the new fixture is found with its method and full path, and no negative case is reported.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-code/tests/it/golden.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T3-AC2",
+          "criterion": "A URL query for a fixture route returns its handler as an exact occurrence.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-retrieval/tests/it/endpoints.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T3-AC3",
+          "criterion": "Held-out and repository eval reports are unchanged apart from added route hits.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_default"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Route rules",
+        "Fixture",
+        "Updated language table in README.md"
+      ],
+      "rollback": "Revert the PR; the next index recomputes graphs with the previous derivation."
+    },
+    {
+      "id": "T4",
+      "title": "HTTP routes for ASP.NET minimal APIs",
+      "milestone": "M3",
+      "priority": "P2",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V04"
+      ],
+      "branch": "roadmap/t4-routes-minimal-api",
+      "pr": null,
+      "purpose": "Route detection covers Flask, FastAPI and ASP.NET attributes only. C# minimal-API code is parsed for symbols, but its HTTP routes are not graph rows, so URL anchors, impact and cross-service questions miss them.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-code/src/framework.rs",
+          "crates/docmonk-code/src/graph_stage.rs",
+          "crates/docmonk-code/queries/csharp.scm",
+          "fixtures/expected/code.json",
+          "fixtures/expected/graph.json",
+          "README.md",
+          "docs/reference.md",
+          "CHANGELOG.md"
+        ],
+        "create": [
+          "fixtures/endpoints/src/MinimalApi/Program.cs"
+        ],
+        "review": [
+          "crates/docmonk-code/src/extract.rs",
+          "crates/docmonk-code/src/messaging.rs",
+          "docs/adr/0009-code-intelligence.md",
+          "docs/adr/0036-retrieval-anchors-and-exact-occurrences.md",
+          "fixtures/endpoints/src/Content/ContentController.cs"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "T4-01",
+          "title": "Rules",
+          "details": "Detect MapGet, MapPost, MapPut, MapPatch, MapDelete and MapGroup prefixes. Compose group or class prefixes with handler paths the way compose_routes does for C# controllers.",
+          "done": false
+        },
+        {
+          "id": "T4-02",
+          "title": "Graph rows",
+          "details": "Emit the same route rows as the existing rules so exact URL occurrences, explore and impact pick them up with no retrieval change. Bump the graph derivation so graphs, not content, are recomputed.",
+          "done": false
+        },
+        {
+          "id": "T4-03",
+          "title": "Fixtures and tests",
+          "details": "Add the fixture, extend the golden and endpoint tests, and include negative cases: a string that looks like a path but is not a route.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "eval_default"
+        ],
+        "tests": [],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "T4-AC1",
+          "criterion": "Every route in the new fixture is found with its method and full path, and no negative case is reported.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-code/tests/it/golden.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T4-AC2",
+          "criterion": "A URL query for a fixture route returns its handler as an exact occurrence.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-retrieval/tests/it/endpoints.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T4-AC3",
+          "criterion": "Held-out and repository eval reports are unchanged apart from added route hits.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_default"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Route rules",
+        "Fixture",
+        "Updated language table in README.md"
+      ],
+      "rollback": "Revert the PR; the next index recomputes graphs with the previous derivation."
+    },
+    {
+      "id": "T5",
+      "title": "Server mode from preview to GA",
+      "milestone": "M3",
+      "priority": "P1",
+      "executor": "claude_code_with_cluster",
+      "status": "not_started",
+      "depends_on": [
+        "S3"
+      ],
+      "requires": [
+        {
+          "kind": "cluster",
+          "description": "OpenSearch 2.17 on :9201 and Elasticsearch 8.15 on :9202 with disk for the 50k file corpus."
+        },
+        {
+          "kind": "human_approval",
+          "description": "Ledger status changes and the GA statement."
+        }
+      ],
+      "addresses": [
+        "V10"
+      ],
+      "branch": null,
+      "pr": null,
+      "purpose": "Server mode has no live numbers. The roadmap already specifies the measurements (R3, R4) and the residual fixes (A4, A5); this package sequences them and ends with the GA call.",
+      "scope": {
+        "modify": [
+          "plans/improvement-roadmap.json",
+          "audit/remediation/ledger.json",
+          "docs/adr/0035-server-mvcc-publication.md",
+          "docs/adr/0041-bounded-embedding-and-server-hydration.md",
+          "README.md",
+          "CHANGELOG.md"
+        ],
+        "create": [],
+        "review": [
+          "docker/docker-compose.opensearch.yml",
+          "docker/docker-compose.elasticsearch.yml",
+          "fixtures/p0/server-mode-baseline.json",
+          "benchmarks/relationships/REPORT.md"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "T5-01",
+          "title": "Clusters",
+          "details": "Bring up OpenSearch and Elasticsearch from the docker compose files with enough disk for the 8k and 50k file corpora.",
+          "done": false
+        },
+        {
+          "id": "T5-02",
+          "title": "Measure",
+          "details": "Roadmap R3 and R4: ADR 0035 live numbers, ADR 0041 held-out on three backends and paged-embedding memory, ledger F10 and F12.",
+          "done": false
+        },
+        {
+          "id": "T5-03",
+          "title": "Close residuals",
+          "details": "Roadmap A4: ledger findings F04, F08, F09 and F11. Ledger status changes need human approval.",
+          "done": false
+        },
+        {
+          "id": "T5-04",
+          "title": "Scale envelope",
+          "details": "Roadmap A5: publish the tested corpus sizes and hardware in docs/reference.md.",
+          "done": false
+        },
+        {
+          "id": "T5-05",
+          "title": "GA call",
+          "details": "A maintainer flips server mode from preview to GA in README.md and CHANGELOG.md.",
+          "executor": "human",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "server_tests",
+          "eval_default"
+        ],
+        "tests": [],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "T5-AC1",
+          "criterion": "The live server suites pass on both engines.",
+          "verify": {
+            "kind": "command",
+            "ref": "server_tests"
+          },
+          "met": false
+        },
+        {
+          "id": "T5-AC2",
+          "criterion": "ADR 0035 and ADR 0041 carry measured numbers and a closed status.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        },
+        {
+          "id": "T5-AC3",
+          "criterion": "The held-out report on each server backend meets the approved floors.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_default"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Measurement reports",
+        "Updated ledger",
+        "GA statement"
+      ],
+      "rollback": "Keep the preview label; nothing shipped changes.",
+      "notes": [
+        "Tracking package: branches and PRs are those of the roadmap packages."
+      ]
+    },
+    {
+      "id": "T6",
+      "title": "Git remote sources in server mode",
+      "milestone": "M3",
+      "priority": "P2",
+      "executor": "claude_code_with_cluster",
+      "status": "not_started",
+      "depends_on": [
+        "T5"
+      ],
+      "requires": [
+        {
+          "kind": "cluster",
+          "description": "OpenSearch 2.17 on :9201 and Elasticsearch 8.15 on :9202."
+        }
+      ],
+      "addresses": [
+        "V05"
+      ],
+      "branch": "roadmap/t6-git-sources-server",
+      "pr": null,
+      "purpose": "Git sources are local mode only (ADR 0043). A team sharing one index needs a repository URL to be a source there too, with exactly one writer fetching it.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-indexing/src/git.rs",
+          "crates/docmonk-indexing/src/watcher/git.rs",
+          "crates/docmonk-service/src/sources.rs",
+          "crates/docmonk-service/src/server_index.rs",
+          "crates/docmonk-backends/src/schema.rs",
+          "docs/reference.md",
+          "CHANGELOG.md"
+        ],
+        "create": [
+          "docs/adr/0046-git-sources-in-server-mode.md"
+        ],
+        "review": [
+          "docs/adr/0043-git-remote-sources.md",
+          "docs/adr/0035-server-mvcc-publication.md",
+          "crates/docmonk-backends/src/publish.rs",
+          "crates/docmonk-cli/tests/it/git_source.rs"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "T6-01",
+          "title": "ADR",
+          "details": "Decide where the checkout lives (the host holding the writer lease), how the indexed commit is stored in the server catalog, and what a second host does. Credentials still come only from git's own helpers.",
+          "done": false
+        },
+        {
+          "id": "T6-02",
+          "title": "Implement",
+          "details": "Register, fetch and index a git source in server mode under the existing writer lease and fencing; status shows the indexed commit.",
+          "done": false
+        },
+        {
+          "id": "T6-03",
+          "title": "Failure cases",
+          "details": "Unreachable remote or deleted branch marks the source offline and keeps the published index, as in local mode.",
+          "done": false
+        },
+        {
+          "id": "T6-04",
+          "title": "Live tests",
+          "details": "Two-host test: only the lease holder fetches; the other reads the published build.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "server_tests"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "T6-AC1",
+          "criterion": "A git source indexes and publishes on both engines.",
+          "verify": {
+            "kind": "command",
+            "ref": "server_tests"
+          },
+          "met": false
+        },
+        {
+          "id": "T6-AC2",
+          "criterion": "Two hosts never fetch or publish the same source concurrently.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-service/tests/it/server_live.rs"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "ADR",
+        "Server-mode git sources",
+        "Live tests"
+      ],
+      "rollback": "Revert the PR; server mode refuses git sources again."
+    },
+    {
+      "id": "T7",
+      "title": "Connector framework",
+      "milestone": "M3",
+      "priority": "P2",
+      "executor": "claude_code_then_human_review",
+      "status": "not_started",
+      "depends_on": [
+        "S3"
+      ],
+      "requires": [
+        {
+          "kind": "human_approval",
+          "description": "ADR and decision D3 before implementation."
+        }
+      ],
+      "addresses": [
+        "V05"
+      ],
+      "branch": "roadmap/t7-connector-framework",
+      "pr": null,
+      "purpose": "Sources are folders and git repositories. Team knowledge also lives in Confluence, Slack and Jira. Before any connector, fix the contract: how a remote system becomes documents with stable ids, incremental sync, deletions and credentials that never enter config.yaml or the index.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-core/src/models.rs",
+          "crates/docmonk-config/src/model.rs",
+          "crates/docmonk-service/src/sources.rs",
+          "crates/docmonk-indexing/src/scan.rs",
+          "crates/docmonk-indexing/src/diff.rs",
+          "crates/docmonk-status/src/model.rs",
+          "docs/reference.md",
+          "deny.toml"
+        ],
+        "create": [
+          "docs/adr/0047-connector-sources.md",
+          "crates/docmonk-connectors/"
+        ],
+        "review": [
+          "docs/adr/0043-git-remote-sources.md",
+          "docs/adr/0042-secret-redaction.md",
+          "docs/adr/0003-dependency-policy.md",
+          "crates/docmonk-indexing/src/watcher/network.rs",
+          "docs/architecture.md"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "T7-01",
+          "title": "ADR",
+          "details": "Write the ADR: a connector trait (list changed items since a cursor, fetch one item as bytes plus metadata, report deletions), source kind and config shape, credentials from environment variables only, rate limiting and backoff, offline behaviour, privacy (a connector is an outbound network call the user opts into per source).",
+          "done": false
+        },
+        {
+          "id": "T7-02",
+          "title": "Human review of the ADR",
+          "details": "A maintainer approves the ADR and decision D3 of this plan before any code.",
+          "executor": "human",
+          "done": false
+        },
+        {
+          "id": "T7-03",
+          "title": "Crate and trait",
+          "details": "Add crates/docmonk-connectors with the trait, a cursor store in the control database, and an in-memory fake connector used by tests.",
+          "done": false
+        },
+        {
+          "id": "T7-04",
+          "title": "Indexing integration",
+          "details": "Connector items flow through the existing convert, redact, chunk and publish path; status shows last sync, cursor age and errors per source.",
+          "done": false
+        },
+        {
+          "id": "T7-05",
+          "title": "Layering",
+          "details": "Add the crate to the workspace and to the layer table in docs/architecture.md; keep docmonk-core free of network dependencies.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "deny"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "T7-AC1",
+          "criterion": "The fake connector indexes, updates and deletes items incrementally with no full rescan.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-connectors/tests/it/main.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T7-AC2",
+          "criterion": "Planted secrets in connector content are redacted before storage.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-connectors/tests/it/main.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T7-AC3",
+          "criterion": "cargo deny passes with any new dependency.",
+          "verify": {
+            "kind": "command",
+            "ref": "deny"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "ADR",
+        "docmonk-connectors crate",
+        "Fake connector and tests"
+      ],
+      "rollback": "Revert the PR; no stored data depends on the crate until a connector source is registered."
+    },
+    {
+      "id": "T8",
+      "title": "Confluence connector",
+      "milestone": "M3",
+      "priority": "P2",
+      "executor": "claude_code_then_human_review",
+      "status": "not_started",
+      "depends_on": [
+        "T7"
+      ],
+      "requires": [
+        {
+          "kind": "external_account",
+          "description": "A Confluence workspace and an API token with read-only scope for the live check."
+        },
+        {
+          "kind": "secret",
+          "description": "The token, supplied through an environment variable."
+        }
+      ],
+      "addresses": [
+        "V05"
+      ],
+      "branch": "roadmap/t8-confluence-connector",
+      "pr": null,
+      "purpose": "Index spaces and pages with their attachments from Confluence as cited documents through the connector framework, read-only, with the page or message URL as the citation target.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-connectors/",
+          "crates/docmonk-cli/src/main.rs",
+          "crates/docmonk-ui/assets/templates/sources/list.html",
+          "README.md",
+          "docs/reference.md",
+          "CHANGELOG.md"
+        ],
+        "create": [
+          "crates/docmonk-connectors/src/confluence.rs",
+          "fixtures/connectors/confluence/"
+        ],
+        "review": [
+          "docs/adr/0047-connector-sources.md",
+          "crates/docmonk-convert/src/converter.rs",
+          "crates/docmonk-telemetry/src/redact.rs"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "T8-01",
+          "title": "Read the API docs",
+          "details": "Read the current Confluence REST API documentation for authentication, pagination, rate limits and change feeds at implementation time; do not rely on memory.",
+          "done": false
+        },
+        {
+          "id": "T8-02",
+          "title": "Implement",
+          "details": "List and fetch spaces and pages with their attachments; page storage format converts through the existing HTML path, keeping headings and tables. Incremental sync by the API's change cursor or updated timestamp; deletions and permission loss remove the item.",
+          "done": false
+        },
+        {
+          "id": "T8-03",
+          "title": "Recorded fixtures",
+          "details": "Tests run against recorded responses in fixtures; no test calls the live service. Scrub tokens and personal data from recordings.",
+          "done": false
+        },
+        {
+          "id": "T8-04",
+          "title": "Live check",
+          "details": "A maintainer runs one sync against a real Confluence workspace and reports counts and errors.",
+          "executor": "human",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "deny"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "T8-AC1",
+          "criterion": "A recorded workspace indexes fully, then a second sync with one changed and one deleted item touches only those two.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-connectors/tests/it/main.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T8-AC2",
+          "criterion": "The token is read only from the environment and never appears in config.yaml, logs, status or the index.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-connectors/tests/it/main.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T8-AC3",
+          "criterion": "A live sync against a real workspace completes.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Confluence connector",
+        "Recorded fixtures",
+        "Reference section"
+      ],
+      "rollback": "Revert the PR; remove the source to drop its index."
+    },
+    {
+      "id": "T9",
+      "title": "Slack connector",
+      "milestone": "M3",
+      "priority": "P3",
+      "executor": "claude_code_then_human_review",
+      "status": "not_started",
+      "depends_on": [
+        "T8"
+      ],
+      "requires": [
+        {
+          "kind": "external_account",
+          "description": "A Slack workspace and an API token with read-only scope for the live check."
+        },
+        {
+          "kind": "secret",
+          "description": "The token, supplied through an environment variable."
+        }
+      ],
+      "addresses": [
+        "V05"
+      ],
+      "branch": "roadmap/t9-slack-connector",
+      "pr": null,
+      "purpose": "Index selected public channels, threads kept together from Slack as cited documents through the connector framework, read-only, with the page or message URL as the citation target.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-connectors/",
+          "crates/docmonk-cli/src/main.rs",
+          "crates/docmonk-ui/assets/templates/sources/list.html",
+          "README.md",
+          "docs/reference.md",
+          "CHANGELOG.md"
+        ],
+        "create": [
+          "crates/docmonk-connectors/src/slack.rs",
+          "fixtures/connectors/slack/"
+        ],
+        "review": [
+          "docs/adr/0047-connector-sources.md",
+          "crates/docmonk-convert/src/converter.rs",
+          "crates/docmonk-telemetry/src/redact.rs"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "T9-01",
+          "title": "Read the API docs",
+          "details": "Read the current Slack REST API documentation for authentication, pagination, rate limits and change feeds at implementation time; do not rely on memory.",
+          "done": false
+        },
+        {
+          "id": "T9-02",
+          "title": "Implement",
+          "details": "List and fetch selected public channels, threads kept together; one document per thread with author and timestamp, channel allow-list required. Incremental sync by the API's change cursor or updated timestamp; deletions and permission loss remove the item.",
+          "done": false
+        },
+        {
+          "id": "T9-03",
+          "title": "Recorded fixtures",
+          "details": "Tests run against recorded responses in fixtures; no test calls the live service. Scrub tokens and personal data from recordings.",
+          "done": false
+        },
+        {
+          "id": "T9-04",
+          "title": "Live check",
+          "details": "A maintainer runs one sync against a real Slack workspace and reports counts and errors.",
+          "executor": "human",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "deny"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "T9-AC1",
+          "criterion": "A recorded workspace indexes fully, then a second sync with one changed and one deleted item touches only those two.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-connectors/tests/it/main.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T9-AC2",
+          "criterion": "The token is read only from the environment and never appears in config.yaml, logs, status or the index.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-connectors/tests/it/main.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T9-AC3",
+          "criterion": "A live sync against a real workspace completes.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Slack connector",
+        "Recorded fixtures",
+        "Reference section"
+      ],
+      "rollback": "Revert the PR; remove the source to drop its index."
+    },
+    {
+      "id": "T10",
+      "title": "Jira connector",
+      "milestone": "M3",
+      "priority": "P3",
+      "executor": "claude_code_then_human_review",
+      "status": "not_started",
+      "depends_on": [
+        "T8"
+      ],
+      "requires": [
+        {
+          "kind": "external_account",
+          "description": "A Jira workspace and an API token with read-only scope for the live check."
+        },
+        {
+          "kind": "secret",
+          "description": "The token, supplied through an environment variable."
+        }
+      ],
+      "addresses": [
+        "V05"
+      ],
+      "branch": "roadmap/t10-jira-connector",
+      "pr": null,
+      "purpose": "Index issues of selected projects with their comments from Jira as cited documents through the connector framework, read-only, with the page or message URL as the citation target.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-connectors/",
+          "crates/docmonk-cli/src/main.rs",
+          "crates/docmonk-ui/assets/templates/sources/list.html",
+          "README.md",
+          "docs/reference.md",
+          "CHANGELOG.md"
+        ],
+        "create": [
+          "crates/docmonk-connectors/src/jira.rs",
+          "fixtures/connectors/jira/"
+        ],
+        "review": [
+          "docs/adr/0047-connector-sources.md",
+          "crates/docmonk-convert/src/converter.rs",
+          "crates/docmonk-telemetry/src/redact.rs"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "T10-01",
+          "title": "Read the API docs",
+          "details": "Read the current Jira REST API documentation for authentication, pagination, rate limits and change feeds at implementation time; do not rely on memory.",
+          "done": false
+        },
+        {
+          "id": "T10-02",
+          "title": "Implement",
+          "details": "List and fetch issues of selected projects with their comments; one document per issue with key, status, summary, description and comments. Incremental sync by the API's change cursor or updated timestamp; deletions and permission loss remove the item.",
+          "done": false
+        },
+        {
+          "id": "T10-03",
+          "title": "Recorded fixtures",
+          "details": "Tests run against recorded responses in fixtures; no test calls the live service. Scrub tokens and personal data from recordings.",
+          "done": false
+        },
+        {
+          "id": "T10-04",
+          "title": "Live check",
+          "details": "A maintainer runs one sync against a real Jira workspace and reports counts and errors.",
+          "executor": "human",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "deny"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "T10-AC1",
+          "criterion": "A recorded workspace indexes fully, then a second sync with one changed and one deleted item touches only those two.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-connectors/tests/it/main.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T10-AC2",
+          "criterion": "The token is read only from the environment and never appears in config.yaml, logs, status or the index.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-connectors/tests/it/main.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T10-AC3",
+          "criterion": "A live sync against a real workspace completes.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Jira connector",
+        "Recorded fixtures",
+        "Reference section"
+      ],
+      "rollback": "Revert the PR; remove the source to drop its index."
+    },
+    {
+      "id": "T11",
+      "title": "Token authentication for the HTTP MCP endpoint",
+      "milestone": "M3",
+      "priority": "P2",
+      "executor": "claude_code_then_human_review",
+      "status": "not_started",
+      "depends_on": [
+        "A1"
+      ],
+      "requires": [
+        {
+          "kind": "human_approval",
+          "description": "ADR and decision D4 before implementation."
+        }
+      ],
+      "addresses": [
+        "V09"
+      ],
+      "branch": "roadmap/t11-mcp-http-token",
+      "pr": null,
+      "purpose": "HTTP MCP is safe on loopback and, remotely, only behind an authenticating reverse proxy. A team that wants to share one DocMonk needs a built-in option that does not depend on proxy configuration.",
+      "scope": {
+        "modify": [
+          "crates/docmonk-ui/src/mcp_http.rs",
+          "crates/docmonk-ui/src/access.rs",
+          "crates/docmonk-config/src/model.rs",
+          "crates/docmonk-mcp/src/query_log.rs",
+          "docs/ui.md",
+          "docs/reference.md",
+          "SECURITY.md",
+          "CHANGELOG.md"
+        ],
+        "create": [
+          "docs/adr/0048-mcp-http-authentication.md"
+        ],
+        "review": [
+          "crates/docmonk-ui/tests/it/mcp_http.rs",
+          "crates/docmonk-ui/tests/it/security.rs",
+          "crates/docmonk-core/src/security.rs"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "T11-01",
+          "title": "ADR and decision",
+          "details": "Write the ADR and record decision D4 of this plan: static bearer tokens now, OIDC later or never. A maintainer approves before code.",
+          "executor": "human",
+          "done": false
+        },
+        {
+          "id": "T11-02",
+          "title": "Tokens",
+          "details": "Bearer tokens read from environment variables or a file outside config.yaml, compared in constant time, each with a name and an optional list of visible sources.",
+          "done": false
+        },
+        {
+          "id": "T11-03",
+          "title": "Transport rule",
+          "details": "A non-loopback bind still requires TLS in front; with tokens configured, a request without a valid token is refused with 401 before any JSON-RPC handling.",
+          "done": false
+        },
+        {
+          "id": "T11-04",
+          "title": "Audit",
+          "details": "The MCP query log records the token name, never the token.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "T11-AC1",
+          "criterion": "A remote request without a token, with a wrong token, or for a source outside the token's list is refused.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-ui/tests/it/mcp_http.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T11-AC2",
+          "criterion": "Loopback behaviour without tokens configured is unchanged.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-ui/tests/it/mcp_http.rs"
+          },
+          "met": false
+        },
+        {
+          "id": "T11-AC3",
+          "criterion": "No token value appears in logs, status or the query log.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-ui/tests/it/security.rs"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Token authentication",
+        "ADR",
+        "SECURITY.md update"
+      ],
+      "rollback": "Revert the PR; remote access again requires the authenticating proxy."
+    },
+    {
+      "id": "H1",
+      "title": "Bump rusqlite",
+      "milestone": "M4",
+      "priority": "P3",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V08"
+      ],
+      "branch": "roadmap/h1-rusqlite-bump",
+      "pr": null,
+      "purpose": "rusqlite is pinned at 0.32 with bundled SQLite. Moving to the current release picks up SQLite fixes; FTS and query-planner changes can move rankings, so it is measured, not assumed.",
+      "scope": {
+        "modify": [
+          "Cargo.toml",
+          "Cargo.lock",
+          "crates/docmonk-storage/src/db.rs"
+        ],
+        "create": [],
+        "review": [
+          "crates/docmonk-storage/src/schema.rs",
+          "crates/docmonk-storage/src/search.rs",
+          "docs/adr/0006-local-storage.md",
+          "deny.toml"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "H1-01",
+          "title": "Bump",
+          "details": "Update the workspace dependency to the latest rusqlite release and fix API changes.",
+          "done": false
+        },
+        {
+          "id": "H1-02",
+          "title": "Prove no drift",
+          "details": "Run the held-out and golden evals before and after; rankings, citations and verdicts must be identical. If they differ, stop and report instead of blessing.",
+          "done": false
+        },
+        {
+          "id": "H1-03",
+          "title": "Existing homes",
+          "details": "Open a home written before the bump and confirm status and search work unchanged.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "deny",
+          "eval_default"
+        ],
+        "tests": [],
+        "eval_report_required": true
+      },
+      "acceptance": [
+        {
+          "id": "H1-AC1",
+          "criterion": "Before and after held-out reports are byte-identical.",
+          "verify": {
+            "kind": "command",
+            "ref": "eval_default"
+          },
+          "met": false
+        },
+        {
+          "id": "H1-AC2",
+          "criterion": "cargo deny passes.",
+          "verify": {
+            "kind": "command",
+            "ref": "deny"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Updated dependency",
+        "Before and after reports"
+      ],
+      "rollback": "Revert the Cargo.toml and Cargo.lock commit."
+    },
+    {
+      "id": "H2",
+      "title": "Linux arm64 release target",
+      "milestone": "M4",
+      "priority": "P3",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [
+        "S3"
+      ],
+      "addresses": [
+        "V07"
+      ],
+      "branch": "roadmap/h2-linux-arm64",
+      "pr": null,
+      "purpose": "Releases cover Linux x86_64, macOS (both) and Windows x86_64. Linux arm64 exists only as a container image, which leaves out Graviton hosts, Raspberry Pi class machines and arm64 Linux laptops.",
+      "scope": {
+        "modify": [
+          ".github/workflows/rust-release.yml",
+          ".github/workflows/rust.yml",
+          "install.sh",
+          "xtask/src/package.rs",
+          "crates/docmonk-update/src/release.rs",
+          "crates/docmonk-update/src/layout.rs",
+          "README.md",
+          "docs/CI.md"
+        ],
+        "create": [],
+        "review": [
+          "docs/adr/0030-release-and-container.md",
+          "docs/adr/0029-native-update.md",
+          "scripts/ci_changes.sh"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "H2-01",
+          "title": "Build natively",
+          "details": "Add aarch64-unknown-linux-gnu to the release matrix on a native arm64 runner, as the container build already does; no cross-compilation.",
+          "done": false
+        },
+        {
+          "id": "H2-02",
+          "title": "Package and update",
+          "details": "cargo xtask package, SHA256SUMS, the installer's platform detection and docmonk update all recognise the new target.",
+          "done": false
+        },
+        {
+          "id": "H2-03",
+          "title": "Test",
+          "details": "Run the workspace tests on the arm64 runner on pushes, and the install-script job for the new archive.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "H2-AC1",
+          "criterion": "The release publishes a signed linux-arm64 archive and install.sh installs it on an arm64 host.",
+          "verify": {
+            "kind": "test",
+            "ref": "install-script CI job"
+          },
+          "met": false
+        },
+        {
+          "id": "H2-AC2",
+          "criterion": "docmonk update install works from the previous release on arm64.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Fifth release target"
+      ],
+      "rollback": "Remove the matrix entry; existing targets are unaffected."
+    },
+    {
+      "id": "H3",
+      "title": "Dependency advisory review",
+      "milestone": "M4",
+      "priority": "P3",
+      "executor": "claude_code",
+      "status": "not_started",
+      "depends_on": [],
+      "addresses": [
+        "V08"
+      ],
+      "branch": "roadmap/h3-advisory-review",
+      "pr": null,
+      "purpose": "deny.toml ignores three zip advisories with a review date of 2027-01-31, blocked on calamine and candle-core. The ignores must be removed or re-justified before that date, not left to expire silently.",
+      "scope": {
+        "modify": [
+          "deny.toml",
+          "Cargo.lock"
+        ],
+        "create": [],
+        "review": [
+          "crates/docmonk-update/src/install.rs",
+          "xtask/src/package.rs",
+          "docs/adr/0003-dependency-policy.md"
+        ]
+      },
+      "tasks": [
+        {
+          "id": "H3-01",
+          "title": "Check upstream",
+          "details": "Check whether calamine, docling and candle-core have moved to zip 9 or later; update where possible.",
+          "done": false
+        },
+        {
+          "id": "H3-02",
+          "title": "Re-verify the claim",
+          "details": "Grep the workspace and the dependency sources in use for ZipArchive::extract and ZipStreamReader::extract.",
+          "done": false
+        },
+        {
+          "id": "H3-03",
+          "title": "Update deny.toml",
+          "details": "Remove each ignore that no longer applies; give any that remains a new reason and a new review date.",
+          "done": false
+        }
+      ],
+      "verification": {
+        "commands": [
+          "deny"
+        ],
+        "tests": [],
+        "eval_report_required": false
+      },
+      "acceptance": [
+        {
+          "id": "H3-AC1",
+          "criterion": "cargo deny check passes and no ignore carries a past review date.",
+          "verify": {
+            "kind": "command",
+            "ref": "deny"
+          },
+          "met": false
+        }
+      ],
+      "deliverables": [
+        "Updated deny.toml"
+      ],
+      "rollback": "Revert the commit.",
+      "notes": [
+        "Do this by 2027-01-15. SBOM and package managers are roadmap P11 and status badges are roadmap Q6; they are not repeated here."
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "D1",
+      "question": "Which default models for the OpenAI and Anthropic providers?",
+      "options": [
+        "The provider's current small, cheap model, looked up at implementation time",
+        "No default: require ai.model to be set for cloud providers"
+      ],
+      "recommendation": "The provider's current small model, re-checked at every minor release.",
+      "rationale": "A default keeps docmonk ask one config line away; requiring a model avoids ever shipping a retired name but adds a step.",
+      "owner": "human",
+      "status": "decided",
+      "decision": "The provider's current small, cheap model, looked up at implementation time; the names are listed in the S2 PR for maintainer approval (decided by the maintainer on 2026-11-10).",
+      "blocks": [
+        "S2"
+      ]
+    },
+    {
+      "id": "D2",
+      "question": "Should tools/list serve minimal output schemas by default?",
+      "options": [
+        "Minimal by default, full behind a config key",
+        "Full by default, minimal behind a config key",
+        "Drop output schemas entirely"
+      ],
+      "recommendation": "Minimal by default, full behind a config key.",
+      "rationale": "Most clients pay for the manifest on every session and few validate structured output against the schema; the full schema stays available for those that do.",
+      "owner": "human",
+      "status": "decided",
+      "decision": "Minimal by default, full behind a config key (decided by the maintainer on 2026-11-10).",
+      "blocks": [
+        "A1"
+      ]
+    },
+    {
+      "id": "D3",
+      "question": "Which connector first, and are connectors in scope for a local-first product?",
+      "options": [
+        "Confluence first, then Slack and Jira",
+        "Slack first",
+        "No connectors: document export-to-folder workflows instead"
+      ],
+      "recommendation": "Confluence first, then Slack and Jira, each opt-in per source.",
+      "rationale": "Confluence pages are long-lived documents and map cleanly onto the existing HTML path; chat and tickets are noisier. Connectors make outbound calls, which the privacy stance must state plainly.",
+      "owner": "human",
+      "status": "proposed",
+      "decision": null,
+      "blocks": [
+        "T7",
+        "T8",
+        "T9",
+        "T10"
+      ]
+    },
+    {
+      "id": "D4",
+      "question": "How should HTTP MCP authenticate without a reverse proxy?",
+      "options": [
+        "Static bearer tokens",
+        "OIDC",
+        "Keep proxy-only"
+      ],
+      "recommendation": "Static bearer tokens now; revisit OIDC only if a team asks for per-user identity.",
+      "rationale": "Tokens are small, testable and enough for a team-shared read-only endpoint; OIDC adds a large dependency and attack surface.",
+      "owner": "human",
+      "status": "proposed",
+      "decision": null,
+      "blocks": [
+        "T11"
+      ]
+    }
+  ],
+  "risks": [
+    {
+      "id": "K01",
+      "risk": "Self-confirming quality: the same model writes code, labels and gates.",
+      "likelihood": "high",
+      "impact": "high",
+      "mitigation": "S1 comes first; new gate files (A6) get human-approved initial values and code-owner protection.",
+      "related": [
+        "S1",
+        "A6",
+        "Q1"
+      ]
+    },
+    {
+      "id": "K02",
+      "risk": "This plan rests on reading the code, not running it; a finding may be wrong in detail.",
+      "likelihood": "medium",
+      "impact": "medium",
+      "mitigation": "Every package starts by confirming its finding on current main and stops if the code differs materially.",
+      "related": [
+        "A1",
+        "Q2",
+        "T1"
+      ]
+    },
+    {
+      "id": "K03",
+      "risk": "Trimming the manifest breaks a client that relies on full output schemas.",
+      "likelihood": "low",
+      "impact": "medium",
+      "mitigation": "Decision D2 and a config key that restores full schemas; structuredContent is unchanged.",
+      "related": [
+        "A1",
+        "D2"
+      ]
+    },
+    {
+      "id": "K04",
+      "risk": "Route heuristics produce false routes and pollute exact URL matches.",
+      "likelihood": "medium",
+      "impact": "medium",
+      "mitigation": "Negative fixtures in every route package and unchanged eval reports as acceptance.",
+      "related": [
+        "T1",
+        "T2",
+        "T3",
+        "T4"
+      ]
+    },
+    {
+      "id": "K05",
+      "risk": "Connectors weaken the local-first and no-outbound-calls promise and add credential handling.",
+      "likelihood": "medium",
+      "impact": "high",
+      "mitigation": "ADR and decision D3 before code, per-source opt-in, environment-only credentials, read-only scopes, recorded fixtures.",
+      "related": [
+        "T7",
+        "T8",
+        "T9",
+        "T10",
+        "D3"
+      ]
+    },
+    {
+      "id": "K06",
+      "risk": "Built-in HTTP authentication is done badly and gives false confidence.",
+      "likelihood": "low",
+      "impact": "high",
+      "mitigation": "ADR and human review first, constant-time comparison, TLS still required for non-loopback binds, refusal tests.",
+      "related": [
+        "T11",
+        "D4"
+      ]
+    },
+    {
+      "id": "K07",
+      "risk": "Server-mode work needs clusters and disk that are not always available.",
+      "likelihood": "medium",
+      "impact": "low",
+      "mitigation": "Server mode ships as preview in 1.0; T5 and T6 are batched.",
+      "related": [
+        "T5",
+        "T6"
+      ]
+    },
+    {
+      "id": "K08",
+      "risk": "A SQLite upgrade shifts FTS ranking.",
+      "likelihood": "low",
+      "impact": "medium",
+      "mitigation": "Byte-identical before and after eval reports are the acceptance criterion; stop instead of blessing.",
+      "related": [
+        "H1"
+      ]
+    }
+  ],
+  "execution": {
+    "start_with": "S1",
+    "order": [
+      "S1",
+      "S2",
+      "A1",
+      "A3",
+      "H1",
+      "H3",
+      "S3",
+      "Q1",
+      "Q2",
+      "A2",
+      "A4",
+      "A6",
+      "A5",
+      "T1",
+      "T2",
+      "T3",
+      "T4",
+      "T11",
+      "T5",
+      "T6",
+      "T7",
+      "T8",
+      "T9",
+      "T10",
+      "H2"
+    ],
+    "parallel_tracks": [
+      {
+        "name": "Human",
+        "work_packages": [
+          "S1"
+        ],
+        "why": "Key, label review and decisions are maintainer work and gate the tag; start on day one."
+      },
+      {
+        "name": "Agent, independent of the tag",
+        "work_packages": [
+          "S2",
+          "A1",
+          "A3",
+          "H1",
+          "H3",
+          "T1",
+          "T2",
+          "T3",
+          "T4"
+        ],
+        "why": "None of these depend on S1, so an agent can work them while the label review runs."
+      },
+      {
+        "name": "Cluster work",
+        "work_packages": [
+          "T5",
+          "T6"
+        ],
+        "why": "Batch the work that needs live engines."
+      },
+      {
+        "name": "Connectors",
+        "work_packages": [
+          "T7",
+          "T8",
+          "T9",
+          "T10"
+        ],
+        "why": "One contract first, then one connector at a time."
+      }
+    ],
+    "stop_and_ask_when": [
+      "The next work package's executor is human, or a task's executor is human.",
+      "A change would touch a protected path in a way its rule forbids, or needs a human approval.",
+      "A decision (D1-D4 here, or D1-D4 of the roadmap) blocks the next step; present the evidence and the recommendation.",
+      "A cluster, secret or external account listed under requires is not available.",
+      "An acceptance criterion cannot be met without lowering a floor, weakening an audit or changing behaviour the plan says to preserve.",
+      "A finding in context.findings does not hold on current main."
+    ],
+    "pr_report": [
+      "Work package id and title in the PR title.",
+      "Files changed and why.",
+      "Commands run with results (every key in verification.commands).",
+      "Before/after held-out reports when eval_report_required is true.",
+      "Measured numbers for any performance or size claim.",
+      "Trade-offs taken and anything left open."
+    ],
+    "status_updates": "After each PR is opened or merged, update the work package's status, its tasks' done flags, its acceptance met flags and pr in this file, append a progress_log entry, and run commands.validate_plan. For tracking packages, update plans/improvement-roadmap.json as well."
+  },
+  "progress_log": [
+    {
+      "date": "2026-11-10",
+      "work_package": "S2",
+      "event": "unblocked",
+      "summary": "Decision D1 recorded: current small model per provider."
+    },
+    {
+      "date": "2026-11-10",
+      "work_package": "A1",
+      "event": "unblocked",
+      "summary": "Decision D2 recorded: minimal output schemas by default, full behind a config key."
+    }
+  ],
+  "agent_prompt": "Implement plans/upgrade-plan.json in https://github.com/gzarog/DocMonk. It follows plans/plan.schema.json and complements plans/improvement-roadmap.json; read all three fully. The plan was written from a read of main at 710200a without building or running tests, so confirm each finding on current main first and adapt where the code has moved. Work in execution.order, starting with execution.start_with, one roadmap/ branch and one PR per work package, respecting depends_on; packages in the independent parallel track may proceed while S1 is with the maintainer. Do only tasks whose executor (task-level, else work-package-level) is not human; for claude_code_then_human_review, open the PR and stop for review; for claude_code_with_cluster, use the service containers from .github/workflows/rust.yml. Obey policy.protected_paths and execution.stop_and_ask_when. Never decide D1-D4 yourself. Look up third-party API and model details at implementation time. Report each PR as execution.pr_report says, and update status fields and progress_log as execution.status_updates says, validating with commands.validate_plan."
+}
