@@ -22,7 +22,7 @@ pub fn open(path: &Path, cache_size_mb: i64) -> Result<Connection> {
     }
     let ctx = format!("open {}", path.display());
     let mut conn = Connection::open(path).map_err(StorageError::sqlite(ctx.clone()))?;
-    crate::stats::install(&mut conn);
+    crate::stats::install(&mut conn).map_err(StorageError::sqlite(ctx.clone()))?;
     conn.busy_timeout(BUSY_TIMEOUT)
         .map_err(StorageError::sqlite(ctx.clone()))?;
     conn.execute_batch(&format!(
@@ -35,9 +35,9 @@ pub fn open(path: &Path, cache_size_mb: i64) -> Result<Connection> {
         JOURNAL_SIZE_LIMIT,
         cache_size_mb.max(1) * 1024
     ))
-    .map_err(StorageError::sqlite(ctx))?;
+    .map_err(StorageError::sqlite(ctx.clone()))?;
     conn.set_prepared_statement_cache_capacity(64);
-    install_deadline(&conn);
+    install_deadline(&mut conn).map_err(StorageError::sqlite(ctx))?;
     Ok(conn)
 }
 
@@ -49,11 +49,11 @@ const DEADLINE_CHECK_STEPS: i32 = 1000;
 /// reads the deadline of whichever thread runs the statement, so pooled
 /// connections shared across requests stay correct; threads without a
 /// request deadline are never interrupted.
-pub fn install_deadline(conn: &Connection) {
+pub fn install_deadline(conn: &mut Connection) -> rusqlite::Result<()> {
     conn.progress_handler(
         DEADLINE_CHECK_STEPS,
         Some(docmonk_core::deadline::expired as fn() -> bool),
-    );
+    )
 }
 
 /// `BEGIN IMMEDIATE` transaction: commits on `Ok`, rolls back on `Err`.

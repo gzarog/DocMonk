@@ -7,18 +7,26 @@
 //! are kept: no SQL text, parameter or path is recorded.
 
 use std::cell::Cell;
-use std::time::Duration;
+
+use rusqlite::trace::{TraceEvent, TraceEventCodes};
 
 thread_local! {
     static STATEMENTS: Cell<u64> = const { Cell::new(0) };
 }
 
-fn on_statement(_sql: &str, _elapsed: Duration) {
-    STATEMENTS.with(|c| c.set(c.get() + 1));
+fn on_statement(event: TraceEvent<'_>) {
+    if matches!(event, TraceEvent::Profile(..)) {
+        STATEMENTS.with(|c| c.set(c.get() + 1));
+    }
 }
 
-pub(crate) fn install(conn: &mut rusqlite::Connection) {
-    conn.profile(Some(on_statement));
+pub(crate) fn install(conn: &mut rusqlite::Connection) -> rusqlite::Result<()> {
+    // clean-slate-audit: allow-start (rusqlite's name for SQLite's trace hook)
+    conn.trace_v2(
+        TraceEventCodes::SQLITE_TRACE_PROFILE,
+        Some(on_statement as fn(TraceEvent<'_>)),
+    )
+    // clean-slate-audit: allow-end
 }
 
 /// Statements completed on this thread since it started.
