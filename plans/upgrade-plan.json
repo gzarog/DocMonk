@@ -128,7 +128,7 @@
       {
         "id": "V04",
         "severity": "medium",
-        "summary": "HTTP route detection covers Python decorators and C# attributes only; Express, Fastify, Spring, Go routers and ASP.NET minimal APIs are not detected although their languages are parsed.",
+        "summary": "HTTP route detection covers Flask and FastAPI decorators and ASP.NET attributes only; Express, Fastify, Spring, Go routers and ASP.NET minimal APIs are not detected although their languages are parsed for symbols.",
         "evidence": [
           {
             "path": "crates/docmonk-code/src/framework.rs"
@@ -735,13 +735,13 @@
       "milestone": "M0",
       "priority": "P1",
       "executor": "claude_code_then_human_review",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [],
       "addresses": [
         "V03"
       ],
       "branch": "roadmap/s2-ai-default-models",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/153",
       "purpose": "The OpenAI and Anthropic defaults in docmonk-ai are dated model names. A first-time user of docmonk ask with a cloud provider should get a model that is current and still served.",
       "scope": {
         "modify": [
@@ -763,19 +763,19 @@
           "id": "S2-01",
           "title": "Pick the models",
           "details": "Read each provider's current model list and deprecation page at implementation time and propose one small, cheap default per provider. Do not take model names from memory. Decision D1 of this plan records the choice.",
-          "done": false
+          "done": true
         },
         {
           "id": "S2-02",
           "title": "Change the constants",
           "details": "Update OPENAI_DEFAULT_MODEL and ANTHROPIC_DEFAULT_MODEL in crates/docmonk-ai/src/http.rs and any registry entry that repeats them.",
-          "done": false
+          "done": true
         },
         {
           "id": "S2-03",
           "title": "Refresh fixtures and docs",
           "details": "Regenerate the golden fixtures with DOCMONK_BLESS=1, check the diff contains only the model names, and update the ai.model rows in docs/reference.md.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -1126,13 +1126,13 @@
       "milestone": "M2",
       "priority": "P1",
       "executor": "claude_code_then_human_review",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [],
       "addresses": [
         "V01"
       ],
       "branch": "roadmap/a1-mcp-manifest-budget",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/154",
       "purpose": "crates/docmonk-mcp/src/mcp_tools.json is about 102 KB for 13 tools, most of it outputSchema. A client that loads tools/list whole spends roughly 25k tokens of agent context before the first call.",
       "scope": {
         "modify": [
@@ -1156,25 +1156,25 @@
           "id": "A1-01",
           "title": "Measure",
           "details": "Add a test that serialises the tools/list result and reports its bytes and an approximate token count, per tool and in total. Commit the baseline numbers in the PR.",
-          "done": false
+          "done": true
         },
         {
           "id": "A1-02",
           "title": "Collapse output schemas",
           "details": "Serve a minimal outputSchema by default (top-level keys and types only) and keep the full schemas behind a config key, pending decision D2 of this plan. structuredContent itself does not change.",
-          "done": false
+          "done": true
         },
         {
           "id": "A1-03",
           "title": "Shorten descriptions",
           "details": "Rewrite tool and parameter descriptions to one or two sentences that say when to use the tool; move reference detail to docs/reference.md.",
-          "done": false
+          "done": true
         },
         {
           "id": "A1-04",
           "title": "Gate it",
           "details": "The manifest test fails when tools/list exceeds the budget, so the manifest cannot grow back unnoticed.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -3437,6 +3437,20 @@
       "work_package": "A1",
       "event": "unblocked",
       "summary": "Decision D2 recorded: minimal output schemas by default, full behind a config key."
+    },
+    {
+      "date": "2026-11-10",
+      "work_package": "S2",
+      "event": "pr_opened",
+      "summary": "S2: default models gpt-6-luna and claude-haiku-5-5 proposed; PR open for review.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/153"
+    },
+    {
+      "date": "2026-11-10",
+      "work_package": "A1",
+      "event": "pr_opened",
+      "summary": "A1: default tools/list 13,898 bytes (was 59,524); budget test and mcp.full_output_schemas added; PR open for review.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/154"
     }
   ],
   "agent_prompt": "Implement plans/upgrade-plan.json in https://github.com/gzarog/DocMonk. It follows plans/plan.schema.json and complements plans/improvement-roadmap.json; read all three fully. The plan was written from a read of main at 710200a without building or running tests, so confirm each finding on current main first and adapt where the code has moved. Work in execution.order, starting with execution.start_with, one roadmap/ branch and one PR per work package, respecting depends_on; packages in the independent parallel track may proceed while S1 is with the maintainer. Do only tasks whose executor (task-level, else work-package-level) is not human; for claude_code_then_human_review, open the PR and stop for review; for claude_code_with_cluster, use the service containers from .github/workflows/rust.yml. Obey policy.protected_paths and execution.stop_and_ask_when. Never decide D1-D4 yourself. Look up third-party API and model details at implementation time. Report each PR as execution.pr_report says, and update status fields and progress_log as execution.status_updates says, validating with commands.validate_plan."
