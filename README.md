@@ -149,7 +149,7 @@ Details: [Indexing behaviour](docs/reference.md#indexing-behaviour).
 
 <!-- clean-slate-audit: allow-start -->
 
-Full extraction for **Python, JavaScript, TypeScript/TSX, Go, Java, Rust and C#**, including HTTP routes from Python decorators and C# attributes. Other languages are still indexed for full-text search.
+Full extraction for **Python, JavaScript, TypeScript/TSX, Go, Java, Rust and C#**, including HTTP routes from Flask and FastAPI decorators, ASP.NET route attributes, and Express and Fastify route calls. Other languages are still indexed for full-text search.
 
 <!-- clean-slate-audit: allow-end -->
 

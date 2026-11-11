@@ -217,3 +217,160 @@ fn extraction_and_relationships_are_as_expected() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }
+
+/// The route rows of one fixtures/endpoints file as the graph stores
+/// them: `(subject, target symbol, resolver, evidence, line)`, sorted.
+fn route_rows(rel: &str) -> Vec<(String, String, String, String, String)> {
+    let source = std::fs::read(repo_root().join("fixtures/endpoints").join(rel)).unwrap();
+    let source = String::from_utf8_lossy(&source)
+        .replace("\r\n", "\n")
+        .into_bytes();
+    let Ok(PreparedCode::Parsed {
+        language,
+        extraction,
+    }) = prepare_source(&source, rel)
+    else {
+        panic!("{rel} does not parse");
+    };
+    let ids: Vec<String> = extraction.entities.iter().map(|e| e.name.clone()).collect();
+    let rows = entity_rows(rel, language, &extraction, &ids);
+    let same_file = candidates(&rows);
+    let rels = build_relationships(rel, rel, language, &extraction, &ids, &mut |text| {
+        resolve_reference(text, &same_file, |_| Vec::new(), |_| Vec::new())
+    });
+    let mut out: Vec<_> = rels
+        .into_iter()
+        .filter(|r| {
+            r.target_symbol
+                .as_deref()
+                .is_some_and(|s| s.starts_with("route:"))
+        })
+        .map(|r| {
+            assert_eq!(r.confidence, "heuristic", "{r:?}");
+            let line = r
+                .source_location
+                .as_deref()
+                .and_then(|l| l.rsplit(':').next())
+                .unwrap_or_default()
+                .to_owned();
+            (
+                r.source_entity_id,
+                r.target_symbol.unwrap_or_default(),
+                r.resolver,
+                r.evidence.unwrap_or_default(),
+                line,
+            )
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        (a.4.parse::<i64>().unwrap_or(0), &a.3).cmp(&(b.4.parse::<i64>().unwrap_or(0), &b.3))
+    });
+    out
+}
+
+fn route_row(
+    subject: &str,
+    target: &str,
+    resolver: &str,
+    evidence: &str,
+    line: &str,
+) -> (String, String, String, String, String) {
+    (
+        subject.into(),
+        target.into(),
+        resolver.into(),
+        evidence.into(),
+        line.into(),
+    )
+}
+
+/// Express and Fastify (upgrade plan T1): every route of the fixtures
+/// with its method and full path on its handler, and none of the calls
+/// that only look like routes.
+#[test]
+fn express_and_fastify_route_fixtures_are_as_expected() {
+    let express = "framework:express_route";
+    // The file's own entity is its default namespace (the path's stem).
+    assert_eq!(
+        route_rows("src/web/server.ts"),
+        [
+            route_row(
+                "server",
+                "route:health/live",
+                express,
+                "GET /health/live",
+                "37"
+            ),
+            route_row(
+                "listOrders",
+                "route:api/web/orders",
+                express,
+                "GET /api/web/orders",
+                "41"
+            ),
+            route_row(
+                "getOrder",
+                "route:api/web/orders/{}",
+                express,
+                "GET /api/web/orders/:orderId",
+                "42"
+            ),
+            route_row(
+                "createOrder",
+                "route:api/web/orders",
+                express,
+                "POST /api/web/orders",
+                "43"
+            ),
+            route_row(
+                "purgeOrders",
+                "route:api/web/orders/admin/orders",
+                express,
+                "DELETE /api/web/orders/admin/orders",
+                "44"
+            ),
+            route_row(
+                "server",
+                "route:api/web/orders/admin/ping",
+                express,
+                "ANY /api/web/orders/admin/ping",
+                "45"
+            ),
+        ]
+    );
+    let fastify = "framework:fastify_route";
+    assert_eq!(
+        route_rows("src/web/plugin.ts"),
+        [
+            route_row(
+                "getInvoice",
+                "route:api/web/invoices/{}",
+                fastify,
+                "GET /api/web/invoices/:invoiceId",
+                "16"
+            ),
+            route_row(
+                "replaceInvoice",
+                "route:api/web/invoices/{}",
+                fastify,
+                "PATCH /api/web/invoices/:invoiceId",
+                "17"
+            ),
+            route_row(
+                "replaceInvoice",
+                "route:api/web/invoices/{}",
+                fastify,
+                "PUT /api/web/invoices/:invoiceId",
+                "17"
+            ),
+            route_row(
+                "invoiceRoutes",
+                "route:api/web/invoices",
+                fastify,
+                "POST /api/web/invoices",
+                "22"
+            ),
+            route_row("plugin", "route:ready", fastify, "GET /ready", "27"),
+        ]
+    );
+}

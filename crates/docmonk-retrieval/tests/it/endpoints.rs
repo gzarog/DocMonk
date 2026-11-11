@@ -245,6 +245,88 @@ fn embedded_and_bare_url_questions_find_the_same_exact_evidence() {
     assert!(bare.get("diagnostics").is_none(), "explain is opt-in");
 }
 
+/// Routes registered by a call (Express, Fastify: upgrade plan T1) are
+/// exact occurrences like composed ASP.NET routes, on their handler.
+#[test]
+fn a_route_registered_by_a_call_is_found_on_its_handler() {
+    let ix = index("fixtures/endpoints", true);
+    let route = |q: &str| -> Vec<(String, i64, String, String, String)> {
+        let v = run(&ix, q, false);
+        v["exact_occurrences"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|o| o["evidence_class"] == "statically_composed_route")
+            .map(|o| {
+                (
+                    o["path"].as_str().unwrap().to_owned(),
+                    o["line"].as_i64().unwrap(),
+                    o["http_method"].as_str().unwrap_or_default().to_owned(),
+                    o["matched"].as_str().unwrap().to_owned(),
+                    // The handler's qualified name; its last segment.
+                    o["entity"]
+                        .as_str()
+                        .and_then(|e| e.rsplit('.').next())
+                        .unwrap_or_default()
+                        .to_owned(),
+                )
+            })
+            .collect()
+    };
+    let hit = |path: &str, line: i64, method: &str, matched: &str, entity: &str| {
+        (
+            path.to_owned(),
+            line,
+            method.to_owned(),
+            matched.to_owned(),
+            entity.to_owned(),
+        )
+    };
+    // Express: a router mounted under two prefixes; a concrete id matches
+    // the parameterised route.
+    assert_eq!(
+        route("Which code handles the URL /api/web/orders/admin/orders?"),
+        [hit(
+            "src/web/server.ts",
+            44,
+            "DELETE",
+            "/api/web/orders/admin/orders",
+            "purgeOrders"
+        )]
+    );
+    // Fastify: a plugin registered under a prefix, the full route form.
+    let invoices = route("Where is the endpoint /api/web/invoices/{invoiceId} implemented?");
+    for want in [
+        hit(
+            "src/web/plugin.ts",
+            16,
+            "GET",
+            "/api/web/invoices/:invoiceId",
+            "getInvoice",
+        ),
+        hit(
+            "src/web/plugin.ts",
+            17,
+            "PUT",
+            "/api/web/invoices/:invoiceId",
+            "replaceInvoice",
+        ),
+    ] {
+        assert!(
+            invoices.contains(&want),
+            "missing {want:?} in {invoices:#?}"
+        );
+    }
+    // Calls that only look like routes are literals, never routes.
+    for q in [
+        "Is the URL /api/web/remote/purge served by this code?",
+        "Is the URL /api/web/cached/value served by this code?",
+        "Is the URL /api/web/not-a-route served by this code?",
+    ] {
+        assert_eq!(route(q), [], "{q}");
+    }
+}
+
 #[test]
 fn a_near_miss_url_never_matches_the_shorter_one() {
     let ix = index("fixtures/endpoints", true);

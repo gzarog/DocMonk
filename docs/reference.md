@@ -98,7 +98,7 @@ Exact occurrences are looked up by a match key. The key is the path only, with p
 | Class | Meaning |
 |---|---|
 | `direct_exact_literal` | The path appears verbatim in a code string literal (owning entity and line given) |
-| `statically_composed_route` | An ASP.NET controller `[Route]` prefix plus an action `[Http*]`/`[Route]` template (or a Flask/FastAPI decorator) composes to the path. This is static evidence, not runtime proof |
+| `statically_composed_route` | An ASP.NET controller `[Route]` prefix plus an action `[Http*]`/`[Route]` template (or a Flask/FastAPI decorator, or an Express/Fastify route call with its mount prefixes) composes to the path. This is static evidence, not runtime proof |
 | `document_reference` | A document chunk whose stored text contains the path (verified, not just a full-text match) |
 | `heuristic_match` | A template (`/x/{id}`) or interpolated literal (`$"/x/{id}"`) that may produce the path |
 | `resolved_code_relationship` | A graph relationship (caller, reference) of a matched entity |
@@ -175,7 +175,7 @@ Quality is gated in CI by the 72-query golden set and by a 250-query generated e
 
 <!-- clean-slate-audit: allow-start -->
 
-Full extraction for Python, JavaScript, TypeScript/TSX, Go, Java, Rust and C#; HTTP routes from Python decorators and C# route attributes. Other languages are indexed for full-text search only.
+Full extraction for Python, JavaScript, TypeScript/TSX, Go, Java, Rust and C#; HTTP routes from Python decorators, C# route attributes, and Express and Fastify route calls (below). Other languages are indexed for full-text search only.
 
 <!-- clean-slate-audit: allow-end -->
 
@@ -189,6 +189,8 @@ docmonk link list
 docmonk link add <entity> <document> [--section ID]
 docmonk link remove <ID>
 ```
+
+**Routes registered by a call.** In JavaScript and TypeScript files that use Express or Fastify, a route registration is a graph edge from its handler to the route, like a composed ASP.NET route: URL questions find it as a `statically_composed_route`, and `references` and `impact` on the handler show it. Recognised: Express `app.get|post|put|patch|delete|head|options|all(path, ..., handler)` on an application or router the file creates (`express()`, `Router()`) or names `app`/`router`, with `app.use(prefix, router)` mounts of the same file followed through nested routers; Fastify shorthand methods on an instance the file creates (`fastify()`) or names `fastify`/`server`/`app`, `route({ method, url, handler })`, and `register(plugin, { prefix })` for a plugin function of the same file. The path must be a string literal. `:id` and `*rest` parameters match like `{id}`. The edge is on the handler when it is a named function of the same file, otherwise on the function around the call or on the file. Not seen: paths built at runtime, routers imported from another file, prefixes applied in another file, and `router.route(path).get(...)` chains. A call with the same shape on anything else (an HTTP client's `get(url, options)`, a `Map`) is not a route. The edges are part of graph derivation `graph-5`: the first `docmonk index` after upgrading recomputes graphs (never content).
 
 **Messaging topology** (ADR 0044). Broker sites become graph edges to message endpoints: Kafka topics, RabbitMQ queues and exchanges, and MassTransit message types. Recognised: RabbitMQ.Client (`BasicPublish`, `BasicConsume`, `QueueBind`, `ExchangeDeclare`), MassTransit (`Publish<T>`, `Send<T>`, `Publish(new T(...))`, `IConsumer<T>`), Confluent.Kafka (`Produce`/`ProduceAsync`, `Subscribe`), kafkajs (`send({ topic })`, `subscribe({ topics })`) and Spring Kafka (`@KafkaListener(topics = ...)`, `KafkaTemplate.send`). An endpoint is read when it is a string literal or a constant defined in the same file; names from configuration or other files are not seen. `impact <topic | queue | exchange | MessageType>` lists the `publishers` and `consumers` across every source, following RabbitMQ queue bindings whose key matches a published routing key (`*` one word, `#` any), with each site in `messaging` (source, path, line, framework, endpoint, routing key). The text view prints `Publishers:` and `Consumers:`, `explore` adds `publishes`/`consumes` evidence, and MCP `docmonk_impact` returns the same fields. The edges are part of graph derivation `graph-4`: the first `docmonk index` after upgrading recomputes graphs (never content).
 
