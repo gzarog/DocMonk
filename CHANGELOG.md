@@ -74,6 +74,14 @@ R4), which have not been run yet.
   across sources (RabbitMQ bindings followed), and `explore` and MCP
   `docmonk_impact` carry the same sites. Graph derivation `graph-4`: the
   first index after upgrading recomputes graphs, not content.
+- HTTP routes for Express and Fastify. Route calls
+  (`app.get(path, handler)`, Fastify's `route({ method, url, handler })`)
+  on an application, router or plugin of the same file are graph edges
+  from the handler to the route, with `app.use(prefix, router)` and
+  `register(plugin, { prefix })` prefixes joined. URL questions find
+  them as statically composed routes. Look-alike calls on other objects
+  are not routes. Graph derivation `graph-5`: the first index after
+  upgrading recomputes graphs, not content.
 
 ### Project
 

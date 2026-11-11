@@ -12,6 +12,7 @@ pub mod messaging;
 pub mod passages;
 pub mod process;
 pub mod resolve;
+pub mod routes;
 
 use std::sync::Arc;
 

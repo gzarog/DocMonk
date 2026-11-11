@@ -121,6 +121,8 @@ pub struct Extraction {
     /// Message broker sites (filled by [`crate::process::prepare_source`],
     /// which has the language and the text).
     pub messages: Vec<crate::messaging::MessageSite>,
+    /// Routes registered by a call (filled like `messages`).
+    pub routes: Vec<crate::routes::RouteSite>,
 }
 
 /// String literal node kinds of every supported grammar.
