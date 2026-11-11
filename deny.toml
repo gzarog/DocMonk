@@ -16,17 +16,31 @@ yanked = "warn"
 # Every ignore needs a reason and a review date. Remove an entry as soon as
 # the lockfile no longer carries the affected version.
 ignore = [
-  # zip < 9: path traversal and permission issues in ZipArchive::extract and
-  # ZipStreamReader::extract only. No workspace crate calls either: the
-  # updater and xtask place every entry themselves
+  # zip < 9: path traversal, permission and abort-on-symlink issues in
+  # ZipArchive::extract and ZipStreamReader::extract only. No workspace
+  # crate calls either: the updater and xtask place every entry themselves
   # (crates/docmonk-update/src/install.rs: enclosed_name, own placement,
   # mode masked to 0o755), and calamine/docling (zip 8) and candle-core
-  # (zip 1, pinned =0.9.1) only read archive members by name.
-  # Blocked on calamine and candle-core moving to zip >= 9. Review by
+  # (zip 1, pinned =0.9.1) only read archive members by name. Re-checked
+  # on 2026-11-11 by searching the workspace and the calamine 0.36.1,
+  # docling 1.89.0 and candle-core 0.9.1 sources for both calls: none.
+  # calamine has moved to zip 9 (0.37), but only docling 2.x uses it, and
+  # docling 2.x needs Rust 1.92 (the toolchain is 1.90, the MSRV 1.89).
+  # Blocked on that toolchain decision and on candle-core. Review by
   # 2027-01-31.
   { id = "RUSTSEC-2026-0367", reason = "extract-only; not called (see above); review 2027-01-31" },
   { id = "RUSTSEC-2026-0368", reason = "extract-only; not called (see above); review 2027-01-31" },
   { id = "RUSTSEC-2026-0369", reason = "extract-only; not called (see above); review 2027-01-31" },
+  { id = "RUSTSEC-2026-0429", reason = "extract-only; not called (see above); review 2027-01-31" },
+  # calamine < 0.38: panic and unbounded allocation in the CFB/OLE2 parser,
+  # which calamine 0.36.1 uses for binary .xls workbooks (Xls) and for VBA
+  # projects (vba_project) only. Neither is reached: docmonk-convert has
+  # no .xls format and passes docling an explicit InputFormat, never Xls
+  # (crates/docmonk-convert/src/converter.rs), and docling's xlsx backend
+  # never reads a VBA project. The fix (calamine 0.38) needs docling 2.x
+  # and so Rust 1.92, as above. Review when the toolchain moves, and at
+  # the latest by 2027-01-31; do not add an .xls format before then.
+  { id = "RUSTSEC-2026-0436", reason = "CFB parser only for .xls and VBA; neither reached (see above); review 2027-01-31" },
 ]
 
 [licenses]
