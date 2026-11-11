@@ -1306,13 +1306,13 @@
       "milestone": "M2",
       "priority": "P2",
       "executor": "claude_code",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [],
       "addresses": [
         "V02"
       ],
       "branch": "roadmap/a3-mcp-resources-prompts",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/155",
       "purpose": "resources/list, resources/templates/list and prompts/list return empty lists today. Resources let clients attach a document or symbol by URI; prompts give users the evidence-first workflow in one pick.",
       "scope": {
         "modify": [
@@ -1339,25 +1339,25 @@
           "id": "A3-01",
           "title": "ADR",
           "details": "Write the ADR with the next free number: URI scheme for documents, chunks and symbols, pagination, and how mcp.hidden_sources and redaction apply.",
-          "done": false
+          "done": true
         },
         {
           "id": "A3-02",
           "title": "Resource templates and reads",
           "details": "Implement resources/templates/list and resources/read over the KnowledgeRead port, pinned to the published build like every other read.",
-          "done": false
+          "done": true
         },
         {
           "id": "A3-03",
           "title": "Prompts",
           "details": "Two prompts: answer with evidence (explore then evidence, cite or abstain) and impact review (impact on a symbol, then linked specs).",
-          "done": false
+          "done": true
         },
         {
           "id": "A3-04",
           "title": "Same guards as tools",
           "details": "Hidden sources are not listed or readable, secrets stay redacted, and every read is written to the MCP query log.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -2927,13 +2927,13 @@
       "milestone": "M4",
       "priority": "P3",
       "executor": "claude_code",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [],
       "addresses": [
         "V08"
       ],
-      "branch": "roadmap/h1-rusqlite-bump",
-      "pr": null,
+      "branch": "roadmap/h3-advisory-review",
+      "pr": "https://github.com/gzarog/DocMonk/pull/156",
       "purpose": "rusqlite is pinned at 0.32 with bundled SQLite. Moving to the current release picks up SQLite fixes; FTS and query-planner changes can move rankings, so it is measured, not assumed.",
       "scope": {
         "modify": [
@@ -2954,19 +2954,19 @@
           "id": "H1-01",
           "title": "Bump",
           "details": "Update the workspace dependency to the latest rusqlite release and fix API changes.",
-          "done": false
+          "done": true
         },
         {
           "id": "H1-02",
           "title": "Prove no drift",
           "details": "Run the held-out and golden evals before and after; rankings, citations and verdicts must be identical. If they differ, stop and report instead of blessing.",
-          "done": false
+          "done": true
         },
         {
           "id": "H1-03",
           "title": "Existing homes",
           "details": "Open a home written before the bump and confirm status and search work unchanged.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -3101,13 +3101,13 @@
       "milestone": "M4",
       "priority": "P3",
       "executor": "claude_code",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [],
       "addresses": [
         "V08"
       ],
       "branch": "roadmap/h3-advisory-review",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/156",
       "purpose": "deny.toml ignores three zip advisories with a review date of 2027-01-31, blocked on calamine and candle-core. The ignores must be removed or re-justified before that date, not left to expire silently.",
       "scope": {
         "modify": [
@@ -3126,19 +3126,19 @@
           "id": "H3-01",
           "title": "Check upstream",
           "details": "Check whether calamine, docling and candle-core have moved to zip 9 or later; update where possible.",
-          "done": false
+          "done": true
         },
         {
           "id": "H3-02",
           "title": "Re-verify the claim",
           "details": "Grep the workspace and the dependency sources in use for ZipArchive::extract and ZipStreamReader::extract.",
-          "done": false
+          "done": true
         },
         {
           "id": "H3-03",
           "title": "Update deny.toml",
           "details": "Remove each ignore that no longer applies; give any that remains a new reason and a new review date.",
-          "done": false
+          "done": true
         }
       ],
       "verification": {
@@ -3451,6 +3451,27 @@
       "event": "pr_opened",
       "summary": "A1: default tools/list 13,898 bytes (was 59,524); budget test and mcp.full_output_schemas added; PR open for review.",
       "pr": "https://github.com/gzarog/DocMonk/pull/154"
+    },
+    {
+      "date": "2026-11-11",
+      "work_package": "A3",
+      "event": "pr_opened",
+      "summary": "A3: docmonk:// resources (source, document, chunk, symbol) and two prompts behind the tool guards; ADR 0045; PR open for review.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/155"
+    },
+    {
+      "date": "2026-11-11",
+      "work_package": "H3",
+      "event": "pr_opened",
+      "summary": "H3: pulldown-cmark 0.13.6; RUSTSEC-2026-0429 and -0436 ignored with re-verified reasons (their fix needs docling 2.x and Rust 1.92); shares a PR with H1 because cargo deny fails on main until both land.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/156"
+    },
+    {
+      "date": "2026-11-11",
+      "work_package": "H1",
+      "event": "pr_opened",
+      "summary": "H1: rusqlite 0.41.1 (SQLite 3.54.1) fixes RUSTSEC-2026-0459; held-out reports equal except 15 timing and memory fields; shares the H3 branch and PR.",
+      "pr": "https://github.com/gzarog/DocMonk/pull/156"
     }
   ],
   "agent_prompt": "Implement plans/upgrade-plan.json in https://github.com/gzarog/DocMonk. It follows plans/plan.schema.json and complements plans/improvement-roadmap.json; read all three fully. The plan was written from a read of main at 710200a without building or running tests, so confirm each finding on current main first and adapt where the code has moved. Work in execution.order, starting with execution.start_with, one roadmap/ branch and one PR per work package, respecting depends_on; packages in the independent parallel track may proceed while S1 is with the maintainer. Do only tasks whose executor (task-level, else work-package-level) is not human; for claude_code_then_human_review, open the PR and stop for review; for claude_code_with_cluster, use the service containers from .github/workflows/rust.yml. Obey policy.protected_paths and execution.stop_and_ask_when. Never decide D1-D4 yourself. Look up third-party API and model details at implementation time. Report each PR as execution.pr_report says, and update status fields and progress_log as execution.status_updates says, validating with commands.validate_plan."
