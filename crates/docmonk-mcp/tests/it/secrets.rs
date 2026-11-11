@@ -191,6 +191,65 @@ fn no_planted_secret_is_retrievable_through_any_read_surface() {
     let docs = ask("docmonk_documents", json!({"source_id": source}));
     ask("docmonk_status", json!({"source_id": source}));
 
+    // Resources (ADR 0045) read the same stored, redacted text: every
+    // record an evidence answer cited, as a chunk or a symbol, and every
+    // cited chunk's whole document.
+    let mut uris = std::collections::BTreeSet::new();
+    for q in &queries {
+        let out = tool("docmonk_evidence", json!({"query": q, "limit": 20}));
+        for e in out["structuredContent"]["evidence"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            let kind = match e["kind"].as_str() {
+                Some("document") => "chunk",
+                Some("entity") => "symbol",
+                _ => continue,
+            };
+            uris.insert(format!(
+                "docmonk://{kind}/{source}/{}",
+                e["record_id"].as_str().unwrap()
+            ));
+        }
+    }
+    let read = |uri: &str| -> String {
+        let msg = json!({"jsonrpc": "2.0", "id": 1, "method": "resources/read",
+            "params": {"uri": uri}});
+        let reply = docmonk_mcp::handle_line(&msg.to_string()).expect("a reply");
+        reply["result"]["contents"][0]["text"]
+            .as_str()
+            .unwrap_or_else(|| panic!("{uri}: {reply}"))
+            .to_owned()
+    };
+    let mut resources = Vec::new();
+    let mut documents = std::collections::BTreeSet::new();
+    for uri in &uris {
+        let text = read(uri);
+        documents.extend(
+            text.split_whitespace()
+                .filter(|w| w.starts_with("docmonk://document/"))
+                .map(str::to_owned),
+        );
+        resources.push((format!("resources/read {uri}"), text));
+    }
+    for uri in &documents {
+        resources.push((format!("resources/read {uri}"), read(uri)));
+    }
+    assert!(
+        uris.iter().any(|u| u.starts_with("docmonk://chunk/"))
+            && uris.iter().any(|u| u.starts_with("docmonk://symbol/"))
+            && !documents.is_empty(),
+        "resources of every kind were read: {uris:?} {documents:?}"
+    );
+    assert!(
+        resources
+            .iter()
+            .any(|(_, text)| text.contains("[REDACTED:")),
+        "the redacted lines are readable as resources"
+    );
+    answers.extend(resources);
+
     let mut planted: Vec<String> = COMMITTED.iter().map(|s| s.to_string()).collect();
     planted.extend(tokens);
     for (call, out) in &answers {

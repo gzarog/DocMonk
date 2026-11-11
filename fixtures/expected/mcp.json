@@ -5328,7 +5328,32 @@
   "response": {
    "jsonrpc": "2.0",
    "result": {
-    "prompts": []
+    "prompts": [
+     {
+      "name": "answer_with_evidence",
+      "title": "Answer with evidence",
+      "description": "Answer a question from the indexed code and documents, citing every claim or saying the evidence is insufficient.",
+      "arguments": [
+       {
+        "name": "question",
+        "description": "The question to answer.",
+        "required": true
+       }
+      ]
+     },
+     {
+      "name": "impact_review",
+      "title": "Impact review",
+      "description": "Review what a change to a code symbol affects: callers, callees, tests and the specifications linked to it.",
+      "arguments": [
+       {
+        "name": "symbol",
+        "description": "The symbol to review: a name or a fully qualified name.",
+        "required": true
+       }
+      ]
+     }
+    ]
    }
   }
  },
@@ -5358,7 +5383,29 @@
   "response": {
    "jsonrpc": "2.0",
    "result": {
-    "resourceTemplates": []
+    "resourceTemplates": [
+     {
+      "uriTemplate": "docmonk://document/{source_id}/{document_id}{?from}",
+      "name": "document",
+      "title": "Indexed document",
+      "description": "The text of an indexed document, chunk by chunk in reading order. A long document is cut at the result budget and ends with the URI that continues it (`from` is the ordinal of the first chunk returned).",
+      "mimeType": "text/plain"
+     },
+     {
+      "uriTemplate": "docmonk://chunk/{source_id}/{chunk_id}",
+      "name": "chunk",
+      "title": "Document chunk",
+      "description": "One chunk of an indexed document with its heading path and pages. `chunk_id` is the `record_id` of a document evidence entry (for a title hit, the document's first chunk).",
+      "mimeType": "text/plain"
+     },
+     {
+      "uriTemplate": "docmonk://symbol/{source_id}/{entity_id}",
+      "name": "symbol",
+      "title": "Code symbol",
+      "description": "A code symbol's qualified name, signature, file, lines and body. `entity_id` is the `entity_id` of a docmonk_explore entity or the `record_id` of an entity evidence entry.",
+      "mimeType": "text/plain"
+     }
+    ]
    }
   }
  },

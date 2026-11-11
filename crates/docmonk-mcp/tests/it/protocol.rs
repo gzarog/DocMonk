@@ -167,3 +167,73 @@ fn oversized_messages_are_rejected_and_the_stream_stays_in_sync() {
     assert_eq!(reply["error"]["code"], INVALID_REQUEST);
     assert!(reply["id"].is_null());
 }
+
+/// Resources and prompts are advertised and offered (upgrade plan A3):
+/// the template and prompt lists need no index.
+#[test]
+fn resources_and_prompts_are_advertised_and_listed() {
+    let _home = crate::home_lock();
+    let init = call(json!(1), "initialize", json!({}));
+    let capabilities = &init["result"]["capabilities"];
+    assert!(capabilities["resources"].is_object(), "{init}");
+    assert!(capabilities["prompts"].is_object(), "{init}");
+
+    let templates = call(json!(2), "resources/templates/list", json!({}));
+    let templates = templates["result"]["resourceTemplates"].as_array().unwrap();
+    let uris: Vec<&str> = templates
+        .iter()
+        .map(|t| t["uriTemplate"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        uris,
+        [
+            "docmonk://document/{source_id}/{document_id}{?from}",
+            "docmonk://chunk/{source_id}/{chunk_id}",
+            "docmonk://symbol/{source_id}/{entity_id}",
+        ]
+    );
+    for t in templates {
+        assert!(t["name"].is_string() && t["description"].is_string(), "{t}");
+    }
+
+    let prompts = call(json!(3), "prompts/list", json!({}));
+    let prompts = prompts["result"]["prompts"].as_array().unwrap();
+    assert_eq!(prompts.len(), 2);
+    for p in prompts {
+        let name = p["name"].as_str().unwrap();
+        let argument = p["arguments"][0]["name"].as_str().unwrap();
+        let got = call(
+            json!(4),
+            "prompts/get",
+            json!({"name": name, "arguments": {argument: "Dog.bark"}}),
+        );
+        let message = &got["result"]["messages"][0];
+        assert_eq!(message["role"], "user", "{got}");
+        assert_eq!(message["content"]["type"], "text", "{got}");
+        assert!(
+            message["content"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("Dog.bark"),
+            "{got}"
+        );
+        // A missing argument and an unknown prompt are invalid params.
+        let missing = call(json!(5), "prompts/get", json!({"name": name}));
+        assert_eq!(missing["error"]["code"], INVALID_PARAMS, "{missing}");
+    }
+    let unknown = call(json!(6), "prompts/get", json!({"name": "nope"}));
+    assert_eq!(unknown["error"]["code"], INVALID_PARAMS, "{unknown}");
+    assert_eq!(unknown["error"]["message"], "Unknown prompt: nope");
+
+    // A read without a URI is invalid params; a URI that is not ours is
+    // "resource not found", decided before anything is opened.
+    let no_uri = call(json!(7), "resources/read", json!({}));
+    assert_eq!(no_uri["error"]["code"], INVALID_PARAMS, "{no_uri}");
+    let foreign = call(
+        json!(8),
+        "resources/read",
+        json!({"uri": "file:///etc/hostname"}),
+    );
+    assert_eq!(foreign["error"]["code"], docmonk_mcp::RESOURCE_NOT_FOUND);
+    assert_eq!(foreign["error"]["data"]["uri"], "file:///etc/hostname");
+}

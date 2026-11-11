@@ -169,3 +169,131 @@ fn a_hidden_source_never_appears_in_any_mcp_tool_result() {
     );
     assert_eq!(refunds_line["sources"], json!([shop]));
 }
+
+fn rpc(method: &str, params: Value) -> Value {
+    let msg = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
+    docmonk_mcp::handle_line(&msg.to_string()).expect("a reply")
+}
+
+/// Resources follow the same rule (upgrade plan A3, ADR 0045): a hidden
+/// source is not listed, and none of its URIs can be read, including ones
+/// an agent learned while the source was still visible.
+#[test]
+fn a_hidden_source_cannot_be_listed_or_read_as_a_resource() {
+    let _home = crate::home_lock();
+    let d = tempfile::tempdir().unwrap();
+    let home = Home::new(d.path().join("home"));
+    home.ensure_layout().unwrap();
+    let open = d.path().join("shop");
+    let hidden = d.path().join("vault");
+    write(
+        &open,
+        "docs/refunds.md",
+        "# Refunds\n\nRefunds above 500 euros need finance approval.\n",
+    );
+    write(
+        &hidden,
+        "src/Pay/PayGate.cs",
+        "namespace Pay { public class PayGate { public int Charge(int a) { return a; } } }\n",
+    );
+    write(
+        &hidden,
+        "docs/settlement.md",
+        "# Settlement\n\nRefunds are settled by the zanzibarquorum ledger at night.\n",
+    );
+    let mut catalog = docmonk_service::sources::catalog(&home).unwrap();
+    let shop = catalog
+        .add(open.to_str().unwrap(), vec![], vec![])
+        .unwrap()
+        .id;
+    let vault = catalog
+        .add(hidden.to_str().unwrap(), vec![], vec![])
+        .unwrap()
+        .id;
+    let mut cfg = DocMonkConfig::default();
+    cfg.updates.enabled = false;
+    docmonk_config::write_user_config(&cfg, &home).unwrap();
+    let selected = docmonk_service::indexing::selected_sources(&home, None).unwrap();
+    docmonk_service::indexing::index_sources(&home, &selected, "index", |_| {}).unwrap();
+    std::env::set_var("DOCMONK_HOME", home.root());
+
+    // While visible: both sources are listed and the vault is readable.
+    let listed = rpc("resources/list", json!({})).to_string();
+    assert!(
+        listed.contains(&shop) && listed.contains(&vault),
+        "{listed}"
+    );
+    let record = |query: &str, kind: &str| -> String {
+        let out = tool("docmonk_evidence", json!({"query": query}));
+        out["evidence"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|e| e["kind"] == kind && e["source_id"] == vault.as_str())
+            .unwrap_or_else(|| panic!("no {kind} evidence for {query}: {out}"))["record_id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let chunk_uri = format!(
+        "docmonk://chunk/{vault}/{}",
+        record("zanzibarquorum ledger", "document")
+    );
+    let symbol_uri = format!(
+        "docmonk://symbol/{vault}/{}",
+        record("PayGate Charge", "entity")
+    );
+    let chunk = rpc("resources/read", json!({"uri": chunk_uri}));
+    let chunk_text = chunk["result"]["contents"][0]["text"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{chunk}"));
+    assert!(chunk_text.contains("zanzibarquorum"), "{chunk}");
+    let document_uri = chunk_text
+        .split_whitespace()
+        .find(|w| w.starts_with("docmonk://document/"))
+        .unwrap()
+        .to_owned();
+    let source_uri = format!("docmonk://source/{vault}");
+    let uris = [source_uri, chunk_uri, symbol_uri, document_uri];
+    for uri in &uris {
+        let reply = rpc("resources/read", json!({"uri": uri}));
+        assert!(
+            reply["result"]["contents"][0]["text"].is_string(),
+            "{uri}: {reply}"
+        );
+    }
+
+    // Hidden (by id here; the other test hides by path).
+    cfg.mcp.hidden_sources = vec![vault.clone()];
+    docmonk_config::write_user_config(&cfg, &home).unwrap();
+    let listed = rpc("resources/list", json!({}));
+    let text = listed.to_string();
+    assert!(text.contains(&shop), "{text}");
+    assert!(
+        !text.contains(&vault) && !text.contains(hidden.to_str().unwrap()),
+        "{text}"
+    );
+    assert_eq!(listed["result"]["resources"].as_array().unwrap().len(), 1);
+    for uri in &uris {
+        let reply = rpc("resources/read", json!({"uri": uri}));
+        // Exactly the answer an unknown source gets.
+        assert_eq!(
+            reply["error"],
+            json!({"code": -32002, "message": "Resource not found", "data": {"uri": uri}}),
+            "{uri}: {reply}"
+        );
+        assert!(!reply.to_string().contains("zanzibarquorum"), "{reply}");
+    }
+    let unknown = rpc(
+        "resources/read",
+        json!({"uri": "docmonk://source/src_nope"}),
+    );
+    assert_eq!(unknown["error"]["code"], -32002);
+    // The visible source still reads.
+    let shop_uri = format!("docmonk://source/{shop}");
+    let reply = rpc("resources/read", json!({"uri": shop_uri}));
+    assert!(
+        reply["result"]["contents"][0]["text"].is_string(),
+        "{reply}"
+    );
+}
