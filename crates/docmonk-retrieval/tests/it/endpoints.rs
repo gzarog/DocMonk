@@ -307,7 +307,7 @@ fn a_route_registered_by_a_call_is_found_on_its_handler() {
         hit(
             "src/web/plugin.ts",
             17,
-            "PUT",
+            "PATCH,PUT",
             "/api/web/invoices/:invoiceId",
             "replaceInvoice",
         ),

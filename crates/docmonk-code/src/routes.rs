@@ -39,7 +39,8 @@ pub struct RouteSite {
     pub line: i64,
     /// The handler, the function around the call, or `None` (the file).
     pub subject_local_id: Option<usize>,
-    /// `GET`, `POST`, ... or `ANY`.
+    /// `GET`, `POST`, ... or `ANY`; several methods one registration
+    /// declares for the same path are joined in order (`PATCH,PUT`).
     pub method: String,
     /// The full path as written, prefixes joined (`/api/users/:id`).
     pub path: String,
@@ -488,8 +489,25 @@ pub fn detect(language: &str, text: &str, entities: &[ExtractedEntity]) -> Vec<R
     }
     let mut out = sites.out;
     out.sort();
-    out.truncate(MAX_ROUTE_SITES_PER_FILE);
-    out
+    // One registration with several methods is one route row: readers
+    // tell occurrences apart by place and path, not by method.
+    let mut merged: Vec<RouteSite> = Vec::with_capacity(out.len());
+    for site in out {
+        match merged.iter_mut().find(|m| {
+            m.line == site.line
+                && m.subject_local_id == site.subject_local_id
+                && m.path == site.path
+                && m.resolver == site.resolver
+        }) {
+            Some(same) => {
+                same.method.push(',');
+                same.method.push_str(&site.method);
+            }
+            None => merged.push(site),
+        }
+    }
+    merged.truncate(MAX_ROUTE_SITES_PER_FILE);
+    merged
 }
 
 #[cfg(test)]
@@ -565,13 +583,7 @@ mod tests {
                     "getInvoice"
                 ),
                 row(
-                    "PATCH",
-                    "/api/web/invoices/:invoiceId",
-                    "api/web/invoices/{}",
-                    "replaceInvoice"
-                ),
-                row(
-                    "PUT",
+                    "PATCH,PUT",
                     "/api/web/invoices/:invoiceId",
                     "api/web/invoices/{}",
                     "replaceInvoice"

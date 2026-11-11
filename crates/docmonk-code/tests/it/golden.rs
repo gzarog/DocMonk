@@ -349,18 +349,12 @@ fn express_and_fastify_route_fixtures_are_as_expected() {
                 "GET /api/web/invoices/:invoiceId",
                 "16"
             ),
+            // One registration with two methods is one row.
             route_row(
                 "replaceInvoice",
                 "route:api/web/invoices/{}",
                 fastify,
-                "PATCH /api/web/invoices/:invoiceId",
-                "17"
-            ),
-            route_row(
-                "replaceInvoice",
-                "route:api/web/invoices/{}",
-                fastify,
-                "PUT /api/web/invoices/:invoiceId",
+                "PATCH,PUT /api/web/invoices/:invoiceId",
                 "17"
             ),
             route_row(
