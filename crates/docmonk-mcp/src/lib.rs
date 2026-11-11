@@ -3,7 +3,9 @@
 //! A JSON-RPC 2.0 loop over newline-delimited stdin/stdout exposing the
 //! read-only `docmonk_*` tools (catalog in `mcp_tools.json`) with
 //! `{schema_version, ok, error, ...}` results. `docmonk_ask` answers
-//! through the configured AI provider, like `docmonk ask`.
+//! through the configured AI provider, like `docmonk ask`. The same
+//! knowledge is readable as resources (`docmonk://` URIs, [`resources`])
+//! and the evidence-first workflows are offered as [`prompts`].
 //!
 //! Each tool call loads the config and opens the indexed sources afresh,
 //! like a CLI invocation, on a worker thread bounded by
@@ -26,7 +28,9 @@ use docmonk_service::{load, prepared_home};
 
 pub mod budget;
 pub mod exec;
+pub mod prompts;
 pub mod query_log;
+pub mod resources;
 pub mod visibility;
 
 /// Protocol versions the server accepts; anything else gets the latest.
@@ -120,9 +124,23 @@ pub const PARSE_ERROR: i64 = -32700;
 pub const INVALID_REQUEST: i64 = -32600;
 pub const METHOD_NOT_FOUND: i64 = -32601;
 pub const INVALID_PARAMS: i64 = -32602;
+pub const INTERNAL_ERROR: i64 = -32603;
+/// MCP: `resources/read` of a URI that names nothing readable.
+pub const RESOURCE_NOT_FOUND: i64 = -32002;
+
+/// Internal names `resources/list` and `resources/read` run under, so
+/// they pass the same visibility scope, executor limits and query log as
+/// a tool call. They are not in the tool catalog: `tools/call` cannot
+/// reach them.
+const RESOURCES_LIST: &str = "resources/list";
+const RESOURCES_READ: &str = "resources/read";
+
+fn error_object(code: i64, message: &str) -> Value {
+    json!({"code": code, "message": message})
+}
 
 fn rpc_error(id: Value, code: i64, message: &str) -> Value {
-    json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}})
+    json!({"jsonrpc": "2.0", "id": id, "error": error_object(code, message)})
 }
 
 /// The reply to a message longer than `mcp.max_request_bytes` (its id is
@@ -137,7 +155,8 @@ pub fn too_large(limit: usize) -> Value {
 
 /// One JSON-RPC message in, at most one message out. Malformed JSON is a
 /// parse error (-32700, id null); a message that is not a valid request
-/// is -32600; an unknown method -32601; bad `tools/call` params -32602.
+/// is -32600; an unknown method -32601; bad `tools/call`, `prompts/get` or
+/// `resources/read` params -32602; an unreadable resource -32002.
 /// Notifications (no `id`) and responses never get a reply.
 pub fn handle_line(line: &str) -> Option<Value> {
     let Ok(msg) = serde_json::from_str::<Value>(line) else {
@@ -175,20 +194,25 @@ pub fn handle_line(line: &str) -> Option<Value> {
     // Notifications get no reply.
     let id = id?;
     let params = obj.get("params").cloned().unwrap_or(Value::Null);
-    let outcome = match method {
+    let outcome: Result<Value, Value> = match method {
         "initialize" => Ok(initialize(&params)),
         "ping" => Ok(json!({})),
         "tools/list" => Ok(json!({"tools": tools()})),
-        "prompts/list" => Ok(json!({"prompts": []})),
-        "resources/list" => Ok(json!({"resources": []})),
-        "resources/templates/list" => Ok(json!({"resourceTemplates": []})),
-        "tools/call" if !params.is_object() => Err((INVALID_PARAMS, "Invalid params")),
+        "prompts/list" => Ok(json!({"prompts": prompts::list()})),
+        "prompts/get" => prompts::get(&params).map_err(|m| error_object(INVALID_PARAMS, &m)),
+        "resources/list" => list_resources(),
+        "resources/templates/list" => Ok(json!({"resourceTemplates": resources::templates()})),
+        "resources/read" => match params["uri"].as_str() {
+            Some(uri) => read_resource(uri),
+            None => Err(error_object(INVALID_PARAMS, "Invalid params")),
+        },
+        "tools/call" if !params.is_object() => Err(error_object(INVALID_PARAMS, "Invalid params")),
         "tools/call" => Ok(call_tool(&params)),
-        _ => Err((METHOD_NOT_FOUND, "Method not found")),
+        _ => Err(error_object(METHOD_NOT_FOUND, "Method not found")),
     };
     Some(match outcome {
         Ok(result) => json!({"jsonrpc": "2.0", "id": id, "result": result}),
-        Err((code, message)) => rpc_error(id, code, message),
+        Err(error) => json!({"jsonrpc": "2.0", "id": id, "error": error}),
     })
 }
 
@@ -256,6 +280,69 @@ fn initialize(params: &Value) -> Value {
         },
         "instructions": INSTRUCTIONS,
     })
+}
+
+/// The fields a resource entry carries only for the visibility scrub and
+/// the query log; a client never sees them.
+fn public_entries(entries: &Value) -> Vec<Value> {
+    entries
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|entry| {
+            let mut entry = entry.clone();
+            if let Some(o) = entry.as_object_mut() {
+                o.remove("source_id");
+                o.remove("path");
+            }
+            entry
+        })
+        .collect()
+}
+
+/// `resources/list`: the sources this caller may see.
+fn list_resources() -> Result<Value, Value> {
+    let out = run_tool(RESOURCES_LIST, Map::new());
+    if out["ok"] != true {
+        let message = out["error"]["message"].as_str().unwrap_or("internal error");
+        return Err(error_object(INTERNAL_ERROR, message));
+    }
+    Ok(json!({"resources": public_entries(&out["resources"])}))
+}
+
+/// `resources/read`. Whatever names nothing this caller may read (a
+/// malformed URI, an unknown or hidden source, an unknown record) is the
+/// same "Resource not found", so a hidden source cannot be told from a
+/// missing one.
+fn read_resource(uri: &str) -> Result<Value, Value> {
+    let not_found = || {
+        let mut e = error_object(RESOURCE_NOT_FOUND, "Resource not found");
+        e["data"] = json!({"uri": uri});
+        e
+    };
+    let Ok(target) = resources::parse(uri) else {
+        return Err(not_found());
+    };
+    let mut args = Map::new();
+    args.insert("uri".into(), json!(uri));
+    // Named like a tool's source filter, so the hidden-source check
+    // refuses it before anything is opened.
+    args.insert("source_id".into(), json!(target.source_id()));
+    let out = run_tool(RESOURCES_READ, args);
+    if out["ok"] != true {
+        return Err(match out["error"]["type"].as_str() {
+            Some("UsageError") => not_found(),
+            _ => error_object(
+                INTERNAL_ERROR,
+                out["error"]["message"].as_str().unwrap_or("internal error"),
+            ),
+        });
+    }
+    let contents = public_entries(&out["contents"]);
+    if contents.is_empty() {
+        return Err(not_found());
+    }
+    Ok(json!({ "contents": contents }))
 }
 
 fn text_result(text: String, is_error: bool) -> Value {
@@ -868,6 +955,12 @@ fn work(home: &Home, name: &str, args: &Map<String, Value>) -> Result<Value, Doc
                 "warnings": warnings,
             }))
         }
+        RESOURCES_LIST => resources::list(home),
+        RESOURCES_READ => resources::read(
+            home,
+            &cfg,
+            args.get("uri").and_then(Value::as_str).unwrap_or_default(),
+        ),
         other => Err(DocMonkError::usage(format!("Unknown tool: {other}"))),
     }
 }

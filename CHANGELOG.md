@@ -75,6 +75,16 @@ R4), which have not been run yet.
   `docmonk_impact` carry the same sites. Graph derivation `graph-4`: the
   first index after upgrading recomputes graphs, not content.
 
+### MCP
+
+- Resources and prompts (ADR 0045). Documents, chunks and symbols are
+  readable by `docmonk://` URI (`resources/list`,
+  `resources/templates/list`, `resources/read`), from the published
+  build and under the same hidden-source, redaction and query-log rules
+  as tools; long documents page. `prompts/list` offers
+  `answer_with_evidence` and `impact_review`. Both lists were empty
+  before.
+
 ### Project
 
 - Code owners for held-out labels, quality floors, the remediation

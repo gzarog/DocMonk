@@ -6,6 +6,7 @@
 mod agent_flow;
 mod execution;
 mod protocol;
+mod resources;
 mod secrets;
 mod visibility;
 

@@ -358,6 +358,18 @@ Tools: `docmonk_explore`, `docmonk_search`, `docmonk_evidence`, `docmonk_read`, 
 - `docmonk_references` lists every graph edge touching a symbol, like `docmonk references`.
 - `docmonk_links` lists the code-document links of an entity (id, qualified or short name) or a document (id or path), like `docmonk link list`. It is read-only: links are added and removed with the CLI or the Admin UI.
 
+**Resources** (ADR 0045). A client can attach indexed content by URI instead of calling a tool. `resources/list` returns one `docmonk://source/{source_id}` per indexed source; `resources/templates/list` returns the templates below; `resources/read` returns the text.
+
+| URI | Content |
+|---|---|
+| `docmonk://document/{source_id}/{document_id}{?from}` | A document's chunks in reading order. A long document is cut at three quarters of `mcp.max_result_bytes` and ends with `[continues at <uri>]`. |
+| `docmonk://chunk/{source_id}/{chunk_id}` | One chunk with its path, heading path and pages; `chunk_id` is the `record_id` of a document evidence entry. |
+| `docmonk://symbol/{source_id}/{entity_id}` | A symbol's signature, file, lines and body; `entity_id` comes from a `docmonk_explore` entity or an entity evidence entry. |
+
+Reads answer from the published build and say which build that is. They follow the same rules as tools: a hidden source is neither listed nor readable, stored text is redacted, and with `mcp.query_log` every list and read is logged. A URI that names nothing readable, including a hidden source, gets error `-32002` "Resource not found".
+
+**Prompts.** `prompts/list` offers two workflows a user can pick in their client: `answer_with_evidence` (argument `question`: explore, then verified evidence, cite every claim or say the evidence is insufficient) and `impact_review` (argument `symbol`: callers, callees, tests and linked specifications).
+
 **Result budgets.** Every tool answer is limited to `mcp.max_result_items` items per list (default 200) and `mcp.max_result_bytes` in total (default 256 KiB). Lists are cut first, then the largest list is shortened, then the longest text. A cut answer carries `truncated: true` and one `truncation` entry per cut (`path`, `dropped` items or `chars`, `reason`), so the agent knows to narrow its query.
 
 **HTTP transport.** `docmonk serve --mcp --http` serves the same JSON-RPC messages on `POST /mcp`: one message per request, the reply as `application/json`, `202` for notifications, no server-initiated streams. It uses the Admin UI's access model ([docs/ui.md](ui.md)). It binds to loopback by default, where requests act as the local user. A non-loopback bind is refused unless remote mode through an authenticating TLS reverse proxy is configured (`ui.remote_enabled`), and then a tool call needs the proxy-asserted `admin` role. `Host` and `Origin` must be allowed hosts, so a web page on another origin cannot call it.
