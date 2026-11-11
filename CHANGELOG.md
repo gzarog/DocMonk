@@ -75,6 +75,17 @@ R4), which have not been run yet.
   `docmonk_impact` carry the same sites. Graph derivation `graph-4`: the
   first index after upgrading recomputes graphs, not content.
 
+### Dependencies
+
+- rusqlite 0.41 with bundled SQLite 3.54.1 (was rusqlite 0.32), which
+  fixes RUSTSEC-2026-0459. A home written by the previous build
+  opens unchanged, and the held-out report is identical apart from its
+  timing fields.
+- pulldown-cmark 0.13.6 (RUSTSEC-2026-0414, RUSTSEC-2026-0433).
+- `deny.toml`: RUSTSEC-2026-0429 (zip) and RUSTSEC-2026-0436 (calamine)
+  are ignored with the reason they are not reached and a review date;
+  their fix needs docling 2.x and Rust 1.92.
+
 ### Project
 
 - Code owners for held-out labels, quality floors, the remediation
