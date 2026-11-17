@@ -10,9 +10,13 @@ pub fn backoff_seconds(attempt: i64) -> f64 {
     (BASE_DELAY_SECONDS * 2f64.powi((attempt - 1).min(30) as i32)).min(MAX_DELAY_SECONDS)
 }
 
-pub fn next_attempt_at(attempt: i64, now: chrono::DateTime<chrono::Utc>) -> String {
-    let delay = chrono::Duration::milliseconds((backoff_seconds(attempt) * 1000.0) as i64);
-    (now + delay).to_rfc3339_opts(chrono::SecondsFormat::Micros, false)
+pub fn next_attempt_at(
+    attempt: i64,
+    now: docmonk_core::time::DateTime<docmonk_core::time::Utc>,
+) -> String {
+    let delay =
+        docmonk_core::time::Duration::milliseconds((backoff_seconds(attempt) * 1000.0) as i64);
+    (now + delay).to_rfc3339_opts(docmonk_core::time::SecondsFormat::Micros, false)
 }
 
 pub fn is_permanent(attempt: i64) -> bool {

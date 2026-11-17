@@ -49,7 +49,8 @@ pub const RACY_WINDOW_SECS: f64 = 2.0;
 /// the same timestamp tick, so its stat cannot be trusted and it must be
 /// hashed. Unknown or unparseable times are not racy.
 pub fn racy(mtime: f64, last_indexed_at: Option<&str>) -> bool {
-    let Some(at) = last_indexed_at.and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
+    let Some(at) =
+        last_indexed_at.and_then(|t| docmonk_core::time::DateTime::parse_from_rfc3339(t).ok())
     else {
         return false;
     };

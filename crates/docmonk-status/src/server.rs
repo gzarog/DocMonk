@@ -12,9 +12,9 @@
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
-use chrono::Utc;
 use docmonk_backends::status::{FileErrorEvent, PublishedAgg, StatusQuery};
 use docmonk_backends::{BackendError, ServerBackend};
+use docmonk_core::time::Utc;
 use serde_json::Value;
 
 use crate::model::*;
@@ -104,7 +104,7 @@ fn published(a: &PublishedAgg) -> PublishedCounts {
     }
 }
 
-fn lease_of(d: &Value, now: chrono::DateTime<Utc>) -> Option<LeaseFacts> {
+fn lease_of(d: &Value, now: docmonk_core::time::DateTime<Utc>) -> Option<LeaseFacts> {
     let owner = s(d, "lease_owner")?;
     let expires = s(d, "lease_expires_at");
     Some(LeaseFacts {

@@ -7,7 +7,7 @@
 # manifest; nothing here cross-compiles.
 
 # ---------------------------------------------------------------- build ---
-FROM rust:1.90.0-slim-bookworm AS build
+FROM rust:1.92.0-slim-bookworm AS build
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*

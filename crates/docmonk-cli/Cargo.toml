@@ -12,7 +12,6 @@ name = "docmonk"
 path = "src/main.rs"
 
 [dependencies]
-chrono.workspace = true
 clap.workspace = true
 docmonk-ai.workspace = true
 docmonk-backends.workspace = true

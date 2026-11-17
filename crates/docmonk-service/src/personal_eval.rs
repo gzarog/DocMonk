@@ -160,7 +160,8 @@ pub fn record(home: &Home, query: &str, expect: Vec<Expect>) -> Result<Query, Do
         id: format!("q{next}"),
         query: query.to_owned(),
         expect,
-        created_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        created_at: docmonk_core::time::Utc::now()
+            .to_rfc3339_opts(docmonk_core::time::SecondsFormat::Secs, true),
     };
     set.queries.push(q.clone());
     save_queries(home, &set)?;

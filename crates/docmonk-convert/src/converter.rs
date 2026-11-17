@@ -8,7 +8,7 @@ use crate::format::DocumentFormat;
 
 /// Converter identity, part of `parser_version` (a change rebuilds every
 /// source's documents).
-pub const DOCLING_PARSER_VERSION: &str = "docling.rs-1.89.0";
+pub const DOCLING_PARSER_VERSION: &str = "docling.rs-2.67.1";
 
 /// PDF/OCR behaviour (`documents.ocr`, `documents.image_ocr`, `pdf_mode`).
 #[derive(Debug, Clone, PartialEq, Eq)]

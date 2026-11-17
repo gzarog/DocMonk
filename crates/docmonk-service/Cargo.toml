@@ -8,7 +8,6 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-chrono.workspace = true
 docmonk-ai.workspace = true
 docmonk-backends.workspace = true
 docmonk-code.workspace = true

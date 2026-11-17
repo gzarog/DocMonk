@@ -1242,7 +1242,7 @@ fn run_stage_for(
         tracing::warn!(component = "relationships", event = "dependency_ignored", declaration = %d);
     }
     let mut book = RetryBook::load(home);
-    let now = chrono::Utc::now();
+    let now = docmonk_core::time::Utc::now();
     let candidates = reg.refresh_candidates();
     let cache = LookupCache::default();
     if only.is_none() {
@@ -1313,7 +1313,7 @@ pub fn retry_due(
     lock_timeout: std::time::Duration,
     mut on_outcome: impl FnMut(&SourceRecord, &DependencyOutcome),
 ) -> Option<DependencySummary> {
-    let due = RetryBook::load(home).due(chrono::Utc::now());
+    let due = RetryBook::load(home).due(docmonk_core::time::Utc::now());
     if due.is_empty() {
         return None;
     }

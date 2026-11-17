@@ -120,7 +120,8 @@ impl StageIssue {
             source_id: source_id.to_owned(),
             code: code.to_owned(),
             reason: docmonk_telemetry::redact::redact_urls_in_text(reason),
-            at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            at: docmonk_core::time::Utc::now()
+                .to_rfc3339_opts(docmonk_core::time::SecondsFormat::Secs, true),
         }
     }
 }
@@ -290,7 +291,7 @@ pub fn lease_owner() -> String {
 pub fn new_run_id() -> String {
     format!(
         "run-{}-{}",
-        chrono::Utc::now().format("%Y%m%dT%H%M%S%.3fZ"),
+        docmonk_core::time::Utc::now().format("%Y%m%dT%H%M%S%.3fZ"),
         std::process::id()
     )
 }

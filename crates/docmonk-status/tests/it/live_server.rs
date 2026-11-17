@@ -318,7 +318,7 @@ fn scenario(base: &str, engine: Engine) {
     let lease = writer
         .acquire_lease(&id(5), "host-a:41", Duration::from_secs(60))
         .unwrap();
-    let now = chrono::Utc::now().timestamp_millis();
+    let now = docmonk_core::time::Utc::now().timestamp_millis();
     let doc = RuntimeDoc {
         source_id: id(5),
         run_id: "run-a".into(),
@@ -401,7 +401,7 @@ fn bench(base: &str, engine: Engine) -> serde_json::Value {
     let prefix = unique("bench");
     let writer = backend(base, engine, &prefix);
     seed(&writer);
-    let now = chrono::Utc::now().timestamp_millis();
+    let now = docmonk_core::time::Utc::now().timestamp_millis();
     for (n, host) in [(1, "host-a"), (2, "host-a"), (3, "host-b"), (4, "host-b")] {
         let owner = format!("{host}:{n}");
         let lease = writer

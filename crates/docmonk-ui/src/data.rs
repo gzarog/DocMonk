@@ -761,11 +761,13 @@ pub fn daemon_log_tail(home: &Home, max: usize) -> Vec<String> {
 
 /// `_format_uptime` for an ISO start time.
 pub fn format_uptime(started_at: Option<&str>) -> String {
-    let Some(started) = started_at.and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+    let Some(started) =
+        started_at.and_then(|s| docmonk_core::time::DateTime::parse_from_rfc3339(s).ok())
     else {
         return String::new();
     };
-    let secs = (chrono::Utc::now() - started.with_timezone(&chrono::Utc)).num_seconds();
+    let secs = (docmonk_core::time::Utc::now() - started.with_timezone(&docmonk_core::time::Utc))
+        .num_seconds();
     docmonk_indexing::daemon::format_uptime(secs as f64)
 }
 

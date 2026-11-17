@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
-use chrono::{DateTime, Utc};
+use docmonk_core::time::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

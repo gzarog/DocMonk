@@ -819,8 +819,11 @@ pub fn status_payload(home: &Home) -> serde_json::Value {
     let info = pid::running_daemon(home);
     let snapshot = health::read_health(home);
     let uptime = info.as_ref().and_then(|i| {
-        let started = chrono::DateTime::parse_from_rfc3339(&i.started_at).ok()?;
-        Some((chrono::Utc::now() - started.with_timezone(&chrono::Utc)).as_seconds_f64())
+        let started = docmonk_core::time::DateTime::parse_from_rfc3339(&i.started_at).ok()?;
+        Some(
+            (docmonk_core::time::Utc::now() - started.with_timezone(&docmonk_core::time::Utc))
+                .as_seconds_f64(),
+        )
     });
     serde_json::json!({
         "running": info.is_some(),

@@ -20,13 +20,26 @@ ignore = [
   # ZipStreamReader::extract only. No workspace crate calls either: the
   # updater and xtask place every entry themselves
   # (crates/docmonk-update/src/install.rs: enclosed_name, own placement,
-  # mode masked to 0o755), and calamine/docling (zip 8) and candle-core
-  # (zip 1, pinned =0.9.1) only read archive members by name.
-  # Blocked on calamine and candle-core moving to zip >= 9. Review by
-  # 2027-01-31.
+  # mode masked to 0o755), and candle-core (zip 1, pinned =0.9.1) only
+  # reads archive members by name. Blocked on candle-core moving to
+  # zip >= 9. Review by 2027-01-31.
   { id = "RUSTSEC-2026-0367", reason = "extract-only; not called (see above); review 2027-01-31" },
   { id = "RUSTSEC-2026-0368", reason = "extract-only; not called (see above); review 2027-01-31" },
   { id = "RUSTSEC-2026-0369", reason = "extract-only; not called (see above); review 2027-01-31" },
+  # zip < 9, published 2026-11. Only candle-core (zip 1, pinned =0.9.1)
+  # still carries zip < 9; docling/calamine and the workspace are on zip 9.
+  # candle-core only reads archive members by name (pickle.rs, npy.rs):
+  # nothing calls ZipArchive::extract, extract_unwrapped_root_dir,
+  # ZipStreamReader or read_zipfile_from_stream (0429, 0546, 0548), and it
+  # enables none of zip's optional features (`cargo tree -e features
+  # -i zip@1.1.4`), so the AES (0545) and Shrink/Reduce/Implode decoder
+  # (0547) code is not compiled. Blocked on candle-core moving to zip >= 9;
+  # review 2027-01-31.
+  { id = "RUSTSEC-2026-0429", reason = "extract-only; not called (see above); review 2027-01-31" },
+  { id = "RUSTSEC-2026-0545", reason = "aes-crypto feature not enabled; review 2027-01-31" },
+  { id = "RUSTSEC-2026-0546", reason = "extract-only; not called (see above); review 2027-01-31" },
+  { id = "RUSTSEC-2026-0547", reason = "Shrink/Reduce/Implode decoder feature not enabled; review 2027-01-31" },
+  { id = "RUSTSEC-2026-0548", reason = "ZipStreamReader not used (see above); review 2027-01-31" },
 ]
 
 [licenses]

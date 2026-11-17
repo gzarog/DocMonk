@@ -10,8 +10,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use chrono::Utc;
 use docmonk_core::errors::DocMonkError;
+use docmonk_core::time::Utc;
 use docmonk_service::status::{options, StatusSession};
 use docmonk_status::model::*;
 use docmonk_status::snapshot::age_seconds;

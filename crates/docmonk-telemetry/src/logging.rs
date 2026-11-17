@@ -17,7 +17,7 @@ use std::io::Write as _;
 use std::path::Path;
 use std::sync::Mutex;
 
-use chrono::{DateTime, Utc};
+use docmonk_core::time::{DateTime, Utc};
 use tracing::field::{Field, Visit};
 use tracing::{Event, Level, Subscriber};
 use tracing_subscriber::layer::{Context, SubscriberExt};
@@ -56,7 +56,7 @@ pub fn level_name(level: &Level) -> &'static str {
 
 /// RFC 3339 UTC timestamp with microseconds, e.g. `2026-10-02T16:30:06.463119Z`.
 pub fn timestamp(ts: &DateTime<Utc>) -> String {
-    ts.to_rfc3339_opts(chrono::SecondsFormat::Micros, true)
+    ts.to_rfc3339_opts(docmonk_core::time::SecondsFormat::Micros, true)
 }
 
 fn json_str(s: &str, out: &mut String) {
@@ -266,12 +266,11 @@ pub fn configure_logging(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
 
     #[test]
     fn timestamps_are_rfc3339_utc() {
         let t = Utc.with_ymd_and_hms(2026, 10, 2, 16, 30, 6).unwrap()
-            + chrono::Duration::microseconds(463_119);
+            + docmonk_core::time::Duration::microseconds(463_119);
         assert_eq!(timestamp(&t), "2026-10-02T16:30:06.463119Z");
     }
 
