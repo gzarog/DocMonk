@@ -383,6 +383,8 @@ pub fn index_sources_with(
     mut on_event: impl FnMut(SourceEvent<'_>),
 ) -> Result<RunSummary, DocMonkError> {
     let cfg = load(home)?;
+    // AI file analysis that cannot run stops the run before any file.
+    docmonk_convert::check_analysis(&cfg)?;
     let backend = crate::backend::open_for_write(home)?;
     let registry =
         docmonk_convert::registry_with(&cfg, &docmonk_convert::RegistryOptions::for_home(home));

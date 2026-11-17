@@ -1394,7 +1394,7 @@
    "env": "all",
    "error": {
     "exit_code": 3,
-    "message": "unknown ai.provider=\"mystery\"; expected one of openai, anthropic, ollama, openai_compatible, codex, github_copilot",
+    "message": "unknown ai.provider=\"mystery\"; expected one of openai, anthropic, ollama, openai_compatible, codex, github_copilot, claude_code",
     "type": "AiNotConfiguredError"
    },
    "external_ai_allowed": true

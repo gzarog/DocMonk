@@ -418,6 +418,18 @@ impl CodexRuntime {
     }
 }
 
+impl CodexRuntime {
+    /// One answer in a fresh, isolated thread (used by file analysis).
+    pub fn answer(
+        &mut self,
+        system: &str,
+        user: &str,
+        model: &str,
+    ) -> Result<(String, String, AiUsage), DocMonkError> {
+        self.session()?.answer(system, user, model)
+    }
+}
+
 impl SubscriptionRuntime for CodexRuntime {
     fn status(&mut self) -> Result<RuntimeStatus, DocMonkError> {
         self.session()?.account_status()

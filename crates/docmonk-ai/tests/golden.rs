@@ -387,3 +387,6 @@ fn codex_exchanges_are_as_expected() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+#[path = "analysis/cases.rs"]
+mod analysis_cases;

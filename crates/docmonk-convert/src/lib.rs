@@ -2,6 +2,7 @@
 //! `DocumentConverter` seam backed by docling.rs, the Docling-JSON
 //! normalizer and the document processor.
 
+pub mod ai;
 pub mod cache;
 pub mod converter;
 pub mod email;
@@ -74,6 +75,40 @@ pub fn open_graph_facts(
     }
 }
 
+/// Checks that AI file analysis, when `documents.analysis.mode` is `ai`,
+/// can run: the privacy gate, the provider and its credentials (ADR 0045).
+/// Index runs call it before building the registry, so a blocked run stops
+/// with the policy (exit 8) or config (exit 3) error before any file.
+pub fn check_analysis(config: &DocMonkConfig) -> Result<(), docmonk_core::errors::DocMonkError> {
+    if config.documents.analysis.is_ai() {
+        docmonk_ai::create_analyzer(&config.documents.analysis, &config.privacy)?;
+    }
+    Ok(())
+}
+
+/// Fails every document file with the reason analysis cannot run (used when
+/// a caller skipped [`check_analysis`]); nothing native is indexed.
+struct UnavailableAnalysis(String);
+
+impl docmonk_indexing::coordinator::Processor for UnavailableAnalysis {
+    fn prepare(
+        &self,
+        input: &docmonk_indexing::coordinator::PrepareInput,
+    ) -> Result<
+        docmonk_storage::knowledge::FileKnowledge,
+        docmonk_indexing::coordinator::ProcessError,
+    > {
+        if format::detect_format(&input.path).is_none() {
+            return Ok(Default::default());
+        }
+        Err(docmonk_indexing::coordinator::ProcessError {
+            code: "ai_analysis_not_configured".into(),
+            message: format!("{}: {}", input.path.display(), self.0),
+            transient: true,
+        })
+    }
+}
+
 pub fn registry_with(config: &DocMonkConfig, opts: &RegistryOptions) -> Registry {
     let d = &config.documents;
     let pdf = converter::PdfOptions {
@@ -134,16 +169,54 @@ pub fn registry_with(config: &DocMonkConfig, opts: &RegistryOptions) -> Registry
                 ),
             )));
     }
+    let attachments = Some(email::AttachmentSettings {
+        enabled: d.email_attachments,
+        max_bytes: d.email_attachment_max_bytes.max(0) as usize,
+        max_count: d.email_attachment_max_count.max(0) as usize,
+        total_max_bytes: d.email_attachment_total_max_bytes.max(0) as usize,
+    });
+    if d.analysis.is_ai() {
+        // AI file analysis (ADR 0045): the embedded extraction is bypassed.
+        let eml = if d.email_attachments {
+            format!("+{}", docmonk_documents::version::EMAIL_ATTACHMENTS_VERSION)
+        } else {
+            String::new()
+        };
+        match docmonk_ai::create_analyzer(&d.analysis, &config.privacy) {
+            Ok(analyzer) => {
+                r.versions.converter_version =
+                    format!("{}{eml}", ai::converter_identity(analyzer.as_ref()));
+                r.versions.chunker_version = format!(
+                    "{}+ai+{}",
+                    r.versions.chunker_version,
+                    ai::AI_ANALYSIS_VERSION
+                );
+                r.document = Arc::new(ai::AiDocumentProcessor {
+                    analyzer,
+                    chunking: config.documents.chunking.clone(),
+                    max_file_bytes: d.analysis.max_file_bytes.max(1) as u64,
+                    max_pages: (d.max_pages > 0).then_some(d.max_pages as usize),
+                    attachments,
+                    cache: opts
+                        .cache_dir
+                        .clone()
+                        .map(|c| cache::ConversionCache::new(c.join("ai"))),
+                    slots: ai::Slots::new(d.analysis.concurrency.max(1) as usize),
+                });
+            }
+            Err(e) => {
+                r.versions.converter_version =
+                    format!("{}+unavailable{eml}", ai::AI_ANALYSIS_VERSION);
+                r.document = Arc::new(UnavailableAnalysis(e.message().to_owned()));
+            }
+        }
+        return r.with_redaction(config.indexing.redact_secrets);
+    }
     r.document = Arc::new(process::DocumentProcessor {
         converter,
         chunking: config.documents.chunking.clone(),
         max_pages: (d.max_pages > 0).then_some(d.max_pages as usize),
-        attachments: Some(email::AttachmentSettings {
-            enabled: d.email_attachments,
-            max_bytes: d.email_attachment_max_bytes.max(0) as usize,
-            max_count: d.email_attachment_max_count.max(0) as usize,
-            total_max_bytes: d.email_attachment_total_max_bytes.max(0) as usize,
-        }),
+        attachments,
         image_ocr: d.image_ocr,
     });
     // Credentials in indexed text are redacted before storage (ADR 0042).

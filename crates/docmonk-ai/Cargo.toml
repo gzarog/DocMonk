@@ -1,6 +1,6 @@
 [package]
 name = "docmonk-ai"
-description = "DocMonk AI providers for `ask`: OpenAI, Anthropic, Ollama, OpenAI-compatible, and the Codex/Copilot subscription runtimes"
+description = "DocMonk AI providers for `ask` and file analysis: OpenAI, Anthropic, Ollama, OpenAI-compatible, and the Claude Code/Codex/Copilot subscription runtimes"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,6 +13,10 @@ docmonk-core.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

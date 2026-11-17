@@ -159,6 +159,7 @@ pub fn run_foreground(home: &Home, on_ready: impl FnOnce(i64)) -> Result<(), Doc
         &cfg.indexing,
     ));
     let workers = cfg.indexing.resolved_max_parallel_sources().max(1);
+    docmonk_convert::check_analysis(&cfg)?;
     let registry =
         || docmonk_convert::registry_with(&cfg, &docmonk_convert::RegistryOptions::for_home(home));
     let backend = crate::backend::open_for_write(home)?;

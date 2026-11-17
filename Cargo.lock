@@ -1054,6 +1054,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "tempfile",
 ]
 
 [[package]]
@@ -1145,6 +1146,7 @@ name = "docmonk-convert"
 version = "0.0.0"
 dependencies = [
  "docling",
+ "docmonk-ai",
  "docmonk-code",
  "docmonk-config",
  "docmonk-core",
@@ -1164,6 +1166,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tracing",
+ "zip 9.6.1",
 ]
 
 [[package]]

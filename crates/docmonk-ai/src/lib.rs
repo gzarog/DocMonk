@@ -8,6 +8,10 @@
 //! * [`registry`]: the provider capability table.
 //! * [`transport`], [`codex`], [`copilot`]: the subscription runtimes.
 
+pub mod analysis;
+pub mod analysis_http;
+pub mod analysis_subscription;
+pub mod claude_code;
 pub mod codex;
 pub mod copilot;
 pub mod errors;
@@ -19,7 +23,7 @@ pub mod runtime;
 pub mod text;
 pub mod transport;
 
-pub use factory::create_provider;
+pub use factory::{create_analyzer, create_provider};
 pub use prompt::{AiAnswer, AiRequest, AiUsage};
 
 use docmonk_core::errors::DocMonkError;

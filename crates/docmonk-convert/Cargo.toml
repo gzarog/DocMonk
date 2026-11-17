@@ -15,6 +15,7 @@ mail-parser = "0.11"
 ocrs = "=0.12.0"
 rten = { version = "0.24", default-features = false, features = ["rten_format"] }
 sha2.workspace = true
+docmonk-ai.workspace = true
 docmonk-code.workspace = true
 docmonk-config.workspace = true
 docmonk-core.workspace = true
@@ -28,6 +29,7 @@ serde_json.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+zip.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

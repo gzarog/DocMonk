@@ -15,6 +15,8 @@ pub struct ProviderCapability {
     pub model_discovery: &'static str,
     pub usage_reporting: &'static str,
     pub beta: bool,
+    /// Can analyse files (`documents.analysis.provider`, ADR 0045).
+    pub analysis: bool,
     pub notes: &'static str,
 }
 
@@ -33,7 +35,24 @@ pub const REGISTRY: &[ProviderCapability] = &[
         model_discovery: "static",
         usage_reporting: "tokens",
         beta: false,
+        analysis: true,
         notes: "API-key provider; reads ANTHROPIC_API_KEY from the environment.",
+    },
+    ProviderCapability {
+        provider_id: "claude_code",
+        display_name: "Claude via Claude Code (subscription)",
+        auth_modes: &["claude_subscription"],
+        default_auth_mode: "claude_subscription",
+        cloud_egress: true,
+        subscription: true,
+        api_key_env: None,
+        model_discovery: "static",
+        usage_reporting: "tokens",
+        beta: true,
+        analysis: true,
+        notes: "Uses a signed-in Claude Pro or Max plan through the official Claude CLI \
+                (`claude -p`), with no tools, settings or MCP servers; consumes the plan's usage. \
+                Never uses ANTHROPIC_API_KEY.",
     },
     ProviderCapability {
         provider_id: "codex",
@@ -46,6 +65,7 @@ pub const REGISTRY: &[ProviderCapability] = &[
         model_discovery: "dynamic",
         usage_reporting: "unknown",
         beta: true,
+        analysis: true,
         notes: "Uses a signed-in ChatGPT account through the official Codex runtime; consumes \
                 the account allowance. Beta until its version/isolation gates pass. Never reuses \
                 OPENAI_API_KEY.",
@@ -61,6 +81,7 @@ pub const REGISTRY: &[ProviderCapability] = &[
         model_discovery: "dynamic",
         usage_reporting: "unknown",
         beta: true,
+        analysis: false,
         notes: "Uses the signed-in GitHub Copilot CLI credentials through the official SDK; \
                 consumes the Copilot allowance. Never uses GH_TOKEN/GITHUB_TOKEN or a provider \
                 key.",
@@ -76,6 +97,7 @@ pub const REGISTRY: &[ProviderCapability] = &[
         model_discovery: "config",
         usage_reporting: "none",
         beta: false,
+        analysis: false,
         notes: LOCAL_NOTE,
     },
     ProviderCapability {
@@ -89,6 +111,7 @@ pub const REGISTRY: &[ProviderCapability] = &[
         model_discovery: "static",
         usage_reporting: "tokens",
         beta: false,
+        analysis: true,
         notes: "API-key provider; reads OPENAI_API_KEY from the environment.",
     },
     ProviderCapability {
@@ -102,12 +125,13 @@ pub const REGISTRY: &[ProviderCapability] = &[
         model_discovery: "config",
         usage_reporting: "unknown",
         beta: false,
+        analysis: false,
         notes: "Self-hosted or third-party endpoint; requires ai.base_url and ai.model.",
     },
 ];
 
 /// Subscription providers, in registry-definition order.
-pub const SUBSCRIPTION_PROVIDERS: &[&str] = &["codex", "github_copilot"];
+pub const SUBSCRIPTION_PROVIDERS: &[&str] = &["claude_code", "codex", "github_copilot"];
 
 pub fn get(provider_id: &str) -> Option<&'static ProviderCapability> {
     let id = provider_id.trim().to_lowercase();

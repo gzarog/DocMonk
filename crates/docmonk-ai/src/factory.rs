@@ -3,7 +3,7 @@
 //! client is constructed. Ollama is exempt only when its configured host
 //! is loopback; a remote Ollama is gated like any cloud provider.
 
-use docmonk_config::model::{AiConfig, PrivacyConfig};
+use docmonk_config::model::{AiConfig, AnalysisConfig, PrivacyConfig};
 use docmonk_core::errors::DocMonkError;
 
 use crate::errors::{not_configured, privacy_blocked};
@@ -139,9 +139,13 @@ pub fn create_provider_with_env(
             require_external_ai_allowed(privacy, "github_copilot")?;
             Ok(Box::new(copilot::CopilotProvider::new(ai)))
         }
+        "claude_code" => {
+            require_external_ai_allowed(privacy, "claude_code")?;
+            Ok(Box::new(crate::claude_code::ClaudeCodeProvider::new(ai)))
+        }
         _ => Err(not_configured(format!(
             "unknown ai.provider={}; expected one of openai, anthropic, ollama, \
-             openai_compatible, codex, github_copilot",
+             openai_compatible, codex, github_copilot, claude_code",
             crate::text::quoted(&serde_json::Value::String(ai.provider.clone()))
         ))),
     }
@@ -153,4 +157,145 @@ pub fn create_provider(
     privacy: &PrivacyConfig,
 ) -> Result<Box<dyn AiProvider>, DocMonkError> {
     create_provider_with_env(ai, privacy, &|k| std::env::var(k).ok())
+}
+
+/// Builds the file-analysis provider for `documents.analysis` (ADR 0045).
+/// The privacy gate runs first: every analysis provider sends file content
+/// off this machine. `env` reads environment variables (a test seam).
+pub fn create_analyzer_with_env(
+    cfg: &AnalysisConfig,
+    privacy: &PrivacyConfig,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> Result<std::sync::Arc<dyn crate::analysis::AiAnalyzer>, DocMonkError> {
+    use crate::analysis_http::{
+        AnthropicAnalyzer, OpenAiAnalyzer, ANTHROPIC_ANALYSIS_MODEL, OPENAI_ANALYSIS_MODEL,
+    };
+    use crate::analysis_subscription::{ClaudeCodeAnalyzer, CodexAnalyzer};
+    let provider = cfg.provider.trim().to_lowercase();
+    if provider.is_empty() {
+        return Err(not_configured(
+            "documents.analysis.mode is 'ai' but no documents.analysis.provider is set. Set one \
+             with: docmonk config set documents.analysis.provider \
+             <anthropic|openai|claude_code|codex>",
+        ));
+    }
+    if !docmonk_config::model::ANALYSIS_PROVIDERS.contains(&provider.as_str()) {
+        return Err(not_configured(format!(
+            "unknown documents.analysis.provider={provider}; expected one of {}",
+            docmonk_config::model::ANALYSIS_PROVIDERS.join(", ")
+        )));
+    }
+    if !privacy.external_ai_allowed {
+        return Err(privacy_blocked(format!(
+            "documents.analysis.provider='{provider}' sends every document file to a network \
+             endpoint outside this machine, which requires privacy.external_ai_allowed=true (it \
+             defaults to false). Set it with: docmonk config set privacy.external_ai_allowed true"
+        )));
+    }
+    let key = |name: &str| env(name).filter(|v| !v.is_empty());
+    let max_tokens = cfg.max_output_tokens;
+    Ok(match provider.as_str() {
+        "anthropic" => {
+            let api_key = key("ANTHROPIC_API_KEY").ok_or_else(|| {
+                not_configured(
+                    "documents.analysis.provider=anthropic requires the ANTHROPIC_API_KEY env var",
+                )
+            })?;
+            let base = key("ANTHROPIC_BASE_URL")
+                .unwrap_or_else(|| crate::http::ANTHROPIC_DEFAULT_BASE_URL.into());
+            std::sync::Arc::new(AnthropicAnalyzer::new(
+                api_key,
+                or_default(&cfg.model, ANTHROPIC_ANALYSIS_MODEL),
+                &base,
+                cfg.timeout_seconds,
+                max_tokens,
+            ))
+        }
+        "openai" => {
+            let api_key = key("OPENAI_API_KEY").ok_or_else(|| {
+                not_configured(
+                    "documents.analysis.provider=openai requires the OPENAI_API_KEY env var",
+                )
+            })?;
+            let base = key("OPENAI_BASE_URL")
+                .unwrap_or_else(|| crate::http::OPENAI_DEFAULT_BASE_URL.into());
+            std::sync::Arc::new(OpenAiAnalyzer::new(
+                api_key,
+                or_default(&cfg.model, OPENAI_ANALYSIS_MODEL),
+                &base,
+                cfg.timeout_seconds,
+                max_tokens,
+            ))
+        }
+        "claude_code" => std::sync::Arc::new(ClaudeCodeAnalyzer::new(
+            cfg.model.clone(),
+            cfg.timeout_seconds,
+        )),
+        "codex" => {
+            let ai = AiConfig {
+                provider: "codex".into(),
+                model: cfg.model.clone(),
+                base_url: None,
+                timeout_seconds: cfg.timeout_seconds,
+            };
+            std::sync::Arc::new(CodexAnalyzer::new(&ai))
+        }
+        _ => unreachable!("checked against ANALYSIS_PROVIDERS"),
+    })
+}
+
+/// [`create_analyzer_with_env`] over the process environment.
+pub fn create_analyzer(
+    cfg: &AnalysisConfig,
+    privacy: &PrivacyConfig,
+) -> Result<std::sync::Arc<dyn crate::analysis::AiAnalyzer>, DocMonkError> {
+    create_analyzer_with_env(cfg, privacy, &|k| std::env::var(k).ok())
+}
+
+#[cfg(test)]
+mod analysis_tests {
+    use super::*;
+
+    fn cfg(provider: &str) -> AnalysisConfig {
+        AnalysisConfig {
+            mode: "ai".into(),
+            provider: provider.into(),
+            ..AnalysisConfig::default()
+        }
+    }
+
+    #[test]
+    fn analyzers_need_privacy_consent_then_their_credentials() {
+        let closed = PrivacyConfig::default();
+        let open = PrivacyConfig {
+            external_ai_allowed: true,
+        };
+        let none = |_: &str| None;
+        for p in ["anthropic", "openai", "claude_code", "codex"] {
+            let e = create_analyzer_with_env(&cfg(p), &closed, &none)
+                .err()
+                .unwrap();
+            assert_eq!(e.class(), Some("AiPrivacyBlockedError"), "{p}");
+            assert_eq!(e.exit_code(), 8);
+        }
+        let e = create_analyzer_with_env(&cfg("anthropic"), &open, &none)
+            .err()
+            .unwrap();
+        assert!(e.message().contains("ANTHROPIC_API_KEY"));
+        let e = create_analyzer_with_env(&cfg("openai"), &open, &none)
+            .err()
+            .unwrap();
+        assert!(e.message().contains("OPENAI_API_KEY"));
+        let e = create_analyzer_with_env(&cfg(""), &open, &none)
+            .err()
+            .unwrap();
+        assert_eq!(e.class(), Some("AiNotConfiguredError"));
+        let key = |k: &str| (k == "ANTHROPIC_API_KEY").then(|| "sk-test".to_owned());
+        let a = create_analyzer_with_env(&cfg("anthropic"), &open, &key).unwrap();
+        assert_eq!(a.extracted_by(), "ai:anthropic:claude-opus-5-5");
+        let c = create_analyzer_with_env(&cfg("claude_code"), &open, &none).unwrap();
+        assert_eq!(c.provider_id(), "claude_code");
+        let x = create_analyzer_with_env(&cfg("codex"), &open, &none).unwrap();
+        assert!(!x.accepts(crate::analysis::InputKind::Pdf));
+    }
 }

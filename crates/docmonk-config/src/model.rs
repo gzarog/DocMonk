@@ -458,6 +458,55 @@ fn positive_attachment(field: &'static str) -> Check<i64> {
     }
 }
 
+/// Providers that can analyse files (`documents.analysis.provider`).
+pub const ANALYSIS_PROVIDERS: &[&str] = &["anthropic", "openai", "claude_code", "codex"];
+
+section! {
+    /// AI file analysis (ADR 0045). With `mode: ai`, every document file
+    /// is analysed by the configured provider instead of the embedded
+    /// extraction (docling.rs, the PDF text layer, OCR, the normalizer and
+    /// the chunker). API keys are never stored here: `anthropic` reads
+    /// ANTHROPIC_API_KEY, `openai` reads OPENAI_API_KEY, and the
+    /// subscription providers (`claude_code`, `codex`) use only their
+    /// official runtime's own sign-in.
+    AnalysisConfig {
+        mode: String = "native".into(), check = |v| one_of(v, &["native", "ai"]);
+        provider: String = String::new(), check = |v| {
+            if v.is_empty() { Ok(()) } else { one_of(v, ANALYSIS_PROVIDERS) }
+        };
+        model: String = String::new();
+        timeout_seconds: f64 = 300.0, check = |v| {
+            if *v <= 0.0 { Err("must be > 0".into()) } else { Ok(()) }
+        };
+        max_file_bytes: i64 = 32 * 1024 * 1024, check = |v| {
+            if *v <= 0 { Err("must be > 0".into()) } else { Ok(()) }
+        };
+        concurrency: i64 = 2, check = |v| {
+            if (1..=16).contains(v) { Ok(()) } else { Err("must be between 1 and 16".into()) }
+        };
+        max_output_tokens: i64 = 16_000, check = |v| {
+            if *v < 1 { Err("must be >= 1".into()) } else { Ok(()) }
+        };
+    }
+    model_check = |c: &AnalysisConfig| {
+        if c.mode == "ai" && c.provider.is_empty() {
+            Err(format!(
+                "mode 'ai' requires a provider; set one with: docmonk config set \
+                 documents.analysis.provider <{}>",
+                ANALYSIS_PROVIDERS.join("|")
+            ))
+        } else {
+            Ok(())
+        }
+    };
+}
+
+impl AnalysisConfig {
+    pub fn is_ai(&self) -> bool {
+        self.mode == "ai"
+    }
+}
+
 section! {
     DocumentsConfig {
         ocr: String = "auto".into(), check = |v| one_of(v, &["off", "auto", "always"]);
@@ -469,6 +518,7 @@ section! {
         email_attachment_max_bytes: i64 = 25 * 1024 * 1024, check = positive_attachment("email_attachment_max_bytes");
         email_attachment_max_count: i64 = 50, check = positive_attachment("email_attachment_max_count");
         email_attachment_total_max_bytes: i64 = 100 * 1024 * 1024, check = positive_attachment("email_attachment_total_max_bytes");
+        analysis: AnalysisConfig = AnalysisConfig::default();
     }
 }
 
