@@ -1081,6 +1081,7 @@ dependencies = [
  "docmonk-ai",
  "docmonk-backends",
  "docmonk-config",
+ "docmonk-convert",
  "docmonk-core",
  "docmonk-indexing",
  "docmonk-mcp",

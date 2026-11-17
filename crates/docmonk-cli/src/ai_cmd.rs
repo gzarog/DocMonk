@@ -58,6 +58,15 @@ pub enum AiCommand {
         /// Subscription provider id, e.g. codex.
         provider: String,
     },
+    /// Analyse one file with the configured documents.analysis provider and
+    /// print the result, without indexing it (a preview before switching a
+    /// corpus to AI analysis; it sends the file to the provider).
+    Analyze {
+        /// The file to analyse.
+        file: std::path::PathBuf,
+        #[arg(long = "json")]
+        json: bool,
+    },
     /// List the models a signed-in subscription provider offers.
     Models {
         /// Subscription provider id, e.g. codex.
@@ -124,13 +133,48 @@ pub fn run(cmd: AiCommand) -> Result<(), DocMonkError> {
                 let beta = if cap.beta { " " } else { "" };
                 println!("{}{beta} — {}", cap.provider_id, cap.display_name);
                 println!(
-                    "  kind={kind} auth={} cloud_egress={} models={} usage={}",
+                    "  kind={kind} auth={} cloud_egress={} models={} usage={} analysis={}",
                     cap.auth_modes.join("/"),
                     cap.cloud_egress,
                     cap.model_discovery,
-                    cap.usage_reporting
+                    cap.usage_reporting,
+                    cap.analysis
                 );
                 println!("  {}", cap.notes);
+            }
+        }
+        AiCommand::Analyze { file, json } => {
+            let cfg = load(&prepared_home()?)?;
+            let (extracted_by, r) = docmonk_convert::ai::preview(&cfg, &file)?;
+            if json {
+                return print_json(&json!({"extracted_by": extracted_by, "analysis": r}));
+            }
+            println!(
+                "{} — {} chunk(s), {} code reference(s) [{extracted_by}]",
+                r.title.as_deref().unwrap_or("(untitled)"),
+                r.chunks.len(),
+                r.code_references.len()
+            );
+            if let Some(s) = &r.summary {
+                println!("  {s}");
+            }
+            for (i, c) in r.chunks.iter().enumerate() {
+                let pages = match (c.page_start, c.page_end) {
+                    (Some(a), Some(b)) if a != b => format!(" p.{a}-{b}"),
+                    (Some(a), _) => format!(" p.{a}"),
+                    _ => String::new(),
+                };
+                let head: String = c.text.chars().take(80).collect();
+                let path = if c.heading_path.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {}", c.heading_path.join(" > "))
+                };
+                println!(
+                    "  {i:>3} {:<8}{pages}{path}: {}",
+                    c.kind,
+                    head.replace('\n', " ")
+                );
             }
         }
         AiCommand::Status { provider, json } => {

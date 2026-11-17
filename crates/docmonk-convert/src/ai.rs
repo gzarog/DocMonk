@@ -686,3 +686,57 @@ impl Processor for AiDocumentProcessor {
         self.knowledge(&input.path, &input.file_id, input.content_hash.as_deref())
     }
 }
+
+/// `docmonk ai analyze FILE`: analyses one file with the configured
+/// provider, without indexing or caching it, and returns its provenance and
+/// the validated result. The privacy gate applies.
+pub fn preview(
+    config: &docmonk_config::DocMonkConfig,
+    path: &Path,
+) -> Result<(String, AnalysisResult), docmonk_core::errors::DocMonkError> {
+    use docmonk_core::errors::DocMonkError;
+    let analyzer = docmonk_ai::create_analyzer(&config.documents.analysis, &config.privacy)?;
+    let format = detect_format(path).ok_or_else(|| {
+        DocMonkError::usage(format!(
+            "{} is not a document format DocMonk indexes",
+            path.display()
+        ))
+    })?;
+    let bytes = std::fs::read(path)
+        .map_err(|e| DocMonkError::usage(format!("cannot read {}: {e}", path.display())))?;
+    let max = config.documents.analysis.max_file_bytes.max(1) as u64;
+    if bytes.len() as u64 > max {
+        return Err(DocMonkError::usage(format!(
+            "{} ({} bytes) exceeds documents.analysis.max_file_bytes ({max})",
+            path.display(),
+            bytes.len()
+        )));
+    }
+    let pages = (format == DocumentFormat::Pdf)
+        .then(|| crate::pdf::page_count(path).ok().map(|n| n as i64))
+        .flatten();
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("document");
+    let fail = |e: AnalysisError| {
+        DocMonkError::new(
+            docmonk_core::errors::ErrorKind::Generic,
+            format!("{}: {}", e.kind.code(), e.message),
+        )
+        .with_class("AiAnalysisError")
+    };
+    let input = input_for(name, format, bytes, max, pages).map_err(fail)?;
+    if let Some(p) = input.parts.iter().find(|p| !analyzer.accepts(p.kind())) {
+        return Err(fail(AnalysisError::new(
+            AnalysisErrorKind::UnsupportedFormat,
+            format!(
+                "the {} provider cannot take {} input",
+                analyzer.provider_id(),
+                p.kind().as_str()
+            ),
+        )));
+    }
+    let r = analyzer.analyze(&input).map_err(fail)?;
+    Ok((analyzer.extracted_by(), r))
+}

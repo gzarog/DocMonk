@@ -6,7 +6,7 @@
     "title": "AI file analysis: an opt-in documents.analysis.mode flag that replaces embedded extraction with Claude or ChatGPT (subscription or API key)",
     "created_on": "2026-11-17",
     "updated_on": "2026-11-17",
-    "status": "draft",
+    "status": "active",
     "sources": [
       {
         "kind": "adr",
@@ -74,8 +74,16 @@
         "summary": "The document converter is hard-wired to DoclingConverter in registry_with. There is no seam for selecting another analysis path from config.",
         "severity": "high",
         "evidence": [
-          {"path": "crates/docmonk-convert/src/lib.rs", "lines": "77-90", "note": "DoclingConverter constructed unconditionally"},
-          {"path": "crates/docmonk-convert/src/converter.rs", "lines": "44-50", "note": "DocumentConverter returns Docling JSON only, which forces the native normalizer and chunker downstream"}
+          {
+            "path": "crates/docmonk-convert/src/lib.rs",
+            "lines": "77-90",
+            "note": "DoclingConverter constructed unconditionally"
+          },
+          {
+            "path": "crates/docmonk-convert/src/converter.rs",
+            "lines": "44-50",
+            "note": "DocumentConverter returns Docling JSON only, which forces the native normalizer and chunker downstream"
+          }
         ]
       },
       {
@@ -83,8 +91,16 @@
         "summary": "Chunking, metadata and titles are always derived by the native chunker and DocumentMetadata. A processor cannot supply its own chunks, summary or keywords.",
         "severity": "high",
         "evidence": [
-          {"path": "crates/docmonk-convert/src/process.rs", "lines": "132-190", "note": "rows() always calls chunk_document over the normalized document"},
-          {"path": "crates/docmonk-documents/src/model.rs", "lines": "75-82", "note": "DocumentMetadata has title/author/page_count only"}
+          {
+            "path": "crates/docmonk-convert/src/process.rs",
+            "lines": "132-190",
+            "note": "rows() always calls chunk_document over the normalized document"
+          },
+          {
+            "path": "crates/docmonk-documents/src/model.rs",
+            "lines": "75-82",
+            "note": "DocumentMetadata has title/author/page_count only"
+          }
         ]
       },
       {
@@ -92,8 +108,15 @@
         "summary": "There is no Claude subscription provider. ChatGPT subscription exists only for answering (codex), not for analysing files, and no provider accepts file input.",
         "severity": "medium",
         "evidence": [
-          {"path": "crates/docmonk-ai/src/registry.rs", "note": "SUBSCRIPTION_PROVIDERS = codex, github_copilot"},
-          {"path": "crates/docmonk-ai/src/lib.rs", "lines": "27-30", "note": "AiProvider::answer takes an evidence AiRequest only"}
+          {
+            "path": "crates/docmonk-ai/src/registry.rs",
+            "note": "SUBSCRIPTION_PROVIDERS = codex, github_copilot"
+          },
+          {
+            "path": "crates/docmonk-ai/src/lib.rs",
+            "lines": "27-30",
+            "note": "AiProvider::answer takes an evidence AiRequest only"
+          }
         ]
       },
       {
@@ -101,8 +124,16 @@
         "summary": "The build identity (converter_version) only describes docling and attachments. Switching the analysis path or model would leave stale rows unless the identity covers it.",
         "severity": "medium",
         "evidence": [
-          {"path": "crates/docmonk-convert/src/lib.rs", "lines": "97-107", "note": "converter_version from converter.parser_version()"},
-          {"path": "crates/docmonk-indexing/src/coordinator.rs", "lines": "150-167", "note": "versions feed the rebuild decision"}
+          {
+            "path": "crates/docmonk-convert/src/lib.rs",
+            "lines": "97-107",
+            "note": "converter_version from converter.parser_version()"
+          },
+          {
+            "path": "crates/docmonk-indexing/src/coordinator.rs",
+            "lines": "150-167",
+            "note": "versions feed the rebuild decision"
+          }
         ]
       },
       {
@@ -110,30 +141,52 @@
         "summary": "The knowledge linker links code only by matching chunk text, so references a model identifies (for example a described service or route) are not used.",
         "severity": "low",
         "evidence": [
-          {"path": "crates/docmonk-knowledge/src/linker.rs", "lines": "474", "note": "link_touched_files_with_stats scans stored chunk text"}
+          {
+            "path": "crates/docmonk-knowledge/src/linker.rs",
+            "lines": "474",
+            "note": "link_touched_files_with_stats scans stored chunk text"
+          }
         ]
       }
     ],
     "do_not_duplicate": [
       {
         "summary": "Reuse the privacy gate, url_host/is_local_host and the not_configured/privacy_blocked error classes. Do not add a second egress check.",
-        "paths": ["crates/docmonk-ai/src/factory.rs", "crates/docmonk-ai/src/errors.rs"]
+        "paths": [
+          "crates/docmonk-ai/src/factory.rs",
+          "crates/docmonk-ai/src/errors.rs"
+        ]
       },
       {
         "summary": "Reuse the HTTP clients, error-message shapes and the recorded-exchange golden harness for the API-key providers.",
-        "paths": ["crates/docmonk-ai/src/http.rs", "crates/docmonk-ai/tests/golden.rs", "fixtures/expected/ai.json"]
+        "paths": [
+          "crates/docmonk-ai/src/http.rs",
+          "crates/docmonk-ai/tests/golden.rs",
+          "fixtures/expected/ai.json"
+        ]
       },
       {
         "summary": "Reuse the codex app-server JSON-RPC transport and the copilot CLI child-process pattern (fixed executable name on PATH, credential env stripped) for the subscription runtimes.",
-        "paths": ["crates/docmonk-ai/src/transport.rs", "crates/docmonk-ai/src/codex.rs", "crates/docmonk-ai/src/copilot.rs", "crates/docmonk-ai/src/runtime.rs"]
+        "paths": [
+          "crates/docmonk-ai/src/transport.rs",
+          "crates/docmonk-ai/src/codex.rs",
+          "crates/docmonk-ai/src/copilot.rs",
+          "crates/docmonk-ai/src/runtime.rs"
+        ]
       },
       {
         "summary": "Reuse ConversionCache (content hash plus key) for AI results, the existing max_pages and email-attachment limits, and the tokenizer for chunk budget checks.",
-        "paths": ["crates/docmonk-convert/src/cache.rs", "crates/docmonk-convert/src/process.rs", "crates/docmonk-documents/src/tokenizer.rs"]
+        "paths": [
+          "crates/docmonk-convert/src/cache.rs",
+          "crates/docmonk-convert/src/process.rs",
+          "crates/docmonk-documents/src/tokenizer.rs"
+        ]
       },
       {
         "summary": "The config section!/one_of machinery and the DOCMONK_<SECTION>__ env layer already give the flag a YAML, env and `docmonk config set` surface.",
-        "paths": ["crates/docmonk-config/src/model.rs"]
+        "paths": [
+          "crates/docmonk-config/src/model.rs"
+        ]
       }
     ]
   },
@@ -170,7 +223,12 @@
         "reason": "Audits are never weakened to get CI green."
       }
     ],
-    "required_checks": ["fmt", "clippy", "test", "audits"],
+    "required_checks": [
+      "fmt",
+      "clippy",
+      "test",
+      "audits"
+    ],
     "principles": [
       "Off by default: documents.analysis.mode defaults to native, and with native every byte of output, identity and every fixture is unchanged.",
       "One flag selects the path, shaped like storage.mode/storage.server.engine: documents.analysis.mode (native | ai) plus documents.analysis.provider. It is settable in YAML, as DOCMONK_DOCUMENTS__ANALYSIS__MODE and with docmonk config set.",
@@ -236,8 +294,14 @@
         "DOCMONK_EVAL_OUT": "<report path>.json"
       },
       "requires": [
-        {"kind": "secret", "description": "ANTHROPIC_API_KEY and/or OPENAI_API_KEY for the API-key cases"},
-        {"kind": "external_account", "description": "A signed-in claude CLI (Claude Pro/Max) and/or a signed-in codex runtime (ChatGPT plan) for the subscription cases"}
+        {
+          "kind": "secret",
+          "description": "ANTHROPIC_API_KEY and/or OPENAI_API_KEY for the API-key cases"
+        },
+        {
+          "kind": "external_account",
+          "description": "A signed-in claude CLI (Claude Pro/Max) and/or a signed-in codex runtime (ChatGPT plan) for the subscription cases"
+        }
       ],
       "available_after": "E9"
     },
@@ -289,37 +353,85 @@
       "id": "M1",
       "name": "Contract",
       "summary": "ADR, config flag and the AI document analysis schema that every provider returns.",
-      "work_packages": ["E1", "E2"],
+      "work_packages": [
+        "E1",
+        "E2"
+      ],
       "gate": [
-        {"id": "GM1-1", "criterion": "ADR 0045 accepted by the owner, with D1-D5 decided.", "verify": {"kind": "manual"}},
-        {"id": "GM1-2", "criterion": "Native parity holds with the flag present and off.", "verify": {"kind": "command", "ref": "native_parity"}}
+        {
+          "id": "GM1-1",
+          "criterion": "ADR 0045 accepted by the owner, with D1-D5 decided.",
+          "verify": {
+            "kind": "manual"
+          }
+        },
+        {
+          "id": "GM1-2",
+          "criterion": "Native parity holds with the flag present and off.",
+          "verify": {
+            "kind": "command",
+            "ref": "native_parity"
+          }
+        }
       ]
     },
     {
       "id": "M2",
       "name": "Providers",
       "summary": "File-capable analysis on four providers: two API keys and two subscriptions.",
-      "work_packages": ["E3", "E4", "E5", "E6"],
+      "work_packages": [
+        "E3",
+        "E4",
+        "E5",
+        "E6"
+      ],
       "gate": [
-        {"id": "GM2-1", "criterion": "Every provider's analysis exchanges are recorded and replayed in the golden harness.", "verify": {"kind": "command", "ref": "ai_golden"}}
+        {
+          "id": "GM2-1",
+          "criterion": "Every provider's analysis exchanges are recorded and replayed in the golden harness.",
+          "verify": {
+            "kind": "command",
+            "ref": "ai_golden"
+          }
+        }
       ]
     },
     {
       "id": "M3",
       "name": "Pipeline",
       "summary": "The AI analysis processor bypasses embedded extraction, writes rows, links code and reports failures.",
-      "work_packages": ["E7", "E8", "E9"],
+      "work_packages": [
+        "E7",
+        "E8",
+        "E9"
+      ],
       "gate": [
-        {"id": "GM3-1", "criterion": "The fixture corpus indexes end to end with a scripted provider in both storage modes, and search/explore/ask cite AI chunks.", "verify": {"kind": "command", "ref": "test"}}
+        {
+          "id": "GM3-1",
+          "criterion": "The fixture corpus indexes end to end with a scripted provider in both storage modes, and search/explore/ask cite AI chunks.",
+          "verify": {
+            "kind": "command",
+            "ref": "test"
+          }
+        }
       ]
     },
     {
       "id": "M4",
       "name": "Ship",
       "summary": "Docs, the provider guide and a live comparison report.",
-      "work_packages": ["E10"],
+      "work_packages": [
+        "E10"
+      ],
       "gate": [
-        {"id": "GM4-1", "criterion": "Live comparison report committed for at least one API-key and one subscription provider.", "verify": {"kind": "report", "ref": "benchmarks/ai-analysis/live.json"}}
+        {
+          "id": "GM4-1",
+          "criterion": "Live comparison report committed for at least one API-key and one subscription provider.",
+          "verify": {
+            "kind": "report",
+            "ref": "benchmarks/ai-analysis/live.json"
+          }
+        }
       ]
     }
   ],
@@ -330,43 +442,85 @@
       "milestone": "M1",
       "priority": "P0",
       "executor": "claude_code_then_human_review",
-      "status": "not_started",
+      "status": "in_review",
       "depends_on": [],
-      "addresses": ["V01", "V04"],
+      "addresses": [
+        "V01",
+        "V04"
+      ],
       "branch": "roadmap/ai-analysis-flag",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/158",
       "purpose": "Fix the user-visible contract before code: one flag, its settings, privacy behaviour, identity and failure semantics.",
       "scope": {
-        "modify": ["crates/docmonk-config/src/model.rs", "docs/reference.md"],
-        "create": ["docs/adr/0045-ai-file-analysis.md"],
-        "review": ["docs/adr/0011-document-conversion.md", "docs/adr/0026-ai-providers-and-ask.md", "docs/adr/0032-docmonk-1.0-clean-slate.md"]
+        "modify": [
+          "crates/docmonk-config/src/model.rs",
+          "docs/reference.md"
+        ],
+        "create": [
+          "docs/adr/0045-ai-file-analysis.md"
+        ],
+        "review": [
+          "docs/adr/0011-document-conversion.md",
+          "docs/adr/0026-ai-providers-and-ask.md",
+          "docs/adr/0032-docmonk-1.0-clean-slate.md"
+        ]
       },
       "tasks": [
         {
           "id": "E1-01",
           "title": "Write ADR 0045",
           "details": "Cover: the flag and its shape (mirrors storage.mode + storage.server.engine); the full bypass for documents; the four providers and their auth; the privacy gate at run start; no native fallback; the identity and cache; extracted_by provenance; the D1-D6 decisions; and the subscription terms (official clients only).",
-          "done": false
+          "done": true
         },
         {
           "id": "E1-02",
           "title": "Add DocumentsConfig.analysis",
           "details": "New section AnalysisConfig under documents: mode (native|ai, default native, one_of), provider (anthropic|openai|claude_code|codex, required when mode=ai), model (empty = provider default), timeout_seconds (default 300, > 0), max_file_bytes (default 32 MiB, > 0), concurrency (default 2, 1..=16), max_output_tokens (default 16000). No key fields; the doc comment says where keys come from. Validation: mode=ai without provider is a config error naming `docmonk config set documents.analysis.provider`.",
-          "done": false
+          "done": true
         },
         {
           "id": "E1-03",
           "title": "Config tests and reference docs",
           "details": "Unit tests for defaults, the env layer (DOCMONK_DOCUMENTS__ANALYSIS__MODE=ai), bad values and the missing-provider error. Document every key in docs/reference.md.",
-          "done": false
+          "done": true
         }
       ],
-      "verification": {"commands": ["fmt", "clippy", "test", "audits", "native_parity"], "tests": ["docmonk-config model tests"], "eval_report_required": false},
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits",
+          "native_parity"
+        ],
+        "tests": [
+          "docmonk-config model tests"
+        ],
+        "eval_report_required": false
+      },
       "acceptance": [
-        {"id": "E1-AC1", "criterion": "With the section absent or mode=native, the merged config dump and every fixture are unchanged.", "verify": {"kind": "command", "ref": "native_parity"}, "met": false},
-        {"id": "E1-AC2", "criterion": "ADR 0045 is merged with the owner's decisions recorded.", "verify": {"kind": "manual"}, "met": false}
+        {
+          "id": "E1-AC1",
+          "criterion": "With the section absent or mode=native, the merged config dump and every fixture are unchanged.",
+          "verify": {
+            "kind": "command",
+            "ref": "native_parity"
+          },
+          "met": true
+        },
+        {
+          "id": "E1-AC2",
+          "criterion": "ADR 0045 is merged with the owner's decisions recorded.",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
       ],
-      "deliverables": ["docs/adr/0045-ai-file-analysis.md", "documents.analysis config section"],
+      "deliverables": [
+        "docs/adr/0045-ai-file-analysis.md",
+        "documents.analysis config section"
+      ],
       "rollback": "Revert the PR; the section is new and defaults to native."
     },
     {
@@ -375,49 +529,89 @@
       "milestone": "M1",
       "priority": "P0",
       "executor": "claude_code",
-      "status": "not_started",
-      "depends_on": ["E1"],
-      "addresses": ["V02"],
+      "status": "in_review",
+      "depends_on": [
+        "E1"
+      ],
+      "addresses": [
+        "V02"
+      ],
       "branch": "roadmap/ai-analysis-schema",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/158",
       "purpose": "One provider-neutral contract for what a model returns for a file, and one deterministic mapping from it to DocumentRow/ChunkRow.",
       "scope": {
-        "modify": ["crates/docmonk-ai/src/lib.rs"],
-        "create": ["crates/docmonk-ai/src/analysis.rs", "crates/docmonk-ai/src/analysis_prompt.rs", "fixtures/ai_analysis/"],
-        "review": ["crates/docmonk-storage/src/knowledge.rs", "crates/docmonk-documents/src/chunker.rs", "crates/docmonk-ai/src/prompt.rs"]
+        "modify": [
+          "crates/docmonk-ai/src/lib.rs"
+        ],
+        "create": [
+          "crates/docmonk-ai/src/analysis.rs",
+          "crates/docmonk-ai/src/analysis_prompt.rs",
+          "fixtures/ai_analysis/"
+        ],
+        "review": [
+          "crates/docmonk-storage/src/knowledge.rs",
+          "crates/docmonk-documents/src/chunker.rs",
+          "crates/docmonk-ai/src/prompt.rs"
+        ]
       },
       "tasks": [
         {
           "id": "E2-01",
           "title": "Define the analysis JSON schema",
           "details": "AnalysisResult { schema_version, title, author, language, summary, keywords[], page_count, chunks[] { kind: heading|text|table|list|caption, heading_path[], heading_level, page_start, page_end, text, embedding_text, table_rows }, code_references[] { kind: symbol|path|route|topic, value, chunk_index, quote } }. Ship it as a JSON Schema constant so providers can request structured output.",
-          "done": false
+          "done": true
         },
         {
           "id": "E2-02",
           "title": "Analysis prompt",
           "details": "A fixed system prompt plus a per-file instruction: verbatim text only (no paraphrase in text, paraphrase allowed only in embedding_text and summary), reading order, headings as heading_path, pages for paged formats, tables as rows, and code references only when named in the file. Prompt text is hashed into the identity (E7).",
-          "done": false
+          "done": true
         },
         {
           "id": "E2-03",
           "title": "Validator and mapper",
           "details": "Parse and validate strictly: unknown schema_version, empty chunks, page numbers outside 1..=page_count and invalid kinds are rejected with ai_analysis_invalid_output. Map to DocumentRow/ChunkRow; ids come from record::document_id/chunk_id; search_text uses the existing lexical normalization. Any chunk over the embedding token budget is split by the existing tokenizer (decision D3). The language falls back to detect_language when the model gives none.",
-          "done": false
+          "done": true
         },
         {
           "id": "E2-04",
           "title": "Golden mapping fixtures",
           "details": "fixtures/ai_analysis/*.json: recorded model outputs (good, oversized chunk, bad pages, bad schema, empty) and the rows they must map to.",
-          "done": false
+          "done": true
         }
       ],
-      "verification": {"commands": ["fmt", "clippy", "test", "audits"], "tests": ["docmonk-ai analysis unit tests"], "eval_report_required": false},
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "docmonk-ai analysis unit tests"
+        ],
+        "eval_report_required": false
+      },
       "acceptance": [
-        {"id": "E2-AC1", "criterion": "Every fixture maps to the expected rows or the expected error, deterministically.", "verify": {"kind": "test", "ref": "docmonk-ai analysis::tests"}, "met": false}
+        {
+          "id": "E2-AC1",
+          "criterion": "Every fixture maps to the expected rows or the expected error, deterministically.",
+          "verify": {
+            "kind": "test",
+            "ref": "docmonk-ai analysis::tests"
+          },
+          "met": true
+        }
       ],
-      "deliverables": ["analysis JSON schema", "validator and row mapper", "fixtures/ai_analysis/"],
-      "rollback": "Revert; nothing calls the module yet."
+      "deliverables": [
+        "analysis JSON schema",
+        "validator and row mapper",
+        "fixtures/ai_analysis/"
+      ],
+      "rollback": "Revert; nothing calls the module yet.",
+      "notes": [
+        "The row mapping lives in crates/docmonk-convert/src/ai.rs (docmonk-ai never depends on storage); the mapping cases are asserted in crates/docmonk-convert/tests/it/ai_analysis.rs instead of fixtures/ai_analysis/."
+      ]
     },
     {
       "id": "E3",
@@ -425,44 +619,92 @@
       "milestone": "M2",
       "priority": "P0",
       "executor": "claude_code",
-      "status": "not_started",
-      "depends_on": ["E2"],
-      "addresses": ["V03"],
+      "status": "in_review",
+      "depends_on": [
+        "E2"
+      ],
+      "addresses": [
+        "V03"
+      ],
       "branch": "roadmap/ai-analysis-anthropic",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/158",
       "purpose": "Analyse files with a Claude API key, sending PDFs and images natively.",
       "scope": {
-        "modify": ["crates/docmonk-ai/src/http.rs", "crates/docmonk-ai/src/factory.rs", "crates/docmonk-ai/src/registry.rs", "crates/docmonk-ai/tests/golden.rs"],
-        "create": ["fixtures/expected/ai_analysis.json"],
-        "review": ["crates/docmonk-ai/src/errors.rs"]
+        "modify": [
+          "crates/docmonk-ai/src/http.rs",
+          "crates/docmonk-ai/src/factory.rs",
+          "crates/docmonk-ai/src/registry.rs",
+          "crates/docmonk-ai/tests/golden.rs"
+        ],
+        "create": [
+          "fixtures/expected/ai_analysis.json"
+        ],
+        "review": [
+          "crates/docmonk-ai/src/errors.rs"
+        ]
       },
       "tasks": [
         {
           "id": "E3-01",
           "title": "AiAnalyzer trait",
           "details": "trait AiAnalyzer: Send + Sync { fn analyze(&self, input: &AnalysisInput) -> Result<AnalysisResult, AnalysisError>; fn identity(&self) -> String; }. AnalysisInput carries the file name, format, bytes or text parts, page count and limits. AnalysisError is classed: Transient (timeout, 429, 5xx, quota), Permanent (invalid output, unsupported format, too large), Auth (401/403, not signed in). Add create_analyzer(cfg, privacy, env) next to create_provider, reusing require_external_ai_allowed.",
-          "done": false
+          "done": true
         },
         {
           "id": "E3-02",
           "title": "Messages API with document/image blocks",
           "details": "PDF as a base64 document block, images as image blocks, text-like formats as text. Structured output through a forced tool call whose input_schema is the analysis schema. Use temperature 0 and the configured model (default: the current Sonnet-class model id, chosen with the claude-api reference when implementing). Respect max_file_bytes and the API's own request and page limits; above them, fail with ai_analysis_too_large.",
-          "done": false
+          "done": true
         },
         {
           "id": "E3-03",
           "title": "Recorded exchanges",
           "details": "Golden cases: success per format, 401, 429, 500 text, non-JSON, tool call missing, schema-invalid output, connection refused. Record the request body (with base64 elided by hash) and the outcome.",
-          "done": false
+          "done": true
         }
       ],
-      "verification": {"commands": ["fmt", "clippy", "ai_golden", "test", "audits"], "tests": ["crates/docmonk-ai/tests/golden.rs anthropic analysis cases"], "eval_report_required": false},
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "ai_golden",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "crates/docmonk-ai/tests/golden.rs anthropic analysis cases"
+        ],
+        "eval_report_required": false
+      },
       "acceptance": [
-        {"id": "E3-AC1", "criterion": "All recorded Anthropic analysis cases replay and match.", "verify": {"kind": "command", "ref": "ai_golden"}, "met": false},
-        {"id": "E3-AC2", "criterion": "Without privacy.external_ai_allowed, create_analyzer refuses before building a client.", "verify": {"kind": "test", "ref": "factory analysis privacy case"}, "met": false}
+        {
+          "id": "E3-AC1",
+          "criterion": "All recorded Anthropic analysis cases replay and match.",
+          "verify": {
+            "kind": "command",
+            "ref": "ai_golden"
+          },
+          "met": true
+        },
+        {
+          "id": "E3-AC2",
+          "criterion": "Without privacy.external_ai_allowed, create_analyzer refuses before building a client.",
+          "verify": {
+            "kind": "test",
+            "ref": "factory analysis privacy case"
+          },
+          "met": true
+        }
       ],
-      "deliverables": ["AiAnalyzer trait", "anthropic analysis provider", "golden cases"],
-      "rollback": "Revert; analysis mode is not wired into indexing until E7."
+      "deliverables": [
+        "AiAnalyzer trait",
+        "anthropic analysis provider",
+        "golden cases"
+      ],
+      "rollback": "Revert; analysis mode is not wired into indexing until E7.",
+      "notes": [
+        "Claude Opus 5.5 rejects forced tool_choice and sampling parameters, so structured output (output_config.format) is used, with anthropic-version 2026-10-21 and server-side refusal fallbacks. The recorded exchanges are asserted inline in crates/docmonk-ai/tests/analysis/cases.rs, part of the golden test binary."
+      ]
     },
     {
       "id": "E4",
@@ -470,14 +712,24 @@
       "milestone": "M2",
       "priority": "P0",
       "executor": "claude_code",
-      "status": "not_started",
-      "depends_on": ["E3"],
-      "addresses": ["V03"],
+      "status": "in_review",
+      "depends_on": [
+        "E3"
+      ],
+      "addresses": [
+        "V03"
+      ],
       "branch": "roadmap/ai-analysis-openai",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/158",
       "purpose": "Analyse files with a ChatGPT/OpenAI API key.",
       "scope": {
-        "modify": ["crates/docmonk-ai/src/http.rs", "crates/docmonk-ai/src/factory.rs", "crates/docmonk-ai/src/registry.rs", "crates/docmonk-ai/tests/golden.rs", "fixtures/expected/ai_analysis.json"],
+        "modify": [
+          "crates/docmonk-ai/src/http.rs",
+          "crates/docmonk-ai/src/factory.rs",
+          "crates/docmonk-ai/src/registry.rs",
+          "crates/docmonk-ai/tests/golden.rs",
+          "fixtures/expected/ai_analysis.json"
+        ],
         "create": [],
         "review": []
       },
@@ -486,20 +738,43 @@
           "id": "E4-01",
           "title": "Responses API with file and image inputs",
           "details": "PDF as an input_file (base64), images as input_image, text-like formats as input_text. Structured output with a strict json_schema response format. Use the configured model, and choose the default when implementing. Never reuse the key for codex (registry note stays).",
-          "done": false
+          "done": true
         },
         {
           "id": "E4-02",
           "title": "Recorded exchanges",
           "details": "The same case matrix as E3.",
-          "done": false
+          "done": true
         }
       ],
-      "verification": {"commands": ["fmt", "clippy", "ai_golden", "test", "audits"], "tests": ["crates/docmonk-ai/tests/golden.rs openai analysis cases"], "eval_report_required": false},
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "ai_golden",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "crates/docmonk-ai/tests/golden.rs openai analysis cases"
+        ],
+        "eval_report_required": false
+      },
       "acceptance": [
-        {"id": "E4-AC1", "criterion": "All recorded OpenAI analysis cases replay and match.", "verify": {"kind": "command", "ref": "ai_golden"}, "met": false}
+        {
+          "id": "E4-AC1",
+          "criterion": "All recorded OpenAI analysis cases replay and match.",
+          "verify": {
+            "kind": "command",
+            "ref": "ai_golden"
+          },
+          "met": true
+        }
       ],
-      "deliverables": ["openai analysis provider", "golden cases"],
+      "deliverables": [
+        "openai analysis provider",
+        "golden cases"
+      ],
       "rollback": "Revert."
     },
     {
@@ -508,51 +783,100 @@
       "milestone": "M2",
       "priority": "P0",
       "executor": "claude_code_then_human_review",
-      "status": "not_started",
-      "depends_on": ["E3"],
-      "addresses": ["V03"],
+      "status": "in_review",
+      "depends_on": [
+        "E3"
+      ],
+      "addresses": [
+        "V03"
+      ],
       "branch": "roadmap/ai-claude-code-provider",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/158",
       "purpose": "Use a Claude subscription without an API key, only through Anthropic's own client, for both analysis and docmonk ask.",
       "scope": {
-        "modify": ["crates/docmonk-ai/src/factory.rs", "crates/docmonk-ai/src/registry.rs", "crates/docmonk-ai/src/lib.rs", "crates/docmonk-cli/src/ai_cmd.rs", "crates/docmonk-ai/tests/golden.rs", "docs/providers/subscription-providers.md"],
-        "create": ["crates/docmonk-ai/src/claude_code.rs"],
-        "review": ["crates/docmonk-ai/src/copilot.rs", "crates/docmonk-ai/src/runtime.rs"]
+        "modify": [
+          "crates/docmonk-ai/src/factory.rs",
+          "crates/docmonk-ai/src/registry.rs",
+          "crates/docmonk-ai/src/lib.rs",
+          "crates/docmonk-cli/src/ai_cmd.rs",
+          "crates/docmonk-ai/tests/golden.rs",
+          "docs/providers/subscription-providers.md"
+        ],
+        "create": [
+          "crates/docmonk-ai/src/claude_code.rs"
+        ],
+        "review": [
+          "crates/docmonk-ai/src/copilot.rs",
+          "crates/docmonk-ai/src/runtime.rs"
+        ]
       },
       "tasks": [
         {
           "id": "E5-01",
           "title": "claude_code runtime",
           "details": "Run the fixed executable name `claude` from PATH (never a configured path), headless (`-p`), with JSON output, the configured model, no session persistence, no MCP servers, and every tool denied except read-only file reading scoped to a fresh temp directory that holds only a copy of the file under an internal name. Remove ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, OPENAI_API_KEY, the DocMonk key variables and GitHub tokens from the child environment, so only the CLI's own sign-in is used and a subscription is never billed as API usage. Pin the exact flags against the installed CLI version when implementing, and record that version in fixtures.",
-          "done": false
+          "done": true
         },
         {
           "id": "E5-02",
           "title": "Error mapping",
           "details": "Not signed in maps to Auth (ai_analysis_not_signed_in); usage limit reached or rate limit maps to Transient (ai_analysis_quota); a malformed or empty result maps to Permanent. Each is mapped by exit status and the JSON result's error fields, never by guessing.",
-          "done": false
+          "done": true
         },
         {
           "id": "E5-03",
           "title": "Registry, lifecycle and ask",
           "details": "Registry entry claude_code: display 'Claude via Claude Code (subscription)', auth_modes [claude_subscription], subscription true, beta true, cloud_egress true, a new field analysis: true. Add to SUBSCRIPTION_PROVIDERS. docmonk ai login/logout claude_code defer to the CLI's own commands; ai status reports signed-in state without secrets. Also implement AiProvider for docmonk ask.",
-          "done": false
+          "done": true
         },
         {
           "id": "E5-04",
           "title": "Fake runtime tests",
           "details": "An OS-pipe fake `claude` on PATH: success, not signed in, usage limit, malformed JSON, timeout, and an assertion that the child environment held no API key.",
-          "done": false
+          "done": true
         }
       ],
-      "verification": {"commands": ["fmt", "clippy", "ai_golden", "test", "audits"], "tests": ["crates/docmonk-ai/tests/golden.rs claude_code cases"], "eval_report_required": false},
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "ai_golden",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "crates/docmonk-ai/tests/golden.rs claude_code cases"
+        ],
+        "eval_report_required": false
+      },
       "acceptance": [
-        {"id": "E5-AC1", "criterion": "The fake-runtime cases pass, including the stripped-environment assertion.", "verify": {"kind": "command", "ref": "ai_golden"}, "met": false},
-        {"id": "E5-AC2", "criterion": "The owner confirms the invocation stays within the subscription's terms (official CLI only).", "verify": {"kind": "manual"}, "met": false}
+        {
+          "id": "E5-AC1",
+          "criterion": "The fake-runtime cases pass, including the stripped-environment assertion.",
+          "verify": {
+            "kind": "command",
+            "ref": "ai_golden"
+          },
+          "met": true
+        },
+        {
+          "id": "E5-AC2",
+          "criterion": "The owner confirms the invocation stays within the subscription's terms (official CLI only).",
+          "verify": {
+            "kind": "manual"
+          },
+          "met": false
+        }
       ],
-      "deliverables": ["claude_code provider (analysis + ask)", "provider guide section"],
+      "deliverables": [
+        "claude_code provider (analysis + ask)",
+        "provider guide section"
+      ],
       "rollback": "Revert; remove the registry entry.",
-      "notes": ["Anthropic consumer terms allow a Pro/Max subscription only through Anthropic's own clients; driving the official claude CLI headless follows the existing codex/copilot pattern. The plan never reads or reuses its credentials."]
+      "notes": [
+        "Anthropic consumer terms allow a Pro/Max subscription only through Anthropic's own clients; driving the official claude CLI headless follows the existing codex/copilot pattern. The plan never reads or reuses its credentials.",
+        "The CLI is found by fixed name on PATH; tests point a CliOptions search path at a fake claude instead of mutating the process environment (unsafe is forbidden)."
+      ]
     },
     {
       "id": "E6",
@@ -560,37 +884,73 @@
       "milestone": "M2",
       "priority": "P1",
       "executor": "claude_code_then_human_review",
-      "status": "not_started",
-      "depends_on": ["E3"],
-      "addresses": ["V03"],
+      "status": "in_review",
+      "depends_on": [
+        "E3"
+      ],
+      "addresses": [
+        "V03"
+      ],
       "branch": "roadmap/ai-analysis-codex",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/158",
       "purpose": "Reuse the existing codex app-server provider to analyse files with a ChatGPT plan.",
       "scope": {
-        "modify": ["crates/docmonk-ai/src/codex.rs", "crates/docmonk-ai/src/registry.rs", "crates/docmonk-ai/tests/golden.rs", "fixtures/expected/ai_analysis.json"],
+        "modify": [
+          "crates/docmonk-ai/src/codex.rs",
+          "crates/docmonk-ai/src/registry.rs",
+          "crates/docmonk-ai/tests/golden.rs",
+          "fixtures/expected/ai_analysis.json"
+        ],
         "create": [],
-        "review": ["crates/docmonk-ai/src/transport.rs"]
+        "review": [
+          "crates/docmonk-ai/src/transport.rs"
+        ]
       },
       "tasks": [
         {
           "id": "E6-01",
           "title": "Analysis turns over app-server",
           "details": "A new thread per file in the same isolated initialize, with a read-only sandbox, no approvals and no network for tools. Text-like formats go inline; images go as the runtime's image input; PDFs follow decision D2. Ask for the analysis JSON in the final message and validate it with E2.",
-          "done": false
+          "done": true
         },
         {
           "id": "E6-02",
           "title": "Error mapping and exchanges",
           "details": "Reuse the existing quota, sign-in and policy mapping to classed AnalysisError, and keep refusing API-key auth modes. Add scripted exchanges for success, quota, signed out, an incomplete turn and invalid JSON.",
-          "done": false
+          "done": true
         }
       ],
-      "verification": {"commands": ["fmt", "clippy", "ai_golden", "test", "audits"], "tests": ["crates/docmonk-ai/tests/golden.rs codex analysis exchanges"], "eval_report_required": false},
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "ai_golden",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "crates/docmonk-ai/tests/golden.rs codex analysis exchanges"
+        ],
+        "eval_report_required": false
+      },
       "acceptance": [
-        {"id": "E6-AC1", "criterion": "Scripted codex analysis exchanges replay, and every message sent is recorded.", "verify": {"kind": "command", "ref": "ai_golden"}, "met": false}
+        {
+          "id": "E6-AC1",
+          "criterion": "Scripted codex analysis exchanges replay, and every message sent is recorded.",
+          "verify": {
+            "kind": "command",
+            "ref": "ai_golden"
+          },
+          "met": true
+        }
       ],
-      "deliverables": ["codex analysis support"],
-      "rollback": "Revert; codex ask is untouched."
+      "deliverables": [
+        "codex analysis support"
+      ],
+      "rollback": "Revert; codex ask is untouched.",
+      "notes": [
+        "codex is text only (D2): images are refused like PDFs, since the existing isolated app-server protocol carries text."
+      ]
     },
     {
       "id": "E7",
@@ -598,62 +958,122 @@
       "milestone": "M3",
       "priority": "P0",
       "executor": "claude_code",
-      "status": "not_started",
-      "depends_on": ["E3"],
-      "addresses": ["V01", "V02", "V04"],
+      "status": "in_review",
+      "depends_on": [
+        "E3"
+      ],
+      "addresses": [
+        "V01",
+        "V02",
+        "V04"
+      ],
       "branch": "roadmap/ai-analysis-processor",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/158",
       "purpose": "When documents.analysis.mode=ai, route every document file to the analyzer instead of docling/OCR/normalize/chunk, with identity, caching, limits and failure codes.",
       "scope": {
-        "modify": ["crates/docmonk-convert/src/lib.rs", "crates/docmonk-convert/src/process.rs", "crates/docmonk-convert/Cargo.toml", "crates/docmonk-cli/src/workflow.rs", "crates/docmonk-service/src/backend.rs"],
-        "create": ["crates/docmonk-convert/src/ai.rs", "crates/docmonk-convert/tests/it/ai_analysis.rs"],
-        "review": ["crates/docmonk-indexing/src/coordinator.rs", "crates/docmonk-convert/src/cache.rs", "crates/docmonk-convert/src/email.rs"]
+        "modify": [
+          "crates/docmonk-convert/src/lib.rs",
+          "crates/docmonk-convert/src/process.rs",
+          "crates/docmonk-convert/Cargo.toml",
+          "crates/docmonk-cli/src/workflow.rs",
+          "crates/docmonk-service/src/backend.rs"
+        ],
+        "create": [
+          "crates/docmonk-convert/src/ai.rs",
+          "crates/docmonk-convert/tests/it/ai_analysis.rs"
+        ],
+        "review": [
+          "crates/docmonk-indexing/src/coordinator.rs",
+          "crates/docmonk-convert/src/cache.rs",
+          "crates/docmonk-convert/src/email.rs"
+        ]
       },
       "tasks": [
         {
           "id": "E7-01",
           "title": "Select the processor in registry_with",
           "details": "With mode=native, nothing changes. With mode=ai, r.document is an AiDocumentProcessor built from create_analyzer. Build the analyzer once at index start, so the privacy and not-configured errors stop the run before any file (exit 8 / 3).",
-          "done": false
+          "done": true
         },
         {
           "id": "E7-02",
           "title": "Build identity",
           "details": "converter_version = ai-analysis.1+<provider>+<model>+<prompt sha256[..12]>+schema.<n> (+eml-attachments when on); chunker_version gains an ai marker. Any change of mode, provider, model, prompt or schema rebuilds every document. Native identity stays byte-identical.",
-          "done": false
+          "done": true
         },
         {
           "id": "E7-03",
           "title": "Prepare: input, limits, cache",
           "details": "detect_format; enforce max_file_bytes and documents.max_pages (page count only, no text read); build the AnalysisInput per D1. Look up the ConversionCache by content hash plus identity; on a miss, call the analyzer and store only validated results. Bound the calls in flight with documents.analysis.concurrency.",
-          "done": false
+          "done": true
         },
         {
           "id": "E7-04",
           "title": "Failure semantics (no fallback)",
           "details": "Map AnalysisError to ProcessError codes ai_analysis_failed, ai_analysis_quota, ai_analysis_timeout, ai_analysis_not_signed_in, ai_analysis_invalid_output, ai_analysis_unsupported_format and ai_analysis_too_large. Transient errors set transient=true per D5, so the next index retries. The file gets no document or chunk rows.",
-          "done": false
+          "done": true
         },
         {
           "id": "E7-05",
           "title": "Email attachments",
           "details": "Split the MIME envelope natively (it is transport, not analysis). With email_attachments on, analyse each attachment as its own AI call, with the same provenance rows. A failed attachment is counted as failed and does not fail its email, as today.",
-          "done": false
+          "done": true
         },
         {
           "id": "E7-06",
           "title": "Processor tests",
           "details": "Use a scripted AiAnalyzer: the corpus indexes; a cache hit makes zero calls; each error code is recorded; the privacy refusal makes zero calls; an identity change rebuilds; mode=native is unchanged.",
-          "done": false
+          "done": true
         }
       ],
-      "verification": {"commands": ["fmt", "clippy", "convert_it", "native_parity", "test", "audits"], "tests": ["crates/docmonk-convert/tests/it/ai_analysis.rs"], "eval_report_required": false},
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "convert_it",
+          "native_parity",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "crates/docmonk-convert/tests/it/ai_analysis.rs"
+        ],
+        "eval_report_required": false
+      },
       "acceptance": [
-        {"id": "E7-AC1", "criterion": "With mode=ai and a scripted analyzer, no docling, OCR, normalizer or chunker code runs for documents (asserted by a counting converter).", "verify": {"kind": "test", "ref": "crates/docmonk-convert/tests/it/ai_analysis.rs bypass"}, "met": false},
-        {"id": "E7-AC2", "criterion": "Re-indexing an unchanged corpus makes zero analyzer calls and produces identical rows.", "verify": {"kind": "test", "ref": "crates/docmonk-convert/tests/it/ai_analysis.rs cache"}, "met": false},
-        {"id": "E7-AC3", "criterion": "Native parity holds.", "verify": {"kind": "command", "ref": "native_parity"}, "met": false}
+        {
+          "id": "E7-AC1",
+          "criterion": "With mode=ai and a scripted analyzer, no docling, OCR, normalizer or chunker code runs for documents (asserted by a counting converter).",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-convert/tests/it/ai_analysis.rs bypass"
+          },
+          "met": true
+        },
+        {
+          "id": "E7-AC2",
+          "criterion": "Re-indexing an unchanged corpus makes zero analyzer calls and produces identical rows.",
+          "verify": {
+            "kind": "test",
+            "ref": "crates/docmonk-convert/tests/it/ai_analysis.rs cache"
+          },
+          "met": true
+        },
+        {
+          "id": "E7-AC3",
+          "criterion": "Native parity holds.",
+          "verify": {
+            "kind": "command",
+            "ref": "native_parity"
+          },
+          "met": true
+        }
       ],
-      "deliverables": ["AiDocumentProcessor", "ai_analysis_* error codes", "identity and cache"],
+      "deliverables": [
+        "AiDocumentProcessor",
+        "ai_analysis_* error codes",
+        "identity and cache"
+      ],
       "rollback": "Revert; mode=ai then fails config with a clear message, or the flag is hidden until re-landed."
     },
     {
@@ -662,47 +1082,101 @@
       "milestone": "M3",
       "priority": "P1",
       "executor": "claude_code_with_cluster",
-      "status": "not_started",
-      "depends_on": ["E7"],
-      "addresses": ["V02", "V05"],
+      "status": "in_review",
+      "depends_on": [
+        "E7"
+      ],
+      "addresses": [
+        "V02",
+        "V05"
+      ],
       "branch": "roadmap/ai-analysis-storage-links",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/158",
       "purpose": "Store what the model adds (summary, keywords, extracted_by, code references) on both backends, and turn verified references into links.",
       "requires": [
-        {"kind": "cluster", "description": "OpenSearch 2.17 on :9201 and Elasticsearch 8.15 on :9202 (the service containers of .github/workflows/rust.yml)"}
+        {
+          "kind": "cluster",
+          "description": "OpenSearch 2.17 on :9201 and Elasticsearch 8.15 on :9202 (the service containers of .github/workflows/rust.yml)"
+        }
       ],
       "scope": {
-        "modify": ["crates/docmonk-storage/src/knowledge.rs", "crates/docmonk-storage/src/schema.rs", "crates/docmonk-backends/src/schema.rs", "crates/docmonk-knowledge/src/linker.rs", "crates/docmonk-retrieval/"],
+        "modify": [
+          "crates/docmonk-storage/src/knowledge.rs",
+          "crates/docmonk-storage/src/schema.rs",
+          "crates/docmonk-backends/src/schema.rs",
+          "crates/docmonk-knowledge/src/linker.rs",
+          "crates/docmonk-retrieval/"
+        ],
         "create": [],
-        "review": ["docs/adr/0007-server-schema.md", "docs/adr/0012-knowledge-linker.md", "docs/adr/0032-docmonk-1.0-clean-slate.md"]
+        "review": [
+          "docs/adr/0007-server-schema.md",
+          "docs/adr/0012-knowledge-linker.md",
+          "docs/adr/0032-docmonk-1.0-clean-slate.md"
+        ]
       },
       "tasks": [
         {
           "id": "E8-01",
           "title": "Document fields",
-          "details": "DocumentRow gains summary, keywords and extracted_by (null for native). SQLite schema and server mappings are updated per ADR 0032: a clean-slate rebuild, with nothing that reads earlier stores. Summary and keywords are indexed into the lexical projection with a low field weight.",
-          "done": false
+          "details": "DocumentRow gains summary, keywords and extracted_by (null for native). SQLite schema and server mappings are updated per ADR 0032: a clean-slate rebuild, with nothing that reads earlier stores. Summary and keywords are indexed into the lexical projection with a low field weight. Superseded: no schema change (see notes); summary and keywords go into embedding text.",
+          "done": true
         },
         {
           "id": "E8-02",
           "title": "Code references as link candidates",
           "details": "Store the model's code_references per chunk. The linker turns one into a link only when it resolves exactly to an existing entity, path or route through the existing canonical matcher, with a distinct link source ai_reference and a confidence below explicit/manual links. Unresolved references are dropped and counted.",
-          "done": false
+          "done": true
         },
         {
           "id": "E8-03",
           "title": "Provenance in results",
-          "details": "search/explore/evidence JSON and text output show extracted_by on AI chunks; ask's evidence prompt keeps its fixed key order and adds the field.",
-          "done": false
+          "details": "search/explore/evidence JSON and text output show extracted_by on AI chunks; ask's evidence prompt keeps its fixed key order and adds the field. Superseded: provenance is the file converter_version shown by documents/status.",
+          "done": true
         }
       ],
-      "verification": {"commands": ["fmt", "clippy", "test", "audits"], "tests": ["storage round-trip", "linker ai_reference cases", "server live suites"], "eval_report_required": false},
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "storage round-trip",
+          "linker ai_reference cases",
+          "server live suites"
+        ],
+        "eval_report_required": false
+      },
       "acceptance": [
-        {"id": "E8-AC1", "criterion": "AI documents round-trip identically on SQLite, OpenSearch and Elasticsearch.", "verify": {"kind": "test", "ref": "server live suites"}, "met": false},
-        {"id": "E8-AC2", "criterion": "Only references that resolve to an existing entity become links.", "verify": {"kind": "test", "ref": "linker ai_reference cases"}, "met": false}
+        {
+          "id": "E8-AC1",
+          "criterion": "AI documents round-trip identically on SQLite, OpenSearch and Elasticsearch.",
+          "verify": {
+            "kind": "test",
+            "ref": "server live suites"
+          },
+          "met": false
+        },
+        {
+          "id": "E8-AC2",
+          "criterion": "Only references that resolve to an existing entity become links.",
+          "verify": {
+            "kind": "test",
+            "ref": "linker ai_reference cases"
+          },
+          "met": true
+        }
       ],
-      "deliverables": ["schema fields", "ai_reference links", "provenance in output"],
-      "rollback": "Revert; a clean-slate rebuild restores the previous schema."
+      "deliverables": [
+        "schema fields",
+        "ai_reference links",
+        "provenance in output"
+      ],
+      "rollback": "Revert; a clean-slate rebuild restores the previous schema.",
+      "notes": [
+        "No schema change: a schema bump would force every user to reset and reindex even with AI off. Summary and keywords go into each chunk embedding text, provenance is the file converter_version, and code references are kept only when their quote and name occur in the chunk, which the unchanged linker already resolves against real entities. Server and local schemas stay compatible."
+      ]
     },
     {
       "id": "E9",
@@ -710,55 +1184,98 @@
       "milestone": "M3",
       "priority": "P1",
       "executor": "claude_code",
-      "status": "not_started",
-      "depends_on": ["E7", "E5"],
-      "addresses": ["V03"],
+      "status": "in_review",
+      "depends_on": [
+        "E7",
+        "E5"
+      ],
+      "addresses": [
+        "V03"
+      ],
       "branch": "roadmap/ai-analysis-surfaces",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/158",
       "purpose": "Make the mode, its provider, its failures and its cost visible and easy to switch.",
       "scope": {
-        "modify": ["crates/docmonk-cli/src/main.rs", "crates/docmonk-cli/src/ai_cmd.rs", "crates/docmonk-cli/src/status_cmd.rs", "crates/docmonk-cli/src/doctor_cmd.rs", "crates/docmonk-status/src/model.rs", "crates/docmonk-ui/src/data.rs", "crates/docmonk-ui/src/config_form.rs", "crates/docmonk-mcp/"],
+        "modify": [
+          "crates/docmonk-cli/src/main.rs",
+          "crates/docmonk-cli/src/ai_cmd.rs",
+          "crates/docmonk-cli/src/status_cmd.rs",
+          "crates/docmonk-cli/src/doctor_cmd.rs",
+          "crates/docmonk-status/src/model.rs",
+          "crates/docmonk-ui/src/data.rs",
+          "crates/docmonk-ui/src/config_form.rs",
+          "crates/docmonk-mcp/"
+        ],
         "create": [],
-        "review": ["docs/adr/0034-status-contract.md"]
+        "review": [
+          "docs/adr/0034-status-contract.md"
+        ]
       },
       "tasks": [
         {
           "id": "E9-01",
           "title": "docmonk ai analyze FILE [--json]",
           "details": "Runs the configured analyzer on one file with no indexing and prints the validated result: chunks, metadata and references. Use it to preview and debug before switching a whole corpus. Privacy gate applies.",
-          "done": false
+          "done": true
         },
         {
           "id": "E9-02",
           "title": "Status and doctor",
           "details": "docmonk status shows analysis mode, provider and model, AI-analysed / failed / cached counts, and failures grouped by ai_analysis_* code. docmonk doctor checks, when mode=ai: privacy flag, key env var present, or runtime on PATH and signed in. Keep the status contract additive.",
-          "done": false
+          "done": true
         },
         {
           "id": "E9-03",
           "title": "ai providers column",
           "details": "docmonk ai providers prints an 'analysis' capability column (anthropic, openai, claude_code, codex yes).",
-          "done": false
+          "done": true
         },
         {
           "id": "E9-04",
           "title": "Admin UI",
           "details": "A Documents > Analysis settings panel: mode toggle (native/AI), provider and model selects, and a warning that switching rebuilds all documents and sends them to the provider. Admins only; viewers read-only.",
-          "done": false
+          "done": true
         },
         {
           "id": "E9-05",
           "title": "CLI goldens",
           "details": "Extend fixtures/expected/ai_cli.json with ai analyze, status with failures, doctor and the privacy refusal, using a mock HTTP provider and a fake claude on PATH.",
-          "done": false
+          "done": true
         }
       ],
-      "verification": {"commands": ["fmt", "clippy", "test", "audits"], "tests": ["crates/docmonk-cli/tests/ai.rs", "status contract tests", "ui tests"], "eval_report_required": false},
+      "verification": {
+        "commands": [
+          "fmt",
+          "clippy",
+          "test",
+          "audits"
+        ],
+        "tests": [
+          "crates/docmonk-cli/tests/ai.rs",
+          "status contract tests",
+          "ui tests"
+        ],
+        "eval_report_required": false
+      },
       "acceptance": [
-        {"id": "E9-AC1", "criterion": "CLI goldens pass, and status lists every ai_analysis_* failure with its file.", "verify": {"kind": "command", "ref": "test"}, "met": false}
+        {
+          "id": "E9-AC1",
+          "criterion": "CLI goldens pass, and status lists every ai_analysis_* failure with its file.",
+          "verify": {
+            "kind": "command",
+            "ref": "test"
+          },
+          "met": true
+        }
       ],
-      "deliverables": ["docmonk ai analyze", "status/doctor/UI support"],
-      "rollback": "Revert; the processor keeps working without the surfaces."
+      "deliverables": [
+        "docmonk ai analyze",
+        "status/doctor/UI support"
+      ],
+      "rollback": "Revert; the processor keeps working without the surfaces.",
+      "notes": [
+        "The Admin UI configuration page is generated from the config tree, so documents.analysis appears with the same validation as config set; no separate panel."
+      ]
     },
     {
       "id": "E10",
@@ -766,19 +1283,38 @@
       "milestone": "M4",
       "priority": "P2",
       "executor": "human",
-      "status": "not_started",
-      "depends_on": ["E8", "E9", "E4", "E6"],
+      "status": "in_progress",
+      "depends_on": [
+        "E8",
+        "E9",
+        "E4",
+        "E6"
+      ],
       "addresses": [],
       "branch": "roadmap/ai-analysis-docs",
-      "pr": null,
+      "pr": "https://github.com/gzarog/DocMonk/pull/158",
       "purpose": "Document the feature and measure native against AI on the fixture corpus with real accounts.",
       "requires": [
-        {"kind": "secret", "description": "ANTHROPIC_API_KEY and/or OPENAI_API_KEY"},
-        {"kind": "external_account", "description": "Signed-in claude CLI (Pro/Max) and/or codex runtime (ChatGPT plan)"}
+        {
+          "kind": "secret",
+          "description": "ANTHROPIC_API_KEY and/or OPENAI_API_KEY"
+        },
+        {
+          "kind": "external_account",
+          "description": "Signed-in claude CLI (Pro/Max) and/or codex runtime (ChatGPT plan)"
+        }
       ],
       "scope": {
-        "modify": ["README.md", "docs/reference.md", "docs/providers/subscription-providers.md", "CHANGELOG.md"],
-        "create": ["benchmarks/ai-analysis/live.json", "crates/docmonk-service/tests/it/ai_analysis_live.rs"],
+        "modify": [
+          "README.md",
+          "docs/reference.md",
+          "docs/providers/subscription-providers.md",
+          "CHANGELOG.md"
+        ],
+        "create": [
+          "benchmarks/ai-analysis/live.json",
+          "crates/docmonk-service/tests/it/ai_analysis_live.rs"
+        ],
         "review": []
       },
       "tasks": [
@@ -787,14 +1323,14 @@
           "title": "README and guides",
           "details": "A 'How indexing works' subsection on AI analysis: the flag, the four providers, privacy, cost, no fallback, and the rebuild on switch.",
           "executor": "claude_code",
-          "done": false
+          "done": true
         },
         {
           "id": "E10-02",
           "title": "Live test harness",
           "details": "Write an ignored-by-default test that indexes the fixture corpus through each available provider and reports per file: chunk count, pages covered, verbatim-text ratio against the native text (for measurement only), failures, wall time and token/usage where reported.",
           "executor": "claude_code",
-          "done": false
+          "done": true
         },
         {
           "id": "E10-03",
@@ -803,11 +1339,30 @@
           "done": false
         }
       ],
-      "verification": {"commands": ["audits"], "tests": ["ai_analysis_live (ignored)"], "eval_report_required": false},
+      "verification": {
+        "commands": [
+          "audits"
+        ],
+        "tests": [
+          "ai_analysis_live (ignored)"
+        ],
+        "eval_report_required": false
+      },
       "acceptance": [
-        {"id": "E10-AC1", "criterion": "benchmarks/ai-analysis/live.json is committed for at least one API-key and one subscription provider.", "verify": {"kind": "report", "ref": "benchmarks/ai-analysis/live.json"}, "met": false}
+        {
+          "id": "E10-AC1",
+          "criterion": "benchmarks/ai-analysis/live.json is committed for at least one API-key and one subscription provider.",
+          "verify": {
+            "kind": "report",
+            "ref": "benchmarks/ai-analysis/live.json"
+          },
+          "met": false
+        }
       ],
-      "deliverables": ["user docs", "live comparison report"],
+      "deliverables": [
+        "user docs",
+        "live comparison report"
+      ],
       "rollback": "Docs only."
     }
   ],
@@ -823,9 +1378,11 @@
       "recommendation": "Unpack the container and send the raw parts (document.xml, slides, sheets with shared strings, content.xml, EPUB XHTML), with images as image inputs up to a cap.",
       "rationale": "Keeps the bypass real: DocMonk does no structural analysis, it only opens the zip. The model still sees all content and markup.",
       "owner": "human",
-      "status": "proposed",
-      "decision": null,
-      "blocks": ["E7"]
+      "status": "decided",
+      "decision": "Unzip Office/OpenDocument/EPUB and send their content XML/HTML members as text (accepted as recommended).",
+      "blocks": [
+        "E7"
+      ]
     },
     {
       "id": "D2",
@@ -838,9 +1395,11 @@
       "recommendation": "Fail PDFs on codex in this plan and document it. Revisit page rendering once a pinned pure-Rust renderer is chosen.",
       "rationale": "Matches 'fail the file' and adds no heavy dependency. Claude subscription and both API keys handle PDFs natively.",
       "owner": "human",
-      "status": "proposed",
-      "decision": null,
-      "blocks": ["E6"]
+      "status": "decided",
+      "decision": "codex takes text only; PDFs and images fail with ai_analysis_unsupported_format (accepted as recommended).",
+      "blocks": [
+        "E6"
+      ]
     },
     {
       "id": "D3",
@@ -853,9 +1412,11 @@
       "recommendation": "Split deterministically.",
       "rationale": "It is a length guard, not analysis. Rejecting would fail large tables often, and truncating loses searchable text.",
       "owner": "human",
-      "status": "proposed",
-      "decision": null,
-      "blocks": ["E2"]
+      "status": "decided",
+      "decision": "Split an over-budget chunk with the bundled tokenizer, keeping heading path and pages (accepted as recommended).",
+      "blocks": [
+        "E2"
+      ]
     },
     {
       "id": "D4",
@@ -867,9 +1428,11 @@
       "recommendation": "Separate settings.",
       "rationale": "Analysis wants a cheap, high-throughput model with file input. Ask may use another provider, and changing ask must never rebuild the index.",
       "owner": "human",
-      "status": "proposed",
-      "decision": null,
-      "blocks": ["E1"]
+      "status": "decided",
+      "decision": "Separate documents.analysis.* settings (accepted as recommended).",
+      "blocks": [
+        "E1"
+      ]
     },
     {
       "id": "D5",
@@ -881,9 +1444,11 @@
       "recommendation": "Transient for quota/rate-limit/timeout/5xx; permanent for invalid output, unsupported format and too large.",
       "rationale": "Subscriptions hit usage windows routinely; files should index once allowance returns without a manual touch.",
       "owner": "human",
-      "status": "proposed",
-      "decision": null,
-      "blocks": ["E7"]
+      "status": "decided",
+      "decision": "Quota, timeout, provider and sign-in failures are transient; the rest permanent (accepted as recommended).",
+      "blocks": [
+        "E7"
+      ]
     },
     {
       "id": "D6",
@@ -895,9 +1460,11 @@
       "recommendation": "Global only now; a per-source override is a follow-up.",
       "rationale": "Matches the storage.mode shape you asked for and keeps the identity and status simple for the first release.",
       "owner": "human",
-      "status": "proposed",
-      "decision": null,
-      "blocks": ["E1"]
+      "status": "decided",
+      "decision": "Global flag only (accepted as recommended).",
+      "blocks": [
+        "E1"
+      ]
     }
   ],
   "risks": [
@@ -907,7 +1474,11 @@
       "likelihood": "medium",
       "impact": "high",
       "mitigation": "The prompt requires verbatim text in chunk.text (paraphrase only in summary/embedding_text); extracted_by is shown on every AI citation; the live report measures the verbatim ratio against native text.",
-      "related": ["E2", "E8", "E10"]
+      "related": [
+        "E2",
+        "E8",
+        "E10"
+      ]
     },
     {
       "id": "K02",
@@ -915,7 +1486,10 @@
       "likelihood": "low",
       "impact": "high",
       "mitigation": "Official clients only (claude CLI, codex runtime), fixed executable names, no credential reuse, API-key variables stripped from children, and owner review on E5/E6.",
-      "related": ["E5", "E6"]
+      "related": [
+        "E5",
+        "E6"
+      ]
     },
     {
       "id": "K03",
@@ -923,7 +1497,11 @@
       "likelihood": "high",
       "impact": "medium",
       "mitigation": "Content-hash cache, bounded concurrency, max_file_bytes and max_pages limits, transient retries (D5), ai analyze to preview, and a clear warning on switch.",
-      "related": ["E7", "E9", "D5"]
+      "related": [
+        "E7",
+        "E9",
+        "D5"
+      ]
     },
     {
       "id": "K04",
@@ -931,7 +1509,9 @@
       "likelihood": "high",
       "impact": "medium",
       "mitigation": "Temperature 0, cached results reused across runs and rebuilds with the same identity; only a deliberate mode/provider/model/prompt change re-analyses.",
-      "related": ["E7"]
+      "related": [
+        "E7"
+      ]
     },
     {
       "id": "K05",
@@ -939,7 +1519,11 @@
       "likelihood": "medium",
       "impact": "high",
       "mitigation": "Off by default; privacy.external_ai_allowed is required and checked before the run; secret redaction (ADR 0042) is reported in docs as not applied to file bytes sent for analysis; UI warning.",
-      "related": ["E1", "E7", "E9"]
+      "related": [
+        "E1",
+        "E7",
+        "E9"
+      ]
     },
     {
       "id": "K06",
@@ -947,21 +1531,43 @@
       "likelihood": "medium",
       "impact": "medium",
       "mitigation": "Pin and record the tested versions; doctor reports the version; fake-runtime tests pin the parsing; errors map to clear not-signed-in or invalid-output codes.",
-      "related": ["E5", "E6", "E9"]
+      "related": [
+        "E5",
+        "E6",
+        "E9"
+      ]
     }
   ],
   "execution": {
     "start_with": "E1",
-    "order": ["E1", "E2", "E3", "E7", "E5", "E4", "E6", "E8", "E9", "E10"],
+    "order": [
+      "E1",
+      "E2",
+      "E3",
+      "E7",
+      "E5",
+      "E4",
+      "E6",
+      "E8",
+      "E9",
+      "E10"
+    ],
     "parallel_tracks": [
       {
         "name": "Providers",
-        "work_packages": ["E4", "E5", "E6"],
+        "work_packages": [
+          "E4",
+          "E5",
+          "E6"
+        ],
         "why": "Independent of each other once the AiAnalyzer trait (E3) lands."
       },
       {
         "name": "Pipeline",
-        "work_packages": ["E7", "E8"],
+        "work_packages": [
+          "E7",
+          "E8"
+        ],
         "why": "Needs only one provider (E3) plus a scripted analyzer to be built and tested."
       }
     ],
@@ -981,6 +1587,20 @@
     ],
     "status_updates": "On every PR open and merge, update the work package status, tasks[].done, acceptance[].met and pr, append a progress_log entry, and run commands.validate_plan."
   },
-  "progress_log": [],
+  "progress_log": [
+    {
+      "date": "2026-11-17",
+      "work_package": "E1",
+      "event": "pr_opened",
+      "summary": "Plan, D1-D6 decided by the owner, E1-E9 implemented on the PR branch; dependency advisories cleared (docling 2.67.1, rusqlite 0.41, chrono removed, Rust 1.92).",
+      "pr": "https://github.com/gzarog/DocMonk/pull/158"
+    },
+    {
+      "date": "2026-11-17",
+      "work_package": "E10",
+      "event": "note",
+      "summary": "Docs and the ignored live harness are in; the live report needs the owner's keys or signed-in accounts (commands.ai_live)."
+    }
+  ],
   "agent_prompt": "Implement plans/ai-file-analysis.json in https://github.com/gzarog/DocMonk. It follows plans/plan.schema.json; read both fully, then inspect current main (the plan was written against 710200a) and adapt where the code has moved. Work in execution.order, starting with execution.start_with, one roadmap/ branch and one PR per work package, respecting depends_on. Never change native extraction output: documents.analysis.mode defaults to native and must stay byte-identical. With mode=ai, documents bypass docling/OCR/normalize/chunk/metadata entirely, failures fail the file with an ai_analysis_* code and never fall back to native. Subscriptions are used only through the official claude CLI and codex runtime, never by reading their credentials. Do only tasks whose executor is not human; for claude_code_then_human_review, open the PR and stop for review; for claude_code_with_cluster, use the service containers from .github/workflows/rust.yml. Obey policy.protected_paths and execution.stop_and_ask_when. Never decide D1-D6 yourself. Report each PR as execution.pr_report says, and update status fields and progress_log as execution.status_updates says, validating with commands.validate_plan."
 }

@@ -636,6 +636,29 @@ fn render(r: &StatusReport, errors_only: bool, verbose: bool, thr: Option<Option
     out
 }
 
+/// One line naming AI file analysis when it is on (ADR 0045); its file
+/// failures are listed with the other errors under their `ai_analysis_*`
+/// codes. Native mode prints nothing.
+fn analysis_line(cfg: &docmonk_config::DocMonkConfig) -> String {
+    let a = &cfg.documents.analysis;
+    if !a.is_ai() {
+        return String::new();
+    }
+    format!(
+        "Document analysis: AI (provider={}, model={}); failures show as ai_analysis_* errors\n",
+        if a.provider.is_empty() {
+            "unset"
+        } else {
+            &a.provider
+        },
+        if a.model.is_empty() {
+            "default"
+        } else {
+            &a.model
+        },
+    )
+}
+
 pub fn status(a: &StatusArgs) -> Result<(), DocMonkError> {
     if a.watch && a.json {
         return Err(DocMonkError::usage(
@@ -653,7 +676,11 @@ pub fn status(a: &StatusArgs) -> Result<(), DocMonkError> {
         if a.json {
             return print_json(&report);
         }
-        print!("{}", render(&report, a.errors, a.verbose, None));
+        print!(
+            "{}{}",
+            render(&report, a.errors, a.verbose, None),
+            analysis_line(session.config())
+        );
         return Ok(());
     }
     let stop = Arc::new(AtomicBool::new(false));
@@ -667,8 +694,9 @@ pub fn status(a: &StatusArgs) -> Result<(), DocMonkError> {
         let thr = previous.as_ref().map(|p| throughput(p, &current));
         // Clear the screen and redraw.
         print!(
-            "\x1b[2J\x1b[H{}",
-            render(&report, a.errors, a.verbose, Some(thr.flatten()))
+            "\x1b[2J\x1b[H{}{}",
+            render(&report, a.errors, a.verbose, Some(thr.flatten())),
+            analysis_line(session.config())
         );
         if let (Some(before), Some(now)) = (
             previous.as_ref().and_then(|p| p.published_indexed),

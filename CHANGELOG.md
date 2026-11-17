@@ -28,8 +28,27 @@ as generally available or as a preview in 1.0 is still open (roadmap
 decision D1). It depends on the live 8k/50k-file measurements (roadmap
 R4), which have not been run yet.
 
+### AI file analysis
+
+- `documents.analysis.mode: ai` hands every document file to Claude or
+  ChatGPT instead of the embedded extraction (ADR 0045). Providers:
+  `anthropic` (`ANTHROPIC_API_KEY`), `openai` (`OPENAI_API_KEY`),
+  `claude_code` (Claude Pro/Max through the official `claude` CLI) and
+  `codex` (ChatGPT plan, text formats). Off by default; it needs
+  `privacy.external_ai_allowed: true`, and a failed file fails with an
+  `ai_analysis_*` code without falling back to native extraction.
+  `docmonk ai analyze FILE` previews one file.
+- `claude_code` is also a `docmonk ask` provider and a subscription runtime
+  for `docmonk ai status|login|logout|models`.
+
 ### Security
 
+- docling.rs 2.67.1 (calamine 0.38, zip 9), rusqlite 0.41 (SQLite 3.54.1),
+  pulldown-cmark 0.13.6 and the removal of the unmaintained chrono (replaced
+  by `docmonk_core::time` on jiff, byte-identical timestamps) clear
+  RUSTSEC-2026-0414, -0433, -0436, -0459 and -0543. The toolchain is Rust
+  1.92. The converter identity changes, so every source rebuilds its
+  documents once.
 - Patched the open RustSec advisories in the TLS stack (rustls 0.23.46,
   rustls-webpki 0.103.16, webpki-roots 1.0.11) and tokio
   (RUSTSEC-2026-0386). The zip advisories only affect

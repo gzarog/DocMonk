@@ -265,6 +265,12 @@ fn ai_section(cfg: &docmonk_config::DocMonkConfig) -> Section {
                 "warn",
                 "codex runtime not found on PATH; run 'docmonk ai login codex' setup",
             ),
+            "claude_code" if found("claude") => check("runtime", "ok", "Claude CLI found on PATH"),
+            "claude_code" => check(
+                "runtime",
+                "warn",
+                "Claude CLI not found on PATH; install Claude Code and sign in with `claude`",
+            ),
             // The Rust adapter drives the Copilot CLI (ADR 0026).
             _ if found("copilot") => check("runtime", "ok", "Copilot CLI found on PATH"),
             _ => check(
@@ -274,7 +280,57 @@ fn ai_section(cfg: &docmonk_config::DocMonkConfig) -> Section {
             ),
         });
     }
+    checks.extend(analysis_checks(cfg));
     Section { name: "AI", checks }
+}
+
+/// AI file analysis (ADR 0045), only when `documents.analysis.mode` is `ai`:
+/// consent, the provider, and its key or runtime. Offline and secret-free.
+fn analysis_checks(cfg: &docmonk_config::DocMonkConfig) -> Vec<Check> {
+    let a = &cfg.documents.analysis;
+    if !a.is_ai() {
+        return Vec::new();
+    }
+    let mut out = vec![check(
+        "analysis",
+        "ok",
+        format!(
+            "documents.analysis.mode=ai, provider={}, model={}",
+            if a.provider.is_empty() {
+                "unset"
+            } else {
+                &a.provider
+            },
+            if a.model.is_empty() {
+                "default"
+            } else {
+                &a.model
+            }
+        ),
+    )];
+    if !cfg.privacy.external_ai_allowed {
+        out.push(check(
+            "analysis_privacy",
+            "fail",
+            "AI file analysis sends documents off this machine and needs \
+             privacy.external_ai_allowed=true; index runs stop until it is set",
+        ));
+    }
+    let env_set = |k: &str| std::env::var(k).is_ok_and(|v| !v.is_empty());
+    let found = |exe| docmonk_ai::runtime::which(exe).is_some();
+    let need = match a.provider.as_str() {
+        "anthropic" => (!env_set("ANTHROPIC_API_KEY")).then_some("ANTHROPIC_API_KEY is not set"),
+        "openai" => (!env_set("OPENAI_API_KEY")).then_some("OPENAI_API_KEY is not set"),
+        "claude_code" => (!found("claude"))
+            .then_some("the Claude CLI ('claude') is not on PATH; install Claude Code and sign in"),
+        "codex" => (!found("codex")).then_some("the codex runtime is not on PATH"),
+        _ => Some("documents.analysis.provider is not set"),
+    };
+    out.push(match need {
+        Some(m) => check("analysis_provider", "fail", m),
+        None => check("analysis_provider", "ok", "credentials or runtime present"),
+    });
+    out
 }
 
 fn tokenizer_section(

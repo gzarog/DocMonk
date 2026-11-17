@@ -16,6 +16,7 @@ clap.workspace = true
 docmonk-ai.workspace = true
 docmonk-backends.workspace = true
 docmonk-config.workspace = true
+docmonk-convert.workspace = true
 docmonk-core.workspace = true
 docmonk-indexing.workspace = true
 docmonk-mcp.workspace = true
