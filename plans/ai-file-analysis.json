@@ -389,7 +389,7 @@
       "tasks": [
         {
           "id": "E2-01",
-          "title": "Define the analysis JSON schema (v1)",
+          "title": "Define the analysis JSON schema",
           "details": "AnalysisResult { schema_version, title, author, language, summary, keywords[], page_count, chunks[] { kind: heading|text|table|list|caption, heading_path[], heading_level, page_start, page_end, text, embedding_text, table_rows }, code_references[] { kind: symbol|path|route|topic, value, chunk_index, quote } }. Ship it as a JSON Schema constant so providers can request structured output.",
           "done": false
         },
@@ -416,7 +416,7 @@
       "acceptance": [
         {"id": "E2-AC1", "criterion": "Every fixture maps to the expected rows or the expected error, deterministically.", "verify": {"kind": "test", "ref": "docmonk-ai analysis::tests"}, "met": false}
       ],
-      "deliverables": ["analysis schema v1", "validator and row mapper", "fixtures/ai_analysis/"],
+      "deliverables": ["analysis JSON schema", "validator and row mapper", "fixtures/ai_analysis/"],
       "rollback": "Revert; nothing calls the module yet."
     },
     {
@@ -680,7 +680,7 @@
         {
           "id": "E8-01",
           "title": "Document fields",
-          "details": "DocumentRow gains summary, keywords and extracted_by (null for native). SQLite schema and server mappings are updated per ADR 0032 (clean slate, no migration code). Summary and keywords are indexed into the lexical projection with a low field weight.",
+          "details": "DocumentRow gains summary, keywords and extracted_by (null for native). SQLite schema and server mappings are updated per ADR 0032: a clean-slate rebuild, with nothing that reads earlier stores. Summary and keywords are indexed into the lexical projection with a low field weight.",
           "done": false
         },
         {
