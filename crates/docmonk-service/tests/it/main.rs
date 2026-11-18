@@ -3,6 +3,7 @@
 //! small (each binary links the whole dependency graph). Run one
 //! group with `cargo test -p docmonk-service --test it -- <module>::`.
 
+mod ai_analysis_live;
 mod batched_reads;
 mod dependencies;
 mod embedding_model_switch;

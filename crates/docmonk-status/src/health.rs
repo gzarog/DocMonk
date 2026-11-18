@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use chrono::{DateTime, Utc};
+use docmonk_core::time::{DateTime, Utc};
 
 use crate::model::*;
 use crate::snapshot::{iso, parse_time, SourceFacts};

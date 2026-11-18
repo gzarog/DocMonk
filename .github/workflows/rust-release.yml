@@ -10,8 +10,8 @@ name: Rust release
 #     to main: the next vX.Y.Z is computed (patch bump, or minor when the
 #     merged commit message contains "[release minor]"), tagged, and
 #     published as a full release, which `docmonk update` picks up;
-#   * a pushed `v<MAJOR.MINOR.PATCH>` tag: a pre-release with the
-#     image, for dry runs;
+#   * a pushed `v<MAJOR.MINOR.PATCH>` or `v<MAJOR.MINOR.PATCH>-rc.N`
+#     (`-beta.N`, `-alpha.N`) tag: a pre-release with the image;
 #   * manual dispatch (default branch only).
 #
 # Repository settings it reads:
@@ -105,12 +105,17 @@ jobs:
             *)
               v="$IN_VERSION"; pre="$IN_PRERELEASE"; img="$IN_IMAGE" ;;
           esac
+          # A release candidate (-rc.N, -beta.N, -alpha.N) is always a
+          # pre-release, whatever started the run.
+          case "$v" in *-*) pre=true ;; esac
           { echo "version=$v"; echo "prerelease=$pre"; echo "image=$img"; echo "sha=$sha"; } >> "$GITHUB_OUTPUT"
           { echo "VERSION=$v"; echo "TAG=v$v"; } >> "$GITHUB_ENV"
       - name: Strict MAJOR.MINOR.PATCH, tag not taken
         run: |
-          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' \
-            || { echo "::error::version must be MAJOR.MINOR.PATCH, got '$VERSION'"; exit 1; }
+          # `docmonk update` only ever offers plain versions.
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-(rc|beta|alpha)\.[0-9]+)?$' \
+            || { echo "::error::version must be MAJOR.MINOR.PATCH[-rc.N|-beta.N|-alpha.N], got '$VERSION'"; exit 1; }
+
           # A tag push *is* the release tag; every other trigger must not
           # reuse an existing one.
           if [ "$GITHUB_EVENT_NAME" != push ] && git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then

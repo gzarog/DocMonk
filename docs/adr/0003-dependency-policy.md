@@ -13,8 +13,8 @@ Status: accepted
 * `anyhow` only at process/application boundaries; libraries use `thiserror`.
 * TLS uses rustls; no OpenSSL requirement.
 * `Cargo.lock` is committed (the workspace ships binaries).
-* Toolchain is pinned by `rust-toolchain.toml` (1.90.0); MSRV is the
-  workspace `rust-version` (1.89, needed for `std::fs::File::try_lock`).
+* Toolchain is pinned by `rust-toolchain.toml` (1.92.0); MSRV is the
+  workspace `rust-version` (1.92, required by docling.rs 2.67).
 * The production runtime has no dependency outside the Rust binary and its
   bundled model assets.
 * `deny.toml` enforces this policy with `cargo deny check` in CI

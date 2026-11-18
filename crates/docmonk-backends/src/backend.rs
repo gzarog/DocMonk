@@ -1883,11 +1883,11 @@ pub(crate) fn now() -> String {
 
 /// An RFC 3339 / naive-UTC ISO timestamp as epoch milliseconds.
 pub fn iso_to_millis(v: &str) -> Option<String> {
-    chrono::DateTime::parse_from_rfc3339(v)
+    docmonk_core::time::DateTime::parse_from_rfc3339(v)
         .map(|d| d.timestamp_millis())
         .ok()
         .or_else(|| {
-            chrono::NaiveDateTime::parse_from_str(v, "%Y-%m-%dT%H:%M:%S%.f")
+            docmonk_core::time::NaiveDateTime::parse_from_str(v, "%Y-%m-%dT%H:%M:%S%.f")
                 .ok()
                 .map(|n| n.and_utc().timestamp_millis())
         })

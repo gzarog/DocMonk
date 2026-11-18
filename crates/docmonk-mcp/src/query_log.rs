@@ -50,7 +50,7 @@ pub fn entry(tool: &str, args: &Value, out: &Value) -> Value {
     let mut touched = BTreeSet::new();
     sources(out, &mut touched);
     json!({
-        "time": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        "time": docmonk_core::time::Utc::now().to_rfc3339_opts(docmonk_core::time::SecondsFormat::Millis, true),
         "tool": tool,
         "arguments": redact(args),
         "ok": out["ok"] == true,

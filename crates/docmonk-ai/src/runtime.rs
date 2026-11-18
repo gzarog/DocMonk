@@ -49,6 +49,7 @@ pub fn resolve_runtime(
     match cap.map(|c| c.provider_id) {
         Some("codex") => Ok(Box::new(crate::codex::CodexRuntime::new(ai))),
         Some("github_copilot") => Ok(Box::new(crate::copilot::CopilotRuntime::new(ai))),
+        Some("claude_code") => Ok(Box::new(crate::claude_code::ClaudeCodeRuntime::new(ai))),
         _ => Err(runtime_unavailable(format!(
             "'{provider_id}' is not a subscription provider with a managed runtime"
         ))),
@@ -57,7 +58,11 @@ pub fn resolve_runtime(
 
 /// `shutil.which`: `name` on `PATH` (with `PATHEXT` on Windows).
 pub fn which(name: &str) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
+    which_in(name, &std::env::var_os("PATH")?)
+}
+
+/// [`which`] over an explicit search path.
+pub fn which_in(name: &str, path: &std::ffi::OsStr) -> Option<PathBuf> {
     let exts: Vec<String> = if cfg!(windows) {
         std::env::var("PATHEXT")
             .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into())

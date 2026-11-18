@@ -770,7 +770,7 @@
       },
       {
        "caption": null,
-       "contextual_text": "Document: Operations Handbook\nSection: Operations Handbook > Code-ish\n\nCall\n\ndocmonk index --source /srv/data\n\nthen visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details.",
+       "contextual_text": "Document: Operations Handbook\nSection: Operations Handbook > Code-ish\n\nCall\n\ndocmonk index --source /srv/data\n\nthen visit\n\nhttps://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1\n\nfor details.",
        "heading_level": null,
        "heading_path": [
         "Operations Handbook",
@@ -780,9 +780,9 @@
        "page_end": null,
        "page_start": null,
        "parent_index": 19,
-       "search_text": "Operations Handbook\nOperations Handbook\nCode-ish\nCall\n\ndocmonk index --source /srv/data\n\nthen visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details.",
+       "search_text": "Operations Handbook\nOperations Handbook\nCode-ish\nCall\n\ndocmonk index --source /srv/data\n\nthen visit\n\nhttps://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1\n\nfor details.",
        "table_rows": null,
-       "text": "Call\n\ndocmonk index --source /srv/data\n\nthen visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details.",
+       "text": "Call\n\ndocmonk index --source /srv/data\n\nthen visit\n\nhttps://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1\n\nfor details.",
        "token_count": 51
       }
      ],
@@ -2803,7 +2803,7 @@
       },
       {
        "caption": null,
-       "contextual_text": "Document: Operations Handbook\nSection: Operations Handbook > Code-ish\n\nCall\n\ndocmonk index --source /srv/data",
+       "contextual_text": "Document: Operations Handbook\nSection: Operations Handbook > Code-ish\n\nCall\n\ndocmonk index --source /srv/data\n\nthen visit",
        "heading_level": null,
        "heading_path": [
         "Operations Handbook",
@@ -2813,14 +2813,14 @@
        "page_end": null,
        "page_start": null,
        "parent_index": 82,
-       "search_text": "Operations Handbook\nOperations Handbook\nCode-ish\nCall\n\ndocmonk index --source /srv/data",
+       "search_text": "Operations Handbook\nOperations Handbook\nCode-ish\nCall\n\ndocmonk index --source /srv/data\n\nthen visit",
        "table_rows": null,
-       "text": "Call\n\ndocmonk index --source /srv/data",
-       "token_count": 13
+       "text": "Call\n\ndocmonk index --source /srv/data\n\nthen visit",
+       "token_count": 15
       },
       {
        "caption": null,
-       "contextual_text": "Document: Operations Handbook\nSection: Operations Handbook > Code-ish\n\nthen visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details.",
+       "contextual_text": "Document: Operations Handbook\nSection: Operations Handbook > Code-ish\n\nthen visit\n\nhttps://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1\n\nfor details.",
        "heading_level": null,
        "heading_path": [
         "Operations Handbook",
@@ -2830,9 +2830,9 @@
        "page_end": null,
        "page_start": null,
        "parent_index": 82,
-       "search_text": "Operations Handbook\nOperations Handbook\nCode-ish\nthen visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details.",
+       "search_text": "Operations Handbook\nOperations Handbook\nCode-ish\nthen visit\n\nhttps://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1\n\nfor details.",
        "table_rows": null,
-       "text": "then visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details.",
+       "text": "then visit\n\nhttps://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1\n\nfor details.",
        "token_count": 38
       }
      ],
@@ -8159,7 +8159,37 @@
       "page_start": null,
       "parent_index": 14,
       "table_rows": null,
-      "text": "then visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details."
+      "text": "then visit"
+     },
+     {
+      "caption": null,
+      "header_row_count": 0,
+      "heading_level": null,
+      "heading_path": [
+       "Operations Handbook",
+       "Code-ish"
+      ],
+      "kind": "paragraph",
+      "page_end": null,
+      "page_start": null,
+      "parent_index": 14,
+      "table_rows": null,
+      "text": "https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1"
+     },
+     {
+      "caption": null,
+      "header_row_count": 0,
+      "heading_level": null,
+      "heading_path": [
+       "Operations Handbook",
+       "Code-ish"
+      ],
+      "kind": "paragraph",
+      "page_end": null,
+      "page_start": null,
+      "parent_index": 14,
+      "table_rows": null,
+      "text": "for details."
      }
     ]
    }

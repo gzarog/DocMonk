@@ -28,9 +28,12 @@ sha() {
     fi
 }
 
-fetch() { # <dir> <base-url> <file> <sha256>
+fetch() { # <dir> <base-url> <file> <sha256> [<fallback-base-url>]
     mkdir -p "$1"
-    [ -f "$1/$3" ] || curl -sSfL --retry 4 -o "$1/$3" "$2/$3"
+    if [ ! -f "$1/$3" ]; then
+        curl -sSfL --retry 4 -o "$1/$3" "$2/$3" \
+            || { [ -n "${5:-}" ] && rm -f "$1/$3" && curl -sSfL --retry 4 -o "$1/$3" "$5/$3"; }
+    fi
     got="$(sha "$1/$3")"
     if [ "$got" != "$4" ]; then
         echo "error: $1/$3: expected sha256 $4, got $got" >&2
@@ -53,8 +56,11 @@ fetch "$D" "$B" tokenizer.json d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab9
 
 D="$ROOT/ocrs"
 B=https://ocrs-models.s3-accelerate.amazonaws.com
-fetch "$D" "$B" text-detection.rten f15cfb56bd02c4bf478a20343986504a1f01e1665c2b3a0ad66340f054b1b5ca
-fetch "$D" "$B" text-recognition.rten e484866d4cce403175bd8d00b128feb08ab42e208de30e42cd9889d8f1735a6e
+# The original host answers 403 since 2026-11; this Hugging Face copy,
+# pinned to one commit, serves byte-identical files (the same SHA-256).
+M=https://huggingface.co/lukesutor/ocrs/resolve/fd1a72bc9682fe5244d67461efbf0d49c692d340
+fetch "$D" "$B" text-detection.rten f15cfb56bd02c4bf478a20343986504a1f01e1665c2b3a0ad66340f054b1b5ca "$M"
+fetch "$D" "$B" text-recognition.rten e484866d4cce403175bd8d00b128feb08ab42e208de30e42cd9889d8f1735a6e "$M"
 if [ "$MULTILINGUAL" = "--multilingual" ]; then
     D="$ROOT/multilingual-e5-small"
     B=https://huggingface.co/intfloat/multilingual-e5-small/resolve/614241f622f53c4eeff9890bdc4f31cfecc418b3

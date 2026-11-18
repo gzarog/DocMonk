@@ -12,7 +12,8 @@ set -euo pipefail
 # code is missing here, so the list cannot silently go stale.
 platform_source() {
   case "$1" in
-    crates/docmonk-ai/src/runtime.rs | crates/docmonk-cli/src/update_cmd.rs \
+    crates/docmonk-ai/src/analysis_subscription.rs | crates/docmonk-ai/src/runtime.rs \
+      | crates/docmonk-ai/tests/analysis/cases.rs | crates/docmonk-cli/src/update_cmd.rs \
       | crates/docmonk-cli/tests/it/status.rs | crates/docmonk-cli/tests/it/ui.rs \
       | crates/docmonk-cli/tests/it/update.rs | crates/docmonk-core/src/paths.rs \
       | crates/docmonk-core/src/security.rs | crates/docmonk-indexing/src/ignore.rs \

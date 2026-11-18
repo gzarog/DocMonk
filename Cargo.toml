@@ -27,7 +27,7 @@ members = [
 [workspace.package]
 version = "0.0.0"
 edition = "2021"
-rust-version = "1.89"
+rust-version = "1.92"
 license = "MIT"
 publish = false
 
@@ -49,8 +49,8 @@ signal-hook = "0.3"
 tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "time", "sync", "signal"] }
 docmonk-ai = { path = "crates/docmonk-ai" }
 docmonk-backends = { path = "crates/docmonk-backends" }
-chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 dunce = "1"
+jiff = { version = "0.2", default-features = false, features = ["std"] }
 docmonk-code = { path = "crates/docmonk-code" }
 docmonk-convert = { path = "crates/docmonk-convert" }
 docmonk-config = { path = "crates/docmonk-config" }
@@ -74,14 +74,14 @@ notify = "8.2"
 regex = "1"
 roxmltree = "0.20"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "rustls-tls-native-roots", "json"] }
-rusqlite = { version = "0.32", features = ["bundled", "trace", "hooks"] }
+rusqlite = { version = "0.41", features = ["bundled", "trace", "hooks"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 sha2 = "0.10"
 sysinfo = { version = "0.37", default-features = false, features = ["system", "disk"] }
 tar = "0.4"
-zip = { version = "8", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 tempfile = "3"
 thiserror = "2"
 tracing = "0.1"

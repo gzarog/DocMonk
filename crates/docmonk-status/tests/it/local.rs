@@ -6,8 +6,8 @@ use crate::common;
 
 use std::time::Instant;
 
-use chrono::Utc;
 use docmonk_core::paths::project_id_for_canonical;
+use docmonk_core::time::Utc;
 use docmonk_indexing::progress::{iso, write_progress, IndexProgress, SourceProgress};
 use docmonk_status::local::{collect, LocalInputs};
 use docmonk_status::model::*;
@@ -350,7 +350,7 @@ fn four_active_passes_crash_and_stall_are_judged_per_source() {
     assert_eq!(r.summary.files.pending_in_current_runs, None);
 
     // One pass stops heartbeating: stalled, the others stay live.
-    p.sources[1].heartbeat_at = Some(iso(now - chrono::Duration::seconds(900)));
+    p.sources[1].heartbeat_at = Some(iso(now - docmonk_core::time::Duration::seconds(900)));
     write_progress(&home.index_progress(), &p).unwrap();
     let r = report(&home);
     assert_eq!(

@@ -3,6 +3,7 @@
 //! small (each binary links the whole dependency graph). Run one
 //! group with `cargo test -p docmonk-convert --test it -- <module>::`.
 
+mod ai_analysis;
 mod common;
 mod conversion;
 mod email;

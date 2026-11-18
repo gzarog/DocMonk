@@ -13,7 +13,12 @@ const ENV_PREFIX: &str = "DOCMONK_";
 const SENSITIVE: &[&str] = &["key", "token", "secret", "password", "credential"];
 /// Settings whose names match [`SENSITIVE`] but hold policy, not a
 /// credential (ADR 0042): shown and editable like any other setting.
-const NOT_SENSITIVE: &[&str] = &["indexing.redact_secrets", "indexing.secret_patterns"];
+const NOT_SENSITIVE: &[&str] = &[
+    "indexing.redact_secrets",
+    "indexing.secret_patterns",
+    // A size limit for AI file analysis (ADR 0045), not a credential.
+    "documents.analysis.max_output_tokens",
+];
 
 fn is_sensitive(path: &str) -> bool {
     let lower = path.to_lowercase();

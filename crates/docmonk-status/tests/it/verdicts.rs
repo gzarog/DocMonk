@@ -2,7 +2,7 @@
 //! builder, with a fixed clock. The same facts give the same verdict in
 //! local and server mode.
 
-use chrono::{DateTime, Utc};
+use docmonk_core::time::{DateTime, Utc};
 use docmonk_status::model::*;
 use docmonk_status::snapshot::{assemble, CollectOptions, Collected, SourceFacts};
 

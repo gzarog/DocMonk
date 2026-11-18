@@ -215,7 +215,18 @@ docmonk ask "how are settlement retries handled?"
 |---|---|
 | **Ollama**, OpenAI-compatible | Local / self-hosted |
 | **OpenAI**, **Anthropic** | Require `privacy.external_ai_allowed: true` |
-| **Codex**, **GitHub Copilot** (beta) | `docmonk ai login <provider>`, see [docs/providers](docs/providers/) |
+| **Claude Code** (Claude Pro/Max), **Codex**, **GitHub Copilot** (beta) | Signed in through their own CLIs, see [docs/providers](docs/providers/) |
+
+**AI file analysis (opt-in).** Hand every document to Claude or ChatGPT instead of the built-in extraction, by subscription or API key:
+
+```bash
+docmonk config set privacy.external_ai_allowed true
+docmonk config set documents.analysis.mode ai            # native (default) | ai
+docmonk config set documents.analysis.provider claude_code   # anthropic | openai | claude_code | codex
+docmonk ai analyze docs/policy.pdf                       # preview one file first
+```
+
+A file the model cannot analyse is reported as failed (`ai_analysis_*`), never silently indexed natively. See [AI file analysis](docs/reference.md#ai-file-analysis).
 
 </details>
 
@@ -311,6 +322,7 @@ Every setting is in [the reference](docs/reference.md). Settings live in `~/.doc
 | `indexing.pipeline_relationships` | `false` | `true`: build each source's relationships right after its own index, instead of after every source is indexed |
 | `graph.require_current` | `false` | `true`: hide links while they are being refreshed, instead of showing the previous ones marked `stale` |
 | `ai.provider` / `ai.model` | `none` | Optional AI answers for `docmonk ask` |
+| `documents.analysis.mode` / `.provider` | `native` | `ai`: documents are analysed by Claude or ChatGPT (`anthropic`, `openai`, `claude_code`, `codex`) instead of the built-in extraction |
 | `privacy.external_ai_allowed` | `false` | Required for cloud AI providers |
 | `updates.enabled` | `true` | Check for new versions in the background and tell you when one is out |
 

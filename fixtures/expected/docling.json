@@ -39,9 +39,9 @@
    "key_value_items": [],
    "name": "document",
    "origin": {
-    "binary_hash": 10904649132233591164,
-    "filename": "document.docx",
-    "mimetype": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    "binary_hash": 10209299795391603604,
+    "filename": "document",
+    "mimetype": "text/plain"
    },
    "pages": {},
    "pictures": [],
@@ -383,9 +383,9 @@
    "key_value_items": [],
    "name": "document",
    "origin": {
-    "binary_hash": 1224680027167683798,
-    "filename": "document.odt",
-    "mimetype": "application/vnd.oasis.opendocument.text"
+    "binary_hash": 10209299795391603604,
+    "filename": "document",
+    "mimetype": "text/plain"
    },
    "pages": {},
    "pictures": [],
@@ -586,6 +586,12 @@
       },
       {
        "$ref": "#/texts/15"
+      },
+      {
+       "$ref": "#/texts/16"
+      },
+      {
+       "$ref": "#/texts/17"
       }
      ],
      "content_layer": "body",
@@ -600,9 +606,9 @@
    "key_value_items": [],
    "name": "handbook",
    "origin": {
-    "binary_hash": 661287844055018619,
-    "filename": "handbook.md",
-    "mimetype": "text/markdown"
+    "binary_hash": 7975678521803174693,
+    "filename": "handbook",
+    "mimetype": "text/plain"
    },
    "pages": {},
    "pictures": [],
@@ -7478,13 +7484,38 @@
      "children": [],
      "content_layer": "body",
      "label": "text",
-     "orig": "then visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details.",
+     "orig": "then visit",
      "parent": {
       "$ref": "#/groups/0"
      },
      "prov": [],
      "self_ref": "#/texts/15",
-     "text": "then visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details."
+     "text": "then visit"
+    },
+    {
+     "children": [],
+     "content_layer": "body",
+     "hyperlink": "https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1",
+     "label": "text",
+     "orig": "https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1",
+     "parent": {
+      "$ref": "#/groups/0"
+     },
+     "prov": [],
+     "self_ref": "#/texts/16",
+     "text": "https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1"
+    },
+    {
+     "children": [],
+     "content_layer": "body",
+     "label": "text",
+     "orig": "for details.",
+     "parent": {
+      "$ref": "#/groups/0"
+     },
+     "prov": [],
+     "self_ref": "#/texts/17",
+     "text": "for details."
     }
    ],
    "version": "1.10.0"
@@ -8140,7 +8171,37 @@
      "page_start": null,
      "parent_index": 14,
      "table_rows": null,
-     "text": "then visit https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1 for details."
+     "text": "then visit"
+    },
+    {
+     "caption": null,
+     "header_row_count": 0,
+     "heading_level": null,
+     "heading_path": [
+      "Operations Handbook",
+      "Code-ish"
+     ],
+     "kind": "paragraph",
+     "page_end": null,
+     "page_start": null,
+     "parent_index": 14,
+     "table_rows": null,
+     "text": "https://example.com/a/very/long/path?query=supercalifragilisticexpialidocious&x=1"
+    },
+    {
+     "caption": null,
+     "header_row_count": 0,
+     "heading_level": null,
+     "heading_path": [
+      "Operations Handbook",
+      "Code-ish"
+     ],
+     "kind": "paragraph",
+     "page_end": null,
+     "page_start": null,
+     "parent_index": 14,
+     "table_rows": null,
+     "text": "for details."
     }
    ]
   }
@@ -8203,9 +8264,9 @@
    "key_value_items": [],
    "name": "long",
    "origin": {
-    "binary_hash": 13286970923699160240,
-    "filename": "long.txt",
-    "mimetype": "text/markdown"
+    "binary_hash": 14837330719131395891,
+    "filename": "long",
+    "mimetype": "text/plain"
    },
    "pages": {},
    "pictures": [],
@@ -8568,9 +8629,9 @@
    "key_value_items": [],
    "name": "presentation",
    "origin": {
-    "binary_hash": 9628019190020651258,
-    "filename": "presentation.odp",
-    "mimetype": "application/vnd.oasis.opendocument.presentation"
+    "binary_hash": 4626562696372771353,
+    "filename": "presentation",
+    "mimetype": "text/plain"
    },
    "pages": {},
    "pictures": [],
@@ -8699,9 +8760,9 @@
    "key_value_items": [],
    "name": "presentation",
    "origin": {
-    "binary_hash": 8930096613865819342,
-    "filename": "presentation.pptx",
-    "mimetype": "application/vnd.openxmlformats-officedocument.presentationml.template"
+    "binary_hash": 4626562696372771353,
+    "filename": "presentation",
+    "mimetype": "text/plain"
    },
    "pages": {
     "1": {
@@ -8878,9 +8939,9 @@
    "key_value_items": [],
    "name": "sample",
    "origin": {
-    "binary_hash": 2113433867866242764,
-    "filename": "sample.epub",
-    "mimetype": "application/epub+zip"
+    "binary_hash": 17570797238186910919,
+    "filename": "sample",
+    "mimetype": "text/plain"
    },
    "pages": {},
    "pictures": [],
@@ -8978,9 +9039,9 @@
    "key_value_items": [],
    "name": "simple",
    "origin": {
-    "binary_hash": 4796319821484387600,
-    "filename": "simple.csv",
-    "mimetype": "text/csv"
+    "binary_hash": 12537241554077432735,
+    "filename": "simple",
+    "mimetype": "text/plain"
    },
    "pages": {},
    "pictures": [],
@@ -9237,9 +9298,9 @@
    "key_value_items": [],
    "name": "simple",
    "origin": {
-    "binary_hash": 5010287847532303349,
-    "filename": "simple.html",
-    "mimetype": "text/html"
+    "binary_hash": 12537241554077432735,
+    "filename": "simple",
+    "mimetype": "text/plain"
    },
    "pages": {},
    "pictures": [],
@@ -9581,9 +9642,9 @@
    "key_value_items": [],
    "name": "simple",
    "origin": {
-    "binary_hash": 4265439101631325419,
-    "filename": "simple.md",
-    "mimetype": "text/markdown"
+    "binary_hash": 12537241554077432735,
+    "filename": "simple",
+    "mimetype": "text/plain"
    },
    "pages": {},
    "pictures": [],
@@ -9948,9 +10009,9 @@
    "key_value_items": [],
    "name": "simple",
    "origin": {
-    "binary_hash": 15778680932853216029,
-    "filename": "simple.txt",
-    "mimetype": "text/markdown"
+    "binary_hash": 12537241554077432735,
+    "filename": "simple",
+    "mimetype": "text/plain"
    },
    "pages": {},
    "pictures": [],
@@ -10070,9 +10131,9 @@
    "key_value_items": [],
    "name": "spreadsheet",
    "origin": {
-    "binary_hash": 12586793784983794406,
-    "filename": "spreadsheet.ods",
-    "mimetype": "application/vnd.oasis.opendocument.spreadsheet"
+    "binary_hash": 362688065539859929,
+    "filename": "spreadsheet",
+    "mimetype": "text/plain"
    },
    "pages": {
     "1": {
@@ -10371,9 +10432,9 @@
    "key_value_items": [],
    "name": "spreadsheet",
    "origin": {
-    "binary_hash": 17267965406669100215,
-    "filename": "spreadsheet.xlsx",
-    "mimetype": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    "binary_hash": 362688065539859929,
+    "filename": "spreadsheet",
+    "mimetype": "text/plain"
    },
    "pages": {
     "1": {
@@ -10671,9 +10732,9 @@
    "key_value_items": [],
    "name": "status",
    "origin": {
-    "binary_hash": 16374660628360114776,
-    "filename": "status.html",
-    "mimetype": "text/html"
+    "binary_hash": 14183358520170196015,
+    "filename": "status",
+    "mimetype": "text/plain"
    },
    "pages": {},
    "pictures": [],

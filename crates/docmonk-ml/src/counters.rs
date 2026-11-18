@@ -10,6 +10,17 @@ static ANN_LOADS: AtomicU64 = AtomicU64::new(0);
 static ANN_CACHE_HITS: AtomicU64 = AtomicU64::new(0);
 static QUERY_EMBEDS: AtomicU64 = AtomicU64::new(0);
 
+thread_local! {
+    /// Query embeddings made on this thread (tests measure one call without
+    /// counting what other threads embed meanwhile).
+    static THREAD_QUERY_EMBEDS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// Query embeddings made on the calling thread so far.
+pub fn thread_query_embeds() -> u64 {
+    THREAD_QUERY_EMBEDS.with(std::cell::Cell::get)
+}
+
 /// A snapshot of every counter.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
 pub struct Counters {
@@ -58,4 +69,5 @@ pub(crate) fn ann_cache_hit() {
 }
 pub(crate) fn query_embedded() {
     QUERY_EMBEDS.fetch_add(1, Ordering::Relaxed);
+    THREAD_QUERY_EMBEDS.with(|c| c.set(c.get() + 1));
 }

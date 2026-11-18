@@ -10,7 +10,7 @@ Status: accepted
 
 ## Converter
 
-- `docmonk-convert` integrates `docling` (docling.rs), pinned at `=1.89.0`,
+- `docmonk-convert` integrates `docling` (docling.rs), pinned at `=2.67.1` (with docling-core and docling-pdf locked to 2.67.1),
   with `default-features = false`. That means no ONNX Runtime, no model
   weights, no ASR/VLM and no network access.
 - It sits behind a `DocumentConverter` trait. The trait returns Docling

@@ -24,7 +24,10 @@ runs:
       run: |
         mkdir -p "$DIR"
         fetch() {
-          [ -f "$DIR/$1" ] || curl -sSfL --retry 4 -o "$DIR/$1" "https://ocrs-models.s3-accelerate.amazonaws.com/$1"
+          # The original host answers 403 since 2026-11; the pinned Hugging
+          # Face copy serves byte-identical files (checked below).
+          [ -f "$DIR/$1" ] || curl -sSfL --retry 4 -o "$DIR/$1" "https://ocrs-models.s3-accelerate.amazonaws.com/$1" \
+            || { rm -f "$DIR/$1"; curl -sSfL --retry 4 -o "$DIR/$1" "https://huggingface.co/lukesutor/ocrs/resolve/fd1a72bc9682fe5244d67461efbf0d49c692d340/$1"; }
           if command -v sha256sum >/dev/null; then
             echo "$2  $DIR/$1" | sha256sum -c -
           else

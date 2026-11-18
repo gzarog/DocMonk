@@ -6,13 +6,13 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use chrono::{DateTime, Utc};
 use docmonk_core::paths::Home;
+use docmonk_core::time::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// First retry delay; doubled per failed attempt up to [`MAX_DELAY`].
-pub const BASE_DELAY: chrono::Duration = chrono::Duration::seconds(30);
-pub const MAX_DELAY: chrono::Duration = chrono::Duration::hours(1);
+pub const BASE_DELAY: docmonk_core::time::Duration = docmonk_core::time::Duration::seconds(30);
+pub const MAX_DELAY: docmonk_core::time::Duration = docmonk_core::time::Duration::hours(1);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RetryEntry {
@@ -35,7 +35,7 @@ pub fn path(home: &Home) -> std::path::PathBuf {
 }
 
 /// The delay before attempt `attempts + 1`.
-pub fn delay(attempts: u32) -> chrono::Duration {
+pub fn delay(attempts: u32) -> docmonk_core::time::Duration {
     let shift = attempts.saturating_sub(1).min(16);
     (BASE_DELAY * (1i32 << shift)).min(MAX_DELAY)
 }
@@ -69,7 +69,7 @@ impl RetryBook {
     /// Records a failed attempt of an unresolved consumer and
     /// schedules the next one with backoff.
     pub fn failed(&mut self, consumer: &str, code: &str, reason: &str, now: DateTime<Utc>) {
-        let at = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let at = now.to_rfc3339_opts(docmonk_core::time::SecondsFormat::Secs, true);
         let prev = self.consumers.remove(consumer);
         let attempts = prev.as_ref().map_or(0, |p| p.attempts) + 1;
         self.consumers.insert(
@@ -81,7 +81,7 @@ impl RetryBook {
                 first_failed_at: prev.map_or_else(|| at.clone(), |p| p.first_failed_at),
                 last_attempt_at: at,
                 next_attempt_at: (now + delay(attempts))
-                    .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                    .to_rfc3339_opts(docmonk_core::time::SecondsFormat::Secs, true),
             },
         );
     }
@@ -125,9 +125,9 @@ mod tests {
 
     #[test]
     fn backoff_doubles_and_is_capped() {
-        assert_eq!(delay(1), chrono::Duration::seconds(30));
-        assert_eq!(delay(2), chrono::Duration::seconds(60));
-        assert_eq!(delay(4), chrono::Duration::seconds(240));
+        assert_eq!(delay(1), docmonk_core::time::Duration::seconds(30));
+        assert_eq!(delay(2), docmonk_core::time::Duration::seconds(60));
+        assert_eq!(delay(4), docmonk_core::time::Duration::seconds(240));
         assert_eq!(delay(40), MAX_DELAY);
     }
 

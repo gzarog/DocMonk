@@ -32,7 +32,7 @@ struct Scratch(PathBuf);
 
 impl Scratch {
     fn new(home: &Home, label: &str) -> Result<Self, DocMonkError> {
-        let stamp = chrono::Utc::now().format("%Y%m%d%H%M%S%f");
+        let stamp = docmonk_core::time::Utc::now().format("%Y%m%d%H%M%S%f");
         let dir = home
             .tmp_dir()
             .join(format!("{label}_{stamp}_{}", std::process::id()));
@@ -210,7 +210,7 @@ pub fn restore_archive(home: &Home, archive: &Path) -> Result<Value, DocMonkErro
             .map_err(dberr)?;
     let holding = home.tmp_dir().join(format!(
         "pre_restore_{}",
-        chrono::Utc::now().format("%Y%m%d%H%M%S%f")
+        docmonk_core::time::Utc::now().format("%Y%m%d%H%M%S%f")
     ));
     std::fs::create_dir_all(&holding).map_err(generic)?;
     let staged_config = stage.join("config.yaml");

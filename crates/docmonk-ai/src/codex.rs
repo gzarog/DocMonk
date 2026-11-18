@@ -1,10 +1,15 @@
 //! ChatGPT via the Codex App Server (beta): the official
-//! `codex app-server` spoken to over stdio JSON-RPC.
+//! `codex app-server`, spoken to over stdio JSON-RPC with its documented
+//! protocol (`initialize`, `account/read`, `account/login/start`,
+//! `model/list`, `thread/start`, `turn/start` and the turn notifications).
 //!
-//! Every answer runs in a fresh, isolated thread/turn (tools, files, web,
-//! plugins, hooks and inherited MCP servers disabled in the runtime
-//! configuration). Only ChatGPT sign-in is accepted; `OPENAI_API_KEY` is
-//! never read. Incomplete or empty turns are never presented as answers.
+//! Every answer runs in a fresh thread: approvals are `never`, the sandbox
+//! is read-only, restricted to a private directory that holds nothing but
+//! the turn's own images, and has no network. A request the runtime sends
+//! back (an approval prompt) is refused by the transport. Only ChatGPT
+//! sign-in is accepted; an API-key sign-in is refused and `OPENAI_API_KEY`
+//! is never read. Failed, interrupted or empty turns are never presented as
+//! answers.
 
 use std::io::Read;
 use std::process::{Child, Command, Stdio};
@@ -29,14 +34,11 @@ pub const PROVIDER_ID: &str = "codex";
 const EXECUTABLE: &str = "codex";
 const MIN_TESTED_VERSION: (u32, u32, u32) = (0, 0, 0);
 
-fn isolation() -> Value {
+/// The turn's sandbox: read-only, limited to `root`, no network.
+fn sandbox_policy(root: &str) -> Value {
     json!({
-        "tools": false,
-        "fileAccess": false,
-        "web": false,
-        "plugins": false,
-        "hooks": false,
-        "mcpServers": [],
+        "type": "readOnly",
+        "access": {"type": "restricted", "includePlatformDefaults": false, "readableRoots": [root]},
     })
 }
 
@@ -96,7 +98,15 @@ pub fn map_runtime_error(e: RpcError) -> DocMonkError {
     };
     let text = format!("{code_s} {message}").to_lowercase();
     let is = |set: &[&str]| set.contains(&code_s.as_str());
-    if is(&["429", "quota_exceeded", "insufficient_quota"]) || text.contains("quota") {
+    if is(&[
+        "429",
+        "quota_exceeded",
+        "insufficient_quota",
+        "usagelimitexceeded",
+    ]) || text.contains("quota")
+        || text.contains("usage limit")
+        || text.contains("rate limit")
+    {
         return quota_exhausted(format!(
             "the ChatGPT account's allowance is exhausted: {message}"
         ));
@@ -118,23 +128,13 @@ pub fn map_runtime_error(e: RpcError) -> DocMonkError {
     RpcError::Remote { code, message }.into_error()
 }
 
-fn opt_str(v: &Value) -> Option<String> {
-    v.as_str().map(str::to_owned)
-}
-
+/// `account/read` as a status. A sign-in that is not ChatGPT (an API key)
+/// is refused: the codex provider is the subscription path.
 pub fn status_from_result(r: &Value) -> Result<RuntimeStatus, DocMonkError> {
-    let authenticated = truthy(&r["authenticated"]);
-    let account = match &r["account"] {
-        Value::Object(a) => ["email", "id", "name"]
-            .iter()
-            .map(|k| a.get(*k).unwrap_or(&Value::Null))
-            .find(|v| truthy(v))
-            .and_then(opt_str),
-        Value::String(s) => Some(s.clone()),
-        _ => None,
-    };
-    let mode = &r["authMode"];
-    if authenticated && !mode.is_null() && mode != "chatgpt" {
+    let account = &r["account"];
+    let authenticated = account.is_object();
+    let mode = &account["type"];
+    if authenticated && mode != "chatgpt" {
         return Err(policy_blocked(format!(
             "the Codex runtime is signed in with an unexpected auth mode {}; DocMonk's codex \
              provider requires ChatGPT (subscription) sign-in, not an API key",
@@ -144,73 +144,54 @@ pub fn status_from_result(r: &Value) -> Result<RuntimeStatus, DocMonkError> {
     Ok(RuntimeStatus {
         provider_id: PROVIDER_ID.into(),
         authenticated,
-        account,
-        runtime_version: opt_str(&r["runtimeVersion"]),
+        account: account["email"].as_str().map(str::to_owned),
+        runtime_version: None,
         detail: if authenticated {
-            "signed in".into()
+            match account["planType"].as_str() {
+                Some(plan) => format!("signed in (ChatGPT {plan})"),
+                None => "signed in".into(),
+            }
         } else {
             "not signed in; run 'docmonk ai login codex'".into()
         },
     })
 }
 
-/// Truthiness of a JSON value: null, false, zero and empty strings,
-/// arrays and objects are false.
-fn truthy(v: &Value) -> bool {
-    match v {
-        Value::Null => false,
-        Value::Bool(b) => *b,
-        Value::Number(n) => n.as_f64().is_some_and(|f| f != 0.0),
-        Value::String(s) => !s.is_empty(),
-        Value::Array(a) => !a.is_empty(),
-        Value::Object(o) => !o.is_empty(),
-    }
-}
-
 fn int(v: &Value) -> Option<i64> {
     v.as_i64().filter(|_| !v.is_f64())
 }
 
-pub fn answer_from_result(r: &Value) -> Result<(String, String, AiUsage), DocMonkError> {
-    let status = &r["status"];
-    if !status.is_null() && status != "completed" {
-        return Err(invalid_response(format!(
-            "Codex turn did not complete (status={}); refusing to present it as an answer",
-            quoted(status)
-        )));
-    }
-    let text = match &r["message"] {
-        Value::Object(m) => match m.get("content") {
-            Some(Value::String(s)) => s.clone(),
-            Some(Value::Array(blocks)) => blocks
-                .iter()
-                .filter(|b| b.is_object() && b["type"] == "text")
-                .map(|b| plain(b.get("text").unwrap_or(&Value::String(String::new()))))
-                .collect(),
-            _ => String::new(),
-        },
-        _ => r["text"].as_str().unwrap_or_default().to_owned(),
-    };
-    if text.is_empty() {
-        return Err(invalid_response("Codex turn returned no answer text"));
-    }
-    let model = r["model"]
+/// A failed turn's error as a semantic error.
+fn turn_error(turn: &Value) -> DocMonkError {
+    let message = turn["error"]["message"]
         .as_str()
-        .filter(|m| !m.is_empty())
-        .unwrap_or("codex")
+        .unwrap_or("the turn failed")
         .to_owned();
-    let usage = match &r["usage"] {
-        Value::Object(u) => AiUsage {
-            input_tokens: u.get("inputTokens").and_then(int),
-            output_tokens: u.get("outputTokens").and_then(int),
+    let info = plain(&turn["error"]["codexErrorInfo"]);
+    let e = map_runtime_error(RpcError::Remote {
+        code: if info.is_empty() {
+            Value::Null
+        } else {
+            Value::String(info)
         },
-        _ => AiUsage::default(),
-    };
-    Ok((text, model, usage))
+        message: message.clone(),
+    });
+    if e.class() == Some("JsonRpcError") {
+        crate::errors::provider_error(format!("the Codex turn failed: {message}"))
+    } else {
+        e
+    }
+}
+
+/// What one turn produced, from its notifications.
+#[derive(Debug, Default)]
+pub struct TurnOutcome {
+    pub text: String,
+    pub usage: AiUsage,
 }
 
 /// The protocol operations over one connection; each answer is a fresh
-/// thread/turn.
+/// thread with one turn.
 pub struct CodexSession {
     client: JsonRpcClient,
     timeout: f64,
@@ -239,9 +220,11 @@ impl CodexSession {
         self.request(
             "initialize",
             Some(json!({
-                "clientInfo": {"name": "docmonk", "title": "DocMonk"},
-                "capabilities": {"isolation": isolation()},
-                "authMode": "chatgpt",
+                "clientInfo": {
+                    "name": "docmonk",
+                    "title": "DocMonk",
+                    "version": env!("CARGO_PKG_VERSION"),
+                },
             })),
         )?;
         self.client.notify("initialized", Some(json!({})))?;
@@ -251,14 +234,51 @@ impl CodexSession {
 
     pub fn account_status(&mut self) -> Result<RuntimeStatus, DocMonkError> {
         self.initialize()?;
-        let r = self.request("account/getStatus", None)?;
+        let r = self.request("account/read", Some(json!({"refreshToken": false})))?;
         status_from_result(&r)
     }
 
+    /// ChatGPT device-code sign-in: prints where to go and the code, waits
+    /// for the runtime to report completion, then reads the account.
     pub fn login(&mut self) -> Result<RuntimeStatus, DocMonkError> {
         self.initialize()?;
-        let r = self.request("account/login", Some(json!({"mode": "chatgpt"})))?;
-        status_from_result(&r)
+        let r = self.request(
+            "account/login/start",
+            Some(json!({"type": "chatgptDeviceCode"})),
+        )?;
+        let login_id = r["loginId"].clone();
+        if let (Some(url), Some(code)) = (r["verificationUrl"].as_str(), r["userCode"].as_str()) {
+            eprintln!("Sign in to ChatGPT: open {url} and enter the code {code}");
+        }
+        // The person has a few minutes to finish in the browser.
+        let wait = self.timeout.max(600.0);
+        let deadline = Instant::now() + Duration::from_secs_f64(wait);
+        loop {
+            let left = deadline
+                .saturating_duration_since(Instant::now())
+                .as_secs_f64();
+            let Some(n) = self
+                .client
+                .next_notification(left)
+                .map_err(map_runtime_error)?
+            else {
+                return Err(authentication_required(
+                    "ChatGPT sign-in did not complete in time; run 'docmonk ai login codex' again",
+                ));
+            };
+            if n["method"] == "account/login/completed"
+                && (login_id.is_null() || n["params"]["loginId"] == login_id)
+            {
+                if n["params"]["success"] != true {
+                    return Err(authentication_required(format!(
+                        "ChatGPT sign-in failed: {}",
+                        plain(&n["params"]["error"])
+                    )));
+                }
+                break;
+            }
+        }
+        self.account_status()
     }
 
     pub fn logout(&mut self) -> Result<(), DocMonkError> {
@@ -268,51 +288,141 @@ impl CodexSession {
 
     pub fn models(&mut self) -> Result<Vec<String>, DocMonkError> {
         self.initialize()?;
-        let r = self.request("model/list", None)?;
-        Ok(r["models"]
+        let r = self.request("model/list", Some(json!({})))?;
+        Ok(r["data"]
             .as_array()
             .into_iter()
             .flatten()
-            .filter_map(|e| match e {
-                Value::Object(o) => ["id", "name"]
-                    .iter()
-                    .map(|k| o.get(*k).unwrap_or(&Value::Null))
-                    .find(|v| truthy(v))
-                    .and_then(opt_str),
-                Value::String(s) => Some(s.clone()),
-                _ => None,
-            })
+            .filter(|m| m["hidden"] != true)
+            .filter_map(|m| m["id"].as_str().or_else(|| m["model"].as_str()))
+            .map(str::to_owned)
             .collect())
     }
 
+    /// One turn in a fresh thread: `system` and `user` as text, then the
+    /// local images, sandboxed to `root` (the images' directory). With
+    /// `output_schema`, the final message must match it.
+    pub fn run_turn(
+        &mut self,
+        system: &str,
+        user: &str,
+        images: &[std::path::PathBuf],
+        root: &std::path::Path,
+        model: &str,
+        output_schema: Option<Value>,
+    ) -> Result<TurnOutcome, DocMonkError> {
+        self.initialize()?;
+        let root_s = root.display().to_string();
+        let mut thread_params = json!({
+            "approvalPolicy": "never",
+            "sandbox": "read-only",
+            "cwd": root_s,
+        });
+        // Only a configured model is passed; otherwise the runtime picks.
+        if !model.is_empty() {
+            thread_params["model"] = json!(model);
+        }
+        let thread = self.request("thread/start", Some(thread_params))?;
+        let thread_id = thread["thread"]["id"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| invalid_response("Codex runtime did not return a thread id"))?
+            .to_owned();
+        let mut input = vec![json!({"type": "text", "text": format!("{system}\n\n{user}")})];
+        input.extend(
+            images
+                .iter()
+                .map(|p| json!({"type": "localImage", "path": p.display().to_string()})),
+        );
+        let mut params = json!({
+            "threadId": thread_id,
+            "input": input,
+            "approvalPolicy": "never",
+            "sandboxPolicy": sandbox_policy(&root_s),
+        });
+        if !model.is_empty() {
+            params["model"] = json!(model);
+        }
+        if let Some(schema) = output_schema {
+            params["outputSchema"] = schema;
+        }
+        let started = self.request("turn/start", Some(params))?;
+        let turn_id = started["turn"]["id"].clone();
+        let deadline = Instant::now()
+            + Duration::try_from_secs_f64(self.timeout.max(0.0)).unwrap_or(Duration::MAX);
+        let mut final_text: Option<String> = None;
+        let mut last_text: Option<String> = None;
+        let mut usage = AiUsage::default();
+        loop {
+            let left = deadline
+                .saturating_duration_since(Instant::now())
+                .as_secs_f64();
+            let Some(n) = self
+                .client
+                .next_notification(left)
+                .map_err(map_runtime_error)?
+            else {
+                return Err(crate::errors::timeout(format!(
+                    "the Codex turn did not finish within {:.0}s",
+                    self.timeout
+                )));
+            };
+            let p = &n["params"];
+            let ours =
+                |turn: &Value| turn_id.is_null() || turn["id"].is_null() || turn["id"] == turn_id;
+            match n["method"].as_str().unwrap_or_default() {
+                "item/completed" if p["item"]["type"] == "agentMessage" => {
+                    let text = p["item"]["text"].as_str().unwrap_or_default().to_owned();
+                    if p["item"]["phase"] == "final_answer" {
+                        final_text = Some(text);
+                    } else {
+                        last_text = Some(text);
+                    }
+                }
+                "thread/tokenUsage/updated" => {
+                    let u = &p["tokenUsage"]["total"];
+                    usage = AiUsage {
+                        input_tokens: int(&u["inputTokens"]),
+                        output_tokens: int(&u["outputTokens"]),
+                    };
+                }
+                "turn/completed" if ours(&p["turn"]) => {
+                    let turn = &p["turn"];
+                    match turn["status"].as_str() {
+                        Some("completed") | None => {}
+                        Some("failed") => return Err(turn_error(turn)),
+                        Some(other) => {
+                            return Err(invalid_response(format!(
+                                "Codex turn did not complete (status={}); refusing to present \
+                                 it as an answer",
+                                quoted(&Value::String(other.to_owned()))
+                            )))
+                        }
+                    }
+                    let text = final_text.or(last_text).unwrap_or_default();
+                    if text.trim().is_empty() {
+                        return Err(invalid_response("Codex turn returned no answer text"));
+                    }
+                    return Ok(TurnOutcome { text, usage });
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// `docmonk ask`: a text-only turn.
     pub fn answer(
         &mut self,
         system: &str,
         user: &str,
         model: &str,
     ) -> Result<(String, String, AiUsage), DocMonkError> {
-        self.initialize()?;
-        let thread = self.request("thread/create", Some(json!({"isolation": isolation()})))?;
-        let thread_id = [&thread["threadId"], &thread["id"]]
-            .into_iter()
-            .find(|v| truthy(v))
-            .and_then(|v| v.as_str().map(str::to_owned))
-            .ok_or_else(|| invalid_response("Codex runtime did not return a thread id"))?;
-        let mut params = json!({
-            "threadId": thread_id,
-            "stream": false,
-            "isolation": isolation(),
-            "input": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        });
-        // Only a configured model is passed; otherwise the runtime picks.
-        if !model.is_empty() {
-            params["model"] = json!(model);
-        }
-        let r = self.request("thread/runTurn", Some(params))?;
-        answer_from_result(&r)
+        let dir = crate::analysis_subscription::TempDir::new().map_err(|e| {
+            crate::errors::provider_error(format!("cannot create a temporary directory: {e}"))
+        })?;
+        let out = self.run_turn(system, user, &[], dir.path(), model, None)?;
+        let model = if model.is_empty() { PROVIDER_ID } else { model };
+        Ok((out.text, model.to_owned(), out.usage))
     }
 
     pub fn close(&mut self) {
@@ -415,6 +525,33 @@ impl CodexRuntime {
             self.spawned = Some(spawn(self.timeout)?);
         }
         Ok(&mut self.spawned.as_mut().expect("spawned").session)
+    }
+}
+
+impl CodexRuntime {
+    /// One answer in a fresh, sandboxed thread.
+    pub fn answer(
+        &mut self,
+        system: &str,
+        user: &str,
+        model: &str,
+    ) -> Result<(String, String, AiUsage), DocMonkError> {
+        self.session()?.answer(system, user, model)
+    }
+
+    /// One turn with local images and an optional output schema (file
+    /// analysis); see [`CodexSession::run_turn`].
+    pub fn run_turn(
+        &mut self,
+        system: &str,
+        user: &str,
+        images: &[std::path::PathBuf],
+        root: &std::path::Path,
+        model: &str,
+        output_schema: Option<Value>,
+    ) -> Result<TurnOutcome, DocMonkError> {
+        self.session()?
+            .run_turn(system, user, images, root, model, output_schema)
     }
 }
 

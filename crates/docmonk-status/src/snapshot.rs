@@ -4,7 +4,7 @@
 //! [`assemble`] turns them into the canonical [`StatusReport`] through the
 //! single health evaluator, so the two modes can never drift apart.
 
-use chrono::{DateTime, NaiveDateTime, SecondsFormat, Utc};
+use docmonk_core::time::{DateTime, NaiveDateTime, SecondsFormat, Utc};
 
 use crate::health;
 use crate::model::*;

@@ -10,6 +10,7 @@ pub mod models;
 pub mod paths;
 pub mod secrets;
 pub mod security;
+pub mod time;
 pub mod urls;
 pub mod version;
 

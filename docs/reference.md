@@ -21,6 +21,31 @@ Detail behind the [README](../README.md) pitch deck.
 - **PDF pages** (ADR 0039): with `documents.ocr: auto`, every page whose text layer is (nearly) empty is OCR'd, and `always` OCRs every page. The recognized text joins its page: it never replaces the text layer, and a block the text layer already holds is not added twice. `docmonk documents --json` reports per PDF `pages.ocr`: `not_needed`, `applied`, `no_images`, `unavailable`, `failed` or `disabled`. It also gives the pages that gained OCR text (`ocr_pages`) and the pages still without text (`empty_pages`). When the OCR a page needed could not run, the PDF is indexed with a notice in its `last_error` and the error feed (`ocr_unavailable`, `ocr_failed`), and `status` counts it as degraded. Blank pages and pages left unread by `documents.ocr: off` are only recorded. OCR runs only on the local pinned `ocrs` models and never calls a service.
 - Chunk sizes follow the embedding model's real tokenizer (`documents.chunking.max_tokens: auto`); tables split at row boundaries.
 
+## AI file analysis
+
+Off by default. One switch hands every document file to Claude or ChatGPT instead of the embedded extraction (ADR 0045), much as `storage.mode` switches the storage engine:
+
+```bash
+docmonk config set privacy.external_ai_allowed true      # documents leave this machine
+docmonk config set documents.analysis.mode ai           # native (default) | ai
+docmonk config set documents.analysis.provider claude_code   # anthropic | openai | claude_code | codex
+docmonk ai analyze ~/company-docs/policy.pdf            # preview one file, nothing indexed
+docmonk index                                            # every document is rebuilt once
+```
+
+| Provider | Account | Notes |
+|---|---|---|
+| `anthropic` | `ANTHROPIC_API_KEY` | PDFs and PNG/JPEG images sent natively; default model `claude-opus-5-5` |
+| `openai` | `OPENAI_API_KEY` | PDFs and PNG/JPEG images sent natively; default model `gpt-4o-mini` |
+| `claude_code` | Claude Pro / Max | The official `claude` CLI, signed in with `claude` then `/login`; reads only a private copy of the file; API keys are never passed to it |
+| `codex` | ChatGPT plan | The official Codex runtime (`docmonk ai login codex`); PDFs are sent as page images (rendered locally, at most `documents.max_pages`), images as they are |
+
+- **What the model does:** with `ai`, docling.rs, the PDF text layer, OCR, the normalizer and the chunker are bypassed for documents. The model returns the chunks (verbatim text, headings, pages, tables), title, author, language, summary, keywords and the code the file names. Office, OpenDocument and EPUB files are unzipped and their content parts sent as text. Code files keep the native code intelligence.
+- **Settings:** `documents.analysis.model` (empty: the provider default), `timeout_seconds` (300), `max_file_bytes` (32 MiB), `concurrency` (2 analyses in flight), `max_output_tokens` (16000). Env: `DOCMONK_DOCUMENTS__ANALYSIS__MODE=ai`, and so on.
+- **No fallback:** a file whose analysis fails is recorded failed and indexed with nothing. `docmonk status` lists it under its code: `ai_analysis_quota`, `_timeout`, `_failed` and `_not_signed_in` are retried on the next index, and `_invalid_output`, `_unsupported_format`, `_too_large`, `_rejected` and `_refused` wait until the file changes.
+- **Cost and repeatability:** results are cached by file content and analysis identity, so an unchanged file is never sent twice. Changing the mode, provider, model or prompt rebuilds every document once.
+- **Privacy:** with `privacy.external_ai_allowed: false`, `docmonk index` stops before reading any file (exit 8). `docmonk doctor` checks consent and the provider's key or runtime.
+
 ## Email attachments
 
 An `.eml` file's MIME attachments in any supported format above (PDF, DOCX, XLSX, PPTX, TXT, …) are converted with the same pipeline as standalone files and indexed as **child documents of the email**. The `.eml` stays the only indexed file: no extra file rows, queue jobs or status counts are created for attachments.
@@ -383,7 +408,7 @@ docmonk config set ai.model llama3.2
 docmonk ask "how are settlement retries handled?"
 ```
 
-Providers: Ollama, OpenAI-compatible, OpenAI and Anthropic (require `privacy.external_ai_allowed: true`), Codex and GitHub Copilot (beta, `docmonk ai login <provider>`; see [providers/](providers/)).
+Providers: Ollama, OpenAI-compatible, OpenAI and Anthropic (require `privacy.external_ai_allowed: true`), Claude Code (Claude Pro/Max), Codex and GitHub Copilot (beta subscriptions, signed in through their own CLIs; see [providers/](providers/)). The same accounts can analyse files: see [AI file analysis](#ai-file-analysis).
 
 ## Server storage (OpenSearch / Elasticsearch)
 

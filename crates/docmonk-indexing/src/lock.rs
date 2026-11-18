@@ -191,7 +191,7 @@ impl RunLock {
             "operation": sanitize_token(operation, 64),
             "source_id": source_id.and_then(|s| sanitize_token(s, 64)),
             "hostname": sanitize_token(&hostname(), 64),
-            "acquired_at": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, false),
+            "acquired_at": docmonk_core::time::Utc::now().to_rfc3339_opts(docmonk_core::time::SecondsFormat::Secs, false),
         });
         let mut lock = Self {
             file: Some(file),

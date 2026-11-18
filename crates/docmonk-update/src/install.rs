@@ -179,7 +179,8 @@ fn unpack(archive: &[u8], zip: bool, dest: &Path) -> Result<(), String> {
         for i in 0..z.len() {
             let mut f = z.by_index(i).map_err(|e| bad(&e))?;
             let Some(raw) = f.enclosed_name() else {
-                return Err(format!("unsafe path in release archive: {}", f.name()));
+                let name = f.name().map(|n| n.into_owned()).unwrap_or_default();
+                return Err(format!("unsafe path in release archive: {name}"));
             };
             let Some(path) = place(&raw)? else { continue };
             if f.is_dir() {

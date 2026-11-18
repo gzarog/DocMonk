@@ -269,10 +269,10 @@ impl<'a> RuntimeHeartbeat<'a> {
         };
         let doc = self.with(|(p, last)| {
             *last = Some(std::time::Instant::now());
-            let now = chrono::Utc::now();
+            let now = docmonk_core::time::Utc::now();
             let expires = if p.active {
-                now + chrono::Duration::from_std(self.ttl.max(HEARTBEAT_INTERVAL * 3))
-                    .unwrap_or_else(|_| chrono::Duration::seconds(60))
+                now + docmonk_core::time::Duration::from_std(self.ttl.max(HEARTBEAT_INTERVAL * 3))
+                    .unwrap_or_else(|_| docmonk_core::time::Duration::seconds(60))
             } else {
                 now
             };

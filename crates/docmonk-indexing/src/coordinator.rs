@@ -350,7 +350,7 @@ impl Options {
 }
 
 fn now_iso() -> String {
-    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, false)
+    docmonk_core::time::Utc::now().to_rfc3339_opts(docmonk_core::time::SecondsFormat::Micros, false)
 }
 
 fn db_err(e: impl std::fmt::Display) -> DocMonkError {
@@ -1107,7 +1107,10 @@ fn build(
                         result.retrying += 1;
                         (
                             "retry",
-                            Some(retry::next_attempt_at(attempts, chrono::Utc::now())),
+                            Some(retry::next_attempt_at(
+                                attempts,
+                                docmonk_core::time::Utc::now(),
+                            )),
                             FileOutcome::Retry,
                         )
                     };

@@ -219,8 +219,8 @@ impl Catalog {
 /// Epoch milliseconds (server dates) as RFC 3339; anything else unchanged.
 pub fn millis_to_iso(v: &str) -> String {
     match v.parse::<i64>() {
-        Ok(ms) => chrono::DateTime::from_timestamp_millis(ms)
-            .map(|d| d.to_rfc3339_opts(chrono::SecondsFormat::Micros, false))
+        Ok(ms) => docmonk_core::time::DateTime::from_timestamp_millis(ms)
+            .map(|d| d.to_rfc3339_opts(docmonk_core::time::SecondsFormat::Micros, false))
             .unwrap_or_else(|| v.to_owned()),
         Err(_) => v.to_owned(),
     }

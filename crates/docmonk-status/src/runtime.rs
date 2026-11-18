@@ -9,7 +9,7 @@
 //!   host, checked against the source's writer lease (fencing token). A
 //!   remote PID is never used as proof.
 
-use chrono::{DateTime, Utc};
+use docmonk_core::time::{DateTime, Utc};
 
 use crate::model::{LastRun, LiveRun, Liveness, LockInfo};
 use crate::snapshot::{age_seconds, normalize_time, percentage};
@@ -316,7 +316,7 @@ mod tests {
     #[test]
     fn a_live_embedding_stage_reports_rate_and_eta() {
         let now = Utc::now();
-        let t = |secs: i64| iso(now - chrono::Duration::seconds(secs));
+        let t = |secs: i64| iso(now - docmonk_core::time::Duration::seconds(secs));
         let mut s = docmonk_indexing::progress::SourceProgress::new("src", &t(100));
         s.stage = Some("finalizing".into());
         s.heartbeat_at = Some(t(1));
@@ -361,8 +361,8 @@ mod tests {
                 "source_id": src, "run_id": "r", "host": owner.split(':').next(),
                 "owner": owner, "lease_token": token, "stage": "processing",
                 "active": true, "processed": 3, "planned": 6,
-                "heartbeat_at": ms(now - chrono::Duration::seconds(beat)),
-                "expires_at": ms(now + chrono::Duration::seconds(exp)),
+                "heartbeat_at": ms(now - docmonk_core::time::Duration::seconds(beat)),
+                "expires_at": ms(now + docmonk_core::time::Duration::seconds(exp)),
             })
         };
         let lease = |owner: &str, token: i64, live: bool| LeaseFacts {
@@ -386,7 +386,7 @@ mod tests {
             json!({"source_id": "done", "active": false, "outcome": "completed",
                    "finished_at": ms(now), "heartbeat_at": ms(now)}),
             json!({"source_id": "old", "active": false, "outcome": "completed",
-                   "finished_at": ms(now - chrono::Duration::hours(5))}),
+                   "finished_at": ms(now - docmonk_core::time::Duration::hours(5))}),
         ];
         let runs = server_runs(&docs, &leases, 120.0, now);
         let got: Vec<(&str, Liveness)> = runs

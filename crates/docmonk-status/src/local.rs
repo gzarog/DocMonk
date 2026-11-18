@@ -7,8 +7,8 @@
 //! statements (the build summary and the newest errors). No per-file
 //! queries.
 
-use chrono::{DateTime, Utc};
 use docmonk_core::paths::{project_id_for_canonical, Home};
+use docmonk_core::time::{DateTime, Utc};
 use docmonk_storage::control::{BuildState as StoredBuild, ControlPlane};
 use docmonk_storage::knowledge::ProjectStore;
 use docmonk_storage::StorageLayout;

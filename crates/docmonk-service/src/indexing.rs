@@ -120,7 +120,8 @@ impl StageIssue {
             source_id: source_id.to_owned(),
             code: code.to_owned(),
             reason: docmonk_telemetry::redact::redact_urls_in_text(reason),
-            at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            at: docmonk_core::time::Utc::now()
+                .to_rfc3339_opts(docmonk_core::time::SecondsFormat::Secs, true),
         }
     }
 }
@@ -290,7 +291,7 @@ pub fn lease_owner() -> String {
 pub fn new_run_id() -> String {
     format!(
         "run-{}-{}",
-        chrono::Utc::now().format("%Y%m%dT%H%M%S%.3fZ"),
+        docmonk_core::time::Utc::now().format("%Y%m%dT%H%M%S%.3fZ"),
         std::process::id()
     )
 }
@@ -382,6 +383,8 @@ pub fn index_sources_with(
     mut on_event: impl FnMut(SourceEvent<'_>),
 ) -> Result<RunSummary, DocMonkError> {
     let cfg = load(home)?;
+    // AI file analysis that cannot run stops the run before any file.
+    docmonk_convert::check_analysis(&cfg)?;
     let backend = crate::backend::open_for_write(home)?;
     let registry =
         docmonk_convert::registry_with(&cfg, &docmonk_convert::RegistryOptions::for_home(home));

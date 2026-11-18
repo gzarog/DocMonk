@@ -3,8 +3,10 @@
 //! runtimes.
 //!
 //! A reader thread frames the stream into lines, so a message split
-//! across reads is reassembled. Notifications and replies to unknown ids
-//! are ignored. A malformed line, an unframed message over 8 MiB or EOF
+//! across reads is reassembled. Replies to unknown ids are ignored;
+//! notifications are kept (bounded) for [`JsonRpcClient::next_notification`];
+//! a request from the runtime (an approval prompt, say) is answered with a
+//! "not supported" error so a turn never waits on it. A malformed line, an unframed message over 8 MiB or EOF
 //! fails the pending call (and every later one) as an invalid response,
 //! never as an answer.
 
@@ -22,6 +24,16 @@ use crate::errors::{invalid_response, json_rpc, provider_error, timeout};
 use crate::text::plain;
 
 const MAX_MESSAGE_BYTES: usize = 8 * 1024 * 1024;
+/// Notifications kept between reads (the oldest are dropped first).
+const MAX_PENDING_NOTIFICATIONS: usize = 4096;
+
+/// What one read produced.
+enum Incoming {
+    Reply(Map<String, Value>),
+    /// A notification, now at the back of the queue.
+    Notification,
+    Timeout,
+}
 
 enum Event {
     Line(Vec<u8>),
@@ -56,6 +68,7 @@ pub struct JsonRpcClient {
     next_id: i64,
     fatal: Option<DocMonkError>,
     closed: bool,
+    notifications: std::collections::VecDeque<Value>,
 }
 
 impl JsonRpcClient {
@@ -101,6 +114,7 @@ impl JsonRpcClient {
             next_id: 0,
             fatal: None,
             closed: false,
+            notifications: std::collections::VecDeque::new(),
         }
     }
 
@@ -145,14 +159,56 @@ impl JsonRpcClient {
         let deadline = Instant::now()
             + Duration::try_from_secs_f64(timeout_s.max(0.0)).unwrap_or(Duration::MAX);
         loop {
-            let wait = deadline.saturating_duration_since(Instant::now());
-            let event = match self.events.recv_timeout(wait) {
-                Ok(e) => e,
-                Err(RecvTimeoutError::Timeout) => {
+            let message = match self.read_message(deadline)? {
+                Incoming::Reply(m) => m,
+                Incoming::Notification => continue,
+                Incoming::Timeout => {
                     return Err(RpcError::Other(timeout(format!(
                         "ai runtime did not answer '{method}' within {timeout_s:.0}s"
                     ))))
                 }
+            };
+            // Notifications are kept; late/unknown replies are tolerated.
+            if message.get("id").and_then(Value::as_i64) != Some(id) {
+                continue;
+            }
+            match message.get("error") {
+                Some(Value::Null) | None => {}
+                Some(Value::Object(err)) => {
+                    return Err(RpcError::Remote {
+                        code: err.get("code").cloned().unwrap_or(Value::Null),
+                        message: err
+                            .get("message")
+                            .map(plain)
+                            .unwrap_or_else(|| "unknown error".into()),
+                    })
+                }
+                Some(other) => {
+                    return Err(RpcError::Remote {
+                        code: Value::Null,
+                        message: plain(other),
+                    })
+                }
+            }
+            return Ok(match message.get("result") {
+                Some(Value::Object(r)) => Value::Object(r.clone()),
+                other => {
+                    let mut m = Map::new();
+                    m.insert("result".into(), other.cloned().unwrap_or(Value::Null));
+                    Value::Object(m)
+                }
+            });
+        }
+    }
+
+    /// The next message, `None` at the deadline. Notifications are queued
+    /// and runtime requests answered here, before the caller sees anything.
+    fn read_message(&mut self, deadline: Instant) -> Result<Incoming, RpcError> {
+        loop {
+            let wait = deadline.saturating_duration_since(Instant::now());
+            let event = match self.events.recv_timeout(wait) {
+                Ok(e) => e,
+                Err(RecvTimeoutError::Timeout) => return Ok(Incoming::Timeout),
                 Err(RecvTimeoutError::Disconnected) => Event::Eof,
             };
             let line = match event {
@@ -184,36 +240,43 @@ impl JsonRpcClient {
             let Value::Object(message) = message else {
                 return Err(self.fail(invalid_response("ai runtime sent a non-object message")));
             };
-            // Notifications and late/unknown replies are tolerated.
-            if message.get("id").and_then(Value::as_i64) != Some(id) {
-                continue;
+            match (message.get("method"), message.get("id")) {
+                (Some(_), Some(id)) => {
+                    // A request from the runtime: nothing is ever approved.
+                    let reply = json!({"jsonrpc": "2.0", "id": id, "error":
+                        {"code": -32601, "message": "not supported by this client"}});
+                    self.write(&reply).map_err(RpcError::Other)?;
+                }
+                (Some(_), None) => {
+                    if self.notifications.len() >= MAX_PENDING_NOTIFICATIONS {
+                        self.notifications.pop_front();
+                    }
+                    self.notifications.push_back(Value::Object(message));
+                    return Ok(Incoming::Notification);
+                }
+                _ => return Ok(Incoming::Reply(message)),
             }
-            match message.get("error") {
-                Some(Value::Null) | None => {}
-                Some(Value::Object(err)) => {
-                    return Err(RpcError::Remote {
-                        code: err.get("code").cloned().unwrap_or(Value::Null),
-                        message: err
-                            .get("message")
-                            .map(plain)
-                            .unwrap_or_else(|| "unknown error".into()),
-                    })
-                }
-                Some(other) => {
-                    return Err(RpcError::Remote {
-                        code: Value::Null,
-                        message: plain(other),
-                    })
-                }
+        }
+    }
+
+    /// The next notification from the runtime, waiting up to `timeout_s`;
+    /// `Ok(None)` when none arrived in time.
+    pub fn next_notification(&mut self, timeout_s: f64) -> Result<Option<Value>, RpcError> {
+        if let Some(n) = self.notifications.pop_front() {
+            return Ok(Some(n));
+        }
+        if let Some(e) = &self.fatal {
+            return Err(RpcError::Other(e.clone()));
+        }
+        let deadline = Instant::now()
+            + Duration::try_from_secs_f64(timeout_s.max(0.0)).unwrap_or(Duration::MAX);
+        loop {
+            match self.read_message(deadline)? {
+                // A late reply to an earlier request: ignored.
+                Incoming::Reply(_) => continue,
+                Incoming::Notification => return Ok(self.notifications.pop_front()),
+                Incoming::Timeout => return Ok(None),
             }
-            return Ok(match message.get("result") {
-                Some(Value::Object(r)) => Value::Object(r.clone()),
-                other => {
-                    let mut m = Map::new();
-                    m.insert("result".into(), other.cloned().unwrap_or(Value::Null));
-                    Value::Object(m)
-                }
-            });
         }
     }
 

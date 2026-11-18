@@ -7,12 +7,18 @@ inference that consumes your account's allowance, and it is neither offline
 nor unlimited. Indexing and retrieval stay fully local; enabling a
 subscription provider requires no reindexing.
 
-Two subscription providers ship, both **beta**:
+Three subscription providers ship, all **beta**:
 
 | Provider id | Product | Runtime | Optional install |
 |---|---|---|---|
+| `claude_code` | Claude Pro / Max | official Claude CLI (`claude -p`) | install Claude Code, run `claude` and sign in with `/login` |
 | `codex` | ChatGPT (Codex access) | official Codex runtime (`codex`) | install the Codex runtime and put it on `PATH` |
 | `github_copilot` | GitHub Copilot | official `copilot` CLI (`copilot -p`) | install the GitHub Copilot CLI and sign in with it |
+
+`claude_code` and `codex` can also **analyse files** for the index
+(`documents.analysis.mode: ai`, ADR 0045). That is the one place a
+subscription is used while indexing, and only when you turn it on: see
+[AI file analysis](../reference.md#ai-file-analysis).
 
 ## Two ways to use a subscription
 
@@ -57,7 +63,7 @@ remain available and are never silently substituted.
 
 ```yaml
 ai:
-  provider: codex        # or github_copilot, or an existing provider
+  provider: codex        # or claude_code, github_copilot, or an existing provider
   model: ""              # empty = let the runtime choose and report it
   timeout_seconds: 120
 privacy:
@@ -75,8 +81,9 @@ cannot point DocMonk at an arbitrary binary to run.
   token.
 - **Never** silently uses an API key or a billable fallback for a
   subscription request; it fails clearly when sign-in is required.
-- **Never** lets `GH_TOKEN`/`GITHUB_TOKEN`/`OPENAI_API_KEY` quietly become
-  the effective sign-in; the effective auth mode is verified and an
+- **Never** lets `GH_TOKEN`/`GITHUB_TOKEN`/`OPENAI_API_KEY` (or, for
+  `claude_code`, `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`) quietly become
+  the effective sign-in: they are removed from the runtime's environment; the effective auth mode is verified and an
   unexpected token-based mode is rejected. `docmonk doctor` flags such env
   vars.
 - Runs every answer in a **fresh, isolated session** with tools, file
@@ -102,14 +109,19 @@ is present — all offline and without printing secrets.
   version, use the MCP client flow (A) instead.
 - Account allowances, model access, and provider/organization policies
   still apply.
-- Subscription mode is not an unlimited background service: daemon indexing
-  never uses it and never prompts for sign-in.
+- Subscription mode is not an unlimited background service: indexing uses
+  it only with `documents.analysis.mode: ai`, never prompts for sign-in, and
+  records a usage-limit stop as `ai_analysis_quota`, retried on the next
+  index.
 - Tested runtime/SDK versions are recorded in the integration note as real
   verification is performed; a successful login alone is not a
   compatibility claim.
 
 ## Claude and Gemini
 
-For Claude, use the MCP client flow (A) with Claude Code; DocMonk ships no
-Claude subscription-token adapter. Gemini is a later feasibility item. See
-the integration note for details.
+Claude works two ways: the MCP client flow (A) with Claude Code, or the
+`claude_code` provider, which drives the official Claude CLI headless with
+no tools (for `ask`) or only read access to a private copy of one file (for
+file analysis), no settings, hooks or MCP servers, and no saved session.
+DocMonk never reads the CLI's credentials. Gemini is a later feasibility
+item.
