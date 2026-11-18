@@ -53,7 +53,7 @@ storage engine: with one switch.
    | `anthropic` | `ANTHROPIC_API_KEY` | Messages API (`anthropic-version: 2026-10-21`): PDF as a `document` block, images as `image` blocks, structured output (`output_config.format`), refusal fallbacks (`fallbacks: "default"`). Default model `claude-opus-5-5`. |
    | `openai` | `OPENAI_API_KEY` | Responses API: `input_file` / `input_image`, strict `json_schema`. Default model `gpt-4o-mini`. |
    | `claude_code` | Claude Pro/Max | The official `claude` CLI, headless: `claude -p --output-format json --json-schema … --restricted --tools Read --strict-mcp-config --no-session-persistence --permission-mode dontAsk`, in a fresh private directory holding only the file under an internal name. |
-   | `codex` | ChatGPT plan | The existing isolated `codex app-server` thread (ADR 0026): no tools, files or web; text only. |
+   | `codex` | ChatGPT plan | The official `codex app-server` (ADR 0026): a fresh thread, approvals `never`, a read-only sandbox limited to a private directory. Text and `localImage` inputs with `outputSchema`; a PDF is sent as its pages rendered to PNG (hayro, pure Rust, longer side 1600 px, at most `documents.max_pages`), since the runtime has no PDF input. |
 
    Subscription runtimes are found by fixed executable name on `PATH`, never
    a configured path. `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
@@ -120,9 +120,10 @@ storage engine: with one switch.
   XML/HTML members sent as text (styles, themes, settings, relationships and
   layouts skipped), capped by `max_file_bytes`. Opening the zip is not
   analysis.
-* **D2** `codex` takes text only: PDFs and images fail with
-  `ai_analysis_unsupported_format`; use `anthropic`, `openai` or
-  `claude_code` for them.
+* **D2** (revised by the owner) ChatGPT reads PDFs: `codex` gets a PDF as
+  its rendered page images, in order, with a note naming the page count.
+  PNG and JPEG images go as they are. The renderer identity is part of the
+  cache key, so a renderer change re-analyses those PDFs.
 * **D3** A chunk over the embedding budget is split by the bundled tokenizer
   (sentences, then words), keeping its heading path and pages.
 * **D4** Analysis has its own provider settings (`documents.analysis.*`),

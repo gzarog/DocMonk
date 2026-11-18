@@ -34,12 +34,23 @@ R4), which have not been run yet.
   ChatGPT instead of the embedded extraction (ADR 0045). Providers:
   `anthropic` (`ANTHROPIC_API_KEY`), `openai` (`OPENAI_API_KEY`),
   `claude_code` (Claude Pro/Max through the official `claude` CLI) and
-  `codex` (ChatGPT plan, text formats). Off by default; it needs
+  `codex` (ChatGPT plan; PDFs go as locally rendered page images). Off by
+  default; it needs
   `privacy.external_ai_allowed: true`, and a failed file fails with an
   `ai_analysis_*` code without falling back to native extraction.
   `docmonk ai analyze FILE` previews one file.
 - `claude_code` is also a `docmonk ask` provider and a subscription runtime
   for `docmonk ai status|login|logout|models`.
+- The codex provider speaks the documented Codex app-server protocol
+  (`thread/start`, `turn/start`, `account/read`, device-code sign-in) with a
+  read-only, network-less sandbox.
+
+### CI
+
+- The OCR models are fetched from a pinned Hugging Face copy when the
+  original host refuses (byte-identical, same SHA-256).
+- Release candidates: a pushed `vX.Y.Z-rc.N` (`-beta.N`, `-alpha.N`) tag
+  publishes a pre-release; `docmonk update` never offers one.
 
 ### Security
 

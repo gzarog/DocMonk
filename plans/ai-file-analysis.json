@@ -949,7 +949,7 @@
       ],
       "rollback": "Revert; codex ask is untouched.",
       "notes": [
-        "codex is text only (D2): images are refused like PDFs, since the existing isolated app-server protocol carries text."
+        "The codex adapter now speaks the documented app-server protocol (thread/start, turn/start, account/read, device-code login), with approvals never and a read-only sandbox restricted to a private directory. PDFs go as rendered page images (localImage), per the revised D2."
       ]
     },
     {
@@ -1396,7 +1396,7 @@
       "rationale": "Matches 'fail the file' and adds no heavy dependency. Claude subscription and both API keys handle PDFs natively.",
       "owner": "human",
       "status": "decided",
-      "decision": "codex takes text only; PDFs and images fail with ai_analysis_unsupported_format (accepted as recommended).",
+      "decision": "Revised by the owner: ChatGPT reads PDFs. codex gets each PDF as locally rendered page images (hayro, pure Rust), in order, within documents.max_pages; PNG/JPEG images go as they are.",
       "blocks": [
         "E6"
       ]
@@ -1600,6 +1600,12 @@
       "work_package": "E10",
       "event": "note",
       "summary": "Docs and the ignored live harness are in; the live report needs the owner's keys or signed-in accounts (commands.ai_live)."
+    },
+    {
+      "date": "2026-11-18",
+      "work_package": "E6",
+      "event": "note",
+      "summary": "D2 revised: ChatGPT (codex) analyses PDFs as rendered page images; codex adapter moved to the official app-server protocol."
     }
   ],
   "agent_prompt": "Implement plans/ai-file-analysis.json in https://github.com/gzarog/DocMonk. It follows plans/plan.schema.json; read both fully, then inspect current main (the plan was written against 710200a) and adapt where the code has moved. Work in execution.order, starting with execution.start_with, one roadmap/ branch and one PR per work package, respecting depends_on. Never change native extraction output: documents.analysis.mode defaults to native and must stay byte-identical. With mode=ai, documents bypass docling/OCR/normalize/chunk/metadata entirely, failures fail the file with an ai_analysis_* code and never fall back to native. Subscriptions are used only through the official claude CLI and codex runtime, never by reading their credentials. Do only tasks whose executor is not human; for claude_code_then_human_review, open the PR and stop for review; for claude_code_with_cluster, use the service containers from .github/workflows/rust.yml. Obey policy.protected_paths and execution.stop_and_ask_when. Never decide D1-D6 yourself. Report each PR as execution.pr_report says, and update status fields and progress_log as execution.status_updates says, validating with commands.validate_plan."

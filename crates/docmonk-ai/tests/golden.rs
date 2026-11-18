@@ -311,9 +311,19 @@ fn scripted(replies: Vec<Value>) -> (JsonRpcClient, std::thread::JoinHandle<Vec<
             sent.push(message);
             if let Some(id) = id {
                 let mut out = replies.next().unwrap_or(json!({"result": {}}));
+                // Notifications the runtime streams after this reply.
+                let then = out
+                    .as_object_mut()
+                    .and_then(|o| o.remove("then"))
+                    .unwrap_or(json!([]));
                 out["jsonrpc"] = json!("2.0");
                 out["id"] = id;
-                let raw = format!("{out}\n");
+                let mut raw = format!("{out}\n");
+                for n in then.as_array().into_iter().flatten() {
+                    let mut n = n.clone();
+                    n["jsonrpc"] = json!("2.0");
+                    raw.push_str(&format!("{n}\n"));
+                }
                 let _ = to_client_w.write_all(b"{\"jsonrpc\":\"2.0\",\"method\":\"progress\"}\n");
                 let _ = to_client_w.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":999,\"result\":{}}\n");
                 let _ = to_client_w.write_all(&raw.as_bytes()[..7]);
@@ -330,6 +340,16 @@ fn scripted(replies: Vec<Value>) -> (JsonRpcClient, std::thread::JoinHandle<Vec<
     )
 }
 
+/// Per-run temporary paths (`cwd`, readable roots) as `<TMP>`.
+fn untemp(v: Value) -> Value {
+    match v {
+        Value::String(s) if s.contains("docmonk-analysis-") => Value::String("<TMP>".into()),
+        Value::Array(a) => Value::Array(a.into_iter().map(untemp).collect()),
+        Value::Object(o) => Value::Object(o.into_iter().map(|(k, v)| (k, untemp(v))).collect()),
+        other => other,
+    }
+}
+
 #[test]
 fn codex_exchanges_are_as_expected() {
     let g = golden();
@@ -344,6 +364,21 @@ fn codex_exchanges_are_as_expected() {
             "login" => session.login().map(|s| s.to_json()),
             "logout" => session.logout().map(|()| Value::Null),
             "models" => session.models().map(|m| json!(m)),
+            "turn_images" => {
+                let dir = docmonk_ai::analysis_subscription::TempDir::new().unwrap();
+                let img = dir.path().join("part-1.png");
+                std::fs::write(&img, b"png").unwrap();
+                session
+                    .run_turn(
+                        "SYS",
+                        "USER",
+                        &[img],
+                        dir.path(),
+                        "",
+                        Some(json!({"type": "object"})),
+                    )
+                    .map(|o| json!({"text": o.text}))
+            }
             _ => session
                 .answer("SYS", "USER", case["model"].as_str().unwrap())
                 .map(|(text, model, usage)| {
@@ -355,7 +390,7 @@ fn codex_exchanges_are_as_expected() {
                 }),
         };
         drop(session);
-        let sent = handle.join().unwrap();
+        let sent = untemp(json!(handle.join().unwrap()));
         let got = match result {
             Ok(r) => json!({"result": r}),
             Err(e) => json!({"error": error_json(&e)}),
@@ -367,13 +402,14 @@ fn codex_exchanges_are_as_expected() {
         if bless() {
             let mut case = case.clone();
             record(&mut case, &got, "result", None);
+            case["sent"] = sent;
             blessed.push(case);
             continue;
         }
         if got != expected {
             failures.push(format!("{name}:\n  got      {got}\n  expected {expected}"));
         }
-        if json!(sent) != case["sent"] {
+        if sent != case["sent"] {
             failures.push(format!(
                 "{name} sent:\n  got      {}\n  expected {}",
                 json!(sent),

@@ -357,10 +357,12 @@ fn one_embedding_per_query_and_per_corpus_availability() {
             build_id: &ix.build,
         },
     ];
-    let before = docmonk_ml::counters::snapshot();
+    // Counted on this thread: other tests in this binary embed queries in
+    // parallel, which the process-wide counter would include.
+    let before = docmonk_ml::counters::thread_query_embeds();
     let s = hybrid::semantic_search(&corpora, Some(&emb), "invoice", 5, None).unwrap();
-    let used = docmonk_ml::counters::snapshot().since(&before);
-    assert_eq!(used.query_embeds, 1, "one forward pass for three corpora");
+    let used = docmonk_ml::counters::thread_query_embeds() - before;
+    assert_eq!(used, 1, "one forward pass for three corpora");
     assert!(s.available, "{}", s.reason);
     assert_eq!(s.degraded, ["no-knn: vector search unavailable"]);
     // Diagnostics name how each corpus answered.

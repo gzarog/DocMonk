@@ -8,10 +8,11 @@
 //!   settings, hooks or MCP servers, and keeps no session. API-key
 //!   variables are removed from its environment, so the CLI's own sign-in
 //!   is the only credential and a subscription is never billed as API use.
-//! * `codex`: a ChatGPT plan through the official Codex runtime, in the same
-//!   isolated app-server thread `docmonk ask` uses (no tools, no file access,
-//!   no web). It takes text only; PDFs and images fail with
-//!   `ai_analysis_unsupported_format` (decision D2).
+//! * `codex`: a ChatGPT plan through the official Codex runtime, in a fresh
+//!   app-server thread with approvals `never` and a read-only sandbox
+//!   limited to a private directory, without network. It takes text and
+//!   images (`localImage`); a PDF reaches it as rendered page images,
+//!   because the runtime has no PDF input.
 
 use std::io::Read;
 use std::process::{Command, Stdio};
@@ -436,7 +437,9 @@ impl AiAnalyzer for CodexAnalyzer {
     }
 
     fn accepts(&self, kind: InputKind) -> bool {
-        kind == InputKind::Text
+        // PDFs reach codex as rendered page images (the document processor
+        // adapts them; the runtime has no PDF input).
+        matches!(kind, InputKind::Text | InputKind::Image)
     }
 
     fn analyze(&self, input: &AnalysisInput) -> Result<AnalysisResult, AnalysisError> {
@@ -444,32 +447,58 @@ impl AiAnalyzer for CodexAnalyzer {
             return Err(AnalysisError::new(
                 AnalysisErrorKind::UnsupportedFormat,
                 format!(
-                    "the codex provider takes text only; {} ({} input) needs the anthropic, \
-                     openai or claude_code provider",
+                    "the codex provider takes text and images; {} ({} input) must be sent as \
+                     page images",
                     input.file_name,
                     p.kind().as_str()
                 ),
             ));
         }
+        // Images go to the runtime as files in a private directory, which
+        // is also the turn's only readable root.
+        let dir = tempfile_dir()?;
         let mut user = String::new();
-        for p in &input.parts {
-            if let InputPart::Text { name, text } = p {
-                match name {
-                    Some(n) => user.push_str(&format!("<part name=\"{n}\">\n{text}\n</part>\n")),
-                    None => {
-                        user.push_str(text);
-                        user.push('\n');
-                    }
+        let mut images = Vec::new();
+        for (i, p) in input.parts.iter().enumerate() {
+            match p {
+                InputPart::Text {
+                    name: Some(n),
+                    text,
+                } => user.push_str(&format!("<part name=\"{n}\">\n{text}\n</part>\n")),
+                InputPart::Text { name: None, text } => {
+                    user.push_str(text);
+                    user.push('\n');
                 }
+                InputPart::Image { .. } => {
+                    let path = dir.path().join(part_file_name(i, p));
+                    let InputPart::Image { bytes, .. } = p else {
+                        unreachable!()
+                    };
+                    std::fs::write(&path, bytes).map_err(|e| {
+                        AnalysisError::new(
+                            AnalysisErrorKind::Failed,
+                            format!("cannot stage an image: {e}"),
+                        )
+                    })?;
+                    images.push(path);
+                }
+                InputPart::Pdf { .. } => unreachable!("refused above"),
             }
         }
         user.push('\n');
         user.push_str(&instruction(input));
         let mut rt = self.runtime.lock().unwrap_or_else(|p| p.into_inner());
-        let (text, _model, _usage) = rt
-            .answer(SYSTEM_PROMPT, &user, &self.model)
+        let out = rt
+            .run_turn(
+                SYSTEM_PROMPT,
+                &user,
+                &images,
+                dir.path(),
+                &self.model,
+                Some(structured_output_schema()),
+            )
             .map_err(|e| analysis_error_from(&e))?;
-        parse_result(&text, input.page_count)
+        parse_result(&out.text, input.page_count)
     }
 }
 

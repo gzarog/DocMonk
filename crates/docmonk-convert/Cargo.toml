@@ -11,6 +11,7 @@ publish.workspace = true
 docling = { version = "=2.67.1", default-features = false, features = ["pdf-text", "preserve-order"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tiff", "gif", "bmp"] }
 lopdf = "0.44"
+hayro = "0.9"
 mail-parser = "0.11"
 ocrs = "=0.12.0"
 rten = { version = "0.24", default-features = false, features = ["rten_format"] }

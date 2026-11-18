@@ -42,9 +42,17 @@ Status: accepted
   - Malformed JSON, EOF and unframed messages over 8 MiB fail as invalid
     responses.
   - Each request has a deadline.
-- **`codex`:** the `codex app-server` protocol.
-  - Messages: `initialize` with isolation, then `account/*`,
-    `model/list`, `thread/create` and `thread/runTurn`.
+- **`codex`:** the documented `codex app-server` protocol (aligned with
+  the official one in ADR 0045's follow-up).
+  - Messages: `initialize` (`clientInfo`) and `initialized`, then
+    `account/read`, `account/login/start` (`chatgptDeviceCode`, waiting for
+    `account/login/completed`), `account/logout`, `model/list`, and per
+    answer `thread/start` plus `turn/start`.
+  - A turn runs with `approvalPolicy: never` and a `readOnly` sandbox
+    restricted to a private, otherwise empty directory; requests the runtime
+    sends back are answered "not supported". The answer is the final
+    `agentMessage` of `item/completed`, accepted once `turn/completed`
+    reports `completed`.
   - Errors map to quota, sign-in and policy errors.
   - API-key auth modes are refused.
   - Incomplete or empty turns are never answers.

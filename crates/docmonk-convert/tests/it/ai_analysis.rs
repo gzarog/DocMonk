@@ -55,6 +55,8 @@ struct Scripted {
     calls: AtomicUsize,
     seen: Mutex<Vec<AnalysisInput>>,
     text_only: bool,
+    /// Text and images, no PDF (like codex).
+    no_pdf: bool,
 }
 
 impl Scripted {
@@ -64,6 +66,7 @@ impl Scripted {
             calls: AtomicUsize::new(0),
             seen: Mutex::new(Vec::new()),
             text_only: false,
+            no_pdf: false,
         })
     }
 }
@@ -76,7 +79,7 @@ impl AiAnalyzer for Scripted {
         "m1"
     }
     fn accepts(&self, kind: InputKind) -> bool {
-        !self.text_only || kind == InputKind::Text
+        (!self.text_only || kind == InputKind::Text) && !(self.no_pdf && kind == InputKind::Pdf)
     }
     fn analyze(&self, input: &AnalysisInput) -> Result<AnalysisResult, AnalysisError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
@@ -222,6 +225,7 @@ fn failures_fail_the_file_with_their_code_and_no_rows() {
         calls: AtomicUsize::new(0),
         seen: Mutex::new(Vec::new()),
         text_only: true,
+        no_pdf: false,
     });
     let e = processor(text_only.clone(), None)
         .knowledge(
@@ -359,4 +363,46 @@ fn an_index_run_publishes_ai_rows_and_counts_failed_files() {
     )
     .unwrap();
     assert!(r.failed >= 1, "{r:?}");
+}
+
+#[test]
+fn a_pdf_goes_as_page_images_to_a_provider_without_pdf_input() {
+    let a = Arc::new(Scripted {
+        reply: Mutex::new(Ok(result(vec![chunk("text", &[], "x")]))),
+        calls: AtomicUsize::new(0),
+        seen: Mutex::new(Vec::new()),
+        text_only: false,
+        no_pdf: true,
+    });
+    let mut p = processor(a.clone(), None);
+    p.max_pages = Some(2);
+    p.knowledge(
+        &repo_root().join("fixtures/documents/five_pages.pdf"),
+        "f",
+        None,
+    )
+    .unwrap_err(); // five pages exceed max_pages=2: skipped_limit
+    p.max_pages = Some(10);
+    p.knowledge(
+        &repo_root().join("fixtures/documents/five_pages.pdf"),
+        "f",
+        None,
+    )
+    .unwrap();
+    let seen = a.seen.lock().unwrap();
+    assert_eq!(seen.len(), 1);
+    let parts = &seen[0].parts;
+    assert!(matches!(&parts[0], InputPart::Text { text, .. } if text.contains("5 page image(s)")));
+    let images: Vec<_> = parts[1..]
+        .iter()
+        .map(|p| match p {
+            InputPart::Image { media_type, bytes } => (media_type.as_str(), &bytes[..4]),
+            other => panic!("expected page images, got {other:?}"),
+        })
+        .collect();
+    assert_eq!(images.len(), 5);
+    assert!(images
+        .iter()
+        .all(|(mt, head)| *mt == "image/png" && *head == b"\x89PNG"));
+    assert_eq!(seen[0].page_count, Some(5));
 }

@@ -479,6 +479,48 @@ pub fn rows(
     (doc, out)
 }
 
+/// Fits `input` to what the provider takes: a PDF for a provider that reads
+/// images but not PDFs (codex) is sent as its rendered pages, in order,
+/// at most `max_pages`. Returns whether the input was rendered.
+pub fn adapt_input(
+    analyzer: &dyn AiAnalyzer,
+    input: &mut AnalysisInput,
+    max_pages: usize,
+) -> Result<bool, AnalysisError> {
+    use docmonk_ai::analysis::InputKind;
+    let needs = input
+        .parts
+        .iter()
+        .any(|p| p.kind() == InputKind::Pdf && !analyzer.accepts(InputKind::Pdf));
+    if !needs || !analyzer.accepts(InputKind::Image) {
+        return Ok(false);
+    }
+    let mut parts = Vec::new();
+    for part in std::mem::take(&mut input.parts) {
+        let InputPart::Pdf { bytes } = part else {
+            parts.push(part);
+            continue;
+        };
+        let pages = crate::render::pdf_pages_png(&bytes, max_pages)
+            .map_err(|e| AnalysisError::new(AnalysisErrorKind::UnsupportedFormat, e))?;
+        parts.push(InputPart::Text {
+            name: None,
+            text: format!(
+                "The PDF `{}` follows as {} page image(s), page 1 first; page N of the file is \
+                 the N-th image.",
+                input.file_name,
+                pages.len()
+            ),
+        });
+        parts.extend(pages.into_iter().map(|bytes| InputPart::Image {
+            media_type: "image/png".into(),
+            bytes,
+        }));
+    }
+    input.parts = parts;
+    Ok(true)
+}
+
 fn file_stem(name: &str) -> String {
     let stem = Path::new(name)
         .file_stem()
@@ -494,7 +536,17 @@ fn file_stem(name: &str) -> String {
 impl AiDocumentProcessor {
     /// Analyses `bytes` (cache first) or fails with a classed error.
     fn analyse(&self, input: &AnalysisInput, hash: &str) -> Result<AnalysisResult, AnalysisError> {
-        let key = format!("ai|{}", converter_identity(self.analyzer.as_ref()));
+        let mut input = input.clone();
+        let rendered = adapt_input(
+            self.analyzer.as_ref(),
+            &mut input,
+            self.max_pages.unwrap_or(1000),
+        )?;
+        let input = &input;
+        let mut key = format!("ai|{}", converter_identity(self.analyzer.as_ref()));
+        if rendered {
+            key = format!("{key}+{}", crate::render::PAGE_RENDER_VERSION);
+        }
         if let Some(v) = self.cache.as_ref().and_then(|c| c.get(hash, &key)) {
             if let Ok(r) = docmonk_ai::analysis::validate_value(v, input.page_count) {
                 return Ok(r);
@@ -726,7 +778,9 @@ pub fn preview(
         )
         .with_class("AiAnalysisError")
     };
-    let input = input_for(name, format, bytes, max, pages).map_err(fail)?;
+    let mut input = input_for(name, format, bytes, max, pages).map_err(fail)?;
+    let max_pages = (config.documents.max_pages > 0).then_some(config.documents.max_pages as usize);
+    adapt_input(analyzer.as_ref(), &mut input, max_pages.unwrap_or(1000)).map_err(fail)?;
     if let Some(p) = input.parts.iter().find(|p| !analyzer.accepts(p.kind())) {
         return Err(fail(AnalysisError::new(
             AnalysisErrorKind::UnsupportedFormat,

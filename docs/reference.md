@@ -38,7 +38,7 @@ docmonk index                                            # every document is reb
 | `anthropic` | `ANTHROPIC_API_KEY` | PDFs and PNG/JPEG images sent natively; default model `claude-opus-5-5` |
 | `openai` | `OPENAI_API_KEY` | PDFs and PNG/JPEG images sent natively; default model `gpt-4o-mini` |
 | `claude_code` | Claude Pro / Max | The official `claude` CLI, signed in with `claude` then `/login`; reads only a private copy of the file; API keys are never passed to it |
-| `codex` | ChatGPT plan | The official Codex runtime (`docmonk ai login codex`); text formats only, so PDFs and images fail |
+| `codex` | ChatGPT plan | The official Codex runtime (`docmonk ai login codex`); PDFs are sent as page images (rendered locally, at most `documents.max_pages`), images as they are |
 
 - **What the model does:** with `ai`, docling.rs, the PDF text layer, OCR, the normalizer and the chunker are bypassed for documents. The model returns the chunks (verbatim text, headings, pages, tables), title, author, language, summary, keywords and the code the file names. Office, OpenDocument and EPUB files are unzipped and their content parts sent as text. Code files keep the native code intelligence.
 - **Settings:** `documents.analysis.model` (empty: the provider default), `timeout_seconds` (300), `max_file_bytes` (32 MiB), `concurrency` (2 analyses in flight), `max_output_tokens` (16000). Env: `DOCMONK_DOCUMENTS__ANALYSIS__MODE=ai`, and so on.
